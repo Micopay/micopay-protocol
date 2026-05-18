@@ -28,9 +28,28 @@ const app = Fastify({
 
 // --- Plugins ---
 
-// CORS — Allow all origins for the hackathon deployment
-app.register(fastifyCors, { 
-  origin: '*',
+// CORS — explicit allowlist for Capacitor WebView + dev/prod web origins.
+// Extra origins can be added via CORS_EXTRA_ORIGINS (comma-separated).
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://localhost',       // Android (capacitor.config androidScheme: 'https')
+  'capacitor://localhost',   // iOS default scheme
+  'http://localhost:5173',   // Vite dev server
+  'http://localhost:3000',   // same-origin requests during dev
+];
+const EXTRA = (process.env.CORS_EXTRA_ORIGINS ?? '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+const ALLOWED_ORIGINS = [...DEFAULT_ALLOWED_ORIGINS, ...EXTRA];
+
+app.register(fastifyCors, {
+  // Allow requests with no Origin header (curl, native HTTP clients) and any
+  // entry in the allowlist. Reject anything else.
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    cb(new Error(`Origin not allowed: ${origin}`), false);
+  },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 });
 

@@ -24,16 +24,16 @@ async function testRateLimiter() {
   };
 
   // Hit 1
-  await limiter(mockReq as any, mockReply as any);
+  await (limiter as any)(mockReq, mockReply);
   console.log('Hit 1: OK');
 
   // Hit 2
-  await limiter(mockReq as any, mockReply as any);
+  await (limiter as any)(mockReq, mockReply);
   console.log('Hit 2: OK');
 
   // Hit 3 - should throw
   try {
-    await limiter(mockReq as any, mockReply as any);
+    await (limiter as any)(mockReq, mockReply);
     throw new Error('Should have thrown RateLimitError');
   } catch (err) {
     if (err instanceof RateLimitError) {
@@ -50,7 +50,7 @@ async function testRateLimiter() {
   await new Promise(resolve => setTimeout(resolve, windowMs + 100));
 
   // Hit 4 - should be OK again
-  await limiter(mockReq as any, mockReply as any);
+  await (limiter as any)(mockReq, mockReply);
   console.log('Hit 4: OK (Reset worked)');
 
   console.log('All Rate Limiter Tests Passed!');

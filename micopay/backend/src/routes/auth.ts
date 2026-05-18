@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto';
 import db from '../db/schema.js';
 import { config } from '../config.js';
 import { createRateLimiter } from '../middleware/rateLimit.middleware.js';
+import { AuthError, NotFoundError } from '../utils/errors.js';
 
 const authRateLimit = createRateLimiter({
   windowMs: config.authRateLimitWindowMs,

@@ -1,7 +1,7 @@
 import { config } from '../config.js';
 import type { FastifyRequest } from 'fastify';
 import db from '../db/schema.js';
-import { ReplayError } from '../utils/errors.js';
+import { ReplayError, UpstreamError } from '../utils/errors.js';
 
 export async function assertNotReplayed(
   txHash: string,
