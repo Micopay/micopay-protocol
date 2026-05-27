@@ -75,7 +75,7 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
             <div className="flex gap-4">
               <span aria-hidden="true" className="material-symbols-outlined text-primary opacity-60">info</span>
               <p className="text-body text-[14px] leading-relaxed text-on-surface-variant font-medium">
-                Ingresa el monto que deseas recibir. Buscaremos a los agentes verificados más cercanos con liquidez inmediata.
+                Ingresa el monto que deseas recibir. Buscaremos a los comerciantes verificados más cercanos con liquidez inmediata.
               </p>
             </div>
           </div>
@@ -99,7 +99,7 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
             aria-label="Buscar ofertas de efectivo"
             className="w-full bg-gradient-to-r from-primary to-primary-container text-on-primary font-body font-semibold py-4 rounded-xl shadow-[0_12px_24px_rgba(0,105,76,0.2)] active:scale-95 duration-200 transition-all flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-primary"
           >
-            <span>Buscar ofertas de efectivo</span>
+            <span>Buscar opciones de efectivo</span>
             <span aria-hidden="true" className="material-symbols-outlined text-lg">search</span>
           </button>
         </div>

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { resolveErrorMessage } from '../constants/errorMap';
 
 /**
  * Normalizes Fastify `setErrorHandler` payloads (`{ error, message }`) and Axios failures
@@ -7,15 +8,23 @@ import axios from 'axios';
 export function extractApiErrorPayload(err: unknown): { message: string; error?: string } {
   if (axios.isAxiosError(err)) {
     const data = err.response?.data as { message?: string; error?: string } | undefined;
+    const resolved = resolveErrorMessage({
+      response: {
+        status: err.response?.status,
+        data,
+      },
+      message: err.message,
+    });
     const message =
       typeof data?.message === 'string' && data.message.length > 0
-        ? data.message
-        : err.message || 'Something went wrong. Please try again.';
+        ? resolved.message
+        : resolved.message;
     const error = typeof data?.error === 'string' ? data.error : undefined;
     return { message, error };
   }
   if (err instanceof Error) {
-    return { message: err.message };
+    const resolved = resolveErrorMessage(err);
+    return { message: resolved.message };
   }
-  return { message: 'Something went wrong. Please try again.' };
+  return { message: resolveErrorMessage(undefined).message };
 }

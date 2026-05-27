@@ -146,7 +146,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
         ) : trades.length === 0 ? (
           <div className="text-center py-12">
             <span className="material-symbols-outlined text-6xl text-gray-300 mb-4">inbox</span>
-            <p className="text-gray-500">No hay intercambios {activeFilter !== 'all' ? `con estado "${STATUS_LABELS[activeFilter]}"` : ''}</p>
+            <p className="text-gray-500">No hay operaciones {activeFilter !== 'all' ? `con estado "${STATUS_LABELS[activeFilter]}"` : ''}</p>
           </div>
         ) : (
           <div className="space-y-4">

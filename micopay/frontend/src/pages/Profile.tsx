@@ -5,6 +5,7 @@ import {
   getCurrentUser,
   type CurrentUserProfile,
 } from "../services/api";
+import { resolveErrorMessage } from "../constants/errorMap";
 
 interface ProfileProps {
   token: string | null;
@@ -26,7 +27,7 @@ const Profile = ({ token, onBack, onDeleted, onNavigatePrivacy, onNavigateTerms 
   useEffect(() => {
     if (!token) {
       setLoading(false);
-      setError("No hay una cuenta autenticada para mostrar.");
+      setError(resolveErrorMessage({ response: { status: 401 } }).message);
       return;
     }
 
@@ -42,9 +43,7 @@ const Profile = ({ token, onBack, onDeleted, onNavigatePrivacy, onNavigateTerms 
         }
       } catch (err: any) {
         if (!cancelled) {
-          setError(
-            err?.response?.data?.message ?? "No se pudo cargar tu perfil",
-          );
+          setError(resolveErrorMessage(err).message);
         }
       } finally {
         if (!cancelled) {
@@ -88,7 +87,7 @@ const Profile = ({ token, onBack, onDeleted, onNavigatePrivacy, onNavigateTerms 
         onDeleted();
       }, 800);
     } catch (err: any) {
-      setError(err?.response?.data?.message ?? "No se pudo eliminar tu cuenta");
+      setError(resolveErrorMessage(err).message);
     } finally {
       setDeleting(false);
     }
@@ -173,9 +172,9 @@ const Profile = ({ token, onBack, onDeleted, onNavigatePrivacy, onNavigateTerms 
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-sm text-[#67808C]">Wallet</span>
+                    <span className="text-sm text-[#67808C]">Billetera</span>
                     <span className="text-sm font-bold text-[#0B1E26]">
-                      {profile.wallet_type ?? "self_custodial"}
+                      {profile.wallet_type ?? "autocustodia"}
                     </span>
                   </div>
                 </div>

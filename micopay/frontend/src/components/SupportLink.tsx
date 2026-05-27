@@ -7,10 +7,10 @@ const SUPPORT_EMAIL = 'support@micopay.com';
 
 export default function SupportLink({ tradeId, state }: Props) {
   const subject = encodeURIComponent(
-    `Soporte — ${tradeId ? `Trade ${tradeId.slice(0, 8)}…` : 'unknown trade'} — ${state}`
+    `Soporte — ${tradeId ? `Operación ${tradeId.slice(0, 8)}…` : 'operación sin ID'} — ${state}`
   );
   const body = encodeURIComponent(
-    `Hola,\n\nNecesito ayuda.\n\nEstado: ${state}\nTrade ID: ${tradeId || 'N/A'}\n\nGracias.`
+    `Hola,\n\nNecesito ayuda.\n\nEstado: ${state}\nOperación ID: ${tradeId || 'N/D'}\n\nGracias.`
   );
   const href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
 

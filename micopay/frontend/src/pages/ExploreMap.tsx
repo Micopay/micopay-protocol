@@ -37,7 +37,7 @@ const DEFAULT_OFFERS: Offer[] = [
     walkMinutes: 5,
     receiveMxn: 490,
     commissionPct: 2,
-    rating: '⭐ 4.9 · 87 intercambios',
+    rating: '⭐ 4.9 · 87 operaciones',
   },
   {
     id: 'offer_3',
@@ -182,7 +182,7 @@ const ExploreMap = ({
                         {loading ? (
                           <>
                             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            Preparando escrow...
+                            Preparando garantía...
                           </>
                         ) : (
                           'Ir con este agente'
@@ -233,7 +233,7 @@ const ExploreMap = ({
             {/* Footer Note */}
             <footer className="mt-10 mb-8 p-6 text-center">
               <p className="text-[12px] leading-relaxed text-outline font-medium">
-                Tu saldo se bloquea en garantía hasta que confirmes la recepción del efectivo. Operación segura y protegida por MicoPay Smart Escrow.
+                Tu saldo se bloquea en garantía hasta que confirmes la recepción del efectivo. Operación segura y protegida por la garantía inteligente de MicoPay.
               </p>
             </footer>
           </>

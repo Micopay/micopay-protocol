@@ -29,7 +29,7 @@ export function useGeolocation(enabled = true): GeoState {
             const req = await Geolocation.requestPermissions();
             if (req.location !== 'granted') {
               if (!cancelled) {
-                setState({ lat: null, lng: null, loading: false, error: 'Permiso de ubicación denegado' });
+                setState({ lat: null, lng: null, loading: false, error: 'No se permitió usar la ubicación' });
               }
               return;
             }
@@ -50,7 +50,7 @@ export function useGeolocation(enabled = true): GeoState {
           lat: null,
           lng: null,
           loading: false,
-          error: e instanceof Error ? e.message : 'No se pudo obtener ubicación',
+          error: e instanceof Error ? e.message : 'No se pudo obtener la ubicación',
         });
       }
     };

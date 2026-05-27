@@ -34,9 +34,9 @@ Monto: $${amount} MXN
 Recibido: $${received} MXN
 Comisión: $${commission} MXN
 Agente: ${agentName}
-Trade ID: ${trade.id}
-${lockTxHash ? `TX Lock: ${truncateHash(lockTxHash, 16)}` : ''}
-${releaseTxHash ? `TX Release: ${truncateHash(releaseTxHash, 16)}` : ''}`;
+Operación ID: ${trade.id}
+${lockTxHash ? `Bloqueo: ${truncateHash(lockTxHash, 16)}` : ''}
+${releaseTxHash ? `Liberación: ${truncateHash(releaseTxHash, 16)}` : ''}`;
 
         if (navigator.share) {
             try {
@@ -67,7 +67,7 @@ ${releaseTxHash ? `TX Release: ${truncateHash(releaseTxHash, 16)}` : ''}`;
                     {type === 'cashout' ? '¡Listo!' : '¡Depósito exitoso!'}
                 </h1>
                 <p className="text-secondary font-medium text-lg opacity-70">
-                    {type === 'cashout' ? 'Recibiste tu efectivo' : 'Tus MXNE ya están en tu wallet'}
+                    {type === 'cashout' ? 'Recibiste tu efectivo' : 'Tus MXNE ya están en tu billetera'}
                 </p>
             </section>
 
@@ -116,7 +116,7 @@ ${releaseTxHash ? `TX Release: ${truncateHash(releaseTxHash, 16)}` : ''}`;
 
             {/* Hash & Rating */}
             <div className="w-full space-y-8 text-center">
-                {/* Transaction hashes */}
+                {/* Hashes de operación */}
                 <section className="space-y-4">
                     {releaseTxHash && (
                         <div>
@@ -126,7 +126,7 @@ ${releaseTxHash ? `TX Release: ${truncateHash(releaseTxHash, 16)}` : ''}`;
                                 rel="noopener noreferrer"
                                 className="text-primary font-bold text-sm hover:opacity-80 transition-opacity flex items-center justify-center gap-2 mx-auto"
                             >
-                                Ver transacción de liberación
+                                Ver liberación de la operación
                                 <span className="material-symbols-outlined text-[18px]">open_in_new</span>
                             </a>
                             <p className="font-mono text-[11px] text-on-surface-variant opacity-60 tracking-tight mt-1">
@@ -142,7 +142,7 @@ ${releaseTxHash ? `TX Release: ${truncateHash(releaseTxHash, 16)}` : ''}`;
                                 rel="noopener noreferrer"
                                 className="text-primary font-bold text-sm hover:opacity-80 transition-opacity flex items-center justify-center gap-2 mx-auto"
                             >
-                                Ver transacción de bloqueo
+                                Ver bloqueo de la operación
                                 <span className="material-symbols-outlined text-[18px]">open_in_new</span>
                             </a>
                             <p className="font-mono text-[11px] text-on-surface-variant opacity-60 tracking-tight mt-1">
@@ -152,7 +152,7 @@ ${releaseTxHash ? `TX Release: ${truncateHash(releaseTxHash, 16)}` : ''}`;
                     )}
                     {!lockTxHash && !releaseTxHash && (
                         <span className="text-primary font-bold text-sm opacity-40 flex items-center justify-center gap-2">
-                            Ver transacción on-chain
+                            Ver operación en cadena
                             <span className="material-symbols-outlined text-[18px]">open_in_new</span>
                         </span>
                     )}
