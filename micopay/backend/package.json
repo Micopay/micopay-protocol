@@ -7,6 +7,8 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "build": "tsc",
+    "test": "node --import tsx src/tests/event-listener.test.ts",
+    "test:rate-limit": "node --import tsx src/tests/rateLimit.test.ts",
     "e2e": "node --import tsx ../scripts/e2e-test.ts"
   },
   "dependencies": {

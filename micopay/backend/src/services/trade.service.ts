@@ -356,14 +356,20 @@ export async function lockTrade(
 
     await assertNotReplayed(lockTxHash, 'trade/lock', userId);
 
+    // Compute contract_trade_id = sha256(secret_hash_bytes), matching compute_trade_id()
+    // in the Soroban contract. Stored for O(1) lookup when on-chain events arrive.
+    const secretHashBytes = Buffer.from(trade.secret_hash, 'hex');
+    const contractTradeId = createHash('sha256').update(secretHashBytes).digest('hex');
+
     await db.execute(
       `UPDATE trades
        SET status = 'locked',
            stellar_trade_id = $2,
            lock_tx_hash = $3,
-           locked_at = NOW()
+           locked_at = NOW(),
+           contract_trade_id = $4
        WHERE id = $1`,
-      [tradeId, stellarTradeId, lockTxHash],
+      [tradeId, stellarTradeId, lockTxHash, contractTradeId],
     );
 
     await insertTradeAuditEvent({

@@ -58,4 +58,10 @@ export const config = {
   authRateLimitMax: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '5', 10),
   tradeRateLimitWindowMs: parseInt(process.env.TRADE_RATE_LIMIT_WINDOW_MS || '3600000', 10), // 1 hour
   tradeRateLimitMax: parseInt(process.env.TRADE_RATE_LIMIT_MAX || '10', 10),
+
+  // Soroban event listener
+  // Set EVENT_LISTENER_ENABLED=false to disable (polling fallback remains active).
+  eventListenerEnabled: process.env.EVENT_LISTENER_ENABLED !== 'false',
+  eventListenerPollMs: parseInt(process.env.EVENT_LISTENER_POLL_MS || '2000', 10),
+  eventListenerHealthStaleMs: parseInt(process.env.EVENT_LISTENER_HEALTH_STALE_MS || '30000', 10),
 } as const;

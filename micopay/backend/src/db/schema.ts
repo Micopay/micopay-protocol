@@ -11,6 +11,8 @@ const mem: Record<string, any[]> = {
   secret_access_log: [],
   audit_log: [],
   processed_tx: [],
+  event_cursor: [],
+  merchant_configs: [],
 };
 
 function memNow() {
