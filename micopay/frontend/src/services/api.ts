@@ -45,9 +45,12 @@ export interface TradeData {
 export interface TradeDetailResponse {
   trade: TradeData & {
     lock_tx_hash?: string | null;
+    release_tx_hash?: string | null;
+    platform_fee_mxn?: number;
     seller_id?: string;
     buyer_id?: string;
     created_at?: string;
+    completed_at?: string | null;
     expires_at?: string;
   };
   merchant_unavailable: boolean;
@@ -156,11 +159,17 @@ export async function getSecret(
   return res.data;
 }
 
+export interface CompleteTradeResponse {
+  status: string;
+  release_tx_hash: string;
+}
+
 export async function completeTrade(
   tradeId: string,
   buyerToken: string,
-): Promise<void> {
-  await http.post(`/trades/${tradeId}/complete`, {}, authHeaders(buyerToken));
+): Promise<CompleteTradeResponse> {
+  const res = await http.post(`/trades/${tradeId}/complete`, {}, authHeaders(buyerToken));
+  return res.data;
 }
 
 export interface TradeHistoryItem {

@@ -34,8 +34,10 @@ import {
   createTrade,
   lockTrade,
   revealTrade,
+  fetchTradeDetail,
   UserData,
   TradeData,
+  TradeHistoryItem,
 } from "./services/api";
 import { readJSON, writeJSON, removeKey } from "./services/secureStorage";
 
@@ -54,11 +56,13 @@ interface AppCtx {
   sellerUser: UserData | null;
   activeTrade: TradeData | null;
   lockTxHash: string | null;
+  releaseTxHash: string | null;
   activeAmount: number;
   tradeLoading: boolean;
   flow: Flow;
   setActiveAmount: (n: number) => void;
   setFlow: (f: Flow) => void;
+  setReleaseTxHash: (h: string | null) => void;
   handleOfferSelected: (offerId: string) => Promise<void>;
   handleDepositOfferSelected: (offerId: string) => Promise<void>;
   handleAccountDeleted: () => void;
@@ -198,7 +202,7 @@ function ChatDepositRoute() {
 
 function QRRevealRoute() {
   const navigate = useNavigate();
-  const { activeTrade, sellerUser, buyerUser, activeAmount } = useAppCtx();
+  const { activeTrade, sellerUser, buyerUser, activeAmount, setReleaseTxHash } = useAppCtx();
   return (
     <QRReveal
       activeTrade={activeTrade}
@@ -207,41 +211,101 @@ function QRRevealRoute() {
       amount={activeAmount}
       onBack={() => navigate('/chat')}
       onChat={() => navigate('/chat')}
-      onSuccess={() => navigate('/success')}
+      onSuccess={(hash) => {
+        setReleaseTxHash(hash);
+        navigate('/success');
+      }}
     />
   );
 }
 
 function QRDepositRoute() {
   const navigate = useNavigate();
+  const { activeTrade, buyerUser, setReleaseTxHash } = useAppCtx();
   return (
     <DepositQR
+      activeTrade={activeTrade}
+      buyerToken={buyerUser?.token ?? null}
       onBack={() => navigate('/chat-deposit')}
       onChat={() => navigate('/chat-deposit')}
-      onSuccess={() => navigate('/success')}
+      onSuccess={(hash) => {
+        setReleaseTxHash(hash);
+        navigate('/success');
+      }}
     />
   );
 }
 
 function SuccessRoute() {
   const navigate = useNavigate();
-  const { flow, activeAmount, activeTrade, lockTxHash, sellerUser, buyerUser, resetTradeFlow } = useAppCtx();
+  const { flow, activeTrade, lockTxHash, releaseTxHash, buyerUser, resetTradeFlow } = useAppCtx();
+  const [tradeDetail, setTradeDetail] = useState<TradeHistoryItem | null>(null);
+  const [sellerUsername, setSellerUsername] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Block access if there is no real active trade
+  useEffect(() => {
+    if (!activeTrade) {
+      navigate('/', { replace: true });
+      return;
+    }
+
+    // Fetch real trade data from backend
+    if (buyerUser?.token) {
+      fetchTradeDetail(activeTrade.id, buyerUser.token)
+        .then(({ trade, seller_username }) => {
+          setTradeDetail({
+            id: trade.id,
+            status: trade.status,
+            amount_mxn: trade.amount_mxn,
+            platform_fee_mxn: trade.platform_fee_mxn ?? 0,
+            lock_tx_hash: trade.lock_tx_hash ?? lockTxHash,
+            release_tx_hash: trade.release_tx_hash ?? releaseTxHash,
+            created_at: trade.created_at ?? new Date().toISOString(),
+            completed_at: trade.completed_at ?? null,
+            seller_id: trade.seller_id ?? '',
+            buyer_id: trade.buyer_id ?? '',
+          });
+          setSellerUsername(seller_username);
+        })
+        .catch((e) => {
+          console.warn('Could not fetch trade detail for receipt', e);
+        })
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
+  }, [activeTrade, buyerUser?.token, lockTxHash, releaseTxHash, navigate]);
+
+  if (!activeTrade) return null;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F4FAFF]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // Use fetched trade detail if available, otherwise build from context
+  const trade: TradeHistoryItem & { completed_at: string | null } = tradeDetail ?? {
+    id: activeTrade.id,
+    status: activeTrade.status,
+    amount_mxn: activeTrade.amount_mxn,
+    platform_fee_mxn: 0,
+    lock_tx_hash: lockTxHash,
+    release_tx_hash: releaseTxHash,
+    created_at: new Date().toISOString(),
+    completed_at: new Date().toISOString(),
+    seller_id: '',
+    buyer_id: '',
+  };
+
   return (
     <SuccessScreen
       type={flow === 'cashout' ? 'cashout' : 'deposit'}
-      trade={{
-        id: activeTrade?.id ?? 'demo',
-        status: activeTrade?.status ?? 'completed',
-        amount_mxn: activeAmount,
-        platform_fee_mxn: flow === 'cashout' ? activeAmount * 0.01 : activeAmount * 0.008,
-        lock_tx_hash: lockTxHash,
-        release_tx_hash: null,
-        created_at: new Date().toISOString(),
-        completed_at: new Date().toISOString(),
-        seller_id: sellerUser?.id ?? '',
-        buyer_id: buyerUser?.id ?? '',
-      }}
-      agentName={flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe'}
+      trade={trade}
+      agentName={sellerUsername ?? 'Agente'}
       onHome={() => {
         resetTradeFlow();
         navigate('/');
@@ -375,6 +439,7 @@ function App({ initialTradeId: _initialTradeId = null }: AppProps) {
   const [sellerUser, setSellerUser] = useState<UserData | null>(null);
   const [activeTrade, setActiveTrade] = useState<TradeData | null>(null);
   const [lockTxHash, setLockTxHash] = useState<string | null>(null);
+  const [releaseTxHash, setReleaseTxHash] = useState<string | null>(null);
   const [activeAmount, setActiveAmount] = useState(500);
   const [tradeLoading, setTradeLoading] = useState(false);
   const [authReady, setAuthReady] = useState(false);
@@ -413,6 +478,7 @@ function App({ initialTradeId: _initialTradeId = null }: AppProps) {
     setSellerUser(null);
     setActiveTrade(null);
     setLockTxHash(null);
+    setReleaseTxHash(null);
     setFlow(null);
     void removeKey(USERS_STORAGE_KEY);
   };
@@ -421,6 +487,7 @@ function App({ initialTradeId: _initialTradeId = null }: AppProps) {
     setFlow(null);
     setActiveTrade(null);
     setLockTxHash(null);
+    setReleaseTxHash(null);
   };
 
   const runTradeFlow = async () => {
@@ -452,11 +519,13 @@ function App({ initialTradeId: _initialTradeId = null }: AppProps) {
     sellerUser,
     activeTrade,
     lockTxHash,
+    releaseTxHash,
     activeAmount,
     tradeLoading,
     flow,
     setActiveAmount,
     setFlow,
+    setReleaseTxHash,
     handleOfferSelected,
     handleDepositOfferSelected,
     handleAccountDeleted,
