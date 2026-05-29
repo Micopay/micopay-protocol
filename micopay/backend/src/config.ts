@@ -46,6 +46,12 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'dev_jwt_secret',
   jwtExpiry: process.env.JWT_EXPIRY || '24h',
 
+  // Firebase / FCM (for push notifications)
+  firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
+  firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+  firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY,
+  fcmServiceAccountJson: process.env.FCM_SERVICE_ACCOUNT_JSON,
+
   // DeFi integrations
   cetesIssuer: process.env.CETES_ISSUER || 'GCRYUGD5NVARGXT56XEZI5CIFCQETYHAPQQTHO2O3IQZTHDH4LATMYWC',
   blendPoolId: process.env.BLEND_POOL_ID || 'CB5UDFTJ6VFOK63ZHQASNODV4PP2HVGPYRF754LRGO7YRG5SFCAZWTDD',

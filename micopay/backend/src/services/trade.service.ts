@@ -5,6 +5,7 @@ import { generateTradeSecret, encryptSecret, decryptSecret } from './secret.serv
 import { createHash } from 'crypto';
 import type { FastifyRequest } from 'fastify';
 import { callLockOnChain, callReleaseOnChain, verifyLockOnChain, assertNotReplayed } from './stellar.service.js';
+import { sendTradeNotificationToMerchant } from './push.service.js';
 import {
   NotFoundError,
   ForbiddenError,
@@ -176,7 +177,7 @@ export async function createTrade(input: CreateTradeInput) {
     );
   }
   // Verify buyer exists
-  const buyer = await db.getOne('SELECT id, stellar_address FROM users WHERE id = $1', [buyerId]);
+  const buyer = await db.getOne('SELECT id, stellar_address, username FROM users WHERE id = $1', [buyerId]);
   if (!buyer) throw new NotFoundError('USER_NOT_FOUND', 'El usuario comprador no existe', 'Buyer not found');
 
   if (sellerId === buyerId) throw new ValidationError('INVALID_PARTICIPANTS', 'No puedes crear un intercambio contigo mismo', 'Cannot trade with yourself');
@@ -227,8 +228,19 @@ export async function createTrade(input: CreateTradeInput) {
     },
   });
 
+  // Fire-and-forget — push failure must never fail trade creation
+  const buyerUsername = buyer.username || buyer.stellar_address || 'Usuario';
+  sendTradeNotificationToMerchant(sellerId, {
+    tradeId: result.id,
+    amount: `${amountMxn.toLocaleString('es-MX')} MXN`,
+    buyerUsername,
+  }).catch(err => {
+    logger.error({ err, trade_id: result.id, category: 'trade.lifecycle' }, '[trade] Push notification failed silently');
+  });
+
   return result;
 }
+
 
 export async function getTradeById(tradeId: string, userId: string) {
   const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);

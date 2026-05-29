@@ -130,4 +130,64 @@ export async function userRoutes(app: FastifyInstance) {
       return deleteAccount(request.user.id, username);
     },
   );
+
+  /**
+   * PATCH /users/me/push_token
+   * Register or update the authenticated merchant's FCM push token.
+   * Called after the Capacitor app receives a token from Firebase Cloud Messaging.
+   */
+  app.patch(
+    "/users/me/push_token",
+    {
+      preHandler: [authMiddleware],
+      schema: {
+        body: {
+          type: "object",
+          required: ["push_token"],
+          properties: {
+            push_token: { type: "string", minLength: 1, maxLength: 512 },
+          },
+          additionalProperties: false,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { push_token } = request.body as { push_token: string };
+      const userId = request.user.id;
+
+      if (!push_token || push_token.trim().length === 0) {
+        reply.status(400).send({
+          code: "INVALID_PUSH_TOKEN",
+          message: "Push token cannot be empty",
+        });
+        return;
+      }
+
+      try {
+        await db.execute(
+          `UPDATE users
+           SET push_token = $1, push_token_updated_at = NOW()
+           WHERE id = $2`,
+          [push_token, userId]
+        );
+
+        request.log.info(
+          { user_id: userId, category: "push" },
+          "[push] Push token registered"
+        );
+
+        reply.status(200);
+        return { success: true };
+      } catch (err) {
+        request.log.error(
+          { err, user_id: userId, category: "push" },
+          "[push] Failed to update push token"
+        );
+        reply.status(500).send({
+          code: "PUSH_TOKEN_UPDATE_FAILED",
+          message: "Failed to register push token",
+        });
+      }
+    }
+  );
 }
