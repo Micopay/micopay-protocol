@@ -367,3 +367,54 @@ export async function updateMerchantConfig(token: string, config: MerchantConfig
   const res = await http.put('/merchants/me/config', config, authHeaders(token));
   return res.data.config;
 }
+
+// ─── Merchant Discovery ────────────────────────────────────────────────────
+
+export interface AvailableMerchant {
+  seller_id: string;
+  username: string;
+  rate_percent: number;
+  min_trade_mxn: number;
+  max_trade_mxn: number;
+  daily_cap_mxn: number;
+  latitude: number;
+  longitude: number;
+  address_text: string | null;
+  distance_km: number;
+  payout_mxn: number;
+}
+
+export interface MerchantsAvailableQuery {
+  lat: number;
+  lng: number;
+  radius_km?: number;
+  amount_mxn: number;
+  flow?: 'cashout' | 'deposit';
+}
+
+export async function getMerchantsAvailable(
+  query: MerchantsAvailableQuery,
+): Promise<AvailableMerchant[]> {
+  const params = new URLSearchParams({
+    lat: String(query.lat),
+    lng: String(query.lng),
+    amount_mxn: String(query.amount_mxn),
+    ...(query.radius_km !== undefined && { radius_km: String(query.radius_km) }),
+    ...(query.flow && { flow: query.flow }),
+  });
+  const res = await http.get(`/merchants/available?${params.toString()}`);
+  return res.data.merchants as AvailableMerchant[];
+}
+
+export async function updateMerchantLocation(
+  token: string,
+  latitude: number,
+  longitude: number,
+  address_text?: string,
+): Promise<void> {
+  await http.patch(
+    '/merchants/me/location',
+    { latitude, longitude, address_text },
+    authHeaders(token),
+  );
+}
