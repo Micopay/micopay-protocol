@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { extractApiErrorPayload } from '../utils/apiError';
+import { extractApiErrorPayload, type ApiErrorPayload } from '../utils/apiError';
+import { reportClientError } from '../utils/reportError';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -7,6 +8,22 @@ const http = axios.create({ baseURL: BASE_URL });
 
 function authHeaders(token: string) {
   return { headers: { Authorization: `Bearer ${token}` } };
+}
+
+/** Build a user-facing Error that includes the backend support code when available. */
+function toApiError(payload: ApiErrorPayload): Error {
+  let msg = payload.message;
+  if (payload.support_code) {
+    msg += ` (código: ${payload.support_code})`;
+  }
+  if (payload.request_id) {
+    reportClientError({
+      request_id: payload.request_id,
+      error_code: payload.error ?? 'API_ERROR',
+      message: payload.message,
+    });
+  }
+  return new Error(msg);
 }
 
 function randomAddress(prefix: string): string {
@@ -71,8 +88,7 @@ export async function cancelTradeRequest(tradeId: string, buyerToken: string): P
     const res = await http.post(`/trades/${tradeId}/cancel`, {}, authHeaders(buyerToken));
     return res.data as CancelTradeResponse;
   } catch (e: unknown) {
-    const { message } = extractApiErrorPayload(e);
-    throw new Error(message);
+    throw toApiError(extractApiErrorPayload(e));
   }
 }
 
@@ -103,15 +119,8 @@ export async function createTrade(
     );
     return res.data.trade;
   } catch (e: unknown) {
-    const { message } = extractApiErrorPayload(e);
-    throw new Error(message);
+    throw toApiError(extractApiErrorPayload(e));
   }
-  const res = await http.post(
-    "/trades",
-    { seller_id: sellerId, amount_mxn: amountMxn },
-    authHeaders(buyerToken),
-  );
-  return res.data.trade;
 }
 
 export async function getTrade(

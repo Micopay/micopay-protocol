@@ -1,5 +1,6 @@
 import { Component, ReactNode } from 'react';
 import SupportLink from './SupportLink';
+import { reportClientError } from '../utils/reportError';
 
 interface Props {
   children: ReactNode;
@@ -8,16 +9,34 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  supportCode: string;
+}
+
+/** Generate a short hex support code the user can quote to support. */
+function generateSupportCode(): string {
+  const hex = Array.from(crypto.getRandomValues(new Uint8Array(4)))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `${hex.slice(0, 4)}-${hex.slice(4, 8)}`;
 }
 
 class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, supportCode: '' };
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    return { hasError: true, error, supportCode: generateSupportCode() };
+  }
+
+  componentDidCatch(error: Error) {
+    reportClientError({
+      error_code: 'RENDER_CRASH',
+      message: error.message,
+      stack: error.stack,
+      context: { support_code: this.state.supportCode },
+    });
   }
 
   render() {
@@ -33,8 +52,16 @@ class ErrorBoundary extends Component<Props, State> {
               Tus fondos están seguros. Esto fue un error de la interfaz, no de la blockchain.
             </p>
             {this.state.error && (
-              <p className="text-xs text-on-surface-variant/60 font-mono mb-6 break-all">
+              <p className="text-xs text-on-surface-variant/60 font-mono mb-4 break-all">
                 {this.state.error.message}
+              </p>
+            )}
+            {this.state.supportCode && (
+              <p className="text-xs text-on-surface-variant mb-6">
+                Código de soporte:{' '}
+                <span className="font-mono font-bold text-on-surface">
+                  {this.state.supportCode}
+                </span>
               </p>
             )}
             <div className="flex flex-col gap-3 items-center">

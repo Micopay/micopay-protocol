@@ -52,7 +52,11 @@ export default function CancelTradeDialog({
       // On success the parent usually navigates away — do not call `resetAndClose` here to avoid setState after unmount.
       await onConfirmCancel();
     } catch (e) {
-      setRequestError(extractApiErrorPayload(e).message);
+      const payload = extractApiErrorPayload(e);
+      const msg = payload.support_code
+        ? `${payload.message} (código: ${payload.support_code})`
+        : payload.message;
+      setRequestError(msg);
     } finally {
       setSubmitting(false);
     }

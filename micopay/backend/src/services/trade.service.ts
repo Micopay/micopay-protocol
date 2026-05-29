@@ -17,6 +17,7 @@ import {
 } from '../utils/errors.js';
 import {
   getTradeAuditTrail as getTradeAuditTrailRows,
+  getAuditEventsByRequestId,
   insertTradeAuditEvent,
 } from '../db/audit-log.model.js';
 
@@ -42,6 +43,11 @@ function isMerchantUnavailableForTrade(
     return false;
   }
   return sellerRow?.merchant_available === false;
+}
+
+/** Extract the correlation ID attached by requestId middleware. */
+function getRequestId(request: FastifyRequest): string | undefined {
+  return (request as any).requestId;
 }
 
 const STROOPS_PER_MXN = 10_000_000; // 7 decimals
@@ -219,6 +225,7 @@ export async function createTrade(input: CreateTradeInput) {
     fromState: UNKNOWN_STATE,
     toState: 'pending',
     actor: buyerId,
+    requestId: getRequestId(request),
     metadata: {
       success: true,
       amount_mxn: amountMxn,
@@ -371,6 +378,7 @@ export async function lockTrade(
       fromState,
       toState: 'locked',
       actor: userId,
+      requestId: getRequestId(request),
       metadata: {
         success: true,
         lock_tx_hash: lockTxHash,
@@ -414,6 +422,7 @@ export async function revealTrade(request: FastifyRequest, tradeId: string, user
       fromState,
       toState: 'revealing',
       actor: userId,
+      requestId: getRequestId(request),
       metadata: { success: true },
     });
 
@@ -514,6 +523,7 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
       fromState,
       toState: 'completed',
       actor: userId,
+      requestId: getRequestId(request),
       metadata: {
         success: true,
         release_tx_hash: releaseTxHash,
@@ -551,6 +561,7 @@ async function finalizeTradeCancellation(tradeId: string) {
 }
 
 export async function cancelTrade(
+  request: FastifyRequest,
   tradeId: string,
   userId: string,
   reason?: string,
@@ -563,6 +574,7 @@ export async function cancelTrade(
       fromState,
       toState: 'cancelled',
       actor: userId,
+      requestId: getRequestId(request),
       metadata: {
         success: true,
         cancel_reason: reason ?? null,
@@ -654,6 +666,15 @@ export async function getTradeAuditTrail(tradeId: string, userId: string) {
   await getTradeById(tradeId, userId);
 
   const events = await getTradeAuditTrailRows(tradeId);
+  return events.map((event) => ({
+    ...event,
+    timestamp: event.occurred_at,
+  }));
+}
+
+/** Look up audit events by correlation / request ID (support use-case). */
+export async function lookupAuditByRequestId(requestId: string) {
+  const events = await getAuditEventsByRequestId(requestId);
   return events.map((event) => ({
     ...event,
     timestamp: event.occurred_at,
