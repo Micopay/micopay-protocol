@@ -367,3 +367,55 @@ export async function updateMerchantConfig(token: string, config: MerchantConfig
   const res = await http.put('/merchants/me/config', config, authHeaders(token));
   return res.data.config;
 }
+
+// ─── Offline-aware merchant mutations ──────────────────────────────────────
+
+/**
+ * Update merchant availability with offline support
+ * If offline, queues the mutation for later sync
+ */
+export async function updateMerchantAvailabilityWithOfflineSupport(
+  token: string,
+  merchant_available: boolean,
+  queueMutation?: (type: 'availability', payload: any) => Promise<string>,
+): Promise<{ merchant_available: boolean; queued?: boolean }> {
+  try {
+    const result = await patchMerchantAvailability(token, merchant_available);
+    return { ...result, queued: false };
+  } catch (error: any) {
+    // Check if this is a network error (offline)
+    if (!navigator.onLine || error.message?.includes('Network') || error.code === 'ECONNABORTED') {
+      if (queueMutation) {
+        console.log('🔄 Queuing availability mutation (offline)');
+        await queueMutation('availability', { merchant_available });
+        return { merchant_available, queued: true };
+      }
+    }
+    throw error;
+  }
+}
+
+/**
+ * Update merchant config with offline support
+ * If offline, queues the mutation for later sync
+ */
+export async function updateMerchantConfigWithOfflineSupport(
+  token: string,
+  config: MerchantConfig,
+  queueMutation?: (type: 'config', payload: any) => Promise<string>,
+): Promise<{ config: MerchantConfig; queued?: boolean }> {
+  try {
+    const result = await updateMerchantConfig(token, config);
+    return { config: result, queued: false };
+  } catch (error: any) {
+    // Check if this is a network error (offline)
+    if (!navigator.onLine || error.message?.includes('Network') || error.code === 'ECONNABORTED') {
+      if (queueMutation) {
+        console.log('🔄 Queuing config mutation (offline)');
+        await queueMutation('config', config);
+        return { config, queued: true };
+      }
+    }
+    throw error;
+  }
+}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getMerchantConfig, updateMerchantConfig, MerchantConfig } from '../services/api';
+import { getMerchantConfig, updateMerchantConfigWithOfflineSupport, MerchantConfig } from '../services/api';
+import { useOfflineQueue } from '../hooks/useOfflineQueue';
 
 interface MerchantSettingsProps {
   token: string | null;
@@ -11,6 +12,8 @@ export default function MerchantSettings({ token, onBack }: MerchantSettingsProp
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageType, setMessageType] = useState<'success' | 'error' | 'warning' | null>(null);
+  const offlineQueue = useOfflineQueue(token);
 
   useEffect(() => {
     if (!token) {
@@ -35,12 +38,27 @@ export default function MerchantSettings({ token, onBack }: MerchantSettingsProp
     if (!token) return;
     setSaving(true);
     setMessage(null);
+    setMessageType(null);
     try {
-      const updated = await updateMerchantConfig(token, form);
-      setForm(updated);
-      setMessage('Configuración guardada. El límite diario se reinicia a las 00:00 UTC.');
+      const result = await updateMerchantConfigWithOfflineSupport(
+        token,
+        form,
+        offlineQueue.queueMutationAsync,
+      );
+      
+      setForm(result.config);
+      
+      if (result.queued) {
+        setMessage('⏳ Cambios guardados localmente. Se sincronizarán cuando la conexión se restaure.');
+        setMessageType('warning');
+      } else {
+        setMessage('✅ Configuración guardada exitosamente. El límite diario se reinicia a las 00:00 UTC.');
+        setMessageType('success');
+      }
     } catch (err: any) {
-      setMessage(err?.response?.data?.message ?? 'No se pudo guardar la configuración');
+      const errorMsg = err?.response?.data?.message ?? err?.message ?? 'No se pudo guardar la configuración';
+      setMessage(errorMsg);
+      setMessageType('error');
     } finally {
       setSaving(false);
     }
@@ -49,8 +67,62 @@ export default function MerchantSettings({ token, onBack }: MerchantSettingsProp
   return (
     <div className="bg-surface text-on-surface min-h-screen px-6 pt-10 pb-32 max-w-xl mx-auto">
       <button className="mb-6 text-sm font-semibold text-primary" onClick={onBack}>← Volver</button>
-      <h1 className="text-2xl font-bold mb-2">Ajustes de comerciante</h1>
-      <p className="text-sm text-on-surface-variant mb-8">Configura tu tasa y límites operativos.</p>
+      
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold mb-2">Ajustes de comerciante</h1>
+          <p className="text-sm text-on-surface-variant">Configura tu tasa y límites operativos.</p>
+        </div>
+      </div>
+
+      {/* Offline Status Banner */}
+      {!offlineQueue.isOnline && (
+        <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-6 rounded">
+          <div className="flex">
+            <span className="material-symbols-outlined text-amber-600 mr-3">wifi_off</span>
+            <div>
+              <h3 className="font-semibold text-amber-800">Sin conexión</h3>
+              <p className="text-sm text-amber-700">Los cambios se guardarán localmente y se sincronizarán cuando se restaure la conexión.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pending Sync Status */}
+      {offlineQueue.hasPending && (
+        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6 rounded">
+          <div className="flex items-center justify-between">
+            <div className="flex">
+              <span className="material-symbols-outlined text-blue-600 mr-3 animate-spin">progress_activity</span>
+              <div>
+                <h3 className="font-semibold text-blue-800">Pendiente de sincronizar</h3>
+                <p className="text-sm text-blue-700">Tienes cambios esperando ser sincronizados con el servidor.</p>
+              </div>
+            </div>
+            {offlineQueue.isOnline && !offlineQueue.isSyncing && (
+              <button
+                onClick={() => offlineQueue.retryAsync(token)}
+                className="ml-4 px-3 py-1 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
+              >
+                Reintentar
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Syncing Status */}
+      {offlineQueue.isSyncing && (
+        <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-6 rounded">
+          <div className="flex">
+            <span className="material-symbols-outlined text-green-600 mr-3 animate-spin">sync</span>
+            <div>
+              <h3 className="font-semibold text-green-800">Sincronizando...</h3>
+              <p className="text-sm text-green-700">Tus cambios se están enviando al servidor.</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading ? <p>Cargando…</p> : (
         <div className="space-y-5">
@@ -61,13 +133,21 @@ export default function MerchantSettings({ token, onBack }: MerchantSettingsProp
 
           <button
             className="w-full rounded-xl bg-primary text-white font-semibold py-3 disabled:opacity-60"
-            disabled={saving || !token}
+            disabled={saving || !token || offlineQueue.isSyncing}
             onClick={save}
           >
-            {saving ? 'Guardando…' : 'Guardar cambios'}
+            {saving ? 'Guardando…' : offlineQueue.isSyncing ? 'Sincronizando...' : 'Guardar cambios'}
           </button>
 
-          {message && <p className="text-sm text-on-surface-variant">{message}</p>}
+          {message && (
+            <p className={`text-sm font-medium p-3 rounded ${
+              messageType === 'success' ? 'bg-green-50 text-green-800 border border-green-200' :
+              messageType === 'error' ? 'bg-red-50 text-red-800 border border-red-200' :
+              'bg-amber-50 text-amber-800 border border-amber-200'
+            }`}>
+              {message}
+            </p>
+          )}
         </div>
       )}
     </div>
