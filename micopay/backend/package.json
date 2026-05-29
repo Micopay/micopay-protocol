@@ -7,6 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "build": "tsc",
+    "test": "tsx src/tests/rateLimit.test.ts && tsx src/tests/accountDeletion.test.ts",
     "e2e": "node --import tsx ../scripts/e2e-test.ts"
   },
   "dependencies": {
