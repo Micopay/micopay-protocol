@@ -1,4 +1,4 @@
-import { query, getOne, getMany } from "./schema.js";
+import { query, getOne, getMany, execute } from "./schema.js";
 
 export type VerificationStatus = "pending" | "verified" | "paused";
 
@@ -120,4 +120,33 @@ export async function getVerifiedMerchants(): Promise<PublicMerchantRow[]> {
     FROM merchants
     WHERE verification_status = 'verified'
   `);
+}
+
+export async function updateMerchantAvailability(
+  userId: string,
+  status: VerificationStatus,
+): Promise<void> {
+  await execute(
+    "UPDATE merchants SET verification_status = $2, updated_at = NOW() WHERE user_id = $1",
+    [userId, status],
+  );
+}
+
+export async function updateMerchantConfig(
+  userId: string,
+  data: {
+    spread_percent: number;
+    min_amount: number;
+    max_amount: number;
+  },
+): Promise<MerchantRow> {
+  const result = await getOne<MerchantRow>(
+    `UPDATE merchants 
+     SET spread_percent = $2, min_amount = $3, max_amount = $4, updated_at = NOW() 
+     WHERE user_id = $1 
+     RETURNING *`,
+    [userId, data.spread_percent, data.min_amount, data.max_amount],
+  );
+  if (!result) throw new Error("Merchant not found");
+  return result;
 }

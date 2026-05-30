@@ -1,10 +1,13 @@
 import {
   createMerchant,
-  getMerchantByUserId,
+  getMerchantByUserId as getMerchantByUserIdDb,
   getVerifiedMerchants,
+  updateMerchantAvailability as updateMerchantAvailabilityDb,
+  updateMerchantConfig as updateMerchantConfigDb,
   type CreateMerchantInput,
   type MerchantRow,
   type PublicMerchantRow,
+  type VerificationStatus,
 } from "../db/merchants.js";
 import { ConflictError, UnprocessableEntityError } from "../utils/errors.js";
 
@@ -59,4 +62,29 @@ export async function registerMerchant(
 
 export async function listVerifiedMerchants(): Promise<PublicMerchantRow[]> {
   return getVerifiedMerchants();
+}
+
+export async function getMerchantByUserId(
+  userId: string,
+): Promise<MerchantRow | null> {
+  const result = await getMerchantByUserIdDb(userId);
+  return result;
+}
+
+export async function updateMerchantAvailability(
+  userId: string,
+  status: VerificationStatus,
+): Promise<void> {
+  await updateMerchantAvailabilityDb(userId, status);
+}
+
+export async function updateMerchantConfig(
+  userId: string,
+  data: {
+    spread_percent: number;
+    min_amount: number;
+    max_amount: number;
+  },
+): Promise<MerchantRow> {
+  return updateMerchantConfigDb(userId, data);
 }

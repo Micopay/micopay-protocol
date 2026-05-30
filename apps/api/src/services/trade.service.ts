@@ -34,6 +34,12 @@ export async function createTrade(input: CreateTradeInput) {
 
   if (sellerId === buyerId) throw new BadRequestError('Cannot trade with yourself');
 
+  // Verify seller is online
+  const sellerMerchant = await db.getOne('SELECT verification_status FROM merchants WHERE user_id = $1', [sellerId]);
+  if (!sellerMerchant || sellerMerchant.verification_status !== 'verified') {
+    throw new BadRequestError('Merchant is currently offline or paused');
+  }
+
   // Generate HTLC secret
   const { secret, secretHash } = generateTradeSecret();
 

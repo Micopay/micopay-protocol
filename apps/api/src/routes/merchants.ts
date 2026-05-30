@@ -86,4 +86,111 @@ export async function merchantRoutes(app: FastifyInstance) {
     const merchants = await merchantService.listVerifiedMerchants();
     return reply.status(200).send(merchants);
   });
+
+  /**
+   * GET /merchants/me/config
+   * Authenticated. Returns the merchant configuration for the requesting user.
+   */
+  app.get(
+    "/merchants/me/config",
+    { preHandler: [authMiddleware] },
+    async (request, reply) => {
+      const userId = (request as any).user.id;
+      const merchant = await merchantService.getMerchantByUserId(userId);
+      if (!merchant) {
+        return reply.status(404).send({ error: "Merchant record not found" });
+      }
+
+      return reply.send({
+        config: {
+          rate_percent: merchant.spread_percent,
+          min_trade_mxn: merchant.min_amount,
+          max_trade_mxn: merchant.max_amount,
+          daily_cap_mxn: 250000, // Hardcoded for now as per frontend expectations
+        },
+      });
+    },
+  );
+
+  /**
+   * PUT /merchants/me/config
+   * Authenticated. Updates the merchant configuration.
+   */
+  app.put(
+    "/merchants/me/config",
+    {
+      preHandler: [authMiddleware],
+      schema: {
+        body: {
+          type: "object",
+          properties: {
+            rate_percent: { type: "number" },
+            min_trade_mxn: { type: "number" },
+            max_trade_mxn: { type: "number" },
+            daily_cap_mxn: { type: "number" },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const userId = (request as any).user.id;
+      const body = request.body as any;
+
+      const merchant = await merchantService.updateMerchantConfig(userId, {
+        spread_percent: body.rate_percent,
+        min_amount: body.min_trade_mxn,
+        max_amount: body.max_trade_mxn,
+      });
+
+      return reply.send({
+        config: {
+          rate_percent: merchant.spread_percent,
+          min_trade_mxn: merchant.min_amount,
+          max_trade_mxn: merchant.max_amount,
+          daily_cap_mxn: 250000,
+        },
+      });
+    },
+  );
+
+  /**
+   * PATCH /users/me/availability
+   * Authenticated. Updates the merchant availability status.
+   */
+  app.patch(
+    "/users/me/availability",
+    {
+      preHandler: [authMiddleware],
+      schema: {
+        body: {
+          type: "object",
+          required: ["availability"],
+          properties: {
+            availability: {
+              type: "string",
+              enum: ["online", "offline", "paused"],
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const userId = (request as any).user.id;
+      const { availability } = request.body as {
+        availability: "online" | "offline" | "paused";
+      };
+
+      // Map frontend availability to DB verification_status
+      // Note: 'verified' in DB acts as 'online'
+      const status =
+        availability === "online"
+          ? "verified"
+          : availability === "paused"
+            ? "paused"
+            : "pending"; // offline maps to pending for now
+
+      await merchantService.updateMerchantAvailability(userId, status);
+      return reply.status(204).send();
+    },
+  );
 }

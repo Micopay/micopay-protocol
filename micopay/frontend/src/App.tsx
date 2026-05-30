@@ -7,7 +7,7 @@ import {
   useNavigate,
   useLocation,
 } from "react-router-dom";
-import ErrorBoundary from './components/ErrorBoundary';
+import ErrorBoundary from "./components/ErrorBoundary";
 
 import Home from "./pages/Home";
 import CashoutRequest from "./pages/CashoutRequest";
@@ -27,6 +27,7 @@ import MerchantInbox from "./pages/MerchantInbox";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Profile from "./pages/Profile";
+import MerchantSettings from "./pages/MerchantSettings";
 import BottomNav from "./components/BottomNav";
 
 import {
@@ -41,13 +42,16 @@ import { readJSON, writeJSON, removeKey } from "./services/secureStorage";
 
 const USERS_STORAGE_KEY = "micopay_users";
 
-interface StoredUsers { buyer: UserData; seller: UserData }
+interface StoredUsers {
+  buyer: UserData;
+  seller: UserData;
+}
 
 interface AppProps {
   initialTradeId?: string | null;
 }
 
-type Flow = 'cashout' | 'deposit' | null;
+type Flow = "cashout" | "deposit" | null;
 
 interface AppCtx {
   buyerUser: UserData | null;
@@ -80,12 +84,18 @@ function HomeRoute() {
   const { buyerUser, sellerUser, setFlow } = useAppCtx();
   return (
     <Home
-      onNavigateCashout={() => { setFlow('cashout'); navigate('/cashout'); }}
-      onNavigateDeposit={() => { setFlow('deposit'); navigate('/deposit'); }}
-      onNavigateHistory={() => navigate('/history')}
+      onNavigateCashout={() => {
+        setFlow("cashout");
+        navigate("/cashout");
+      }}
+      onNavigateDeposit={() => {
+        setFlow("deposit");
+        navigate("/deposit");
+      }}
+      onNavigateHistory={() => navigate("/history")}
       token={buyerUser?.token ?? null}
       merchantToken={sellerUser?.token ?? null}
-      onNavigateInbox={() => navigate('/inbox')}
+      onNavigateInbox={() => navigate("/inbox")}
     />
   );
 }
@@ -95,8 +105,10 @@ function HistoryRoute() {
   const { buyerUser } = useAppCtx();
   return (
     <History
-      onBack={() => navigate('/')}
-      onSelectTrade={() => { /* deep-link a /trade/:id pendiente */ }}
+      onBack={() => navigate("/")}
+      onSelectTrade={() => {
+        /* deep-link a /trade/:id pendiente */
+      }}
       token={buyerUser?.token ?? null}
     />
   );
@@ -108,7 +120,7 @@ function InboxRoute() {
   return (
     <MerchantInbox
       token={sellerUser?.token ?? null}
-      onBack={() => navigate('/')}
+      onBack={() => navigate("/")}
     />
   );
 }
@@ -118,10 +130,10 @@ function CashoutRoute() {
   const { setActiveAmount } = useAppCtx();
   return (
     <CashoutRequest
-      onBack={() => navigate('/')}
+      onBack={() => navigate("/")}
       onSearch={(amount) => {
         setActiveAmount(amount);
-        navigate('/map');
+        navigate("/map");
       }}
     />
   );
@@ -132,10 +144,10 @@ function DepositRoute() {
   const { setActiveAmount } = useAppCtx();
   return (
     <DepositRequest
-      onBack={() => navigate('/')}
+      onBack={() => navigate("/")}
       onSearch={(amount) => {
         setActiveAmount(Number(amount) || 500);
-        navigate('/map-deposit');
+        navigate("/map-deposit");
       }}
     />
   );
@@ -146,10 +158,10 @@ function MapDepositRoute() {
   const { handleDepositOfferSelected, tradeLoading } = useAppCtx();
   return (
     <DepositMap
-      onBack={() => navigate('/deposit')}
+      onBack={() => navigate("/deposit")}
       onSelectOffer={async (offerId) => {
         await handleDepositOfferSelected(offerId);
-        navigate('/chat-deposit');
+        navigate("/chat-deposit");
       }}
       loading={tradeLoading}
     />
@@ -163,10 +175,10 @@ function MapRoute() {
     <ExploreMap
       amount={activeAmount}
       loading={tradeLoading}
-      onBack={() => navigate('/cashout')}
+      onBack={() => navigate("/cashout")}
       onSelectOffer={async (offerId) => {
         await handleOfferSelected(offerId);
-        navigate('/chat');
+        navigate("/chat");
       }}
     />
   );
@@ -178,8 +190,8 @@ function ChatRoute() {
   return (
     <ChatRoom
       lockTxHash={lockTxHash}
-      onBack={() => navigate('/map')}
-      onViewQR={() => navigate('/qr-reveal')}
+      onBack={() => navigate("/map")}
+      onViewQR={() => navigate("/qr-reveal")}
     />
   );
 }
@@ -190,8 +202,8 @@ function ChatDepositRoute() {
   return (
     <DepositChat
       lockTxHash={lockTxHash}
-      onBack={() => navigate('/map-deposit')}
-      onViewQR={() => navigate('/qr-deposit')}
+      onBack={() => navigate("/map-deposit")}
+      onViewQR={() => navigate("/qr-deposit")}
     />
   );
 }
@@ -205,9 +217,9 @@ function QRRevealRoute() {
       sellerToken={sellerUser?.token ?? null}
       buyerToken={buyerUser?.token ?? null}
       amount={activeAmount}
-      onBack={() => navigate('/chat')}
-      onChat={() => navigate('/chat')}
-      onSuccess={() => navigate('/success')}
+      onBack={() => navigate("/chat")}
+      onChat={() => navigate("/chat")}
+      onSuccess={() => navigate("/success")}
     />
   );
 }
@@ -216,35 +228,44 @@ function QRDepositRoute() {
   const navigate = useNavigate();
   return (
     <DepositQR
-      onBack={() => navigate('/chat-deposit')}
-      onChat={() => navigate('/chat-deposit')}
-      onSuccess={() => navigate('/success')}
+      onBack={() => navigate("/chat-deposit")}
+      onChat={() => navigate("/chat-deposit")}
+      onSuccess={() => navigate("/success")}
     />
   );
 }
 
 function SuccessRoute() {
   const navigate = useNavigate();
-  const { flow, activeAmount, activeTrade, lockTxHash, sellerUser, buyerUser, resetTradeFlow } = useAppCtx();
+  const {
+    flow,
+    activeAmount,
+    activeTrade,
+    lockTxHash,
+    sellerUser,
+    buyerUser,
+    resetTradeFlow,
+  } = useAppCtx();
   return (
     <SuccessScreen
-      type={flow === 'cashout' ? 'cashout' : 'deposit'}
+      type={flow === "cashout" ? "cashout" : "deposit"}
       trade={{
-        id: activeTrade?.id ?? 'demo',
-        status: activeTrade?.status ?? 'completed',
+        id: activeTrade?.id ?? "demo",
+        status: activeTrade?.status ?? "completed",
         amount_mxn: activeAmount,
-        platform_fee_mxn: flow === 'cashout' ? activeAmount * 0.01 : activeAmount * 0.008,
+        platform_fee_mxn:
+          flow === "cashout" ? activeAmount * 0.01 : activeAmount * 0.008,
         lock_tx_hash: lockTxHash,
         release_tx_hash: null,
         created_at: new Date().toISOString(),
         completed_at: new Date().toISOString(),
-        seller_id: sellerUser?.id ?? '',
-        buyer_id: buyerUser?.id ?? '',
+        seller_id: sellerUser?.id ?? "",
+        buyer_id: buyerUser?.id ?? "",
       }}
-      agentName={flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe'}
+      agentName={flow === "cashout" ? "Farmacia Guadalupe" : "Tienda Don Pepe"}
       onHome={() => {
         resetTradeFlow();
-        navigate('/');
+        navigate("/");
       }}
     />
   );
@@ -253,20 +274,20 @@ function SuccessRoute() {
 function ExploreRoute() {
   const navigate = useNavigate();
   const navMap: Record<string, string> = {
-    home: '/',
-    cashout: '/cashout',
-    deposit: '/deposit',
-    cetes: '/cetes',
-    blend: '/blend',
-    explore: '/explore',
-    profile: '/profile',
-    inbox: '/inbox',
-    history: '/history',
+    home: "/",
+    cashout: "/cashout",
+    deposit: "/deposit",
+    cetes: "/cetes",
+    blend: "/blend",
+    explore: "/explore",
+    profile: "/profile",
+    inbox: "/inbox",
+    history: "/history",
   };
   return (
     <Explore
-      onBack={() => navigate('/')}
-      onNavigate={(page) => navigate(navMap[page] ?? '/')}
+      onBack={() => navigate("/")}
+      onNavigate={(page) => navigate(navMap[page] ?? "/")}
     />
   );
 }
@@ -276,8 +297,8 @@ function CetesRoute() {
   const { buyerUser } = useAppCtx();
   return (
     <CETESScreen
-      onBack={() => navigate('/explore')}
-      onBanco={() => navigate('/deposit')}
+      onBack={() => navigate("/explore")}
+      onBanco={() => navigate("/deposit")}
       userToken={buyerUser?.token}
     />
   );
@@ -288,7 +309,7 @@ function BlendRoute() {
   const { buyerUser } = useAppCtx();
   return (
     <BlendScreen
-      onBack={() => navigate('/explore')}
+      onBack={() => navigate("/explore")}
       userToken={buyerUser?.token}
     />
   );
@@ -300,47 +321,60 @@ function ProfileRoute() {
   return (
     <Profile
       token={buyerUser?.token ?? null}
-      onBack={() => navigate('/')}
+      onBack={() => navigate("/")}
       onDeleted={() => {
         handleAccountDeleted();
-        navigate('/');
+        navigate("/");
       }}
-      onNavigatePrivacy={() => navigate('/privacy')}
-      onNavigateTerms={() => navigate('/terms')}
+      onNavigatePrivacy={() => navigate("/privacy")}
+      onNavigateTerms={() => navigate("/terms")}
+      onNavigateMerchantSettings={() => navigate("/merchant-settings")}
+    />
+  );
+}
+
+function MerchantSettingsRoute() {
+  const navigate = useNavigate();
+  const { sellerUser } = useAppCtx();
+  return (
+    <MerchantSettings
+      token={sellerUser?.token ?? null}
+      onBack={() => navigate("/profile")}
     />
   );
 }
 
 function PrivacyRoute() {
   const navigate = useNavigate();
-  return <Privacy onBack={() => navigate('/profile')} />;
+  return <Privacy onBack={() => navigate("/profile")} />;
 }
 
 function TermsRoute() {
   const navigate = useNavigate();
-  return <Terms onBack={() => navigate('/profile')} />;
+  return <Terms onBack={() => navigate("/profile")} />;
 }
 
 // ── BottomNav route adapter ─────────────────────────────────────────────────
 
 const ROUTE_TO_PAGE: Record<string, string> = {
-  '/': 'home',
-  '/cashout': 'cashout',
-  '/inbox': 'inbox',
-  '/explore': 'explore',
-  '/profile': 'profile',
+  "/": "home",
+  "/cashout": "cashout",
+  "/inbox": "inbox",
+  "/explore": "explore",
+  "/profile": "profile",
 };
 
 const HIDE_BOTTOMNAV_ROUTES = new Set([
-  '/chat',
-  '/chat-deposit',
-  '/qr-reveal',
-  '/qr-deposit',
-  '/success',
-  '/cetes',
-  '/blend',
-  '/privacy',
-  '/terms',
+  "/chat",
+  "/chat-deposit",
+  "/qr-reveal",
+  "/qr-deposit",
+  "/success",
+  "/cetes",
+  "/blend",
+  "/merchant-settings",
+  "/privacy",
+  "/terms",
 ]);
 
 function BottomNavAdapter() {
@@ -351,17 +385,19 @@ function BottomNavAdapter() {
   if (HIDE_BOTTOMNAV_ROUTES.has(location.pathname)) return null;
 
   const navMap: Record<string, string> = {
-    home: '/',
-    cashout: '/cashout',
-    inbox: '/inbox',
-    explore: '/explore',
-    profile: '/profile',
+    home: "/",
+    cashout: "/cashout",
+    inbox: "/inbox",
+    explore: "/explore",
+    profile: "/profile",
   };
 
   return (
     <BottomNav
-      currentPage={ROUTE_TO_PAGE[location.pathname] ?? location.pathname.slice(1)}
-      onNavigate={(page) => navigate(navMap[page] ?? '/')}
+      currentPage={
+        ROUTE_TO_PAGE[location.pathname] ?? location.pathname.slice(1)
+      }
+      onNavigate={(page) => navigate(navMap[page] ?? "/")}
       isMerchant={!!sellerUser}
     />
   );
@@ -427,7 +463,11 @@ function App({ initialTradeId: _initialTradeId = null }: AppProps) {
     if (!buyerUser || !sellerUser) return;
     setTradeLoading(true);
     try {
-      const trade = await createTrade(sellerUser.id, activeAmount, buyerUser.token);
+      const trade = await createTrade(
+        sellerUser.id,
+        activeAmount,
+        buyerUser.token,
+      );
       const { lock_tx_hash } = await lockTrade(trade.id, sellerUser.token);
       await revealTrade(trade.id, sellerUser.token);
       setActiveTrade(trade);
@@ -493,6 +533,10 @@ function App({ initialTradeId: _initialTradeId = null }: AppProps) {
               <Route path="/cetes" element={<CetesRoute />} />
               <Route path="/blend" element={<BlendRoute />} />
               <Route path="/profile" element={<ProfileRoute />} />
+              <Route
+                path="/merchant-settings"
+                element={<MerchantSettingsRoute />}
+              />
               <Route path="/privacy" element={<PrivacyRoute />} />
               <Route path="/terms" element={<TermsRoute />} />
               <Route path="*" element={<Navigate to="/" replace />} />
