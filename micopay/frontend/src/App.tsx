@@ -21,6 +21,7 @@ import DepositQR from "./pages/DepositQR";
 import SuccessScreen from "./pages/SuccessScreen";
 import Explore from "./pages/Explore";
 import History from "./pages/History";
+import TradeDetail from "./pages/TradeDetail";
 import CETESScreen from "./pages/CETESScreen";
 import BlendScreen from "./pages/BlendScreen";
 import MerchantInbox from "./pages/MerchantInbox";
@@ -43,9 +44,6 @@ const USERS_STORAGE_KEY = "micopay_users";
 
 interface StoredUsers { buyer: UserData; seller: UserData }
 
-interface AppProps {
-  initialTradeId?: string | null;
-}
 
 type Flow = 'cashout' | 'deposit' | null;
 
@@ -96,8 +94,20 @@ function HistoryRoute() {
   return (
     <History
       onBack={() => navigate('/')}
-      onSelectTrade={() => { /* deep-link a /trade/:id pendiente */ }}
+      onSelectTrade={(trade) => navigate(`/trade/${trade.id}`)}
       token={buyerUser?.token ?? null}
+    />
+  );
+}
+
+function TradeDetailRoute() {
+  const navigate = useNavigate();
+  const { buyerUser, sellerUser } = useAppCtx();
+  return (
+    <TradeDetail
+      buyerToken={buyerUser?.token ?? null}
+      sellerToken={sellerUser?.token ?? null}
+      onBack={() => navigate('/history')}
     />
   );
 }
@@ -343,12 +353,18 @@ const HIDE_BOTTOMNAV_ROUTES = new Set([
   '/terms',
 ]);
 
+const shouldHideBottomNav = (pathname: string): boolean => {
+  if (HIDE_BOTTOMNAV_ROUTES.has(pathname)) return true;
+  if (pathname.startsWith('/trade/')) return true;
+  return false;
+};
+
 function BottomNavAdapter() {
   const navigate = useNavigate();
   const location = useLocation();
   const { sellerUser } = useAppCtx();
 
-  if (HIDE_BOTTOMNAV_ROUTES.has(location.pathname)) return null;
+  if (shouldHideBottomNav(location.pathname)) return null;
 
   const navMap: Record<string, string> = {
     home: '/',
@@ -369,7 +385,7 @@ function BottomNavAdapter() {
 
 // ── Root App ────────────────────────────────────────────────────────────────
 
-function App({ initialTradeId: _initialTradeId = null }: AppProps) {
+function App() {
   const [flow, setFlow] = useState<Flow>(null);
   const [buyerUser, setBuyerUser] = useState<UserData | null>(null);
   const [sellerUser, setSellerUser] = useState<UserData | null>(null);
@@ -479,6 +495,7 @@ function App({ initialTradeId: _initialTradeId = null }: AppProps) {
             <Routes>
               <Route path="/" element={<HomeRoute />} />
               <Route path="/history" element={<HistoryRoute />} />
+              <Route path="/trade/:id" element={<TradeDetailRoute />} />
               <Route path="/inbox" element={<InboxRoute />} />
               <Route path="/cashout" element={<CashoutRoute />} />
               <Route path="/deposit" element={<DepositRoute />} />
