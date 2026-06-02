@@ -1,6 +1,6 @@
 import { Component, ReactNode } from 'react';
 import SupportLink from './SupportLink';
-import { reportClientError } from '../utils/reportError';
+import { resolveErrorMessage } from '../constants/errorMap';
 
 interface Props {
   children: ReactNode;
@@ -41,16 +41,17 @@ class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      const resolved = resolveErrorMessage(this.state.error ?? undefined);
       return (
         <div className="min-h-screen flex items-center justify-center bg-surface-container-lowest px-6">
           <div className="text-center max-w-sm">
             <div className="text-5xl mb-4">⚠️</div>
-            <h2 className="font-headline font-bold text-xl text-on-surface mb-2">
-              Algo salió mal
-            </h2>
-            <p className="text-sm text-on-surface-variant mb-2">
-              Tus fondos están seguros. Esto fue un error de la interfaz, no de la blockchain.
+            <h2 className="font-headline font-bold text-xl text-on-surface mb-2">{resolved.title}</h2>
+            <p className="text-sm text-on-surface-variant mb-2">{resolved.message}</p>
+            <p className="text-xs text-on-surface-variant/70 mb-2">
+              {resolved.fundsSafe ? 'Tus fondos están seguros.' : 'Revisa el estado de tus fondos antes de seguir.'}
             </p>
+            <p className="text-xs text-on-surface-variant/70 mb-2">{resolved.action}</p>
             {this.state.error && (
               <p className="text-xs text-on-surface-variant/60 font-mono mb-4 break-all">
                 {this.state.error.message}

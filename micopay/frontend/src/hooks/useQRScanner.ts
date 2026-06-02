@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { resolveErrorMessage } from '../constants/errorMap';
 
 export interface ScanResult {
   value: string | null;
@@ -9,7 +10,7 @@ export interface ScanResult {
 export function useQRScanner() {
   const scan = useCallback(async (): Promise<ScanResult> => {
     if (!Capacitor.isNativePlatform()) {
-      const value = window.prompt('QR scanner solo en device. Pega el payload manualmente:');
+      const value = window.prompt('El escáner de QR sólo está disponible en el teléfono. Pega el contenido aquí:');
       return { value: value && value.trim() ? value.trim() : null };
     }
 
@@ -18,12 +19,12 @@ export function useQRScanner() {
 
     const perm = await BarcodeScanner.requestPermissions();
     if (perm.camera !== 'granted' && perm.camera !== 'limited') {
-      return { value: null, error: 'Permiso de cámara denegado' };
+      return { value: null, error: resolveErrorMessage({ message: 'camera_denied' }).message };
     }
 
     const supported = await BarcodeScanner.isSupported();
     if (!supported.supported) {
-      return { value: null, error: 'Scanner no disponible en este device' };
+      return { value: null, error: resolveErrorMessage({ message: 'scan_failed' }).message };
     }
 
     try {
@@ -32,7 +33,7 @@ export function useQRScanner() {
       });
       return { value: barcodes[0]?.rawValue ?? null };
     } catch (e) {
-      return { value: null, error: e instanceof Error ? e.message : 'Scan cancelado' };
+      return { value: null, error: resolveErrorMessage({ message: 'scan_failed' }).message };
     }
   }, []);
 

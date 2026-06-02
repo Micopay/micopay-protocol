@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { resolveErrorMessage } from '../constants/errorMap';
 
 export interface ApiErrorPayload {
   message: string;
@@ -18,17 +19,18 @@ export interface ApiErrorPayload {
  */
 export function extractApiErrorPayload(err: unknown): ApiErrorPayload {
   if (axios.isAxiosError(err)) {
-    const data = err.response?.data as {
-      message?: string;
-      error?: string;
-      request_id?: string;
-      support_code?: string;
-    } | undefined;
-
+    const data = err.response?.data as { message?: string; error?: string } | undefined;
+    const resolved = resolveErrorMessage({
+      response: {
+        status: err.response?.status,
+        data,
+      },
+      message: err.message,
+    });
     const message =
       typeof data?.message === 'string' && data.message.length > 0
-        ? data.message
-        : err.message || 'Something went wrong. Please try again.';
+        ? resolved.message
+        : resolved.message;
     const error = typeof data?.error === 'string' ? data.error : undefined;
     const request_id = typeof data?.request_id === 'string' ? data.request_id : undefined;
     const support_code = typeof data?.support_code === 'string' ? data.support_code : undefined;
@@ -36,7 +38,8 @@ export function extractApiErrorPayload(err: unknown): ApiErrorPayload {
     return { message, error, request_id, support_code };
   }
   if (err instanceof Error) {
-    return { message: err.message };
+    const resolved = resolveErrorMessage(err);
+    return { message: resolved.message };
   }
-  return { message: 'Something went wrong. Please try again.' };
+  return { message: resolveErrorMessage(undefined).message };
 }

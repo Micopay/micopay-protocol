@@ -217,6 +217,88 @@ export async function callReleaseOnChain(params: {
 }
 
 /**
+ * Call the escrow contract's refund() function on testnet.
+ * Anyone can call after timeout. trade_id = sha256(secret_hash_bytes).
+ */
+export async function callRefundOnChain(params: {
+  request: FastifyRequest;
+  tradeIdBytes: Buffer;
+}): Promise<{ txHash: string }> {
+  const {
+    Contract, TransactionBuilder, Networks, Keypair,
+    nativeToScVal, rpc: rpcModule,
+  } = await import('@stellar/stellar-sdk');
+
+  const { tradeIdBytes } = params;
+
+  const rpc = new rpcModule.Server(config.stellarRpcUrl);
+  const keypair = Keypair.fromSecret(config.platformSecretKey);
+  const platformAddress = keypair.publicKey();
+
+  const account = await rpc.getAccount(platformAddress);
+  const contract = new Contract(config.escrowContractId);
+
+  const tx = new TransactionBuilder(account, {
+    fee: '1000000',
+    networkPassphrase: Networks.TESTNET,
+  })
+    .addOperation(
+      contract.call(
+        'refund',
+        nativeToScVal(tradeIdBytes, { type: 'bytes' }),
+      ),
+    )
+    .setTimeout(60)
+    .build();
+
+  let prepared;
+  try {
+    prepared = await rpc.prepareTransaction(tx);
+  } catch (err: any) {
+    params.request.log.error({ err: err.message, category: 'stellar.tx' }, '[Stellar] Refund simulation failed');
+    throw new Error(`Refund simulation failed: ${err.message}. Check if trade exists in contract.`);
+  }
+
+  prepared.sign(keypair);
+
+  const sendResult = await rpc.sendTransaction(prepared);
+  if (sendResult.status === 'ERROR') {
+    params.request.log.error({ detail: sendResult.errorResult, category: 'stellar.tx' }, '[Stellar] Refund send failed');
+    throw new Error(`Refund send failed: ${JSON.stringify(sendResult.errorResult)}`);
+  }
+
+  const txHash = sendResult.hash;
+
+  const horizonUrl = `https://horizon-testnet.stellar.org/transactions/${txHash}`;
+  for (let i = 0; i < 15; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      const res = await fetch(horizonUrl);
+      if (res.ok) {
+        const data = await res.json() as { successful: boolean };
+        if (data.successful) {
+          params.request.log.info({ tx_hash: txHash, category: 'stellar.tx' }, '[Stellar] Refund confirmed');
+          return { txHash };
+        }
+        throw new UpstreamError(
+          'STELLAR_REFUND_FAILED',
+          'La transacción de reembolso falló en la blockchain.',
+          `Refund transaction failed on-chain: ${txHash}`
+        );
+      }
+    } catch (err: any) {
+      if (err.message.includes('failed on-chain')) throw err;
+    }
+  }
+
+  throw new UpstreamError(
+    'STELLAR_REFUND_TIMEOUT',
+    'La transacción de reembolso está tardando más de lo esperado.',
+    `Refund tx ${txHash} not confirmed within 30s`
+  );
+}
+
+/**
  * Legacy mock used when MOCK_STELLAR=true.
  */
 export async function verifyLockOnChain(
