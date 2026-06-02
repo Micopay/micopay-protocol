@@ -15,12 +15,16 @@ type TradeDetailData = TradeDetailResponse['trade'] & {
   completed_at?: string | null;
 };
 
-function getToken(): string | null {
+interface TradeDetailProps {
+  buyerToken: string | null;
+  sellerToken: string | null;
+  onBack: () => void;
+}
+
+async function getStoredToken(): Promise<string | null> {
   try {
-    const raw = localStorage.getItem('micopay_users');
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed?.buyer?.token ?? parsed?.seller?.token ?? null;
+    const stored = await readJSON<{ buyer?: { token: string }; seller?: { token: string } }>('micopay_users');
+    return stored?.buyer?.token ?? stored?.seller?.token ?? null;
   } catch {
     return null;
   }
@@ -213,16 +217,16 @@ function RevealingView({ trade }: { trade: TradeDetailData }) {
   );
 }
 
-function RevealedView({ trade, onComplete }: { trade: TradeDetailData; onComplete: () => void }) {
+function RevealedView({ trade, onComplete, token }: { trade: TradeDetailData; onComplete: () => void; token: string | null }) {
   const [isConfirming, setIsConfirming] = useState(false);
 
   const handleConfirm = async () => {
     if (isConfirming) return;
     setIsConfirming(true);
     try {
-      const token = getToken();
-      if (token) {
-        await completeTrade(trade.id, token);
+      const effectiveToken = token ?? (await getStoredToken());
+      if (effectiveToken) {
+        await completeTrade(trade.id, effectiveToken);
       }
     } catch (e) {
       console.warn('Could not complete trade on backend', e);
@@ -606,7 +610,7 @@ function RefundConfirmDialog({
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-export default function TradeDetail() {
+function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [trade, setTrade] = useState<TradeDetailData | null>(null);
@@ -619,15 +623,14 @@ export default function TradeDetail() {
   const fetchTrade = useCallback(async () => {
     if (!id) return;
 
-    const token = getToken();
-    if (!token) {
-      localStorage.setItem('pendingTradeRedirect', `/trade/${id}`);
-      navigate('/login');
+    const effectiveToken = token ?? (await getStoredToken());
+    if (!effectiveToken) {
+      navigate('/');
       return;
     }
 
     try {
-      const data = await fetchTradeDetail(id, token);
+      const data = await fetchTradeDetail(id, effectiveToken);
       setTrade(data.trade as TradeDetailData);
       setError(null);
     } catch (e: any) {
@@ -642,7 +645,7 @@ export default function TradeDetail() {
     } finally {
       setLoading(false);
     }
-  }, [id, navigate]);
+  }, [id, navigate, token]);
 
   // Fetch on mount
   useEffect(() => {
@@ -661,11 +664,11 @@ export default function TradeDetail() {
   const handleCancel = async () => {
     if (!trade) return;
 
-    const token = getToken();
-    if (!token) return;
+    const effectiveToken = token ?? (await getStoredToken());
+    if (!effectiveToken) return;
 
     try {
-      await cancelTradeRequest(trade.id, token);
+      await cancelTradeRequest(trade.id, effectiveToken);
       fetchTrade(); // Refresh trade state
     } catch (e) {
       console.error('Failed to cancel trade', e);
@@ -761,7 +764,7 @@ export default function TradeDetail() {
       case 'revealing':
         return <RevealingView trade={trade} />;
       case 'revealed':
-        return <RevealedView trade={trade} onComplete={handleComplete} />;
+        return <RevealedView trade={trade} onComplete={handleComplete} token={token} />;
       case 'completed':
         return <CompletedView trade={trade} />;
       case 'cancelled':
@@ -782,7 +785,7 @@ export default function TradeDetail() {
         <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate('/')}
+              onClick={onBack}
               className="p-2 hover:bg-surface-container-low rounded-full transition-colors text-primary"
             >
               <span className="material-symbols-outlined">arrow_back</span>
@@ -822,4 +825,8 @@ export default function TradeDetail() {
       )}
     </div>
   );
+}
+
+export default function TradeDetail(props: TradeDetailProps) {
+  return <TradeDetailContent {...props} />;
 }

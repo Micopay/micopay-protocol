@@ -25,6 +25,7 @@ import DepositQR from "./pages/DepositQR";
 import SuccessScreen from "./pages/SuccessScreen";
 import Explore from "./pages/Explore";
 import History from "./pages/History";
+import TradeDetail from "./pages/TradeDetail";
 import CETESScreen from "./pages/CETESScreen";
 import BlendScreen from "./pages/BlendScreen";
 import MerchantInbox from "./pages/MerchantInbox";
@@ -54,9 +55,6 @@ interface StoredUsers {
   seller: UserData;
 }
 
-interface AppProps {
-  initialTradeId?: string | null;
-}
 
 type Flow = "cashout" | "deposit" | null;
 
@@ -120,6 +118,18 @@ function HistoryRoute() {
           onSelectTrade={() => {}}
           token={buyerUser?.token ?? null}
       />
+  );
+}
+
+function TradeDetailRoute() {
+  const navigate = useNavigate();
+  const { buyerUser, sellerUser } = useAppCtx();
+  return (
+    <TradeDetail
+      buyerToken={buyerUser?.token ?? null}
+      sellerToken={sellerUser?.token ?? null}
+      onBack={() => navigate('/history')}
+    />
   );
 }
 
@@ -461,7 +471,7 @@ function BottomNavAdapter() {
 
 // ── Root App ─────────────────────────────────────────────────────────────────
 
-function App({ initialTradeId: _initialTradeId = null }: AppProps) {
+function App() {
   const [flow, setFlow] = useState<Flow>(null);
   const [buyerUser, setBuyerUser] = useState<UserData | null>(null);
   const [sellerUser, setSellerUser] = useState<UserData | null>(null);
