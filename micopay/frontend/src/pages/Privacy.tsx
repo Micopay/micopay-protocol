@@ -43,7 +43,7 @@ const Privacy = ({ onBack }: PrivacyProps) => {
           </p>
           <ul className="text-sm text-[#67808C] leading-relaxed list-disc pl-5 space-y-1">
             <li>Procesar y verificar transacciones P2P</li>
-            <li>Mostrar tu historial de trades</li>
+            <li>Mostrar tu historial de operaciones</li>
             <li>Prevenir fraudes y operaciones duplicadas</li>
             <li>Cumplir con obligaciones legales aplicables</li>
           </ul>

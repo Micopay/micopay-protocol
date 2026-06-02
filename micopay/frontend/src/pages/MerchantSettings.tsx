@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getMerchantConfig, updateMerchantConfigWithOfflineSupport, MerchantConfig } from '../services/api';
-import { useOfflineQueue } from '../hooks/useOfflineQueue';
+import { getMerchantConfig, updateMerchantConfig, MerchantConfig } from '../services/api';
+import { resolveErrorMessage } from '../constants/errorMap';
 
 interface MerchantSettingsProps {
   token: string | null;
@@ -26,7 +26,7 @@ export default function MerchantSettings({ token, onBack }: MerchantSettingsProp
         const data = await getMerchantConfig(token);
         setForm(data);
       } catch (err: any) {
-        setMessage(err?.response?.data?.message ?? 'No se pudo cargar la configuración');
+        setMessage(resolveErrorMessage(err).message);
       } finally {
         setLoading(false);
       }
@@ -56,9 +56,7 @@ export default function MerchantSettings({ token, onBack }: MerchantSettingsProp
         setMessageType('success');
       }
     } catch (err: any) {
-      const errorMsg = err?.response?.data?.message ?? err?.message ?? 'No se pudo guardar la configuración';
-      setMessage(errorMsg);
-      setMessageType('error');
+      setMessage(resolveErrorMessage(err).message);
     } finally {
       setSaving(false);
     }
@@ -67,62 +65,8 @@ export default function MerchantSettings({ token, onBack }: MerchantSettingsProp
   return (
     <div className="bg-surface text-on-surface min-h-screen px-6 pt-10 pb-32 max-w-xl mx-auto">
       <button className="mb-6 text-sm font-semibold text-primary" onClick={onBack}>← Volver</button>
-      
-      <div className="flex items-start justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold mb-2">Ajustes de comerciante</h1>
-          <p className="text-sm text-on-surface-variant">Configura tu tasa y límites operativos.</p>
-        </div>
-      </div>
-
-      {/* Offline Status Banner */}
-      {!offlineQueue.isOnline && (
-        <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-6 rounded">
-          <div className="flex">
-            <span className="material-symbols-outlined text-amber-600 mr-3">wifi_off</span>
-            <div>
-              <h3 className="font-semibold text-amber-800">Sin conexión</h3>
-              <p className="text-sm text-amber-700">Los cambios se guardarán localmente y se sincronizarán cuando se restaure la conexión.</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Pending Sync Status */}
-      {offlineQueue.hasPending && (
-        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6 rounded">
-          <div className="flex items-center justify-between">
-            <div className="flex">
-              <span className="material-symbols-outlined text-blue-600 mr-3 animate-spin">progress_activity</span>
-              <div>
-                <h3 className="font-semibold text-blue-800">Pendiente de sincronizar</h3>
-                <p className="text-sm text-blue-700">Tienes cambios esperando ser sincronizados con el servidor.</p>
-              </div>
-            </div>
-            {offlineQueue.isOnline && !offlineQueue.isSyncing && (
-              <button
-                onClick={() => offlineQueue.retryAsync(token)}
-                className="ml-4 px-3 py-1 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
-              >
-                Reintentar
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Syncing Status */}
-      {offlineQueue.isSyncing && (
-        <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-6 rounded">
-          <div className="flex">
-            <span className="material-symbols-outlined text-green-600 mr-3 animate-spin">sync</span>
-            <div>
-              <h3 className="font-semibold text-green-800">Sincronizando...</h3>
-              <p className="text-sm text-green-700">Tus cambios se están enviando al servidor.</p>
-            </div>
-          </div>
-        </div>
-      )}
+      <h1 className="text-2xl font-bold mb-2">Ajustes del comerciante</h1>
+      <p className="text-sm text-on-surface-variant mb-8">Configura tu tasa y límites de operación.</p>
 
       {loading ? <p>Cargando…</p> : (
         <div className="space-y-5">

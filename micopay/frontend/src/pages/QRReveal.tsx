@@ -11,7 +11,7 @@ interface QRRevealProps {
     amount: number;
     onBack: () => void;
     onChat: () => void;
-    onSuccess: () => void;
+    onSuccess: (releaseTxHash: string) => void;
 }
 
 const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat, onSuccess }: QRRevealProps) => {
@@ -40,19 +40,22 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
         setTradeState(getTradeStateDebugOverride(backendState));
     }, [activeTrade?.status, secretLoaded]);
 
+    const [completeError, setCompleteError] = useState<string | null>(null);
+
     const completePurchase = async () => {
-        if (isConfirming) return;
+        if (isConfirming || !activeTrade || !buyerToken) return;
         setIsConfirming(true);
+        setCompleteError(null);
         setTradeState('pending_cash');
         try {
-            if (activeTrade && buyerToken) {
-                await completeTrade(activeTrade.id, buyerToken);
-            }
+            const result = await completeTrade(activeTrade.id, buyerToken);
             setTradeState('completed');
+            setTimeout(() => onSuccess(result.release_tx_hash), 1500);
         } catch (e) {
-            console.warn('Could not complete trade on backend, proceeding as demo', e);
-        } finally {
-            setTimeout(() => onSuccess(), 1500);
+            console.error('Trade completion failed', e);
+            setTradeState('revealed');
+            setIsConfirming(false);
+            setCompleteError('No se pudo completar la operación. Intenta de nuevo.');
         }
     };
 
@@ -82,7 +85,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
                     <div className="inline-flex items-center gap-2 bg-primary-container/10 border border-primary-container/20 px-4 py-2 rounded-full">
                         <span aria-hidden="true" className="material-symbols-outlined text-primary text-sm" style={{ fontVariationSettings: '"FILL" 1' }}>check_circle</span>
                         <span className="text-primary font-semibold text-sm">
-                            {secretLoaded ? '✓ Escrow on-chain · Fondos bloqueados' : '✓ Oferta aceptada · Saldo bloqueado'}
+                            {secretLoaded ? '✓ Garantía en cadena · Fondos bloqueados' : '✓ Oferta aceptada · Saldo bloqueado'}
                         </span>
                     </div>
                 </div>
@@ -123,7 +126,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
 
                 {/* QR Section */}
                 <section className="mb-10 text-center">
-                    <h2 className="text-[11px] font-bold text-outline-variant uppercase tracking-[0.2em] mb-6">TU CÓDIGO DE INTERCAMBIO</h2>
+                    <h2 className="text-[11px] font-bold text-outline-variant uppercase tracking-[0.2em] mb-6">TU CÓDIGO DE OPERACIÓN</h2>
                     <div className="bg-surface-container-low p-8 rounded-[32px] inline-block mx-auto mb-6 border border-outline-variant/10 shadow-sm">
                         {/* Real QR generated from HTLC secret */}
                         <QRCodeSVG
@@ -149,11 +152,17 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
 
                 {/* Confirm Section */}
                 <section className="mb-10 text-center">
+                    {completeError && (
+                        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm font-medium">
+                            {completeError}
+                        </div>
+                    )}
                     {!isConfirming ? (
                         <button
                             onClick={completePurchase}
+                            disabled={!activeTrade || !buyerToken}
                             aria-label="Confirmar recepción de efectivo"
-                            className="w-full py-4 rounded-2xl bg-primary text-on-primary font-bold text-base flex items-center justify-center gap-2 active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary"
+                            className="w-full py-4 rounded-2xl bg-primary text-on-primary font-bold text-base flex items-center justify-center gap-2 active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-40"
                         >
                             <span aria-hidden="true" className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>check_circle</span>
                             Ya recibí el efectivo
@@ -164,7 +173,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
                                 <div className="absolute inset-0 border-4 border-surface-container-high rounded-full"></div>
                                 <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
                             </div>
-                            <p className="text-sm font-medium text-outline">Confirmando intercambio…</p>
+                            <p className="text-sm font-medium text-outline">Confirmando operación…</p>
                         </div>
                     )}
                 </section>

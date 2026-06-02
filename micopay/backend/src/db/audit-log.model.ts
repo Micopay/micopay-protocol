@@ -6,6 +6,7 @@ export interface TradeAuditEventInput {
   toState: string;
   actor: string;
   metadata?: Record<string, unknown>;
+  requestId?: string;
 }
 
 export interface TradeAuditEvent {
@@ -15,17 +16,18 @@ export interface TradeAuditEvent {
   to_state: string;
   actor: string;
   metadata: Record<string, unknown>;
+  request_id: string | null;
   occurred_at: string;
 }
 
 export async function insertTradeAuditEvent(input: TradeAuditEventInput): Promise<TradeAuditEvent> {
-  const { tradeId, fromState, toState, actor, metadata = {} } = input;
+  const { tradeId, fromState, toState, actor, metadata = {}, requestId = null } = input;
 
   const event = await db.getOne<TradeAuditEvent>(
-    `INSERT INTO audit_log (trade_id, from_state, to_state, actor, metadata)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, trade_id, from_state, to_state, actor, metadata, occurred_at`,
-    [tradeId, fromState, toState, actor, metadata],
+    `INSERT INTO audit_log (trade_id, from_state, to_state, actor, metadata, request_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, trade_id, from_state, to_state, actor, metadata, request_id, occurred_at`,
+    [tradeId, fromState, toState, actor, metadata, requestId],
   );
 
   if (!event) {
@@ -35,9 +37,19 @@ export async function insertTradeAuditEvent(input: TradeAuditEventInput): Promis
   return event;
 }
 
+export async function getAuditEventsByRequestId(requestId: string): Promise<TradeAuditEvent[]> {
+  return db.getMany<TradeAuditEvent>(
+    `SELECT id, trade_id, from_state, to_state, actor, metadata, request_id, occurred_at
+     FROM audit_log
+     WHERE request_id = $1
+     ORDER BY occurred_at ASC, id ASC`,
+    [requestId],
+  );
+}
+
 export async function getTradeAuditTrail(tradeId: string): Promise<TradeAuditEvent[]> {
   return db.getMany<TradeAuditEvent>(
-    `SELECT id, trade_id, from_state, to_state, actor, metadata, occurred_at
+    `SELECT id, trade_id, from_state, to_state, actor, metadata, request_id, occurred_at
      FROM audit_log
      WHERE trade_id = $1
      ORDER BY occurred_at ASC, id ASC`,

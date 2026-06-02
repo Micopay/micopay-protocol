@@ -7,11 +7,10 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "build": "tsc",
-    "test": "vitest --run",
+    "test": "vitest run",
     "seed": "tsx src/scripts/seed.ts",
     "db:setup": "npm run seed",
-    "db:reset": "npx tsx -e \"import('./src/db/schema.js').then(m => m.query('DROP TABLE IF EXISTS merchants, swap_history, bazaar_quotes, bazaar_intents, agent_history, x402_payments CASCADE'))\"",
-    "test": "vitest run"
+    "db:reset": "npx tsx -e \"import('./src/db/schema.js').then(m => m.query('DROP TABLE IF EXISTS merchants, swap_history, bazaar_quotes, bazaar_intents, agent_history, x402_payments CASCADE'))\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.86.1",
@@ -33,6 +32,7 @@
     "typescript": "^5.7.3"
   },
   "devDependencies": {
+    "fast-check": "^4.8.0",
     "pino-pretty": "^13.0.0",
     "vitest": "^4.1.5"
   }
