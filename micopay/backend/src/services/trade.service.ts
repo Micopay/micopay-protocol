@@ -19,6 +19,11 @@ import {
   getTradeAuditTrail as getTradeAuditTrailRows,
   insertTradeAuditEvent,
 } from '../db/audit-log.model.js';
+import {
+  assertCanCreateTrade,
+  assertCanCancelTrade,
+  recordTradeCancelled,
+} from './abuse.service.js';
 
 const logger = pino({ name: 'trade.service' });
 
@@ -163,23 +168,31 @@ export async function createTrade(input: CreateTradeInput) {
     );
   }
 
-  // Verify seller exists
-  const seller = await db.getOne('SELECT id, stellar_address FROM users WHERE id = $1', [sellerId]);
-  if (!seller) throw new NotFoundError('USER_NOT_FOUND', 'El usuario vendedor no existe', 'Seller not found');
-
-  // Block matching if seller is explicitly offline or paused
-  // null/undefined means legacy record — treat as online for backward compat
-  const sellerAvailability = seller.availability ?? 'online';
-  if (sellerAvailability !== 'online') {
-    throw new ConflictError(
-      `Merchant is currently ${sellerAvailability} and cannot accept new trades`,
+  if (sellerId === buyerId) {
+    throw new ValidationError(
+      'INVALID_PARTICIPANTS',
+      'No puedes crear un intercambio contigo mismo',
+      'Cannot trade with yourself',
     );
   }
-  // Verify buyer exists
-  const buyer = await db.getOne('SELECT id, stellar_address FROM users WHERE id = $1', [buyerId]);
-  if (!buyer) throw new NotFoundError('USER_NOT_FOUND', 'El usuario comprador no existe', 'Buyer not found');
 
-  if (sellerId === buyerId) throw new ValidationError('INVALID_PARTICIPANTS', 'No puedes crear un intercambio contigo mismo', 'Cannot trade with yourself');
+  await assertCanCreateTrade({ request, buyerId, sellerId, amountMxn });
+
+  const seller = await db.getOne<{ id: string; stellar_address: string }>(
+    'SELECT id, stellar_address FROM users WHERE id = $1',
+    [sellerId],
+  );
+  if (!seller) {
+    throw new NotFoundError('USER_NOT_FOUND', 'El usuario vendedor no existe', 'Seller not found');
+  }
+
+  const buyer = await db.getOne<{ id: string; stellar_address: string }>(
+    'SELECT id, stellar_address FROM users WHERE id = $1',
+    [buyerId],
+  );
+  if (!buyer) {
+    throw new NotFoundError('USER_NOT_FOUND', 'El usuario comprador no existe', 'Buyer not found');
+  }
 
   await validateAgainstMerchantLimits(sellerId, amountMxn);
 
@@ -581,13 +594,24 @@ export async function cancelTrade(
       throw new ForbiddenError('Not a participant of this trade');
     }
 
+    await assertCanCancelTrade(userId);
+
     const lockTx: string | null = trade.lock_tx_hash ?? null;
+
+    const finishCancel = async (result: CancelTradeResult) => {
+      await audit(result);
+      await recordTradeCancelled({
+        tradeId,
+        sellerId: trade.seller_id,
+        cancelledBy: userId,
+      });
+      return result;
+    };
 
     if (trade.status === 'pending') {
       await finalizeTradeCancellation(tradeId);
       const result: CancelTradeResult = { status: 'cancelled', refund_expected: false, lock_tx_hash: lockTx };
-      await audit(result);
-      return result;
+      return finishCancel(result);
     }
 
     if (trade.status === 'locked') {
@@ -598,8 +622,7 @@ export async function cancelTrade(
           refund_expected: Boolean(lockTx),
           lock_tx_hash: lockTx,
         };
-        await audit(result);
-        return result;
+        return finishCancel(result);
       }
       if (trade.seller_id === userId) {
         const seller = await getSellerMerchantRow(trade.seller_id);
@@ -614,8 +637,7 @@ export async function cancelTrade(
           refund_expected: Boolean(lockTx),
           lock_tx_hash: lockTx,
         };
-        await audit(result);
-        return result;
+        return finishCancel(result);
       }
       throw new ForbiddenError('Not a participant of this trade');
     }
@@ -633,8 +655,7 @@ export async function cancelTrade(
         refund_expected: Boolean(lockTx),
         lock_tx_hash: lockTx,
       };
-      await audit(result);
-      return result;
+      return finishCancel(result);
     }
 
     throw new ConflictError(`Cannot cancel trade in status ${trade.status}.`);

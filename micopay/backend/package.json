@@ -7,7 +7,9 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "build": "tsc",
-    "e2e": "node --import tsx ../scripts/e2e-test.ts"
+    "e2e": "node --import tsx ../scripts/e2e-test.ts",
+    "test:rate-limit": "node --import tsx src/tests/rateLimit.test.ts",
+    "test:abuse": "node --import tsx src/tests/abuse.service.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^8.5.0",

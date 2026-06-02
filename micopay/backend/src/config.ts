@@ -58,4 +58,22 @@ export const config = {
   authRateLimitMax: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '5', 10),
   tradeRateLimitWindowMs: parseInt(process.env.TRADE_RATE_LIMIT_WINDOW_MS || '3600000', 10), // 1 hour
   tradeRateLimitMax: parseInt(process.env.TRADE_RATE_LIMIT_MAX || '10', 10),
+  messageRateLimitWindowMs: parseInt(process.env.MESSAGE_RATE_LIMIT_WINDOW_MS || '60000', 10),
+  messageRateLimitMax: parseInt(process.env.MESSAGE_RATE_LIMIT_MAX || '30', 10),
+  disputeRateLimitWindowMs: parseInt(process.env.DISPUTE_RATE_LIMIT_WINDOW_MS || '3600000', 10),
+  disputeRateLimitMax: parseInt(process.env.DISPUTE_RATE_LIMIT_MAX || '5', 10),
+  deviceRateLimitWindowMs: parseInt(process.env.DEVICE_RATE_LIMIT_WINDOW_MS || '86400000', 10),
+  deviceRateLimitMax: parseInt(process.env.DEVICE_RATE_LIMIT_MAX || '15', 10),
+  ipRateLimitWindowMs: parseInt(process.env.IP_RATE_LIMIT_WINDOW_MS || '86400000', 10),
+  ipRateLimitMax: parseInt(process.env.IP_RATE_LIMIT_MAX || '20', 10),
+
+  // Abuse / safety (#82)
+  buyerDailyTradeMax: parseInt(process.env.BUYER_DAILY_TRADE_MAX || '20', 10),
+  buyerDailyAmountMxnMax: parseInt(process.env.BUYER_DAILY_AMOUNT_MXN_MAX || '100000', 10),
+  cancelCooldownWindowMs: parseInt(process.env.CANCEL_COOLDOWN_WINDOW_MS || '3600000', 10),
+  cancelCooldownThreshold: parseInt(process.env.CANCEL_COOLDOWN_THRESHOLD || '3', 10),
+  cancelCooldownMs: parseInt(process.env.CANCEL_COOLDOWN_MS || '300000', 10),
+  merchantCancelPauseThreshold: parseInt(process.env.MERCHANT_CANCEL_PAUSE_THRESHOLD || '5', 10),
+  merchantDisputePauseThreshold: parseInt(process.env.MERCHANT_DISPUTE_PAUSE_THRESHOLD || '3', 10),
+  adminApiKey: process.env.ADMIN_API_KEY || '',
 } as const;
