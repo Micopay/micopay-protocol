@@ -14,6 +14,7 @@ interface ProfileProps {
   onDeleted: () => void;
   onNavigatePrivacy?: () => void;
   onNavigateTerms?: () => void;
+  onToggleDebug?: () => void;
 }
 
 const Profile = ({ token, devicePublicKey, onBack, onDeleted, onNavigatePrivacy, onNavigateTerms }: ProfileProps) => {

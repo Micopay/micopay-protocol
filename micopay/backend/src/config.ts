@@ -83,3 +83,53 @@ export const config = {
   merchantDisputePauseThreshold: parseInt(process.env.MERCHANT_DISPUTE_PAUSE_THRESHOLD || '3', 10),
   adminApiKey: process.env.ADMIN_API_KEY || '',
 } as const;
+
+export function validateConfig() {
+  const errors: string[] = [];
+
+  if (!config.databaseUrl) {
+    errors.push("DATABASE_URL is missing.");
+  }
+
+  if (!config.secretEncryptionKey) {
+    errors.push("SECRET_ENCRYPTION_KEY is missing.");
+  }
+
+  if (!config.mockStellar) {
+    // Platform Secret Key validation
+    if (!config.platformSecretKey) {
+      errors.push("PLATFORM_SECRET_KEY is missing (required when MOCK_STELLAR=false).");
+    } else {
+      // Validate secret key format: starts with S, contains only uppercase letters/numbers 2-7, length 56
+      const stellarSecretRegex = /^S[A-Z2-7]{55}$/;
+      if (!stellarSecretRegex.test(config.platformSecretKey)) {
+        errors.push("PLATFORM_SECRET_KEY is invalid. It must be a valid Stellar secret key (56 characters starting with 'S').");
+      }
+    }
+
+    // Escrow Contract ID validation
+    if (!config.escrowContractId) {
+      errors.push("ESCROW_CONTRACT_ID is missing (required when MOCK_STELLAR=false).");
+    } else {
+      const stellarContractRegex = /^C[A-Z2-7]{55}$/;
+      if (!stellarContractRegex.test(config.escrowContractId)) {
+        errors.push("ESCROW_CONTRACT_ID is invalid. It must be a valid Stellar contract ID (56 characters starting with 'C').");
+      }
+    }
+
+    // MXNE Contract ID validation
+    if (!config.mxneContractId) {
+      errors.push("MXNE_CONTRACT_ID is missing (required when MOCK_STELLAR=false).");
+    } else {
+      const stellarContractRegex = /^C[A-Z2-7]{55}$/;
+      if (!stellarContractRegex.test(config.mxneContractId)) {
+        errors.push("MXNE_CONTRACT_ID is invalid. It must be a valid Stellar contract ID (56 characters starting with 'C').");
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error("Configuration Validation Failed:\n" + errors.map(e => `  - ${e}`).join("\n"));
+  }
+}
+

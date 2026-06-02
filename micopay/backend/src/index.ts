@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import fastifyCors from '@fastify/cors';
-import { config } from './config.js';
+import { config, validateConfig } from './config.js';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
 import { tradeRoutes } from './routes/trades.js';
@@ -37,7 +37,10 @@ const app = Fastify({
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://localhost',       // Android (capacitor.config androidScheme: 'https')
   'capacitor://localhost',   // iOS default scheme
-  'http://localhost:5173',   // Vite dev server
+  'ionic://localhost',       // iOS alternate scheme
+  'http://localhost',        // Android/Capacitor localhost fallback
+  'http://localhost:5173',   // Vite dev server default
+  'http://localhost:5181',   // micopay frontend dev server
   'http://localhost:3000',   // same-origin requests during dev
 ];
 const EXTRA = (process.env.CORS_EXTRA_ORIGINS ?? '')
@@ -229,6 +232,9 @@ async function startEventListener(): Promise<void> {
 
 async function start() {
   try {
+    // Validate config at startup. Will throw and crash if critical config is missing.
+    validateConfig();
+    
     await seedData();
     await app.listen({ port: config.port, host: '0.0.0.0' });
     app.log.info({ category: 'http', port: config.port }, '🍄 Micopay MVP Backend running');
