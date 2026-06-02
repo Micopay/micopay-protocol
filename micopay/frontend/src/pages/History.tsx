@@ -8,6 +8,7 @@ const STATUS_LABEL: Record<string, { label: string; color: string; bg: string }>
   pending:   { label: 'Pendiente',  color: 'text-outline',   bg: 'bg-outline/10' },
   cancelled: { label: 'Cancelado',  color: 'text-error',     bg: 'bg-error/10' },
   expired:   { label: 'Expirado',   color: 'text-outline',   bg: 'bg-outline/10' },
+  refunded:  { label: 'Reembolsado', color: 'text-[#8b5cf6]', bg: 'bg-[#8b5cf6]/10' },
 };
 
 interface HistoryProps {
@@ -21,6 +22,7 @@ const FILTERS = [
   { id: 'completed', label: 'Completados' },
   { id: 'cancelled', label: 'Cancelados' },
   { id: 'expired', label: 'Expirados' },
+  { id: 'refunded', label: 'Reembolsados' },
 ];
 
 const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {

@@ -143,6 +143,18 @@ export async function tradeRoutes(app: FastifyInstance) {
   });
 
   /**
+   * POST /trades/:id/refund
+   *
+   * Buyer triggers on-chain refund for an expired trade. Calls refund() on the Soroban contract
+   * and transitions the trade to 'refunded' status. Returns `{ status, refund_tx_hash }`.
+   * Errors use `{ error, message }` via the global Fastify error handler.
+   */
+  app.post('/trades/:id/refund', async (request) => {
+    const { id } = request.params as { id: string };
+    return tradeService.refundTrade(request, id, request.user.id);
+  });
+
+  /**
    * GET /trades/:id/audit
    * Ordered trade transition audit trail for support/ops.
    */

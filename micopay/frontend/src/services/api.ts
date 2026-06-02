@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { extractApiErrorPayload } from '../utils/apiError';
+import { signChallenge, getPublicKey } from '../lib/keystore';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -7,15 +8,6 @@ const http = axios.create({ baseURL: BASE_URL });
 
 function authHeaders(token: string) {
   return { headers: { Authorization: `Bearer ${token}` } };
-}
-
-function randomAddress(prefix: string): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let address = "G" + prefix.toUpperCase().replace(/[^A-Z2-7]/g, "A");
-  while (address.length < 56) {
-    address += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return address.substring(0, 56);
 }
 
 export interface UserData {
@@ -77,90 +69,130 @@ export async function cancelTradeRequest(tradeId: string, buyerToken: string): P
 }
 
 export async function patchMerchantAvailability(
-  token: string,
-  merchant_available: boolean,
+    token: string,
+    merchant_available: boolean,
 ): Promise<{ merchant_available: boolean }> {
   const res = await http.patch('/users/me', { merchant_available }, authHeaders(token));
   return res.data.user;
 }
 
 export async function registerUser(username: string): Promise<UserData> {
-  const stellar_address = randomAddress(username.substring(0, 6));
+  const stellar_address = (await getPublicKey()) ?? generateFallbackAddress(username);
   const res = await http.post("/users/register", { username, stellar_address });
   return { ...res.data.user, token: res.data.token };
 }
 
+// Used only if keypair hasn't been generated yet (should not happen in normal flow)
+function generateFallbackAddress(prefix: string): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let address = "G" + prefix.toUpperCase().replace(/[^A-Z2-7]/g, "A");
+  while (address.length < 56) {
+    address += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return address.substring(0, 56);
+}
+
+export async function getAuthToken(username: string): Promise<string> {
+  // Step 1: request a one-time challenge from the server
+  const { challenge } = await fetch(`${BASE_URL}/auth/challenge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username }),
+  }).then(r => r.json());
+
+  // Step 2: sign with the device keypair — private key never leaves the device
+  const signature = await signChallenge(challenge);
+
+  // Step 3: exchange challenge + signature for a JWT
+  const { token } = await fetch(`${BASE_URL}/auth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, challenge, signature }),
+  }).then(r => r.json());
+
+  return token;
+}
+
 export async function createTrade(
-  sellerId: string,
-  amountMxn: number,
-  buyerToken: string,
+    sellerId: string,
+    amountMxn: number,
+    buyerToken: string,
 ): Promise<TradeData> {
   try {
     const res = await http.post(
-      '/trades',
-      { seller_id: sellerId, amount_mxn: amountMxn },
-      authHeaders(buyerToken),
+        '/trades',
+        { seller_id: sellerId, amount_mxn: amountMxn },
+        authHeaders(buyerToken),
     );
     return res.data.trade;
   } catch (e: unknown) {
     const { message } = extractApiErrorPayload(e);
     throw new Error(message);
   }
-  const res = await http.post(
-    "/trades",
-    { seller_id: sellerId, amount_mxn: amountMxn },
-    authHeaders(buyerToken),
-  );
-  return res.data.trade;
 }
 
 export async function getTrade(
-  tradeId: string,
-  token: string,
+    tradeId: string,
+    token: string,
 ): Promise<TradeData> {
   const res = await http.get(`/trades/${tradeId}`, authHeaders(token));
   return res.data.trade;
 }
 
 export async function lockTrade(
-  tradeId: string,
-  sellerToken: string,
+    tradeId: string,
+    sellerToken: string,
 ): Promise<{ lock_tx_hash: string }> {
   const res = await http.post(
-    `/trades/${tradeId}/lock`,
-    {},
-    authHeaders(sellerToken),
+      `/trades/${tradeId}/lock`,
+      {},
+      authHeaders(sellerToken),
   );
   return { lock_tx_hash: res.data.lock_tx_hash };
 }
 
 export async function revealTrade(
-  tradeId: string,
-  sellerToken: string,
+    tradeId: string,
+    sellerToken: string,
 ): Promise<void> {
   await http.post(
-    `/trades/${tradeId}/reveal`,
-    undefined,
-    authHeaders(sellerToken),
+      `/trades/${tradeId}/reveal`,
+      undefined,
+      authHeaders(sellerToken),
   );
 }
 
 export async function getSecret(
-  tradeId: string,
-  sellerToken: string,
+    tradeId: string,
+    sellerToken: string,
 ): Promise<{ secret: string; qr_payload: string }> {
   const res = await http.get(
-    `/trades/${tradeId}/secret`,
-    authHeaders(sellerToken),
+      `/trades/${tradeId}/secret`,
+      authHeaders(sellerToken),
   );
   return res.data;
 }
 
 export async function completeTrade(
-  tradeId: string,
-  buyerToken: string,
+    tradeId: string,
+    buyerToken: string,
 ): Promise<void> {
   await http.post(`/trades/${tradeId}/complete`, {}, authHeaders(buyerToken));
+}
+
+export interface RefundTradeResponse {
+  status: 'refunded';
+  refund_tx_hash: string;
+}
+
+export async function refundTradeRequest(tradeId: string, token: string): Promise<RefundTradeResponse> {
+  try {
+    const res = await http.post(`/trades/${tradeId}/refund`, {}, authHeaders(token));
+    return res.data as RefundTradeResponse;
+  } catch (e: unknown) {
+    const { message } = extractApiErrorPayload(e);
+    throw new Error(message);
+  }
 }
 
 export interface TradeHistoryItem {
@@ -185,35 +217,35 @@ export interface MerchantTrade {
 }
 
 export async function getMerchantTrades(
-  token: string,
-  state: string = 'all',
+    token: string,
+    state: string = 'all',
 ): Promise<MerchantTrade[]> {
   const res = await http.get(`/merchants/me/trades?state=${state}`, authHeaders(token));
   return res.data.trades;
 }
 
 export async function getTradeHistory(
-  token: string,
+    token: string,
 ): Promise<TradeHistoryItem[]> {
   const res = await http.get("/trades/history", authHeaders(token));
   return res.data.trades;
 }
 
 export async function getCurrentUser(
-  token: string,
+    token: string,
 ): Promise<CurrentUserProfile> {
   const res = await http.get("/users/me", authHeaders(token));
   return res.data.user;
 }
 
 export async function deleteAccount(
-  token: string,
-  username: string,
+    token: string,
+    username: string,
 ): Promise<{ status: string }> {
   const res = await http.post(
-    "/users/me/delete",
-    { username },
-    authHeaders(token),
+      "/users/me/delete",
+      { username },
+      authHeaders(token),
   );
   return res.data;
 }
@@ -261,16 +293,16 @@ export async function getCETESRate(amount = "100"): Promise<CETESRate> {
 }
 
 export async function buyCETES(
-  amount: string,
-  sourceAsset: "XLM" | "USDC" | "MXNe",
+    amount: string,
+    sourceAsset: "XLM" | "USDC" | "MXNe",
 ): Promise<CETESTxResult> {
   const res = await http.post("/defi/cetes/buy", { amount, sourceAsset });
   return res.data;
 }
 
 export async function sellCETES(
-  amount: string,
-  destAsset: "XLM" | "USDC" | "MXNe",
+    amount: string,
+    destAsset: "XLM" | "USDC" | "MXNe",
 ): Promise<CETESTxResult> {
   const res = await http.post("/defi/cetes/sell", { amount, destAsset });
   return res.data;
@@ -314,9 +346,9 @@ export async function getBlendPools(): Promise<BlendPoolsResponse> {
 }
 
 export async function blendSupply(
-  amount: string,
-  asset: string,
-  collateral = false,
+    amount: string,
+    asset: string,
+    collateral = false,
 ): Promise<BlendTxResult> {
   const res = await http.post("/defi/blend/supply", {
     amount,
@@ -327,13 +359,12 @@ export async function blendSupply(
 }
 
 export async function blendBorrow(
-  amount: string,
-  asset: string,
+    amount: string,
+    asset: string,
 ): Promise<BlendTxResult> {
   const res = await http.post("/defi/blend/borrow", { amount, asset });
   return res.data;
 }
-
 
 export interface MerchantConfig {
   rate_percent: number;
