@@ -139,7 +139,19 @@ export async function tradeRoutes(app: FastifyInstance) {
   app.post('/trades/:id/cancel', async (request) => {
     const { id } = request.params as { id: string };
     const { reason } = (request.body as { reason?: string } | undefined) ?? {};
-    return tradeService.cancelTrade(id, request.user.id, reason);
+    return tradeService.cancelTrade(request, id, request.user.id, reason);
+  });
+
+  /**
+   * POST /trades/:id/refund
+   *
+   * Buyer triggers on-chain refund for an expired trade. Calls refund() on the Soroban contract
+   * and transitions the trade to 'refunded' status. Returns `{ status, refund_tx_hash }`.
+   * Errors use `{ error, message }` via the global Fastify error handler.
+   */
+  app.post('/trades/:id/refund', async (request) => {
+    const { id } = request.params as { id: string };
+    return tradeService.refundTrade(request, id, request.user.id);
   });
 
   /**
@@ -153,20 +165,25 @@ export async function tradeRoutes(app: FastifyInstance) {
   });
 
   /**
-   * POST /trades/:id/merchant-confirm  (issue #70)
-   *
-   * Merchant scans buyer QR → frontend POSTs here to validate participant,
-   * state, and expiry. Returns a summary for the merchant confirmation screen.
-   *
-   * Errors:
-   *   404 — trade not found / invalid QR
-   *   403 — user is not the seller of this trade
-   *   409 — trade already completed or cancelled
-   *   409 — trade expired
+   * GET /audit/lookup?request_id=<uuid>
+   * Look up audit events by correlation ID. Useful for support when a user
+   * reports a support code — support can find the request_id from logs and
+   * query this endpoint to see exactly what happened.
    */
-  app.post('/trades/:id/merchant-confirm', async (request) => {
-    const { id } = request.params as { id: string };
-    return tradeService.merchantConfirmScan(request, id, request.user.id);
+  app.get('/audit/lookup', {
+    schema: {
+      querystring: {
+        type: 'object',
+        required: ['request_id'],
+        properties: {
+          request_id: { type: 'string', minLength: 1 },
+        },
+      },
+    },
+  }, async (request) => {
+    const { request_id } = request.query as { request_id: string };
+    const events = await tradeService.lookupAuditByRequestId(request_id);
+    return { audit: events };
   });
 
   /**

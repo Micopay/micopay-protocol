@@ -17,6 +17,12 @@ export interface MerchantRow {
   max_amount: number;
   verification_status: VerificationStatus;
   verified_at: string | null;
+  trades_completed: number;
+  completion_rate: number;
+  avg_time_minutes: number;
+  tier: "maestro" | "experto" | "activo" | "espora";
+  total_volume_usdc: number;
+  last_trade_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -33,6 +39,12 @@ export interface PublicMerchantRow {
   spread_percent: number;
   min_amount: number;
   max_amount: number;
+  trades_completed: number;
+  completion_rate: number;
+  avg_time_minutes: number;
+  tier: "maestro" | "experto" | "activo" | "espora";
+  total_volume_usdc: number;
+  last_trade_at: string | null;
 }
 
 export interface CreateMerchantInput {
@@ -67,6 +79,13 @@ export async function initMerchantsTable(): Promise<void> {
       verification_status VARCHAR(10) NOT NULL DEFAULT 'pending'
                             CHECK (verification_status IN ('pending', 'verified', 'paused')),
       verified_at         TIMESTAMPTZ,
+      trades_completed    INTEGER NOT NULL DEFAULT 0,
+      completion_rate     DECIMAL(5,4) NOT NULL DEFAULT 0,
+      avg_time_minutes    INTEGER NOT NULL DEFAULT 0,
+      tier                VARCHAR(10) NOT NULL DEFAULT 'espora'
+                          CHECK (tier IN ('maestro', 'experto', 'activo', 'espora')),
+      total_volume_usdc   DECIMAL(20,2) NOT NULL DEFAULT 0,
+      last_trade_at       TIMESTAMPTZ,
       created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT merchants_user_unique UNIQUE (user_id)
@@ -74,6 +93,7 @@ export async function initMerchantsTable(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_merchants_user_id ON merchants(user_id);
     CREATE INDEX IF NOT EXISTS idx_merchants_status  ON merchants(verification_status);
+    CREATE INDEX IF NOT EXISTS idx_merchants_tier    ON merchants(tier);
   `);
 }
 
@@ -116,8 +136,22 @@ export async function getMerchantByUserId(
 export async function getVerifiedMerchants(): Promise<PublicMerchantRow[]> {
   return getMany<PublicMerchantRow>(`
     SELECT id, display_name, latitude, longitude, address_text,
-           hours_open, hours_close, base_rate, spread_percent, min_amount, max_amount
+           hours_open, hours_close, base_rate, spread_percent, min_amount, max_amount,
+           trades_completed, completion_rate, avg_time_minutes, tier,
+           total_volume_usdc, last_trade_at
     FROM merchants
     WHERE verification_status = 'verified'
+    ORDER BY tier = 'maestro' DESC, completion_rate DESC, trades_completed DESC
   `);
+}
+
+export async function getMerchantById(id: string): Promise<PublicMerchantRow | null> {
+  return getOne<PublicMerchantRow>(`
+    SELECT id, display_name, latitude, longitude, address_text,
+           hours_open, hours_close, base_rate, spread_percent, min_amount, max_amount,
+           trades_completed, completion_rate, avg_time_minutes, tier,
+           total_volume_usdc, last_trade_at
+    FROM merchants
+    WHERE id = $1 AND verification_status = 'verified'
+  `, [id]);
 }

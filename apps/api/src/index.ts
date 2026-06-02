@@ -12,6 +12,8 @@ import { fundRoutes } from "./routes/fund.js";
 import { serviceRoutes } from "./routes/services.js";
 import { demoRoutes } from "./routes/demo.js";
 import { cetesRoutes } from "./routes/cetes.js";
+import { merchantRoutes } from "./routes/merchants.js";
+import { tradeMessagesRoutes } from "./routes/trade-messages.js";
 import { initAuthChallengesTable } from "./db/auth.js";
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
@@ -37,6 +39,7 @@ app.register(serviceRoutes);
 app.register(demoRoutes);
 app.register(cetesRoutes);
 app.register(merchantRoutes);
+app.register(tradeMessagesRoutes);
 
 async function start() {
   await initAuthChallengesTable();

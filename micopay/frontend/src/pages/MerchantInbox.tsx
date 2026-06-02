@@ -1,14 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQRScanner } from '../hooks/useQRScanner';
-import { parseQRPayload } from '../utils/qrPayload';
-import type { ParsedQRPayload } from '../utils/qrPayload';
-import {
-  getMerchantTrades,
-  merchantConfirmScan,
-  type MerchantConfirmResult,
-  type MerchantTrade,
-} from '../services/api';
-import SupportLink from '../components/SupportLink';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 // ── Status display config ──────────────────────────────────────────────────
 
@@ -272,15 +264,17 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
   const [scanView, setScanView] = useState<ScanView>({ type: 'idle' });
   const { scan } = useQRScanner();
 
-  // ── Scan + parse + validate ────────────────────────────────────────────
-  const handleScan = useCallback(async () => {
-    if (!token) {
-      setScanView({ type: 'api_error', message: 'No estás autenticado. Inicia sesión de nuevo.' });
-      return;
-    }
+  // Initialize push notifications for merchant
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const { isEnabled: pushEnabled } = usePushNotifications({
+    isMerchant: !!token,
+    userToken: token,
+    apiUrl,
+  });
 
-    setScanView({ type: 'idle' });
-
+  const handleScan = async () => {
+    setScanError(null);
+    setScannedPayload(null);
     const { value, error } = await scan();
 
     if (error) {
@@ -288,33 +282,12 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
       return;
     }
 
-    if (!value) {
-      // User cancelled scan
-      return;
-    }
-
-    // Step 1: Parse the QR payload
-    const parsed = parseQRPayload(value);
-
-    if (!parsed.ok) {
-      setScanView({ type: 'parse_error', message: parsed.error });
-      return;
-    }
-
-    const payload: ParsedQRPayload = parsed.payload;
-
-    // Step 2: Extract trade ID from the parsed payload
-    let tradeId: string | null = null;
-
-    if (payload.type === 'release') {
-      tradeId = payload.tradeId;
-    } else if (payload.type === 'claim') {
-      // claim QRs use request_id which may correspond to a trade_id
-      tradeId = payload.requestId;
-    } else if (payload.type === 'demo') {
-      setScanView({
-        type: 'parse_error',
-        message: 'Este es un código QR de demostración. Escanea un QR de un intercambio real.',
+  const fetchTrades = async (state: string = 'all') => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiUrl}/merchants/me/trades?state=${state}`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
       return;
     }
@@ -358,9 +331,28 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
     [token],
   );
 
+  // Main effect: fetch trades on filter change
   useEffect(() => {
     fetchTrades(activeFilter);
   }, [activeFilter, fetchTrades]);
+
+  // Polling fallback when push notifications are disabled
+  useEffect(() => {
+    if (pushEnabled || !token) {
+      return; // No polling needed if push works
+    }
+
+    const pollInterval = setInterval(() => {
+      // Only poll when the tab is visible
+      if (document.visibilityState === 'visible') {
+        fetchTrades(activeFilter).catch(() => {
+          // Ignore polling errors silently
+        });
+      }
+    }, 30_000); // Poll every 30 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [pushEnabled, token, activeFilter]);
 
   const filters = [
     { key: 'all', label: 'Todos' },
@@ -390,34 +382,49 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
       </header>
 
       <main className="pt-24 px-6 pb-32">
-        {/* ── Scan result area ──────────────────────────────────────────── */}
-
-        {scanView.type === 'loading' && (
-          <div className="mb-4 rounded-2xl p-6 bg-blue-50 border border-blue-200 flex items-center justify-center gap-3">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
-            <p className="text-sm font-medium text-blue-800">Verificando QR con el servidor…</p>
+        {/* Push notification disabled banner with polling fallback */}
+        {!pushEnabled && token && (
+          <div className="mb-4 rounded-2xl p-4 bg-amber-50 border border-amber-200">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-amber-600">notifications_off</span>
+              <div className="flex-1">
+                <p className="text-sm text-amber-900 font-medium">
+                  Las notificaciones están deshabilitadas. La bandeja se actualiza automáticamente cada 30 segundos.
+                </p>
+                <p className="text-xs text-amber-800 mt-1">
+                  <a href="#" onClick={(e) => { e.preventDefault(); }} className="underline">
+                    Habilitar notificaciones
+                  </a>
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
-        {scanView.type === 'confirmation' && (
-          <div className="mb-4">
-            <TradeConfirmationCard data={scanView.data} onDismiss={dismissScan} />
-          </div>
-        )}
-
-        {scanView.type === 'parse_error' && (
-          <div className="mb-4">
-            <ScanErrorCard message={scanView.message} onDismiss={dismissScan} />
-          </div>
-        )}
-
-        {scanView.type === 'api_error' && (
-          <div className="mb-4">
-            <ScanErrorCard
-              message={scanView.message}
-              tradeId={scanView.tradeId}
-              onDismiss={dismissScan}
-            />
+        {(scannedPayload || scanError) && (
+          <div className={`mb-4 rounded-2xl p-4 ${scanError ? 'bg-red-50 border border-red-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+            <div className="flex items-start gap-3">
+              <span className={`material-symbols-outlined ${scanError ? 'text-red-600' : 'text-emerald-600'}`}>
+                {scanError ? 'error' : 'qr_code_2'}
+              </span>
+              <div className="flex-1 min-w-0">
+                {scanError ? (
+                  <p className="text-sm text-red-800 font-medium">{scanError}</p>
+                ) : (
+                  <>
+                    <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">QR escaneado</p>
+                    <p className="text-xs text-emerald-900 font-mono break-all">{scannedPayload}</p>
+                  </>
+                )}
+              </div>
+              <button
+                onClick={() => { setScannedPayload(null); setScanError(null); }}
+                aria-label="Cerrar"
+                className="material-symbols-outlined text-on-surface-variant text-base"
+              >
+                close
+              </button>
+            </div>
           </div>
         )}
 
@@ -446,12 +453,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
         ) : trades.length === 0 ? (
           <div className="text-center py-12">
             <span className="material-symbols-outlined text-6xl text-gray-300 mb-4">inbox</span>
-            <p className="text-gray-500">
-              No hay intercambios{' '}
-              {activeFilter !== 'all'
-                ? `con estado "${STATUS_LABELS[activeFilter]}"`
-                : ''}
-            </p>
+            <p className="text-gray-500">No hay operaciones {activeFilter !== 'all' ? `con estado "${STATUS_LABELS[activeFilter]}"` : ''}</p>
           </div>
         ) : (
           <div className="space-y-4">

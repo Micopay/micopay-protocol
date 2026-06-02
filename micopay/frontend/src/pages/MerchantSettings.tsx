@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getMerchantConfig, updateMerchantConfig, MerchantConfig } from '../services/api';
+import { resolveErrorMessage } from '../constants/errorMap';
 
 interface MerchantSettingsProps {
   token: string | null;
@@ -23,7 +24,7 @@ export default function MerchantSettings({ token, onBack }: MerchantSettingsProp
         const data = await getMerchantConfig(token);
         setForm(data);
       } catch (err: any) {
-        setMessage(err?.response?.data?.message ?? 'No se pudo cargar la configuración');
+        setMessage(resolveErrorMessage(err).message);
       } finally {
         setLoading(false);
       }
@@ -40,7 +41,7 @@ export default function MerchantSettings({ token, onBack }: MerchantSettingsProp
       setForm(updated);
       setMessage('Configuración guardada. El límite diario se reinicia a las 00:00 UTC.');
     } catch (err: any) {
-      setMessage(err?.response?.data?.message ?? 'No se pudo guardar la configuración');
+      setMessage(resolveErrorMessage(err).message);
     } finally {
       setSaving(false);
     }
@@ -49,8 +50,8 @@ export default function MerchantSettings({ token, onBack }: MerchantSettingsProp
   return (
     <div className="bg-surface text-on-surface min-h-screen px-6 pt-10 pb-32 max-w-xl mx-auto">
       <button className="mb-6 text-sm font-semibold text-primary" onClick={onBack}>← Volver</button>
-      <h1 className="text-2xl font-bold mb-2">Ajustes de comerciante</h1>
-      <p className="text-sm text-on-surface-variant mb-8">Configura tu tasa y límites operativos.</p>
+      <h1 className="text-2xl font-bold mb-2">Ajustes del comerciante</h1>
+      <p className="text-sm text-on-surface-variant mb-8">Configura tu tasa y límites de operación.</p>
 
       {loading ? <p>Cargando…</p> : (
         <div className="space-y-5">
