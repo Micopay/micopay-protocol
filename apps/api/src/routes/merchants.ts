@@ -86,4 +86,19 @@ export async function merchantRoutes(app: FastifyInstance) {
     const merchants = await merchantService.listVerifiedMerchants();
     return reply.status(200).send(merchants);
   });
+
+  /**
+   * GET /merchants/:id
+   * Public. Returns a specific verified merchant with reputation data.
+   */
+  app.get("/merchants/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const merchant = await merchantService.getMerchantById(id);
+    if (!merchant) {
+      return reply.status(404).send({ error: "Merchant not found" });
+    }
+
+    return reply.status(200).send(merchant);
+  });
 }

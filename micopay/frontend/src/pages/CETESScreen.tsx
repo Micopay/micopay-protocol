@@ -119,13 +119,13 @@ const CETESScreen = ({ onBack, onBanco }: CETESScreenProps) => {
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-white/60 rounded-2xl p-3 text-center">
               <p className="text-2xl font-extrabold text-primary">{rate?.apy ?? 11.45}%</p>
-              <p className="text-xs text-on-surface-variant mt-1">APY anual</p>
+              <p className="text-xs text-on-surface-variant mt-1">Rendimiento anual</p>
             </div>
             <div className="bg-white/60 rounded-2xl p-3 text-center">
               <p className="text-2xl font-extrabold text-on-surface">
                 {rateLoading ? '…' : `${(rate?.apy ?? 11.45) / 12}`.slice(0, 4)}%
               </p>
-              <p className="text-xs text-on-surface-variant mt-1">APY mensual</p>
+              <p className="text-xs text-on-surface-variant mt-1">Rendimiento mensual</p>
             </div>
           </div>
         </div>
@@ -213,7 +213,7 @@ const CETESScreen = ({ onBack, onBanco }: CETESScreenProps) => {
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-[#1D9E75] text-xl">check_circle</span>
                 <p className="font-bold text-[#1D9E75]">
-                  {txResult.simulated ? '¡Compra simulada!' : '¡Transacción enviada!'}
+                  {txResult.simulated ? '¡Prueba simulada!' : '¡Operación enviada!'}
                 </p>
               </div>
               <p className="text-xs text-on-surface-variant">
@@ -230,7 +230,7 @@ const CETESScreen = ({ onBack, onBanco }: CETESScreenProps) => {
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-xs text-primary font-bold"
               >
-                Ver en Stellar Explorer
+                Ver en el explorador Stellar
                 <span className="material-symbols-outlined text-sm">open_in_new</span>
               </a>
             </div>

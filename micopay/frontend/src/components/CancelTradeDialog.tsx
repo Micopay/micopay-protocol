@@ -52,7 +52,11 @@ export default function CancelTradeDialog({
       // On success the parent usually navigates away — do not call `resetAndClose` here to avoid setState after unmount.
       await onConfirmCancel();
     } catch (e) {
-      setRequestError(extractApiErrorPayload(e).message);
+      const payload = extractApiErrorPayload(e);
+      const msg = payload.support_code
+        ? `${payload.message} (código: ${payload.support_code})`
+        : payload.message;
+      setRequestError(msg);
     } finally {
       setSubmitting(false);
     }
@@ -72,7 +76,7 @@ export default function CancelTradeDialog({
               ¿Cancelar esta operación?
             </h2>
             <p className="mt-3 text-sm text-on-surface-variant leading-relaxed">
-              Si continúas, te pediremos una segunda confirmación con el detalle de qué pasa con tu USDC o escrow.
+              Si continúas, te pediremos una segunda confirmación con el detalle de qué pasa con tu USDC o garantía.
             </p>
             <div className="mt-6 flex gap-2 justify-end">
               <button
@@ -96,12 +100,12 @@ export default function CancelTradeDialog({
             <h2 className="font-headline text-lg font-bold text-on-surface">Confirmar cancelación</h2>
             {consequence === 'refund_usdc' ? (
               <p className="mt-3 text-sm text-on-surface leading-relaxed">
-                <strong>Tu USDC será reembolsado</strong> desde el escrow según el estado del trade y la red Stellar /
+                <strong>Tu USDC será reembolsado</strong> desde la garantía según el estado de la operación y la red Stellar /
                 Soroban. Los tiempos pueden variar; recibirás el hash de reembolso en tu historial cuando exista.
               </p>
             ) : (
               <p className="mt-3 text-sm text-on-surface leading-relaxed">
-                <strong>No hay fondos bloqueados aún</strong> en cadena para este trade (o no aplica reembolso USDC en
+                <strong>No hay fondos bloqueados aún</strong> en cadena para esta operación (o no aplica reembolso USDC en
                 este estado). La operación se marcará como cancelada sin espera de reembolso.
               </p>
             )}
@@ -132,7 +136,7 @@ export default function CancelTradeDialog({
                 className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 onClick={() => void handleFinalConfirm()}
               >
-                {submitting ? 'Cancelando…' : 'Sí, cancelar trade'}
+                {submitting ? 'Cancelando…' : 'Sí, cancelar operación'}
               </button>
             </div>
           </>

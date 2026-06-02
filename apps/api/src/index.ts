@@ -12,7 +12,10 @@ import { fundRoutes } from "./routes/fund.js";
 import { serviceRoutes } from "./routes/services.js";
 import { demoRoutes } from "./routes/demo.js";
 import { cetesRoutes } from "./routes/cetes.js";
+import { merchantRoutes } from "./routes/merchants.js";
+import { tradeMessagesRoutes } from "./routes/trade-messages.js";
 import { initAuthChallengesTable } from "./db/auth.js";
+import { config } from "./config.js";
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 const NODE_ENV = process.env.NODE_ENV ?? "development";
@@ -35,8 +38,14 @@ app.register(reputationRoutes);
 app.register(fundRoutes);
 app.register(serviceRoutes);
 app.register(demoRoutes);
-app.register(cetesRoutes);
+
+if (config.enableInvestments) {
+  app.register(cetesRoutes);
+  app.register(blendRoutes);
+}
+
 app.register(merchantRoutes);
+app.register(tradeMessagesRoutes);
 
 async function start() {
   await initAuthChallengesTable();

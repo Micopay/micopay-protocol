@@ -35,8 +35,8 @@ export default function TradeCancelled({
         </div>
         <h1 className="font-headline text-2xl font-bold text-primary">Operación cancelada</h1>
         <p className="mt-2 text-sm text-on-surface-variant max-w-sm mx-auto">
-          El trade <span className="font-mono text-xs">{tradeId.slice(0, 8)}…</span> quedó en estado{' '}
-          <strong>cancelled</strong>. Monto referido: <strong>${amountMxn} MXN</strong>.
+          La operación <span className="font-mono text-xs">{tradeId.slice(0, 8)}…</span> quedó en estado{' '}
+          <strong>cancelada</strong>. Monto referido: <strong>${amountMxn} MXN</strong>.
         </p>
       </header>
 
@@ -48,8 +48,8 @@ export default function TradeCancelled({
           {refundExpected ? (
             <>
               <p className="text-sm leading-relaxed">
-                Había un bloqueo en cadena asociado. <strong>Tu USDC será devuelto</strong> al flujo de reembolso del
-                escrow (misma política que un cancel post-lock en el backend).
+                Había un bloqueo en cadena asociado. <strong>Tu USDC será devuelto</strong> al flujo de reembolso de la
+                garantía (misma política que una cancelación posterior al bloqueo en el backend).
               </p>
               {lockTxHash ? (
                 <a
@@ -66,8 +66,8 @@ export default function TradeCancelled({
             </>
           ) : (
             <p className="text-sm leading-relaxed">
-              <strong>No se había registrado un bloqueo aún</strong> para este trade (o estaba en estado previo al
-              lock). No hay USDC en escrow que reembolsar desde esta cancelación.
+              <strong>No se había registrado un bloqueo aún</strong> para esta operación (o estaba en estado previo al
+              bloqueo). No hay USDC en garantía que reembolsar desde esta cancelación.
             </p>
           )}
         </section>

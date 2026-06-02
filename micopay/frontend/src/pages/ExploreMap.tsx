@@ -1,5 +1,19 @@
 import MapSim from '../components/MapSim';
-import { useGeolocation } from '../hooks/useGeolocation';
+import { useMerchantsAvailable } from '../hooks/useMerchantsAvailable';
+import type { AvailableMerchant } from '../services/api';
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+function formatDistance(km: number): string {
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${km.toFixed(1)} km`;
+}
+
+function walkMinutes(km: number): number {
+  return Math.max(1, Math.round((km / 5) * 60));
+}
+
+// ─── Offer shape used by the card renderer ───────────────────────────────────
 
 interface Offer {
   id: string;
@@ -10,16 +24,13 @@ interface Offer {
   receiveMxn: number;
   commissionPct: number;
   badge?: string;
-  rating?: string;
-  verified?: boolean;
   isPrimary?: boolean;
 }
 
-// Hardcoded testnet offers — replace with API data when backend P2P matching is live
-const DEFAULT_OFFERS: Offer[] = [
-  {
-    id: 'offer_1',
-    name: 'Farmacia Guadalupe',
+function merchantToOffer(m: AvailableMerchant, index: number): Offer {
+  return {
+    id: m.seller_id,
+    name: m.username,
     icon: 'storefront',
     distance: '180 m',
     walkMinutes: 3,
@@ -37,7 +48,7 @@ const DEFAULT_OFFERS: Offer[] = [
     walkMinutes: 5,
     receiveMxn: 490,
     commissionPct: 2,
-    rating: '⭐ 4.9 · 87 intercambios',
+    rating: '⭐ 4.9 · 87 operaciones',
   },
   {
     id: 'offer_3',
@@ -56,8 +67,6 @@ interface ExploreMapProps {
   onSelectOffer: (offerId: string) => void;
   amount?: number;
   loading?: boolean;
-  /** Pass [] to show the empty state (e.g. when P2P matching returns no nearby providers) */
-  offers?: Offer[];
 }
 
 const ExploreMap = ({
@@ -65,9 +74,30 @@ const ExploreMap = ({
   onSelectOffer,
   amount = 500,
   loading = false,
-  offers = DEFAULT_OFFERS,
 }: ExploreMapProps) => {
-  const geo = useGeolocation();
+  const { state, refetch } = useMerchantsAvailable({
+    amount_mxn: amount,
+    flow: 'cashout',
+    radius_km: 5,
+  });
+
+  if (state.status === 'loading' || state.status === 'idle') {
+    return <LoadingSkeleton onBack={onBack} />;
+  }
+
+  if (state.status === 'location_denied') {
+    return <LocationDenied onBack={onBack} />;
+  }
+
+  if (state.status === 'error') {
+    return <FetchError onBack={onBack} onRetry={refetch} />;
+  }
+
+  const offers: Offer[] =
+    state.status === 'success'
+      ? state.merchants.map((m, i) => merchantToOffer(m, i))
+      : [];
+
   return (
     <div className="bg-surface-container-lowest text-on-surface font-body min-h-screen pb-24">
       {/* Top Navigation */}
@@ -75,10 +105,13 @@ const ExploreMap = ({
         <button
           onClick={onBack}
           className="flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
+          aria-label="Volver"
         >
           <span className="material-symbols-outlined text-primary">arrow_back</span>
         </button>
-        <h1 className="ml-4 font-headline font-bold text-xl text-primary tracking-tight">Convertir a efectivo</h1>
+        <h1 className="ml-4 font-headline font-bold text-xl text-primary tracking-tight">
+          Convertir a efectivo
+        </h1>
       </header>
 
       <main className="pt-24 px-6 max-w-2xl mx-auto">
@@ -88,25 +121,7 @@ const ExploreMap = ({
         </section>
 
         {offers.length === 0 ? (
-          /* ── Empty state: no merchants match ── */
-          <div className="flex flex-col items-center text-center py-12 px-4 gap-4">
-            <div className="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center">
-              <span className="material-symbols-outlined text-outline text-3xl">location_off</span>
-            </div>
-            <h2 className="font-headline font-bold text-xl text-on-surface">
-              Sin proveedores cerca ahora
-            </h2>
-            <p className="text-sm text-outline leading-snug max-w-[280px]">
-              No hay nadie disponible en tu zona para ${amount} MXN en este momento. Prueba en unos minutos o ajusta el monto.
-            </p>
-            <button
-              onClick={onBack}
-              className="mt-2 h-[48px] px-8 border-2 border-primary text-primary font-bold rounded-xl active:scale-95 transition-all duration-200 flex items-center gap-2"
-            >
-              <span className="material-symbols-outlined text-sm">tune</span>
-              Cambiar monto
-            </button>
-          </div>
+          <EmptyState onBack={onBack} amount={amount} />
         ) : (
           <>
             {/* Results Header */}
@@ -116,13 +131,7 @@ const ExploreMap = ({
               </h2>
               <div className="flex items-center gap-1 mt-1">
                 <span className="material-symbols-outlined text-primary text-sm">location_on</span>
-                <p className="text-sm text-outline font-medium">
-                  {geo.loading
-                    ? 'Localizando...'
-                    : geo.lat && geo.lng
-                      ? `${geo.lat.toFixed(3)}, ${geo.lng.toFixed(3)}`
-                      : 'Zona Centro'}
-                </p>
+                <p className="text-sm text-outline font-medium">Cerca de ti</p>
               </div>
             </div>
 
@@ -182,7 +191,7 @@ const ExploreMap = ({
                         {loading ? (
                           <>
                             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            Preparando escrow...
+                            Preparando garantía...
                           </>
                         ) : (
                           'Ir con este agente'
@@ -195,45 +204,19 @@ const ExploreMap = ({
                 return (
                   <article
                     key={offer.id}
-                    className="bg-surface-container-low/30 p-5 rounded-[24px] border border-transparent hover:border-surface-container-high transition-all"
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center border border-surface-container-high">
-                          <span className="material-symbols-outlined text-outline">{offer.icon}</span>
-                        </div>
-                        <div>
-                          <h3 className="font-headline font-bold text-on-surface">{offer.name}</h3>
-                          {(offer.rating ?? offer.badge) && (
-                            <span className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
-                              {offer.rating ?? offer.badge}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10px] font-bold text-outline uppercase tracking-wider">Oferta</p>
-                        <p className="text-lg font-headline font-bold text-on-surface">
-                          ${offer.receiveMxn.toFixed(2)} MXN
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => onSelectOffer(offer.id)}
-                      disabled={loading}
-                      className="w-full py-3 border border-primary text-primary font-bold rounded-xl active:scale-95 transition-all disabled:opacity-70"
-                    >
-                      Ver oferta
-                    </button>
-                  </article>
-                );
-              })}
+                    offer={offer}
+                    amount={amount}
+                    loading={loading}
+                    onSelectOffer={onSelectOffer}
+                  />
+                ),
+              )}
             </div>
 
             {/* Footer Note */}
             <footer className="mt-10 mb-8 p-6 text-center">
               <p className="text-[12px] leading-relaxed text-outline font-medium">
-                Tu saldo se bloquea en garantía hasta que confirmes la recepción del efectivo. Operación segura y protegida por MicoPay Smart Escrow.
+                Tu saldo se bloquea en garantía hasta que confirmes la recepción del efectivo. Operación segura y protegida por la garantía inteligente de MicoPay.
               </p>
             </footer>
           </>

@@ -45,8 +45,8 @@ export default function TradeConfirmation({
   const title = flow === 'cashout' ? 'Confirmar retiro en efectivo' : 'Confirmar depósito en efectivo';
   const primaryExplainer =
     flow === 'cashout'
-      ? 'Al continuar, buscarás un agente en el mapa. Al aceptar una oferta se creará el trade y se solicitará el bloqueo USDC en escrow según el flujo del protocolo.'
-      : 'Al continuar, buscarás un punto de depósito. Al aceptar una oferta se creará el trade y se solicitará el bloqueo USDC en escrow según el flujo del protocolo.';
+      ? 'Al continuar, buscarás un agente en el mapa. Al aceptar una oferta se creará la operación y se solicitará el bloqueo USDC en garantía según el flujo del protocolo.'
+      : 'Al continuar, buscarás un punto de depósito. Al aceptar una oferta se creará la operación y se solicitará el bloqueo USDC en garantía según el flujo del protocolo.';
 
   return (
     <div className="min-h-screen bg-surface-container-lowest text-on-surface font-body pb-28">
@@ -76,7 +76,7 @@ export default function TradeConfirmation({
           <h2 className="text-xs font-bold tracking-widest text-on-surface-variant uppercase">Resumen</h2>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between gap-4">
-              <dt className="text-on-surface-variant">Monto del trade (MXN)</dt>
+              <dt className="text-on-surface-variant">Monto de la operación (MXN)</dt>
               <dd className="font-semibold tabular-nums">${amountMxn.toLocaleString('es-MX')} MXN</dd>
             </div>
             <div className="flex justify-between gap-4">
@@ -84,7 +84,7 @@ export default function TradeConfirmation({
               <dd className="font-semibold tabular-nums text-primary">${platformFeeMxn.toLocaleString('es-MX')} MXN</dd>
             </div>
             <div className="flex justify-between gap-4 border-t border-outline-variant/15 pt-3">
-              <dt className="text-on-surface-variant">Agente / comercio (ejemplo)</dt>
+              <dt className="text-on-surface-variant">Comerciante / agente (ejemplo)</dt>
               <dd className="font-medium text-right">{merchantDisplayName}</dd>
             </div>
             <div className="flex justify-between gap-4">
