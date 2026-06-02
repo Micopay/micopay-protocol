@@ -120,6 +120,19 @@ export class RateLimitError extends AppError {
   }
 }
 
+/** Account paused, suspended, or blocked by a risk rule (not a rate limit). */
+export class RiskBlockedError extends AppError {
+  constructor(
+    code: string,
+    userMessage: string,
+    devMessage: string,
+    httpStatus = 403,
+  ) {
+    super(code, userMessage, devMessage, httpStatus);
+    this.name = 'RiskBlockedError';
+  }
+}
+
 /**
  * Thrown when a Stellar tx hash has already been processed.
  * HTTP 409 — the outcome of a replayed tx is deterministic, so this is

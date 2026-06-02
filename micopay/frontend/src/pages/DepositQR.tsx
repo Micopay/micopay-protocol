@@ -128,8 +128,8 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
                 {/* Info */}
                 <div className="bg-surface-container-lowest rounded-2xl p-4 flex gap-4 items-start border border-surface-container-low shadow-sm">
                     <span className="material-symbols-outlined text-primary shrink-0">info</span>
-                    <p className="text-[13px] leading-relaxed text-on-surface/80">
-                        El agente acreditará el saldo a tu wallet después de recibir el efectivo y escanear este código.
+                        <p className="text-[13px] leading-relaxed text-on-surface/80">
+                        El comerciante acreditará el saldo a tu billetera después de recibir el efectivo y escanear este código.
                     </p>
                 </div>
 

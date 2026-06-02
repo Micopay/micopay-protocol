@@ -41,11 +41,9 @@ Monto: $${amount} MXN
 Recibido: $${received} MXN
 Comisión: $${commission} MXN
 Agente: ${agentName}
-Trade ID: ${trade.id}
-Estado: ${trade.status}
-${lockTxHash ? `TX Lock: ${truncateHash(lockTxHash, 16)}${isMockHash(lockTxHash) ? ' (simulado)' : ''}` : ''}
-${releaseTxHash ? `TX Release: ${truncateHash(releaseTxHash, 16)}${isMockHash(releaseTxHash) ? ' (simulado)' : ''}` : ''}
-Fecha: ${formatTimestamp(trade.completed_at ?? trade.created_at)}`;
+Operación ID: ${trade.id}
+${lockTxHash ? `Bloqueo: ${truncateHash(lockTxHash, 16)}` : ''}
+${releaseTxHash ? `Liberación: ${truncateHash(releaseTxHash, 16)}` : ''}`;
 
         if (navigator.share) {
             try {
@@ -84,7 +82,7 @@ Fecha: ${formatTimestamp(trade.completed_at ?? trade.created_at)}`;
                     {type === 'cashout' ? '¡Listo!' : '¡Depósito exitoso!'}
                 </h1>
                 <p className="text-secondary font-medium text-lg opacity-70">
-                    {type === 'cashout' ? 'Recibiste tu efectivo' : 'Tus MXNE ya están en tu wallet'}
+                    {type === 'cashout' ? 'Recibiste tu efectivo' : 'Tus MXNE ya están en tu billetera'}
                 </p>
             </section>
 
@@ -192,7 +190,7 @@ Fecha: ${formatTimestamp(trade.completed_at ?? trade.created_at)}`;
 
             {/* Hash & Rating */}
             <div className="w-full space-y-8 text-center">
-                {/* Transaction hash explorer links (non-mock only) */}
+                {/* Hashes de operación */}
                 <section className="space-y-4">
                     {releaseTxHash && !isMockHash(releaseTxHash) && (
                         <div>
@@ -202,7 +200,7 @@ Fecha: ${formatTimestamp(trade.completed_at ?? trade.created_at)}`;
                                 rel="noopener noreferrer"
                                 className="text-primary font-bold text-sm hover:opacity-80 transition-opacity flex items-center justify-center gap-2 mx-auto"
                             >
-                                Ver transacción de liberación
+                                Ver liberación de la operación
                                 <span className="material-symbols-outlined text-[18px]">open_in_new</span>
                             </a>
                             <p className="font-mono text-[11px] text-on-surface-variant opacity-60 tracking-tight mt-1">
@@ -218,7 +216,7 @@ Fecha: ${formatTimestamp(trade.completed_at ?? trade.created_at)}`;
                                 rel="noopener noreferrer"
                                 className="text-primary font-bold text-sm hover:opacity-80 transition-opacity flex items-center justify-center gap-2 mx-auto"
                             >
-                                Ver transacción de bloqueo
+                                Ver bloqueo de la operación
                                 <span className="material-symbols-outlined text-[18px]">open_in_new</span>
                             </a>
                             <p className="font-mono text-[11px] text-on-surface-variant opacity-60 tracking-tight mt-1">
@@ -228,7 +226,7 @@ Fecha: ${formatTimestamp(trade.completed_at ?? trade.created_at)}`;
                     )}
                     {(!lockTxHash && !releaseTxHash) && (
                         <span className="text-primary font-bold text-sm opacity-40 flex items-center justify-center gap-2">
-                            Ver transacción on-chain
+                            Ver operación en cadena
                             <span className="material-symbols-outlined text-[18px]">open_in_new</span>
                         </span>
                     )}

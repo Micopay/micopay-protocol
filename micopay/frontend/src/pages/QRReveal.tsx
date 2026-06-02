@@ -85,7 +85,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
                     <div className="inline-flex items-center gap-2 bg-primary-container/10 border border-primary-container/20 px-4 py-2 rounded-full">
                         <span aria-hidden="true" className="material-symbols-outlined text-primary text-sm" style={{ fontVariationSettings: '"FILL" 1' }}>check_circle</span>
                         <span className="text-primary font-semibold text-sm">
-                            {secretLoaded ? '✓ Escrow on-chain · Fondos bloqueados' : '✓ Oferta aceptada · Saldo bloqueado'}
+                            {secretLoaded ? '✓ Garantía en cadena · Fondos bloqueados' : '✓ Oferta aceptada · Saldo bloqueado'}
                         </span>
                     </div>
                 </div>
@@ -126,7 +126,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
 
                 {/* QR Section */}
                 <section className="mb-10 text-center">
-                    <h2 className="text-[11px] font-bold text-outline-variant uppercase tracking-[0.2em] mb-6">TU CÓDIGO DE INTERCAMBIO</h2>
+                    <h2 className="text-[11px] font-bold text-outline-variant uppercase tracking-[0.2em] mb-6">TU CÓDIGO DE OPERACIÓN</h2>
                     <div className="bg-surface-container-low p-8 rounded-[32px] inline-block mx-auto mb-6 border border-outline-variant/10 shadow-sm">
                         {/* Real QR generated from HTLC secret */}
                         <QRCodeSVG
@@ -173,7 +173,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
                                 <div className="absolute inset-0 border-4 border-surface-container-high rounded-full"></div>
                                 <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
                             </div>
-                            <p className="text-sm font-medium text-outline">Confirmando intercambio…</p>
+                            <p className="text-sm font-medium text-outline">Confirmando operación…</p>
                         </div>
                     )}
                 </section>

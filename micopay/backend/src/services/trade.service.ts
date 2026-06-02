@@ -4,7 +4,7 @@ import pino from 'pino';
 import { generateTradeSecret, encryptSecret, decryptSecret } from './secret.service.js';
 import { createHash } from 'crypto';
 import type { FastifyRequest } from 'fastify';
-import { callLockOnChain, callReleaseOnChain, verifyLockOnChain, assertNotReplayed } from './stellar.service.js';
+import { callLockOnChain, callReleaseOnChain, callRefundOnChain, verifyLockOnChain, assertNotReplayed } from './stellar.service.js';
 import {
   NotFoundError,
   ForbiddenError,
@@ -19,6 +19,11 @@ import {
   getTradeAuditTrail as getTradeAuditTrailRows,
   insertTradeAuditEvent,
 } from '../db/audit-log.model.js';
+import {
+  assertCanCreateTrade,
+  assertCanCancelTrade,
+  recordTradeCancelled,
+} from './abuse.service.js';
 
 const logger = pino({ name: 'trade.service' });
 
@@ -163,23 +168,31 @@ export async function createTrade(input: CreateTradeInput) {
     );
   }
 
-  // Verify seller exists
-  const seller = await db.getOne('SELECT id, stellar_address FROM users WHERE id = $1', [sellerId]);
-  if (!seller) throw new NotFoundError('USER_NOT_FOUND', 'El usuario vendedor no existe', 'Seller not found');
-
-  // Block matching if seller is explicitly offline or paused
-  // null/undefined means legacy record — treat as online for backward compat
-  const sellerAvailability = seller.availability ?? 'online';
-  if (sellerAvailability !== 'online') {
-    throw new ConflictError(
-      `Merchant is currently ${sellerAvailability} and cannot accept new trades`,
+  if (sellerId === buyerId) {
+    throw new ValidationError(
+      'INVALID_PARTICIPANTS',
+      'No puedes crear un intercambio contigo mismo',
+      'Cannot trade with yourself',
     );
   }
-  // Verify buyer exists
-  const buyer = await db.getOne('SELECT id, stellar_address FROM users WHERE id = $1', [buyerId]);
-  if (!buyer) throw new NotFoundError('USER_NOT_FOUND', 'El usuario comprador no existe', 'Buyer not found');
 
-  if (sellerId === buyerId) throw new ValidationError('INVALID_PARTICIPANTS', 'No puedes crear un intercambio contigo mismo', 'Cannot trade with yourself');
+  await assertCanCreateTrade({ request, buyerId, sellerId, amountMxn });
+
+  const seller = await db.getOne<{ id: string; stellar_address: string }>(
+    'SELECT id, stellar_address FROM users WHERE id = $1',
+    [sellerId],
+  );
+  if (!seller) {
+    throw new NotFoundError('USER_NOT_FOUND', 'El usuario vendedor no existe', 'Seller not found');
+  }
+
+  const buyer = await db.getOne<{ id: string; stellar_address: string }>(
+    'SELECT id, stellar_address FROM users WHERE id = $1',
+    [buyerId],
+  );
+  if (!buyer) {
+    throw new NotFoundError('USER_NOT_FOUND', 'El usuario comprador no existe', 'Buyer not found');
+  }
 
   await validateAgainstMerchantLimits(sellerId, amountMxn);
 
@@ -227,8 +240,19 @@ export async function createTrade(input: CreateTradeInput) {
     },
   });
 
+  // Fire-and-forget — push failure must never fail trade creation
+  const buyerUsername = buyer.username || buyer.stellar_address || 'Usuario';
+  sendTradeNotificationToMerchant(sellerId, {
+    tradeId: result.id,
+    amount: `${amountMxn.toLocaleString('es-MX')} MXN`,
+    buyerUsername,
+  }).catch(err => {
+    logger.error({ err, trade_id: result.id, category: 'trade.lifecycle' }, '[trade] Push notification failed silently');
+  });
+
   return result;
 }
+
 
 export async function getTradeById(tradeId: string, userId: string) {
   const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
@@ -356,14 +380,20 @@ export async function lockTrade(
 
     await assertNotReplayed(lockTxHash, 'trade/lock', userId);
 
+    // Compute contract_trade_id = sha256(secret_hash_bytes), matching compute_trade_id()
+    // in the Soroban contract. Stored for O(1) lookup when on-chain events arrive.
+    const secretHashBytes = Buffer.from(trade.secret_hash, 'hex');
+    const contractTradeId = createHash('sha256').update(secretHashBytes).digest('hex');
+
     await db.execute(
       `UPDATE trades
        SET status = 'locked',
            stellar_trade_id = $2,
            lock_tx_hash = $3,
-           locked_at = NOW()
+           locked_at = NOW(),
+           contract_trade_id = $4
        WHERE id = $1`,
-      [tradeId, stellarTradeId, lockTxHash],
+      [tradeId, stellarTradeId, lockTxHash, contractTradeId],
     );
 
     await insertTradeAuditEvent({
@@ -520,6 +550,16 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
       },
     });
 
+    // Update merchant reputation after successful trade completion
+    try {
+      await updateMerchantReputation(trade.seller_id);
+    } catch (reputationError) {
+      logger.warn(
+        { trade_id: tradeId, seller_id: trade.seller_id },
+        '[reputation] Failed to update merchant reputation (non-critical)'
+      );
+    }
+
     return { status: 'completed', release_tx_hash: releaseTxHash };
   } catch (error) {
     await logTransitionFailure({
@@ -530,6 +570,103 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
     }, error);
     throw error;
   }
+}
+
+// ── Reputation calculation ───────────────────────────────────────────────────
+
+/**
+ * Calculate and update merchant reputation from trade history.
+ * Queries micopay backend's trades table for completed trades.
+ */
+async function updateMerchantReputation(userId: string): Promise<void> {
+  // Query micopay backend for trade statistics
+  const result = await query(`
+    SELECT 
+      COUNT(*) FILTER (WHERE status = 'completed') as completed_trades,
+      COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_trades,
+      COUNT(*) as total_trades,
+      AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60) FILTER (WHERE status = 'completed') as avg_time_minutes,
+      SUM(amount_mxn) FILTER (WHERE status = 'completed') as total_volume_mxn
+    FROM trades
+    WHERE seller_id = $1
+  `, [userId]);
+
+  const stats = result.rows[0];
+
+  if (!stats) {
+    // No trades yet - reset to defaults
+    await query(`
+      UPDATE merchants 
+      SET trades_completed = 0,
+          completion_rate = 0,
+          avg_time_minutes = 0,
+          tier = 'espora',
+          total_volume_usdc = 0,
+          last_trade_at = NULL,
+          updated_at = NOW()
+      WHERE user_id = $1
+    `, [userId]);
+    return;
+  }
+
+  const completedTrades = parseInt(stats.completed_trades) || 0;
+  const cancelledTrades = parseInt(stats.cancelled_trades) || 0;
+  const totalTrades = parseInt(stats.total_trades) || 0;
+  const avgTimeMinutes = stats.avg_time_minutes ? Math.round(parseFloat(stats.avg_time_minutes)) : 0;
+  const totalVolumeMXN = parseFloat(stats.total_volume_mxn) || 0;
+
+  // Convert MXN to USDC (approximate: 1 USDC ≈ 17 MXN)
+  const totalVolumeUSDC = totalVolumeMXN / 17;
+
+  // Calculate completion rate
+  const completionRate = totalTrades > 0 ? completedTrades / totalTrades : 0;
+
+  // Determine tier
+  const tier = getTier(completedTrades, completionRate);
+
+  // Get last trade timestamp
+  const lastTradeResult = await query(`
+    SELECT updated_at FROM trades 
+    WHERE seller_id = $1 AND status = 'completed'
+    ORDER BY updated_at DESC LIMIT 1
+  `, [userId]);
+
+  const lastTradeAt = lastTradeResult.rows[0]?.updated_at || null;
+
+  // Update merchant record
+  await query(`
+    UPDATE merchants 
+    SET trades_completed = $1,
+        completion_rate = $2,
+        avg_time_minutes = $3,
+        tier = $4,
+        total_volume_usdc = $5,
+        last_trade_at = $6,
+        updated_at = NOW()
+    WHERE user_id = $7
+  `, [
+    completedTrades,
+    completionRate,
+    avgTimeMinutes,
+    tier,
+    totalVolumeUSDC,
+    lastTradeAt,
+    userId,
+  ]);
+}
+
+// ── Tier definitions ─────────────────────────────────────────────────────────
+const TIERS = [
+  { name: "maestro", minTrades: 100, minCompletion: 0.95 },
+  { name: "experto", minTrades: 30, minCompletion: 0.88 },
+  { name: "activo", minTrades: 10, minCompletion: 0.80 },
+  { name: "espora", minTrades: 0, minCompletion: 0.0 },
+] as const;
+
+function getTier(tradesCompleted: number, completionRate: number): typeof TIERS[number]["name"] {
+  return TIERS.find(
+    (t) => tradesCompleted >= t.minTrades && completionRate >= t.minCompletion
+  )?.name ?? "espora";
 }
 
 /** Response shape for POST /trades/:id/cancel — drives refund copy on the client (#20). */
@@ -581,13 +718,24 @@ export async function cancelTrade(
       throw new ForbiddenError('Not a participant of this trade');
     }
 
+    await assertCanCancelTrade(userId);
+
     const lockTx: string | null = trade.lock_tx_hash ?? null;
+
+    const finishCancel = async (result: CancelTradeResult) => {
+      await audit(result);
+      await recordTradeCancelled({
+        tradeId,
+        sellerId: trade.seller_id,
+        cancelledBy: userId,
+      });
+      return result;
+    };
 
     if (trade.status === 'pending') {
       await finalizeTradeCancellation(tradeId);
       const result: CancelTradeResult = { status: 'cancelled', refund_expected: false, lock_tx_hash: lockTx };
-      await audit(result);
-      return result;
+      return finishCancel(result);
     }
 
     if (trade.status === 'locked') {
@@ -598,8 +746,7 @@ export async function cancelTrade(
           refund_expected: Boolean(lockTx),
           lock_tx_hash: lockTx,
         };
-        await audit(result);
-        return result;
+        return finishCancel(result);
       }
       if (trade.seller_id === userId) {
         const seller = await getSellerMerchantRow(trade.seller_id);
@@ -614,8 +761,7 @@ export async function cancelTrade(
           refund_expected: Boolean(lockTx),
           lock_tx_hash: lockTx,
         };
-        await audit(result);
-        return result;
+        return finishCancel(result);
       }
       throw new ForbiddenError('Not a participant of this trade');
     }
@@ -633,8 +779,7 @@ export async function cancelTrade(
         refund_expected: Boolean(lockTx),
         lock_tx_hash: lockTx,
       };
-      await audit(result);
-      return result;
+      return finishCancel(result);
     }
 
     throw new ConflictError(`Cannot cancel trade in status ${trade.status}.`);
@@ -645,6 +790,93 @@ export async function cancelTrade(
       toState: 'cancelled',
       actor: userId,
       metadata: { cancel_reason: reason ?? null },
+    }, error);
+    throw error;
+  }
+}
+
+/**
+ * Response shape for POST /trades/:id/refund.
+ */
+export interface RefundTradeResult {
+  status: 'refunded';
+  refund_tx_hash: string;
+}
+
+export async function refundTrade(
+  request: FastifyRequest,
+  tradeId: string,
+  userId: string,
+): Promise<RefundTradeResult> {
+  request.log.info({ trade_id: tradeId, user_id: userId, category: 'trade.lifecycle' }, '[trade] Refunding trade');
+  let fromState = UNKNOWN_STATE;
+
+  try {
+    const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+    if (!trade) throw new NotFoundError('Trade not found');
+    fromState = trade.status;
+
+    if (trade.buyer_id !== userId) {
+      throw new ForbiddenError('Solo el comprador puede solicitar un reembolso');
+    }
+
+    if (!trade.lock_tx_hash) {
+      throw new ConflictError('No hay fondos en cadena para reembolsar en este intercambio');
+    }
+
+    if (new Date(trade.expires_at) > new Date()) {
+      throw new TradeStateError(
+        'TRADE_NOT_EXPIRED',
+        'El intercambio aún no ha expirado. Espera a que venza el tiempo.',
+        `Trade ${tradeId} has not expired yet (expires at ${trade.expires_at})`
+      );
+    }
+
+    if (['completed', 'cancelled', 'refunded'].includes(trade.status)) {
+      throw new ConflictError(`No se puede reembolsar un intercambio en estado ${trade.status}`);
+    }
+
+    let refundTxHash: string;
+
+    if (!config.mockStellar) {
+      const secretHashBytes = Buffer.from(trade.secret_hash, 'hex');
+      const tradeIdBytes = createHash('sha256').update(secretHashBytes).digest();
+
+      const result = await callRefundOnChain({ request, tradeIdBytes });
+      refundTxHash = result.txHash;
+    } else {
+      refundTxHash = `mock_refund_${Date.now()}`;
+    }
+
+    await assertNotReplayed(refundTxHash, 'trade/refund', userId);
+
+    await db.execute(
+      `UPDATE trades
+       SET status = 'refunded',
+           release_tx_hash = $2,
+           completed_at = NOW()
+       WHERE id = $1`,
+      [tradeId, refundTxHash],
+    );
+
+    await insertTradeAuditEvent({
+      tradeId,
+      fromState,
+      toState: 'refunded',
+      actor: userId,
+      metadata: {
+        success: true,
+        refund_tx_hash: refundTxHash,
+      },
+    });
+
+    return { status: 'refunded', refund_tx_hash: refundTxHash };
+  } catch (error) {
+    await logTransitionFailure({
+      tradeId,
+      fromState,
+      toState: 'refunded',
+      actor: userId,
     }, error);
     throw error;
   }

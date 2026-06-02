@@ -1,84 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import { requirePayment } from "../middleware/x402.js";
+import { query } from "../db/schema.js";
+import { getVerifiedMerchants } from "../db/merchants.js";
 
 // ── Tier definitions ─────────────────────────────────────────────────────────
 const TIERS = [
-  { name: "maestro",  emoji: "🍄", min_trades: 100, min_completion: 0.95, description: "Top-tier merchant. Trusted by AI agents." },
-  { name: "experto",  emoji: "⭐", min_trades: 30,  min_completion: 0.88, description: "Reliable merchant with solid track record." },
-  { name: "activo",   emoji: "✅", min_trades: 10,  min_completion: 0.80, description: "Active merchant. Growing reputation." },
-  { name: "espora",   emoji: "🌱", min_trades: 0,   min_completion: 0.0,  description: "New merchant. Use with caution." },
+  { name: "maestro", emoji: "🍄", minTrades: 100, minCompletion: 0.95, description: "Top-tier merchant. Trusted by AI agents." },
+  { name: "experto", emoji: "⭐", minTrades: 30, minCompletion: 0.88, description: "Reliable merchant with solid track record." },
+  { name: "activo", emoji: "✅", minTrades: 10, minCompletion: 0.80, description: "Active merchant. Growing reputation." },
+  { name: "espora", emoji: "🌱", minTrades: 0, minCompletion: 0.0, description: "New merchant. Use with caution." },
 ];
 
 function getTier(trades: number, completion: number) {
-  return TIERS.find((t) => trades >= t.min_trades && completion >= t.min_completion) ?? TIERS[TIERS.length - 1];
-}
-
-// ── Seeded mock reputation data keyed by Stellar address ─────────────────────
-// In production: query MicoPay P2P backend + on-chain NFT soulbound data
-const KNOWN_MERCHANTS: Record<string, {
-  name: string;
-  location: string;
-  trades_completed: number;
-  completion_rate: number;
-  avg_time_minutes: number;
-  volume_usdc: string;
-  on_chain_since: string;
-  nft_token_id?: string;
-}> = {
-  "GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGKUJI5KOOJ9TXWNTBBS2JN": {
-    name: "Farmacia Guadalupe",
-    location: "Roma Norte, CDMX",
-    trades_completed: 312,
-    completion_rate: 0.98,
-    avg_time_minutes: 4,
-    volume_usdc: "8420.50",
-    on_chain_since: "2025-09-14T10:22:00Z",
-    nft_token_id: "MCR-MAESTRO-0001",
-  },
-  "GDAHK7EEG2WWHVKDNT4CEQFZGKF2LGDSW2IVM4S5DP42RBW3K6BTODB4A": {
-    name: "Tienda Don Pepe",
-    location: "Roma Norte, CDMX",
-    trades_completed: 89,
-    completion_rate: 0.94,
-    avg_time_minutes: 7,
-    volume_usdc: "2310.75",
-    on_chain_since: "2025-11-03T15:45:00Z",
-  },
-  "GBZXN7PIRZGNMHGA7MUUUF4GWMTISGNQ5E72TFL6GDWPE6K4RCAVOALV": {
-    name: "Abarrotes La Esperanza",
-    location: "Hipódromo Condesa, CDMX",
-    trades_completed: 54,
-    completion_rate: 0.91,
-    avg_time_minutes: 10,
-    volume_usdc: "1180.20",
-    on_chain_since: "2025-12-01T09:00:00Z",
-  },
-  "GAHK7EEG2WWHVKDNT4CEQFZGKF2LGDSW2IVM4S5DP42RBW3K6BTODB4B": {
-    name: "Mini Super Estrella",
-    location: "Hipódromo, CDMX",
-    trades_completed: 8,
-    completion_rate: 0.71,
-    avg_time_minutes: 18,
-    volume_usdc: "145.00",
-    on_chain_since: "2026-01-20T12:30:00Z",
-  },
-};
-
-function buildReputationFromAddress(address: string) {
-  // For unknown addresses, derive pseudo-random reputation from address characters
-  const seed = address.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const trades = (seed % 50) + 5;
-  const completion = 0.70 + ((seed % 25) / 100);
-  return {
-    name: `Merchant ${address.slice(0, 6)}...${address.slice(-4)}`,
-    location: "México",
-    trades_completed: trades,
-    completion_rate: parseFloat(completion.toFixed(2)),
-    avg_time_minutes: 8 + (seed % 12),
-    volume_usdc: ((trades * 25) + (seed % 100)).toFixed(2),
-    on_chain_since: "2026-01-01T00:00:00Z",
-    nft_token_id: undefined,
-  };
+  return TIERS.find((t) => trades >= t.minTrades && completion >= t.minCompletion) ?? TIERS[TIERS.length - 1];
 }
 
 export async function reputationRoutes(fastify: FastifyInstance): Promise<void> {
@@ -107,50 +41,99 @@ export async function reputationRoutes(fastify: FastifyInstance): Promise<void> 
         });
       }
 
-      const data = KNOWN_MERCHANTS[address] ?? buildReputationFromAddress(address);
-      const tier = getTier(data.trades_completed, data.completion_rate);
+      // Query merchant from database
+      const merchantResult = await query(`
+        SELECT m.display_name, m.latitude, m.longitude, m.address_text,
+               m.trades_completed, m.completion_rate, m.avg_time_minutes,
+               m.tier, m.total_volume_usdc, m.last_trade_at, m.verified_at,
+               u.stellar_address
+        FROM merchants m
+        LEFT JOIN users u ON m.user_id = u.id
+        WHERE m.verification_status = 'verified'
+        ORDER BY m.verified_at DESC
+        LIMIT 1
+      `);
+
+      // If no merchant found, return placeholder data
+      if (!merchantResult.rows[0]) {
+        return reply.status(404).send({
+          error: "No verified merchant found",
+          hint: "This Stellar address does not correspond to a verified merchant",
+        });
+      }
+
+      const merchant = merchantResult.rows[0];
+      const tradesCompleted = parseInt(merchant.trades_completed) || 0;
+      const completionRate = parseFloat(merchant.completion_rate) || 0;
+      const tier = getTier(tradesCompleted, completionRate);
 
       // Agent-friendly decision signal
-      const trusted = data.completion_rate >= 0.88 && data.trades_completed >= 10;
+      const trusted = completionRate >= 0.88 && tradesCompleted >= 10;
       const recommendation = trusted
         ? `✅ Trusted. ${tier.emoji} ${tier.name.toUpperCase()} merchant. Send user with confidence.`
-        : `⚠️ Low trust. Only ${data.trades_completed} trades, ${(data.completion_rate * 100).toFixed(0)}% completion. Consider alternatives.`;
+        : `⚠️ Low trust. Only ${tradesCompleted} trades, ${(completionRate * 100).toFixed(0)}% completion. Consider alternatives.`;
 
       return reply.send({
-        address,
+        address: merchant.stellar_address,
         merchant: {
-          name: data.name,
-          location: data.location,
+          name: merchant.display_name,
+          location: merchant.address_text,
         },
         reputation: {
           tier: tier.name,
           tier_emoji: tier.emoji,
           tier_description: tier.description,
-          trades_completed: data.trades_completed,
-          completion_rate: data.completion_rate,
-          completion_percent: `${(data.completion_rate * 100).toFixed(1)}%`,
-          avg_time_minutes: data.avg_time_minutes,
-          total_volume_usdc: data.volume_usdc,
-          on_chain_since: data.on_chain_since,
-          nft_soulbound: data.nft_token_id
-            ? {
-                token_id: data.nft_token_id,
-                transferable: false,
-                status: "planned",
-                note: "Token ID reserved for a non-transferable Soroban badge contract (not yet deployed). Reputation is derived from MicoPay P2P trade history.",
-              }
-            : null,
+          trades_completed: tradesCompleted,
+          completion_rate: completionRate,
+          completion_percent: `${(completionRate * 100).toFixed(1)}%`,
+          avg_time_minutes: merchant.avg_time_minutes,
+          total_volume_usdc: parseFloat(merchant.total_volume_usdc).toFixed(2),
+          on_chain_since: merchant.verified_at || merchant.created_at,
+          nft_soulbound: null, // Planned for future implementation
         },
         agent_signal: {
           trusted,
           recommendation,
           risk_level: trusted
-            ? data.completion_rate >= 0.95 ? "low" : "medium"
+            ? completionRate >= 0.95 ? "low" : "medium"
             : "high",
         },
-        data_source: "MicoPay P2P trade history (testnet demo data)",
+        data_source: "MicoPay P2P trade history",
         queried_at: new Date().toISOString(),
       });
+    }
+  );
+
+  /**
+   * GET /api/v1/merchants
+   * Public. Returns all verified merchants with reputation data.
+   */
+  fastify.get(
+    "/api/v1/merchants",
+    async (_request, reply) => {
+      try {
+        const merchants = await getVerifiedMerchants();
+
+        // Calculate tier for each merchant
+        const merchantsWithTier = merchants.map((m) => {
+          const tier = getTier(
+            parseInt(m.trades_completed) || 0,
+            parseFloat(m.completion_rate) || 0
+          );
+          return {
+            ...m,
+            tier: tier.name,
+            completion_percent: `${(parseFloat(m.completion_rate) * 100).toFixed(1)}%`,
+          };
+        });
+
+        return reply.status(200).send(merchantsWithTier);
+      } catch (err) {
+        return reply.status(500).send({
+          error: "Failed to fetch merchants",
+          details: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   );
 }
