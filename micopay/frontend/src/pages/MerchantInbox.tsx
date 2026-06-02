@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQRScanner } from '../hooks/useQRScanner';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 interface Trade {
   id: string;
@@ -40,6 +41,14 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
   const [scanError, setScanError] = useState<string | null>(null);
   const { scan } = useQRScanner();
 
+  // Initialize push notifications for merchant
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const { isEnabled: pushEnabled } = usePushNotifications({
+    isMerchant: !!token,
+    userToken: token,
+    apiUrl,
+  });
+
   const handleScan = async () => {
     setScanError(null);
     setScannedPayload(null);
@@ -55,7 +64,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/merchants/me/trades?state=${state}`, {
+      const res = await fetch(`${apiUrl}/merchants/me/trades?state=${state}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -67,9 +76,28 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
     }
   };
 
+  // Main effect: fetch trades on filter change
   useEffect(() => {
     fetchTrades(activeFilter);
   }, [activeFilter, token]);
+
+  // Polling fallback when push notifications are disabled
+  useEffect(() => {
+    if (pushEnabled || !token) {
+      return; // No polling needed if push works
+    }
+
+    const pollInterval = setInterval(() => {
+      // Only poll when the tab is visible
+      if (document.visibilityState === 'visible') {
+        fetchTrades(activeFilter).catch(() => {
+          // Ignore polling errors silently
+        });
+      }
+    }, 30_000); // Poll every 30 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [pushEnabled, token, activeFilter]);
 
   const filters = [
     { key: 'all', label: 'Todos' },
@@ -95,6 +123,25 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
       </header>
 
       <main className="pt-24 px-6 pb-32">
+        {/* Push notification disabled banner with polling fallback */}
+        {!pushEnabled && token && (
+          <div className="mb-4 rounded-2xl p-4 bg-amber-50 border border-amber-200">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-amber-600">notifications_off</span>
+              <div className="flex-1">
+                <p className="text-sm text-amber-900 font-medium">
+                  Las notificaciones están deshabilitadas. La bandeja se actualiza automáticamente cada 30 segundos.
+                </p>
+                <p className="text-xs text-amber-800 mt-1">
+                  <a href="#" onClick={(e) => { e.preventDefault(); }} className="underline">
+                    Habilitar notificaciones
+                  </a>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {(scannedPayload || scanError) && (
           <div className={`mb-4 rounded-2xl p-4 ${scanError ? 'bg-red-50 border border-red-200' : 'bg-emerald-50 border border-emerald-200'}`}>
             <div className="flex items-start gap-3">
