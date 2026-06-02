@@ -1,11 +1,6 @@
-import { useEffect, useState } from "react";
-import {
-  getMerchantConfig,
-  updateMerchantConfig,
-  setAvailability,
-  MerchantConfig,
-  getCurrentUser,
-} from "../services/api";
+import { useEffect, useState } from 'react';
+import { getMerchantConfig, updateMerchantConfig, MerchantConfig } from '../services/api';
+import { resolveErrorMessage } from '../constants/errorMap';
 
 interface MerchantSettingsProps {
   token: string | null;
@@ -28,6 +23,8 @@ export default function MerchantSettings({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageType, setMessageType] = useState<'success' | 'error' | 'warning' | null>(null);
+  const offlineQueue = useOfflineQueue(token);
 
   useEffect(() => {
     if (!token) {
@@ -51,9 +48,7 @@ export default function MerchantSettings({
               : "offline",
         );
       } catch (err: any) {
-        setMessage(
-          err?.response?.data?.message ?? "No se pudo cargar la configuración",
-        );
+        setMessage(resolveErrorMessage(err).message);
       } finally {
         setLoading(false);
       }
@@ -82,16 +77,25 @@ export default function MerchantSettings({
     if (!token) return;
     setSaving(true);
     setMessage(null);
+    setMessageType(null);
     try {
-      const updated = await updateMerchantConfig(token, form);
-      setForm(updated);
-      setMessage(
-        "Configuración guardada. El límite diario se reinicia a las 00:00 UTC.",
+      const result = await updateMerchantConfigWithOfflineSupport(
+        token,
+        form,
+        offlineQueue.queueMutationAsync,
       );
+      
+      setForm(result.config);
+      
+      if (result.queued) {
+        setMessage('⏳ Cambios guardados localmente. Se sincronizarán cuando la conexión se restaure.');
+        setMessageType('warning');
+      } else {
+        setMessage('✅ Configuración guardada exitosamente. El límite diario se reinicia a las 00:00 UTC.');
+        setMessageType('success');
+      }
     } catch (err: any) {
-      setMessage(
-        err?.response?.data?.message ?? "No se pudo guardar la configuración",
-      );
+      setMessage(resolveErrorMessage(err).message);
     } finally {
       setSaving(false);
     }
@@ -99,16 +103,9 @@ export default function MerchantSettings({
 
   return (
     <div className="bg-surface text-on-surface min-h-screen px-6 pt-10 pb-32 max-w-xl mx-auto">
-      <button
-        className="mb-6 text-sm font-semibold text-primary"
-        onClick={onBack}
-      >
-        ← Volver
-      </button>
-      <h1 className="text-2xl font-bold mb-2">Ajustes de comerciante</h1>
-      <p className="text-sm text-on-surface-variant mb-8">
-        Configura tu tasa y límites operativos.
-      </p>
+      <button className="mb-6 text-sm font-semibold text-primary" onClick={onBack}>← Volver</button>
+      <h1 className="text-2xl font-bold mb-2">Ajustes del comerciante</h1>
+      <p className="text-sm text-on-surface-variant mb-8">Configura tu tasa y límites de operación.</p>
 
       {loading ? (
         <p>Cargando…</p>
@@ -172,14 +169,20 @@ export default function MerchantSettings({
 
           <button
             className="w-full rounded-xl bg-primary text-white font-semibold py-3 disabled:opacity-60"
-            disabled={saving || !token}
+            disabled={saving || !token || offlineQueue.isSyncing}
             onClick={save}
           >
-            {saving ? "Guardando…" : "Guardar cambios"}
+            {saving ? 'Guardando…' : offlineQueue.isSyncing ? 'Sincronizando...' : 'Guardar cambios'}
           </button>
 
           {message && (
-            <p className="text-sm text-on-surface-variant">{message}</p>
+            <p className={`text-sm font-medium p-3 rounded ${
+              messageType === 'success' ? 'bg-green-50 text-green-800 border border-green-200' :
+              messageType === 'error' ? 'bg-red-50 text-red-800 border border-red-200' :
+              'bg-amber-50 text-amber-800 border border-amber-200'
+            }`}>
+              {message}
+            </p>
           )}
         </div>
       )}

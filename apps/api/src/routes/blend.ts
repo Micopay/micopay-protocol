@@ -20,11 +20,11 @@ export async function blendRoutes(fastify: FastifyInstance): Promise<void> {
         health_factor: 1.0,
         collateral_assets: [
           { symbol: "XLM", amount: "1500", value_usdc: "250.0" },
-          { symbol: "USDC", amount: "250", value_usdc: "250.0" },
+          { symbol: "USDC", amount: "250", value_usdc: "250.0" }
         ],
-        note: "Data simulated for MicoPay Demo",
+        note: "Data simulated for MicoPay Demo"
       });
-    },
+    }
   );
 
   /**
@@ -41,17 +41,14 @@ export async function blendRoutes(fastify: FastifyInstance): Promise<void> {
           required: ["amount", "asset"],
           properties: {
             amount: { type: "number" },
-            asset: { type: "string", enum: ["USDC", "XLM"] },
-          },
-        },
-      },
+            asset: { type: "string", enum: ["USDC", "XLM"] }
+          }
+        }
+      }
     },
     async (request, reply) => {
-      const { amount, asset } = request.body as {
-        amount: number;
-        asset: string;
-      };
-
+      const { amount, asset } = request.body as { amount: number; asset: string };
+      
       // Simulate on-chain transaction
       return reply.send({
         hash: `sim_blend_borrow_${Date.now()}`,
@@ -59,8 +56,8 @@ export async function blendRoutes(fastify: FastifyInstance): Promise<void> {
         amount,
         asset,
         explorer_url: `https://stellar.expert/explorer/testnet/tx/sim_blend_borrow_${Date.now()}`,
-        message: `Successfully borrowed ${amount} ${asset} from Blend`,
+        message: `Successfully borrowed ${amount} ${asset} from Blend`
       });
-    },
+    }
   );
 }
