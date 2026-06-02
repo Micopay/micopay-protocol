@@ -11,9 +11,9 @@ const Explore = ({ onBack, onNavigate }: ExploreProps) => {
             {/* Header */}
             <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-md bg-white/90 border-b border-outline-variant/10">
                 <Logo />
-                <div className="w-10 h-10 rounded-full border-2 border-primary-container overflow-hidden">
+                    <div className="w-10 h-10 rounded-full border-2 border-primary-container overflow-hidden">
                     <img 
-                        alt="User Profile" 
+                        alt="Perfil de usuario" 
                         className="w-full h-full object-cover" 
                         src="https://lh3.googleusercontent.com/aida-public/AB6AXuB67y-i20YKZ74EdUyBhPSynmndCKS-h3EA_TY5I4DqJOMVotSw1KNKnJkRorXphGGSC2O37IzK3Ne0ucqSrLTuM5yBABSXmcqkmRAyds2slhc0jFDuu8bya9fX1W0jjxuPpCDkellmiwXSghk0lbLSUG_ZS_wCQ2m2oeltlvvyv4kQarhZZ8l-AC3gUy-wtgF301WK7zIlo5utKmx_I6CTuAQ_zqkXyiN6Di4UFiRzq5ASwVi017MoYgq_LhBYMO_AEIf4ZAHp1Dh" 
                     />
@@ -39,7 +39,7 @@ const Explore = ({ onBack, onNavigate }: ExploreProps) => {
                             </div>
                             <div>
                                 <h2 className="font-headline font-bold text-xl text-on-surface">Haz crecer tus ahorros</h2>
-                                <p className="text-[10px] font-bold text-primary uppercase tracking-widest">Inversión Segura con Etherfuse</p>
+                                <p className="text-[10px] font-bold text-primary uppercase tracking-widest">Inversión segura con Etherfuse</p>
                             </div>
                         </div>
                         <p className="text-sm text-on-surface-variant leading-relaxed mb-6">
@@ -61,7 +61,7 @@ const Explore = ({ onBack, onNavigate }: ExploreProps) => {
                             </div>
                             <div>
                                 <h2 className="font-headline font-bold text-xl text-on-surface">Pide un préstamo hoy</h2>
-                                <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Liquidez Instantánea con Blend</p>
+                                <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Liquidez instantánea con Blend</p>
                             </div>
                         </div>
                         <p className="text-sm text-on-surface-variant leading-relaxed mb-6">
@@ -83,7 +83,7 @@ const Explore = ({ onBack, onNavigate }: ExploreProps) => {
                             </div>
                             <div>
                                 <h2 className="font-headline font-bold text-xl text-on-surface">Conecta tu Banco</h2>
-                                <p className="text-[10px] font-bold text-primary uppercase tracking-widest">On / Off Ramp Etherfuse</p>
+                                <p className="text-[10px] font-bold text-primary uppercase tracking-widest">Entrada y salida de fondos con Etherfuse</p>
                             </div>
                         </div>
                         <p className="text-sm text-on-surface-variant leading-relaxed mb-6">
@@ -98,7 +98,7 @@ const Explore = ({ onBack, onNavigate }: ExploreProps) => {
 
                 {/* Footer Section */}
                 <footer className="mt-12 text-center">
-                    <p className="text-xs text-outline font-medium">Powered by Stellar, Etherfuse & Blend</p>
+                    <p className="text-xs text-outline font-medium">Impulsado por Stellar, Etherfuse y Blend</p>
                 </footer>
             </main>
         </div>

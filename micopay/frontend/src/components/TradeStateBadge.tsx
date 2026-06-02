@@ -26,8 +26,8 @@ type TradeStateCopy = {
 
 const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
   locked: {
-    label: 'Fondos bloqueados',
-    happened: 'El intercambio ya se abrió y los fondos quedaron en escrow.',
+    label: 'Operación bloqueada',
+    happened: 'La operación ya se abrió y los fondos quedaron en garantía.',
     next: 'Comparte o presenta el código para continuar con la entrega de efectivo.',
     safe: 'Tu saldo sigue protegido en contrato hasta que el proceso termine.',
     tone: {
@@ -39,7 +39,7 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
   },
   pending_cash: {
     label: 'Esperando efectivo',
-    happened: 'El intercambio está activo y esperando confirmación de entrega.',
+    happened: 'La operación está activa y esperando confirmación de entrega.',
     next: 'Cuando recibas el efectivo, confirma para liberar los fondos.',
     safe: 'Si algo falla o se vence el tiempo, el flujo regresa tus fondos según estado.',
     tone: {
@@ -62,7 +62,7 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     icon: 'qr_code_2',
   },
   completed: {
-    label: 'Intercambio completado',
+    label: 'Operación completada',
     happened: 'La operación se confirmó y el movimiento quedó cerrado.',
     next: 'Puedes volver al inicio o revisar el historial de actividad.',
     safe: 'Tus fondos ya se movieron al destino final de esta operación.',
@@ -74,7 +74,7 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     icon: 'check_circle',
   },
   cancelled: {
-    label: 'Intercambio cancelado',
+    label: 'Operación cancelada',
     happened: 'La operación se detuvo antes de completarse.',
     next: 'Inicia una nueva solicitud cuando quieras intentarlo de nuevo.',
     safe: 'Tus fondos no se pierden: quedan asegurados para devolución o reintento.',

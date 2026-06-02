@@ -120,7 +120,7 @@ const Home = ({ onNavigateCashout, onNavigateDeposit, onNavigateHistory, token, 
             <div className="flex items-center gap-2 mt-1">
               <span className="w-2.5 h-2.5 rounded-full bg-[#5DCAA5] animate-pulse shadow-[0_0_8px_#5DCAA5]"></span>
               <p className="text-[#5DCAA5] text-sm font-bold">
-                {xlmBalance ? `${xlmBalance} XLM · Testnet` : 'Cargando balance…'}
+                {xlmBalance ? `${xlmBalance} XLM · Testnet` : 'Cargando saldo…'}
               </p>
             </div>
           </div>

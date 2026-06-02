@@ -74,7 +74,7 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
               </div>
               <div className="flex-1">
                 <p className="text-on-surface font-medium leading-relaxed">
-                  Buscaremos agentes cercanos que tengan saldo disponible para acreditarte.
+                  Buscaremos comerciantes cercanos que tengan saldo disponible para acreditarte.
                 </p>
               </div>
             </div>
@@ -86,7 +86,7 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
               aria-label="Buscar ofertas de depósito"
               className="w-full bg-[linear-gradient(135deg,#00694c_0%,#008560_100%)] text-white h-[56px] rounded-xl font-headline font-bold text-lg shadow-lg shadow-primary/20 active:scale-95 transition-all duration-200 flex items-center justify-center space-x-2 focus:outline-none focus:ring-2 focus:ring-primary"
             >
-              <span>Buscar ofertas de depósito</span>
+              <span>Buscar opciones de depósito</span>
               <span aria-hidden="true" className="material-symbols-outlined text-xl">chevron_right</span>
             </button>
           </div>
