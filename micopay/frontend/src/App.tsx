@@ -33,6 +33,7 @@ import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Profile from "./pages/Profile";
 import ClaimQR from "./pages/ClaimQR";
+import MerchantSettings from "./pages/MerchantSettings";
 import BottomNav from "./components/BottomNav";
 import DebugOverlay from "./components/DebugOverlay";
 
@@ -115,7 +116,7 @@ function HistoryRoute() {
   return (
       <History
           onBack={() => navigate('/')}
-          onSelectTrade={() => {}}
+          onSelectTrade={(trade) => navigate(`/trade/${trade.id}`)}
           token={buyerUser?.token ?? null}
       />
   );
@@ -346,6 +347,7 @@ function SuccessRoute() {
 
 function ExploreRoute() {
   const navigate = useNavigate();
+  const { isDemoMode, isMockStellar } = useAppCtx();
   const navMap: Record<string, string> = {
     home: "/",
     cashout: "/cashout",
@@ -361,6 +363,7 @@ function ExploreRoute() {
       <Explore
           onBack={() => navigate('/')}
           onNavigate={(page) => navigate(navMap[page] ?? '/')}
+          showDefi={!isDemoMode || !isMockStellar}
       />
   );
 }
@@ -408,6 +411,17 @@ function ProfileRoute() {
   );
 }
 
+function MerchantSettingsRoute() {
+  const navigate = useNavigate();
+  const { sellerUser } = useAppCtx();
+  return (
+    <MerchantSettings
+      token={sellerUser?.token ?? null}
+      onBack={() => navigate('/')}
+    />
+  );
+}
+
 function PrivacyRoute() {
   const navigate = useNavigate();
   return <Privacy onBack={() => navigate("/profile")} />;
@@ -429,6 +443,7 @@ const ROUTE_TO_PAGE: Record<string, string> = {
 };
 
 const HIDE_BOTTOMNAV_ROUTES = new Set([
+  "/merchant-settings",
   "/chat",
   "/chat-deposit",
   "/qr-reveal",
@@ -436,7 +451,6 @@ const HIDE_BOTTOMNAV_ROUTES = new Set([
   "/success",
   "/cetes",
   "/blend",
-  "/merchant-settings",
   "/privacy",
   "/terms",
 ]);
@@ -715,6 +729,8 @@ function App() {
               <Routes>
                 <Route path="/" element={<HomeRoute />} />
                 <Route path="/history" element={<HistoryRoute />} />
+                <Route path="/trade/:id" element={<TradeDetailRoute />} />
+                <Route path="/merchant-settings" element={<MerchantSettingsRoute />} />
                 <Route path="/inbox" element={<InboxRoute />} />
                 <Route path="/cashout" element={<CashoutRoute />} />
                 <Route path="/deposit" element={<DepositRoute />} />
