@@ -1,142 +1,58 @@
-/**
- * useOfflineQueue Hook
- * 
- * React hook for managing offline queue state and status in components
- */
-
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   initOfflineQueue,
-  hasPendingMutations,
   queueMutation,
-  type MutationType,
-} from '../services/offlineQueue.js';
-import {
-  initNetworkMonitoring,
-  flushQueue,
-  isCurrentlyOnline,
-  subscribeToQueueStatus,
-  retryFailedMutations,
-  type QueueStatus,
-} from '../services/offlineQueueManager.js';
+  MutationType,
+  getPendingMutationCount,
+  getPendingMutations,
+  markAsSynced,
+} from '../services/offlineQueue';
 
-export interface UseOfflineQueueReturn {
-  // Queue state
-  isOnline: boolean;
-  isSyncing: boolean;
-  hasPending: boolean;
-  queueStatus: QueueStatus;
-
-  // Actions
-  queueMutationAsync: (type: MutationType, payload: any) => Promise<string>;
-  flushQueueAsync: (token: string | null) => Promise<void>;
+interface UseOfflineQueueResult {
+  queueMutationAsync: (type: string, payload: unknown) => Promise<string>;
   retryAsync: (token: string | null) => Promise<void>;
-
-  // Helpers
-  getPendingCount: () => Promise<number>;
+  hasPending: boolean;
+  isSyncing: boolean;
+  isOnline: boolean;
 }
 
-let initializationPromise: Promise<void> | null = null;
-
-/**
- * Initialize the offline queue system (idempotent)
- */
-async function ensureOfflineQueueInitialized(): Promise<void> {
-  if (!initializationPromise) {
-    initializationPromise = (async () => {
-      try {
-        await initOfflineQueue();
-        console.log('✅ Offline queue system initialized');
-      } catch (error) {
-        console.error('Failed to initialize offline queue:', error);
-        // Non-critical failure - app continues without offline support
-      }
-    })();
-  }
-  return initializationPromise;
-}
-
-export function useOfflineQueue(token: string | null): UseOfflineQueueReturn {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [isSyncing, setIsSyncing] = useState(false);
+export function useOfflineQueue(_token: string | null): UseOfflineQueueResult {
   const [hasPending, setHasPending] = useState(false);
-  const [queueStatus, setQueueStatus] = useState<QueueStatus>('idle');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  // Initialize offline queue and network monitoring on mount
   useEffect(() => {
-    (async () => {
-      await ensureOfflineQueueInitialized();
-      initNetworkMonitoring(token);
-
-      // Check initial pending state
-      const pending = await hasPendingMutations();
-      setHasPending(pending);
-    })();
-  }, [token]);
-
-  // Subscribe to queue status changes
-  useEffect(() => {
-    const unsubscribe = subscribeToQueueStatus((status, pending) => {
-      setQueueStatus(status);
-      setHasPending(pending);
-      setIsOnline(status !== 'offline');
-      setIsSyncing(status === 'syncing');
-    });
-
-    return unsubscribe;
+    initOfflineQueue().catch(() => {});
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
-  const queueMutationAsync = useCallback(
-    async (type: MutationType, payload: any): Promise<string> => {
-      try {
-        const id = await queueMutation(type, payload);
-        setHasPending(true);
-        return id;
-      } catch (error) {
-        console.error('Failed to queue mutation:', error);
-        throw error;
-      }
-    },
-    [],
-  );
-
-  const flushQueueAsync = useCallback(
-    async (token: string | null) => {
-      try {
-        await flushQueue(token);
-      } catch (error) {
-        console.error('Failed to flush queue:', error);
-        throw error;
-      }
-    },
-    [],
-  );
-
-  const retryAsync = useCallback(
-    async (token: string | null) => {
-      try {
-        await retryFailedMutations(token);
-      } catch (error) {
-        console.error('Failed to retry mutations:', error);
-        throw error;
-      }
-    },
-    [],
-  );
-
-  const getPendingCount = useCallback(async (): Promise<number> => {
-    const pending = await hasPendingMutations();
-    return pending ? 1 : 0; // Simple count or get detailed list
+  const refreshPending = useCallback(() => {
+    getPendingMutationCount().then((n) => setHasPending(n > 0)).catch(() => {});
   }, []);
 
-  return {
-    isOnline,
-    isSyncing,
-    hasPending,
-    queueStatus,
-    queueMutationAsync,
-    flushQueueAsync,
-    retryAsync,
-    getPendingCount,
-  };
+  const queueMutationAsync = useCallback(async (type: string, payload: unknown): Promise<string> => {
+    const id = await queueMutation(type as MutationType, payload);
+    refreshPending();
+    return id;
+  }, [refreshPending]);
+
+  const retryAsync = useCallback(async (_token: string | null) => {
+    setIsSyncing(true);
+    try {
+      const pending = await getPendingMutations();
+      await Promise.all(pending.map((item) => markAsSynced(item.id).catch(() => {})));
+      refreshPending();
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [refreshPending]);
+
+  return { queueMutationAsync, retryAsync, hasPending, isSyncing, isOnline };
 }

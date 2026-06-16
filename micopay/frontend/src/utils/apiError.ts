@@ -11,6 +11,30 @@ export interface ApiErrorPayload {
 }
 
 /**
+ * Error carrying the normalized API payload so the UI can surface the safe
+ * message plus the optional machine-readable `error`, `request_id` and
+ * `support_code` fields.
+ */
+export class ApiError extends Error {
+  readonly code?: string;
+  readonly requestId?: string;
+  readonly supportCode?: string;
+
+  constructor(payload: ApiErrorPayload) {
+    super(payload.message);
+    this.name = 'ApiError';
+    this.code = payload.error;
+    this.requestId = payload.request_id;
+    this.supportCode = payload.support_code;
+  }
+}
+
+/** Build an `ApiError` from a normalized payload (used in service catch blocks). */
+export function toApiError(payload: ApiErrorPayload): ApiError {
+  return new ApiError(payload);
+}
+
+/**
  * Normalizes Fastify `setErrorHandler` payloads (`{ error, message }`) and Axios failures
  * so UI can show a safe string + optional machine-readable `error` key (#20 error path).
  *
@@ -19,7 +43,9 @@ export interface ApiErrorPayload {
  */
 export function extractApiErrorPayload(err: unknown): ApiErrorPayload {
   if (axios.isAxiosError(err)) {
-    const data = err.response?.data as { message?: string; error?: string } | undefined;
+    const data = err.response?.data as
+      | { message?: string; error?: string; request_id?: string; support_code?: string }
+      | undefined;
     const resolved = resolveErrorMessage({
       response: {
         status: err.response?.status,

@@ -110,7 +110,7 @@ export async function getPendingMutations(): Promise<QueueItem[]> {
     const transaction = database.transaction([STORE_NAME], 'readonly');
     const store = transaction.objectStore(STORE_NAME);
     const index = store.index('synced');
-    const request = index.getAll(false); // false = not synced
+    const request = index.getAll(IDBKeyRange.only(false)); // false = not synced
 
     request.onsuccess = () => {
       const items = request.result as QueueItem[];

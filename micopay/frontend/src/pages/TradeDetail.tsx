@@ -8,6 +8,7 @@ import {
   TradeDetailResponse,
 } from '../services/api';
 import { errorMessages } from '../constants/errorMessages';
+import { readJSON } from '../services/secureStorage';
 
 type TradeDetailData = TradeDetailResponse['trade'] & {
   platform_fee_mxn?: number;
@@ -623,7 +624,7 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
   const fetchTrade = useCallback(async () => {
     if (!id) return;
 
-    const effectiveToken = token ?? (await getStoredToken());
+    const effectiveToken = (buyerToken ?? sellerToken) ?? (await getStoredToken());
     if (!effectiveToken) {
       navigate('/');
       return;
@@ -645,7 +646,7 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
     } finally {
       setLoading(false);
     }
-  }, [id, navigate, token]);
+  }, [id, navigate, buyerToken, sellerToken]);
 
   // Fetch on mount
   useEffect(() => {
@@ -664,7 +665,7 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
   const handleCancel = async () => {
     if (!trade) return;
 
-    const effectiveToken = token ?? (await getStoredToken());
+    const effectiveToken = (buyerToken ?? sellerToken) ?? (await getStoredToken());
     if (!effectiveToken) return;
 
     try {
@@ -683,7 +684,7 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
   // Handle refund
   const handleRefundConfirm = async () => {
     if (!trade) return;
-    const token = getToken();
+    const token = buyerToken ?? sellerToken ?? await getStoredToken();
     if (!token) return;
 
     setIsRefunding(true);
@@ -764,7 +765,7 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
       case 'revealing':
         return <RevealingView trade={trade} />;
       case 'revealed':
-        return <RevealedView trade={trade} onComplete={handleComplete} token={token} />;
+        return <RevealedView trade={trade} onComplete={handleComplete} token={buyerToken ?? sellerToken} />;
       case 'completed':
         return <CompletedView trade={trade} />;
       case 'cancelled':

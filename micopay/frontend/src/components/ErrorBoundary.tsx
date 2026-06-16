@@ -31,7 +31,7 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error) {
-    reportClientError({
+    console.error('[ErrorBoundary]', {
       error_code: 'RENDER_CRASH',
       message: error.message,
       stack: error.stack,

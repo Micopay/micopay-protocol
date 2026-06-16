@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import MapSim from '../components/MapSim';
 import { useMerchantsAvailable } from '../hooks/useMerchantsAvailable';
 import type { AvailableMerchant } from '../services/api';
@@ -37,30 +38,9 @@ function merchantToOffer(m: AvailableMerchant, index: number): Offer {
     receiveMxn: 495,
     commissionPct: 1,
     badge: 'Negocio verificado',
-    verified: true,
-    isPrimary: true,
-  },
-  {
-    id: 'offer_2',
-    name: 'Usuario @carlos_g',
-    icon: 'person',
-    distance: '320 m',
-    walkMinutes: 5,
-    receiveMxn: 490,
-    commissionPct: 2,
-    rating: '⭐ 4.9 · 87 operaciones',
-  },
-  {
-    id: 'offer_3',
-    name: 'Lavandería El Sol',
-    icon: 'laundry',
-    distance: '450 m',
-    walkMinutes: 7,
-    receiveMxn: 485,
-    commissionPct: 3,
-    badge: 'Verificado',
-  },
-];
+    isPrimary: index === 0,
+  };
+}
 
 interface ExploreMapProps {
   onBack: () => void;
@@ -204,13 +184,39 @@ const ExploreMap = ({
                 return (
                   <article
                     key={offer.id}
-                    offer={offer}
-                    amount={amount}
-                    loading={loading}
-                    onSelectOffer={onSelectOffer}
-                  />
-                ),
-              )}
+                    className="bg-surface-container-low/30 p-5 rounded-[24px] border border-transparent hover:border-surface-container-high transition-all"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center border border-surface-container-high">
+                          <span className="material-symbols-outlined text-outline">{offer.icon}</span>
+                        </div>
+                        <div>
+                          <h3 className="font-headline font-bold text-on-surface">{offer.name}</h3>
+                          {offer.badge && (
+                            <span className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                              {offer.badge}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-bold text-outline uppercase tracking-wider">Oferta</p>
+                        <p className="text-lg font-headline font-bold text-on-surface">
+                          ${offer.receiveMxn.toFixed(2)} MXN
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => onSelectOffer(offer.id)}
+                      disabled={loading}
+                      className="w-full py-3 border border-primary text-primary font-bold rounded-xl active:scale-95 transition-all disabled:opacity-70"
+                    >
+                      Ver oferta
+                    </button>
+                  </article>
+                );
+              })}
             </div>
 
             {/* Footer Note */}
@@ -225,5 +231,111 @@ const ExploreMap = ({
     </div>
   );
 };
+
+// ─── State screens ───────────────────────────────────────────────────────────
+
+function StateHeader({ onBack }: { onBack: () => void }) {
+  return (
+    <header className="fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-white/80 backdrop-blur-md shadow-sm">
+      <button
+        onClick={onBack}
+        className="flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
+        aria-label="Volver"
+      >
+        <span className="material-symbols-outlined text-primary">arrow_back</span>
+      </button>
+      <h1 className="ml-4 font-headline font-bold text-xl text-primary tracking-tight">
+        Convertir a efectivo
+      </h1>
+    </header>
+  );
+}
+
+function StateShell({
+  onBack,
+  icon,
+  title,
+  children,
+  spin = false,
+}: {
+  onBack: () => void;
+  icon: string;
+  title: string;
+  children?: ReactNode;
+  spin?: boolean;
+}) {
+  return (
+    <div className="bg-surface-container-lowest text-on-surface font-body min-h-screen pb-24">
+      <StateHeader onBack={onBack} />
+      <main className="pt-24 px-6 max-w-2xl mx-auto flex flex-col items-center text-center">
+        <div className="w-16 h-16 bg-primary-container/10 rounded-2xl flex items-center justify-center mt-16 mb-6">
+          <span className={`material-symbols-outlined text-primary text-4xl ${spin ? 'animate-spin' : ''}`}>
+            {icon}
+          </span>
+        </div>
+        <h2 className="font-headline font-bold text-xl text-on-surface mb-2">{title}</h2>
+        {children}
+      </main>
+    </div>
+  );
+}
+
+function LoadingSkeleton({ onBack }: { onBack: () => void }) {
+  return (
+    <StateShell onBack={onBack} icon="progress_activity" title="Buscando ofertas cerca de ti" spin>
+      <p className="text-sm text-outline font-medium max-w-xs">
+        Localizando agentes disponibles para tu monto…
+      </p>
+    </StateShell>
+  );
+}
+
+function LocationDenied({ onBack }: { onBack: () => void }) {
+  return (
+    <StateShell onBack={onBack} icon="location_off" title="Necesitamos tu ubicación">
+      <p className="text-sm text-outline font-medium max-w-xs mb-6">
+        Activa los permisos de ubicación para encontrar agentes cerca de ti.
+      </p>
+      <button
+        onClick={onBack}
+        className="px-6 py-3 border border-primary text-primary font-bold rounded-xl active:scale-95 transition-all"
+      >
+        Volver
+      </button>
+    </StateShell>
+  );
+}
+
+function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => void }) {
+  return (
+    <StateShell onBack={onBack} icon="cloud_off" title="No pudimos cargar las ofertas">
+      <p className="text-sm text-outline font-medium max-w-xs mb-6">
+        Revisa tu conexión e intenta de nuevo.
+      </p>
+      <button
+        onClick={onRetry}
+        className="px-6 py-3 bg-primary text-white font-bold rounded-xl active:scale-95 transition-all"
+      >
+        Reintentar
+      </button>
+    </StateShell>
+  );
+}
+
+function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) {
+  return (
+    <StateShell onBack={onBack} icon="search_off" title="No hay agentes disponibles">
+      <p className="text-sm text-outline font-medium max-w-xs mb-6">
+        Ningún agente cercano puede atender ${amount} MXN ahora mismo. Intenta con otro monto o más tarde.
+      </p>
+      <button
+        onClick={onBack}
+        className="px-6 py-3 border border-primary text-primary font-bold rounded-xl active:scale-95 transition-all"
+      >
+        Cambiar monto
+      </button>
+    </StateShell>
+  );
+}
 
 export default ExploreMap;

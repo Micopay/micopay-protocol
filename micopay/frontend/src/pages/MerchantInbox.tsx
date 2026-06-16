@@ -1,6 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQRScanner } from '../hooks/useQRScanner';
 import { usePushNotifications } from '../hooks/usePushNotifications';
+import {
+  getMerchantTrades,
+  merchantConfirmScan,
+  type MerchantTrade,
+  type MerchantConfirmResult,
+} from '../services/api';
+import { parseQRPayload } from '../utils/qrPayload';
+import SupportLink from '../components/SupportLink';
 
 // ── Status display config ──────────────────────────────────────────────────
 
@@ -272,9 +280,8 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
     apiUrl,
   });
 
-  const handleScan = async () => {
-    setScanError(null);
-    setScannedPayload(null);
+  const handleScan = useCallback(async () => {
+    if (!token) return;
     const { value, error } = await scan();
 
     if (error) {
@@ -282,22 +289,23 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
       return;
     }
 
-  const fetchTrades = async (state: string = 'all') => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`${apiUrl}/merchants/me/trades?state=${state}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+    // Parse the scanned QR into a typed MicoPay payload.
+    const parsed = parseQRPayload(value);
+    if (!parsed.ok) {
+      setScanView({ type: 'parse_error', message: parsed.error });
       return;
     }
+
+    // The merchant scans the buyer's release QR, which carries the trade_id.
+    const tradeId =
+      parsed.payload.type === 'release' ? parsed.payload.tradeId : null;
 
     if (!tradeId) {
       setScanView({ type: 'parse_error', message: 'No se encontró un ID de trade en el QR' });
       return;
     }
 
-    // Step 3: Validate with backend
+    // Validate with backend.
     setScanView({ type: 'loading' });
 
     try {
@@ -401,30 +409,49 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
           </div>
         )}
 
-        {(scannedPayload || scanError) && (
-          <div className={`mb-4 rounded-2xl p-4 ${scanError ? 'bg-red-50 border border-red-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+        {scanView.type === 'loading' && (
+          <div className="mb-4 rounded-2xl p-4 bg-emerald-50 border border-emerald-200 flex items-center gap-3">
+            <span className="material-symbols-outlined animate-spin text-emerald-600">progress_activity</span>
+            <p className="text-sm text-emerald-900 font-medium">Verificando QR con el servidor…</p>
+          </div>
+        )}
+
+        {scanView.type === 'parse_error' && (
+          <div className="mb-4 rounded-2xl p-4 bg-red-50 border border-red-200 flex items-start gap-3">
+            <span className="material-symbols-outlined text-red-600">error</span>
+            <p className="flex-1 text-sm text-red-800 font-medium">{scanView.message}</p>
+            <button
+              onClick={dismissScan}
+              aria-label="Cerrar"
+              className="material-symbols-outlined text-on-surface-variant text-base"
+            >
+              close
+            </button>
+          </div>
+        )}
+
+        {scanView.type === 'api_error' && (
+          <div className="mb-4 rounded-2xl p-4 bg-red-50 border border-red-200">
             <div className="flex items-start gap-3">
-              <span className={`material-symbols-outlined ${scanError ? 'text-red-600' : 'text-emerald-600'}`}>
-                {scanError ? 'error' : 'qr_code_2'}
-              </span>
-              <div className="flex-1 min-w-0">
-                {scanError ? (
-                  <p className="text-sm text-red-800 font-medium">{scanError}</p>
-                ) : (
-                  <>
-                    <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">QR escaneado</p>
-                    <p className="text-xs text-emerald-900 font-mono break-all">{scannedPayload}</p>
-                  </>
-                )}
-              </div>
+              <span className="material-symbols-outlined text-red-600">error</span>
+              <p className="flex-1 text-sm text-red-800 font-medium">{scanView.message}</p>
               <button
-                onClick={() => { setScannedPayload(null); setScanError(null); }}
+                onClick={dismissScan}
                 aria-label="Cerrar"
                 className="material-symbols-outlined text-on-surface-variant text-base"
               >
                 close
               </button>
             </div>
+            <div className="mt-2 pl-9">
+              <SupportLink tradeId={scanView.tradeId} state="error_escaneo" />
+            </div>
+          </div>
+        )}
+
+        {scanView.type === 'confirmation' && (
+          <div className="mb-4">
+            <TradeConfirmationCard data={scanView.data} onDismiss={dismissScan} />
           </div>
         )}
 

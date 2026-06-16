@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { getMerchantConfig, updateMerchantConfig, MerchantConfig } from '../services/api';
+import { getMerchantConfig, updateMerchantConfigWithOfflineSupport, getCurrentUser, setAvailability, MerchantConfig } from '../services/api';
 import { resolveErrorMessage } from '../constants/errorMap';
+import { useOfflineQueue } from '../hooks/useOfflineQueue';
 
 interface MerchantSettingsProps {
   token: string | null;

@@ -10,7 +10,7 @@ interface StoredKeypair {
 
 export async function generateAndStoreKeypair(): Promise<string> {
     const kp = Keypair.random();
-    await writeJSON<StoredKeypair>(KEYPAIR_KEY, {
+    await writeJSON(KEYPAIR_KEY, {
         publicKey: kp.publicKey(),
         secretKey: kp.secret(),
     });
@@ -37,7 +37,7 @@ export async function signChallenge(challenge: string): Promise<string> {
 
 export async function importKeypair(secretKey: string): Promise<string> {
     const kp = Keypair.fromSecret(secretKey); // throws on bad input
-    await writeJSON<StoredKeypair>(KEYPAIR_KEY, {
+    await writeJSON(KEYPAIR_KEY, {
         publicKey: kp.publicKey(),
         secretKey: kp.secret(),
     });
