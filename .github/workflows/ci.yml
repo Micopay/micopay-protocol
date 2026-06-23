@@ -1,0 +1,63 @@
+name: CI
+
+# Gate de integración para Wave 6 (Etapa 0 / P2-1 de docs/AUDIT_APK_WAVE6.md).
+# Objetivo: que `main` NO vuelva a romperse por código que no compila.
+# Bloquea el merge si el backend o el frontend no buildean.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancela corridas viejas del mismo PR/rama cuando llega un push nuevo.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend build (micopay/backend)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: micopay/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: micopay/backend/package-lock.json
+      - run: npm ci
+      - name: Build (tsc) — BLOQUEANTE
+        run: npm run build
+
+  frontend:
+    name: Frontend build + tests (micopay/frontend)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: micopay/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: micopay/frontend/package-lock.json
+      # El lock se genera en Windows y omite los binarios opcionales de Linux
+      # (rollup/lightningcss) — bug npm #4828. El fix documentado es borrar el
+      # lock y reinstalar fresco para que npm resuelva el binario de la plataforma.
+      - name: Install (regenera deps opcionales por plataforma — npm #4828)
+        run: |
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
+      - name: Build (tsc + vite build) — BLOQUEANTE
+        run: npm run build
+      # No-bloqueante por ahora: la suite TradeDetail tiene 21 tests rojos
+      # (lógica de la app, no de build). Volver bloqueante cuando los P0/P1
+      # arreglen esos tests. Ver P2-1 en docs/AUDIT_APK_WAVE6.md.
+      - name: Tests (vitest) — informativo, NO bloqueante todavía
+        run: npm run test
+        continue-on-error: true

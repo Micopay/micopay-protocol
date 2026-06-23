@@ -59,6 +59,11 @@ export const config = {
   // MVP flags
   mockStellar: process.env.MOCK_STELLAR === 'true',
 
+  // Soroban event listener (off by default; polling fallback covers the rest)
+  eventListenerEnabled: process.env.EVENT_LISTENER_ENABLED === 'true',
+  eventListenerPollMs: parseInt(process.env.EVENT_LISTENER_POLL_MS || '5000', 10),
+  eventListenerHealthStaleMs: parseInt(process.env.EVENT_LISTENER_HEALTH_STALE_MS || '30000', 10),
+
   // Rate Limiting
   authRateLimitWindowMs: parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS || '600000', 10), // 10 min
   authRateLimitMax: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '5', 10),

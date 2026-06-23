@@ -45,7 +45,11 @@ async function invokeVerify(
   const account = await rpc.getAccount(signerKP.publicKey());
   const contract = new StellarSdk.Contract(contractId);
 
-  // Contract: verify(circuit_id: Symbol, public_inputs: Bytes, proof: Bytes) -> Result<(), Error>
+  // reputation_v1 → verify_unique (records nullifier to prevent replay)
+  // poseidon_preimage → verify (no nullifier field)
+  // NOTE: verify_unique requires a redeployed contract — see IMPLEMENTATION_PLAN.md WP4.
+  const contractFn = circuitId === "reputation_v1" ? "verify_unique" : "verify";
+
   const circuitIdVal = StellarSdk.xdr.ScVal.scvSymbol(circuitId);
   const inputsBuf = encodePublicInputs(publicInputs);
   const inputsVal = StellarSdk.xdr.ScVal.scvBytes(inputsBuf);
@@ -55,7 +59,7 @@ async function invokeVerify(
     fee: "1000000",
     networkPassphrase: NET,
   })
-    .addOperation(contract.call("verify", circuitIdVal, inputsVal, proofVal))
+    .addOperation(contract.call(contractFn, circuitIdVal, inputsVal, proofVal))
     .setTimeout(180)
     .build();
 
@@ -182,10 +186,17 @@ export async function zkRoutes(fastify: FastifyInstance): Promise<void> {
           payer: (request as typeof request & { payerAddress?: string }).payerAddress,
         });
       } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // NullifierAlreadyUsed (ZkError code 10) → 409 Conflict
+        if (msg.includes("NullifierAlreadyUsed") || msg.includes("Error(Contract, #10)")) {
+          return reply.status(409).send({
+            error: "Nullifier already used — this proof has already been verified in this context",
+          });
+        }
         fastify.log.error({ err }, "ZK verification failed");
         return reply.status(502).send({
           error: "Verification call failed",
-          detail: err instanceof Error ? err.message : String(err),
+          detail: msg,
         });
       }
     }

@@ -22,6 +22,7 @@ pub enum ZkError {
     ProofParseError = 7,
     VerificationFailed = 8,
     ReputationRootNotSet = 9,
+    NullifierAlreadyUsed = 10,
 }
 
 #[contract]
@@ -97,6 +98,53 @@ impl ZkVerifierRegistry {
         verifier
             .verify(&env, &proof, &public_inputs)
             .map_err(|_| ZkError::VerificationFailed)
+    }
+
+    /// Verify a proof AND record its nullifier to prevent replay.
+    /// For reputation_v1: public_inputs has 4 fields (128 bytes).
+    /// The nullifier is field index 3 → bytes [96..128].
+    /// A nullifier can only be used once per ZkVerifierRegistry instance.
+    ///
+    /// Use this instead of `verify` for circuits that carry a nullifier field.
+    pub fn verify_unique(
+        env: Env,
+        circuit_id: Symbol,
+        public_inputs: Bytes,
+        proof: Bytes,
+    ) -> Result<(), ZkError> {
+        // Extract nullifier (bytes 96..128 = field index 3) before verification
+        // so a bad proof cannot sneak a nullifier into the used set.
+        if public_inputs.len() < 128 {
+            return Err(ZkError::ProofParseError);
+        }
+        let mut nullifier_arr = [0u8; 32];
+        for i in 0..32u32 {
+            nullifier_arr[i as usize] = public_inputs.get(96 + i).unwrap_or(0);
+        }
+        let nullifier = Bytes::from_array(&env, &nullifier_arr);
+
+        // Reject replayed nullifiers before doing expensive crypto
+        if env.storage().persistent().has(&nullifier) {
+            return Err(ZkError::NullifierAlreadyUsed);
+        }
+
+        // Run the full UltraHonk verification
+        let vk = Self::get_vk(&env, &circuit_id)?;
+        let verifier = UltraHonkVerifier::new(&env, &vk).map_err(|e| match e {
+            VkLoadError::WrongLength => ZkError::VkInvalidLength,
+            VkLoadError::InvalidParameters => ZkError::VkInvalidParameters,
+        })?;
+        verifier
+            .verify(&env, &proof, &public_inputs)
+            .map_err(|_| ZkError::VerificationFailed)?;
+
+        // Record nullifier only after proof is valid
+        env.storage().persistent().set(&nullifier, &true);
+        env.storage()
+            .persistent()
+            .extend_ttl(&nullifier, 100_000, 200_000);
+
+        Ok(())
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

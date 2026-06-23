@@ -2,10 +2,11 @@
 
 **The first API that gives AI agents access to physical cash in Mexico**
 
-> Stellar Hacks: Agents — DoraHacks 2026  
-> **Drips Wave 4 contributors** → focus is the retail mobile app in `micopay/frontend` + `micopay/backend`. Jump to [Contributing](#contributing-drips-wave-4) · [Milestones](https://github.com/ericmt-98/micopay-protocol/milestones) · [Open issues](https://github.com/ericmt-98/micopay-protocol/issues) · [`docs/`](./docs/)
+> Stellar Hacks: Agents — DoraHacks 2026
 
-> 🔐 **Next up — Real-World ZK on Stellar.** MicoPay is heading into the upcoming **Zero-Knowledge proof hackathon** with **ZKaaS** already live on testnet: anonymous, pay-per-use ZK verification on Soroban. You can already prove *"my reputation tier is ≥ GOLD"* without revealing who you are — verified on-chain. See [ZK-as-a-Service](#-zk-as-a-service-zkaas) below.
+> 🌊 **We're in Drips Wave 6 — start here.** The focus is turning the retail mobile app (`micopay/frontend` + `micopay/backend`) from a single-device demo into a **real product**: one identity per device and a **real transaction between two phones**. **Contributors: read [`docs/AUDIT_APK_WAVE6.md`](./docs/AUDIT_APK_WAVE6.md)** — it's the Wave 6 source of truth (plan, issue queue, and acceptance criteria). Then jump to [Contributing](#contributing-drips-wave-6) · [`docs/`](./docs/)
+
+> 🔐 **Real-World ZK on Stellar — ZKaaS, live on testnet.** Through the **Zero-Knowledge proof hackathon** MicoPay shipped **ZKaaS**: anonymous, pay-per-use ZK verification on Soroban. You can prove *"my reputation tier is ≥ GOLD"* without revealing who you are — verified on-chain. See [ZK-as-a-Service](#-zk-as-a-service-zkaas) below.
 
 ---
 
@@ -415,13 +416,24 @@ For a precise breakdown of what is real on-chain vs. demo scaffolding — writte
 
 ---
 
-## Contributing (Drips Wave 4)
+## Contributing (Drips Wave 6)
 
-MicoPay is participating in **Stellar Drips Wave 4**. Contributions are scoped to the retail mobile app — not the whole monorepo.
+MicoPay is participating in **Stellar Drips Wave 6**. Contributions are scoped to the retail mobile app — not the whole monorepo.
 
 ### Current Wave focus
 
-One flow over many demos. The Wave is organized around making **Core Retail Flow** — trade creation, state, cancel, timeout, refund, receipt — work reliably end to end. Every other milestone (Backend Hardening, Merchant Operations, Frontend Quality, Store Readiness, Documentation) exists to make that flow trustworthy. If you are unsure where to start, pick an issue from **Core Retail Flow** first.
+**From single-device demo to a real product.** Today the app simulates both sides of a trade on one phone. Wave 6 makes it real: **one identity per device** and a **real transaction between two phones**, with the UI showing the user's own data instead of hardcoded placeholders.
+
+The full plan, prioritized findings, issue queue, and acceptance criteria live in **[`docs/AUDIT_APK_WAVE6.md`](./docs/AUDIT_APK_WAVE6.md)** — read it before picking up work. Work is grouped in stages:
+
+- **Stage 0 (internal, done):** backend build green + CI gate so `main` can't break again.
+- **Stage 1 (P0):** one identity per device, real counterparty, real balance, APK fetch fix.
+- **Stage 2 (P1):** the UI stops showing invented data (map, economics, names, FX).
+- **Stage 3:** backend hardening for a real server.
+- **Stage 4:** product/release decisions (DeFi labeling, APK release config).
+- **Research (parallel, no code):** 5 market/user validation issues (`research` label).
+
+If you are unsure where to start, pick a `complexity: low` issue from Stage 1 or Stage 2.
 
 ### In-scope paths
 
@@ -438,28 +450,31 @@ One flow over many demos. The Wave is organized around making **Core Retail Flow
 
 ### Where to start
 
-1. Read [`docs/PRODUCT_SCOPE.md`](./docs/PRODUCT_SCOPE.md) — what we are building and why.
-2. Read [`docs/RETAIL_ROADMAP.md`](./docs/RETAIL_ROADMAP.md) — the phased execution plan.
+1. Read [`docs/AUDIT_APK_WAVE6.md`](./docs/AUDIT_APK_WAVE6.md) — **the Wave 6 plan**: findings, issue queue, stages, and acceptance criteria.
+2. Read [`docs/PRODUCT_SCOPE.md`](./docs/PRODUCT_SCOPE.md) — what we are building and why.
 3. Read [`docs/UX_MANIFESTO.md`](./docs/UX_MANIFESTO.md) — the trust and UX bar every PR is reviewed against.
 4. Read [`docs/DRIPS_TEAM_GUIDE.md`](./docs/DRIPS_TEAM_GUIDE.md) — how issues, reviews, and merges work during the Wave.
-5. Pick an issue from the [open milestones](https://github.com/ericmt-98/micopay-protocol/milestones).
+5. Pick a Wave 6 issue from the queue once it's published. The queue (with surface, track, and complexity per issue) lives in `AUDIT_APK_WAVE6.md` §6.2; issues are being opened from that plan — check [open issues](https://github.com/ericmt-98/micopay-protocol/issues).
 
-### Milestones
+### Wave 6 work, by stage
 
-| Milestone | Focus |
+The Wave 6 issue queue (`AUDIT_APK_WAVE6.md` §6) maps every issue to a stage, surface (`wave:frontend`/`wave:backend`), track, and complexity. High level:
+
+| Stage | Focus |
 |---|---|
-| [Core Retail Flow](https://github.com/ericmt-98/micopay-protocol/milestone/2) | **Wave priority.** Trade creation, detail view, state machine UX, cancel / timeout / refund, receipts, history linked to real states |
-| [Backend Hardening](https://github.com/ericmt-98/micopay-protocol/milestone/7) | Auth persistence, audit log, error taxonomy, rate limiting, replay protection, structured logging |
-| [Merchant Operations](https://github.com/ericmt-98/micopay-protocol/milestone/3) | Merchant onboarding, profile, availability, limits, trade inbox |
-| [Frontend Quality](https://github.com/ericmt-98/micopay-protocol/milestone/4) | Empty states, a11y pass, loading skeletons — polish outside the core flow |
-| [Store Readiness](https://github.com/ericmt-98/micopay-protocol/milestone/6) | Account deletion, privacy, support path, reviewer mode, store compliance |
-| [Documentation](https://github.com/ericmt-98/micopay-protocol/milestone/8) | Per-folder READMEs, env docs, local setup |
+| Stage 0 (internal, done) | Backend build green + CI gate — `main` can't break again |
+| Stage 1 — Core (P0) | One identity per device, real counterparty, real balance, APK fetch fix |
+| Stage 2 — UI truth (P1) | Map, economics, names, FX use real data instead of placeholders |
+| Stage 3 — Backend hardening | Prod config fail-fast, no in-memory fallback, reproducible migrations, real health |
+| Stage 4 — Product / release | DeFi labeling decision, APK release config |
+| Research (parallel) | 5 market/user validation issues — `research` label, no PR, privacy-first |
 
 ### Labels we use
 
 - **Wave surface:** `wave:retail`, `wave:frontend`, `wave:backend`, `wave:merchant`, `wave:trust`, `wave:docs`
 - **Complexity:** `complexity: low`, `complexity: medium`, `complexity: high`
 - **Flow control:** `wave:good-first`, `wave:blocked`, `wave:needs-product`
+- **Research:** `research` marks market/user validation issues (no code, no PR — close on a structured answer)
 - **Rewards:** `Stellar Wave` marks work eligible for Drips
 
 ### What a good PR looks like

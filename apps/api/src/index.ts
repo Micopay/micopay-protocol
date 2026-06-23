@@ -21,6 +21,10 @@ import { config } from "./config.js";
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 const NODE_ENV = process.env.NODE_ENV ?? "development";
 
+if (process.env.X402_MOCK_MODE === "true" && NODE_ENV === "production") {
+  throw new Error("X402_MOCK_MODE=true is not allowed in production — it bypasses all payment validation");
+}
+
 const app = Fastify({
   logger: NODE_ENV === "development",
   trustProxy: true,

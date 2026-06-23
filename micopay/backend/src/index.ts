@@ -12,6 +12,10 @@ import { adminRoutes } from './routes/admin.js';
 import { tradeSafetyRoutes } from './routes/trade-safety.js';
 import { AppError } from './utils/errors.js';
 import { Keypair } from '@stellar/stellar-sdk';
+import fastifyStatic from '@fastify/static';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { registerRequestId, toSupportCode } from './middleware/requestId.middleware.js';
 import { createProductionListener } from './services/event-listener.service.js';
 import type { EscrowEventListener } from './services/event-listener.service.js';
 

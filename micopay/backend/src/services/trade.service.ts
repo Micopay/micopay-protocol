@@ -25,6 +25,7 @@ import {
   assertCanCancelTrade,
   recordTradeCancelled,
 } from './abuse.service.js';
+import { sendTradeNotificationToMerchant } from './push.service.js';
 
 const logger = pino({ name: 'trade.service' });
 
@@ -192,8 +193,8 @@ export async function createTrade(input: CreateTradeInput) {
     throw new NotFoundError('USER_NOT_FOUND', 'El usuario vendedor no existe', 'Seller not found');
   }
 
-  const buyer = await db.getOne<{ id: string; stellar_address: string }>(
-    'SELECT id, stellar_address FROM users WHERE id = $1',
+  const buyer = await db.getOne<{ id: string; stellar_address: string; username: string | null }>(
+    'SELECT id, stellar_address, username FROM users WHERE id = $1',
     [buyerId],
   );
   if (!buyer) {
@@ -253,7 +254,7 @@ export async function createTrade(input: CreateTradeInput) {
     tradeId: result.id,
     amount: `${amountMxn.toLocaleString('es-MX')} MXN`,
     buyerUsername,
-  }).catch(err => {
+  }).catch((err: unknown) => {
     logger.error({ err, trade_id: result.id, category: 'trade.lifecycle' }, '[trade] Push notification failed silently');
   });
 
@@ -590,8 +591,8 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
  */
 async function updateMerchantReputation(userId: string): Promise<void> {
   // Query micopay backend for trade statistics
-  const result = await query(`
-    SELECT 
+  const result = await db.query(`
+    SELECT
       COUNT(*) FILTER (WHERE status = 'completed') as completed_trades,
       COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_trades,
       COUNT(*) as total_trades,
@@ -605,8 +606,8 @@ async function updateMerchantReputation(userId: string): Promise<void> {
 
   if (!stats) {
     // No trades yet - reset to defaults
-    await query(`
-      UPDATE merchants 
+    await db.query(`
+      UPDATE merchants
       SET trades_completed = 0,
           completion_rate = 0,
           avg_time_minutes = 0,
@@ -635,7 +636,7 @@ async function updateMerchantReputation(userId: string): Promise<void> {
   const tier = getTier(completedTrades, completionRate);
 
   // Get last trade timestamp
-  const lastTradeResult = await query(`
+  const lastTradeResult = await db.query(`
     SELECT updated_at FROM trades 
     WHERE seller_id = $1 AND status = 'completed'
     ORDER BY updated_at DESC LIMIT 1
@@ -644,8 +645,8 @@ async function updateMerchantReputation(userId: string): Promise<void> {
   const lastTradeAt = lastTradeResult.rows[0]?.updated_at || null;
 
   // Update merchant record
-  await query(`
-    UPDATE merchants 
+  await db.query(`
+    UPDATE merchants
     SET trades_completed = $1,
         completion_rate = $2,
         avg_time_minutes = $3,
