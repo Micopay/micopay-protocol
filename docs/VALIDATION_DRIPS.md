@@ -102,7 +102,12 @@ _(no responses yet)_
 _(no responses yet)_
 
 ### V-6 · Remittances cash-out context
-_(no responses yet)_
+
+* **Country / general region:** Argentina (LATAM)
+* **Do YOU receive money from abroad?:** Yes
+* **How do you receive it today?:** Crypto (Stablecoins via Stellar/Soroban protocols and P2P networks) and global digital platforms.
+* **Your main friction receiving + cashing it out:** Fee and trust. Standard international banking wires trigger excessive regulatory friction, high baseline inbound fees, and unfavorable official currency conversion rates. While crypto solves cross-border speed, cashing out stablecoins to local fiat (ARS) still relies heavily on localized P2P order books or physical over-the-counter (OTC) exchanges, introducing variable spread fees and counterparty trust risks.
+* **Would getting it as cash nearby, same day, help YOU?:** Yes. Eliminating the P2P counterparty matching phase and having an immediate, compliant, same-day physical cash-out point nearby would drastically reduce transactional friction and eliminate exchange-rate slippage.
 
 ### V-7 · Current alternatives & switching
 _(no responses yet)_
