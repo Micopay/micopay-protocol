@@ -296,29 +296,29 @@ respuesta estructurada, útil y sin datos personales sensibles.
 > agregados se vacían en [`VALIDATION_DRIPS.md`](./VALIDATION_DRIPS.md).
 
 **Principio privacy-first:** no pedir ni aceptar nombres reales, teléfonos, direcciones, wallets,
-llaves privadas, documentos, comprobantes, hashes de transacción, ingresos exactos, saldos exactos
-ni información financiera delicada. Las respuestas deben usar rangos, país/región general y relatos
-anonimizados.
+llaves privadas, documentos, comprobantes, hashes de transacción ni información financiera.
+**No se piden montos de dinero** (ni siquiera en rangos): nada de ingresos, saldos ni tamaños de
+transacción. Las respuestas usan solo país/región general y relatos anonimizados.
 
 ### Issues iniciales sugeridos
 
 1. **Market validation: contexto de cash-out**
    - Objetivo: entender si convertir saldo digital/remesa/cripto a efectivo es un problema real.
-   - Respuestas esperadas: país o región general, frecuencia aproximada, rango de monto, método
-     actual, principal fricción (comisión, tiempo, confianza, liquidez, seguridad).
+   - Respuestas esperadas: país o región general, frecuencia aproximada, método actual, principal
+     fricción (comisión, tiempo, confianza, liquidez, seguridad). Sin montos.
    - Aceptación: respuesta completa sin datos sensibles y etiquetada para análisis agregado.
 
 2. **Market validation: contexto de cash-in / depósito**
    - Objetivo: entender si ingresar efectivo a una wallet/saldo digital resuelve un dolor real.
-   - Respuestas esperadas: caso de uso, método actual, frecuencia, rango de monto, barreras de
-     confianza y disponibilidad de agentes/comercios.
+   - Respuestas esperadas: caso de uso, método actual, frecuencia, barreras de confianza y
+     disponibilidad de agentes/comercios. Sin montos.
    - Aceptación: respuesta completa sin datos sensibles y etiquetada para análisis agregado.
 
 3. **Market validation: perspectiva de proveedor de liquidez**
    - Objetivo: validar si un usuario/comercio aceptaría operar como proveedor de liquidez (app
      agnóstica de rol, D-2).
    - Respuestas esperadas: tipo de comercio general, país/región, motivación, riesgos percibidos,
-     comisión esperada, límites razonables y condiciones para confiar.
+     comisión esperada (en %) y condiciones para confiar. Sin montos.
    - Aceptación: respuesta completa sin datos sensibles y etiquetada para análisis agregado.
 
 4. **Product validation: onboarding de wallet no-custodial**

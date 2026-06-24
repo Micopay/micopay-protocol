@@ -3,8 +3,8 @@
 > **Purpose:** aggregate, anonymized synthesis of the research issues (V-1…V-5). The full
 > issue text lives in [`WAVE6_RESEARCH_ISSUES.md`](./WAVE6_RESEARCH_ISSUES.md).
 >
-> ⚠️ **Never copy personal data here.** Only patterns, ranges, and counts. No names, no
-> contact info, no exact figures, no screenshots with sensitive data.
+> ⚠️ **Never copy personal data here.** Only patterns and counts. No amounts of money, no
+> names, no contact info, no screenshots with sensitive data.
 
 ---
 

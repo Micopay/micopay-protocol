@@ -26,9 +26,10 @@
 
 > ⚠️ **Privacy-first — do not share personal or sensitive data.** No real names, phone
 > numbers, addresses, wallet addresses, private keys, documents, receipts, transaction
-> hashes, exact income, exact balances, or sensitive financial details. Use **ranges**,
-> a **general country/region**, and **anonymized** stories only. Answers that include
-> sensitive data will be edited or removed.
+> hashes, or financial details. **We do not ask for any amounts of money** — please don't
+> share income, balances, or transaction sizes (not even as ranges). Share only a
+> **general country/region** and **anonymized** stories. Answers that include sensitive
+> data will be edited or removed.
 
 ---
 
@@ -45,7 +46,6 @@ Understand whether converting digital balance (remittance / crypto / digital mon
 ```
 - Country / general region:
 - How often you (or people you know) need to turn digital money into cash: (e.g. weekly / monthly / rarely)
-- Typical amount range: (e.g. <500 MXN / 500–2,000 / 2,000–10,000 / >10,000)
 - Current method you use: (ATM, exchange, a person, a shop, Western Union, etc.)
 - Main friction today: (fee / time / trust / liquidity / safety / availability)
 - One short anonymized story of a time this was painful:
@@ -58,7 +58,7 @@ Understand whether converting digital balance (remittance / crypto / digital mon
 
 ### Out of scope
 - Specific product feedback (that's V-4 / V-5).
-- Any personal identifiers or exact financial figures.
+- Any personal identifiers or amounts of money.
 
 ---
 
@@ -77,7 +77,6 @@ pain — the reverse direction of V-1.
 - Use case where you'd want to deposit cash into a wallet: (top up, save, pay online, send to family, etc.)
 - Current method you use today (if any):
 - How often: (weekly / monthly / rarely)
-- Typical amount range: (e.g. <500 / 500–2,000 / 2,000–10,000 / >10,000)
 - Trust barriers: what would make you hesitate to hand cash to an agent/shop?
 - Availability: are there nearby people/shops you'd trust for this? (yes / no / not sure)
 ```
@@ -89,7 +88,7 @@ pain — the reverse direction of V-1.
 
 ### Out of scope
 - Specific product UI feedback (that's V-4 / V-5).
-- Any personal identifiers or exact financial figures.
+- Any personal identifiers or amounts of money.
 
 ---
 
@@ -112,8 +111,7 @@ Validate whether a regular user or a small business would be willing to act as a
 - If a small business: general type (shop, pharmacy, food, services…). If an individual: skip.
 - Main motivation: (extra income, foot traffic, helping neighbors, curiosity…)
 - Perceived risks: (fake payment, robbery, legal, not getting paid, reputation…)
-- Commission you'd expect to charge: (as a % range, e.g. 1–3%)
-- Reasonable limits: max amount per operation / per day you'd be comfortable with (range)
+- Commission you'd expect to charge: (as a %, e.g. 1–3%)
 - What would make you trust the system enough to try it once:
 ```
 
@@ -124,7 +122,7 @@ Validate whether a regular user or a small business would be willing to act as a
 
 ### Out of scope
 - Onboarding UX feedback (that's V-4).
-- Any personal identifiers or exact financial figures.
+- Any personal identifiers or amounts of money.
 
 ---
 
