@@ -424,7 +424,7 @@ MicoPay is participating in **Stellar Drips Wave 6**. Contributions are scoped t
 
 **From single-device demo to a real product.** Today the app simulates both sides of a trade on one phone. Wave 6 makes it real: **one identity per device** and a **real transaction between two phones**, with the UI showing the user's own data instead of hardcoded placeholders.
 
-The full plan, prioritized findings, issue queue, and acceptance criteria live in **[`docs/AUDIT_APK_WAVE6.md`](./docs/AUDIT_APK_WAVE6.md)** — read it before picking up work. The milestones below organize that work; every milestone (Backend Hardening, Merchant Operations, Frontend Quality, Store Readiness, Documentation) exists to make the core retail flow trustworthy. If you are unsure where to start, pick an issue from **Core Retail Flow** first.
+The full plan, prioritized findings, issue queue, and acceptance criteria live in **[`docs/AUDIT_APK_WAVE6.md`](./docs/AUDIT_APK_WAVE6.md)** — read it before picking up work. The milestones below organize that work; every milestone (UI Truth, Backend Hardening, Product & Release, Market & User Validation) exists to make the core retail flow trustworthy. If you are unsure where to start, pick an issue from **Core Retail Flow (P0)** first.
 
 ### In-scope paths
 
@@ -452,12 +452,11 @@ The full plan, prioritized findings, issue queue, and acceptance criteria live i
 
 | Milestone | Focus |
 |---|---|
-| [Core Retail Flow](https://github.com/ericmt-98/micopay-protocol/milestone/2) | **Wave priority.** Trade creation, detail view, state machine UX, cancel / timeout / refund, receipts, history linked to real states |
-| [Backend Hardening](https://github.com/ericmt-98/micopay-protocol/milestone/7) | Auth persistence, audit log, error taxonomy, rate limiting, replay protection, structured logging |
-| [Merchant Operations](https://github.com/ericmt-98/micopay-protocol/milestone/3) | Merchant onboarding, profile, availability, limits, trade inbox |
-| [Frontend Quality](https://github.com/ericmt-98/micopay-protocol/milestone/4) | Empty states, a11y pass, loading skeletons — polish outside the core flow |
-| [Store Readiness](https://github.com/ericmt-98/micopay-protocol/milestone/6) | Account deletion, privacy, support path, reviewer mode, store compliance |
-| [Documentation](https://github.com/ericmt-98/micopay-protocol/milestone/8) | Per-folder READMEs, env docs, local setup |
+| [Core Retail Flow (P0)](https://github.com/ericmt-98/micopay-protocol/milestone/14) | **Wave priority.** One identity per device, real counterparty, real wallet balance, APK fetch fix, minimal onboarding + key backup (P0-1…P0-5) |
+| [UI Truth (P1)](https://github.com/ericmt-98/micopay-protocol/milestone/15) | Map, economics, agent name, and FX rate use real data instead of placeholders (P1-1…P1-4) |
+| [Backend Hardening](https://github.com/ericmt-98/micopay-protocol/milestone/16) | Fail-fast prod config, no in-memory fallback, no demo seed, reproducible migrations + `init.sql` fix, real health/readiness (B-2…B-7) |
+| [Product & Release](https://github.com/ericmt-98/micopay-protocol/milestone/17) | Label DeFi (CETES/Blend) as simulated; APK release config — push, signing, code-splitting (P2-2, P2-3) |
+| [Market & User Validation](https://github.com/ericmt-98/micopay-protocol/milestone/18) | Privacy-first research feeding the SDF case — demand, supply, onboarding, trust (V-1…V-5, `research`) |
 
 ### Labels we use
 
