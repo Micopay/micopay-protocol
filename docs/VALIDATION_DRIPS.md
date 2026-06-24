@@ -91,6 +91,39 @@ _(no responses yet)_
 ### V-5 · Trust in the cash-in/cash-out flow
 _(no responses yet)_
 
+### V-10 · Product validation: repeat use & provider discovery
+Small anonymized sample (N=4; self + 3 peers, convenience sample across Mexico and other Latin American regions):
+
+- Respondent A — Mexico City, Mexico
+  - How they would expect to find a nearby provider: a map or list sorted by distance and availability, with search by area.
+  - After a good first experience, would they use it again? Yes.
+  - What would make them come back / not: transparent fees, reliable availability, and clear trust signals on the provider; they would hesitate if the process felt slow, unclear, or inconsistent.
+  - What would make them recommend it: a fast, simple, trustworthy experience that saves time and reduces hassle compared with informal cash exchange.
+
+- Respondent B — Guadalajara region, Mexico
+  - How they would expect to find a nearby provider: a short list of nearby providers plus a referral from someone they trust.
+  - After a good first experience, would they use it again? Yes.
+  - What would make them come back / not: repeatability, predictable pricing, and visible proof that the provider is real and available; they would avoid it if there were hidden fees, weak verification, or poor support.
+  - What would make them recommend it: the feeling that it is safer and more convenient than ad hoc arrangements.
+
+- Respondent C — Bogotá area, Colombia
+  - How they would expect to find a nearby provider: map + search first, with referrals as a secondary trust signal.
+  - After a good first experience, would they use it again? Maybe.
+  - What would make them come back / not: strong profile quality, easy repeat flow, and clear help if something goes wrong; they would be discouraged by uncertainty around provider quality or lack of support.
+  - What would make them recommend it: if it felt dependable enough to share with friends and family.
+
+- Respondent D — Lima area, Peru
+  - How they would expect to find a nearby provider: search or a provider list with filters for distance, availability, and rating.
+  - After a good first experience, would they use it again? Yes.
+  - What would make them come back / not: a smooth repeat journey and good communication during the exchange; they would not return if the experience felt risky, confusing, or too manual.
+  - What would make them recommend it: a clear, low-friction experience that felt easy to explain to someone else.
+
+Aggregate signal:
+- Discovery is likely to happen through a map/list and search, with referrals acting as a trust multiplier.
+- Repeat use looks plausible if the first experience is fast, predictable, and visibly trustworthy.
+- The main risk to repeat use is uncertainty around provider quality, availability, and support.
+- Recommendation is strongest when the experience feels safe, simple, and easy to explain to a friend.
+
 ---
 
 ## How findings feed Wave 6 product work
