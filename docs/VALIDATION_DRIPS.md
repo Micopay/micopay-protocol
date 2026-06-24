@@ -108,7 +108,12 @@ _(no responses yet)_
 _(no responses yet)_
 
 ### V-8 · Fair commission / fee tolerance
-_(no responses yet)_
+
+- **Country / region:** Lagos area, Nigeria.
+- **Fair commission for cashing out:** 1–3% feels reasonable to me — enough to compensate a provider for their time and liquidity risk, but low enough that the convenience is still worth it over walking to a bank or agent.
+- **Too-high threshold:** Anything above 5% and I would rather deal with the friction of a traditional channel. At that point the fee starts to feel exploitative rather than a fair service charge.
+- **What would justify a higher fee:** Not having to use a bank account at all is the biggest one for me — that alone unlocks access. Speed (same-day settlement) and a clear safety guarantee (verified provider, in-app dispute path) would also make me willing to stretch a little above my usual ceiling.
+- **Would I pay more for a closer / faster provider:** Yes. If the alternative is travelling further or waiting longer, a small premium for proximity and speed is worth it.
 
 ### V-9 · Safety meeting in person
 _(no responses yet)_
