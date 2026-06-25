@@ -48,6 +48,8 @@ import {
   TradeHistoryItem,
 } from "./services/api";
 import { readJSON, writeJSON, removeKey } from "./services/secureStorage";
+import { mapApiError, type MappedApiError } from "./utils/apiError";
+import { IS_DEMO_MODE } from "./utils/demoMode";
 
 const USERS_STORAGE_KEY = "micopay_users";
 
@@ -67,13 +69,17 @@ interface AppCtx {
   releaseTxHash: string | null;
   activeAmount: number;
   tradeLoading: boolean;
+  tradeError: MappedApiError | null;
   flow: Flow;
   devicePublicKey: string | null;
   setActiveAmount: (n: number) => void;
   setFlow: (f: Flow) => void;
   setReleaseTxHash: (h: string | null) => void;
-  handleOfferSelected: (offerId: string) => Promise<void>;
-  handleDepositOfferSelected: (offerId: string) => Promise<void>;
+  handleOfferSelected: (offerId: string) => Promise<boolean>;
+  handleDepositOfferSelected: (offerId: string) => Promise<boolean>;
+  tradeError: MappedApiError | null;
+  clearTradeError: () => void;
+  retryTradeFlow: () => Promise<boolean>;
   handleAccountDeleted: () => void;
   resetTradeFlow: () => void;
   envName: string;
@@ -175,30 +181,44 @@ function DepositRoute() {
 
 function MapDepositRoute() {
   const navigate = useNavigate();
-  const { handleDepositOfferSelected, tradeLoading } = useAppCtx();
+  const { handleDepositOfferSelected, tradeLoading, tradeError, clearTradeError, retryTradeFlow } = useAppCtx();
   return (
       <DepositMap
           onBack={() => navigate('/deposit')}
           onSelectOffer={async (offerId) => {
-            await handleDepositOfferSelected(offerId);
-            navigate('/chat-deposit');
+            const ok = await handleDepositOfferSelected(offerId);
+            if (ok) navigate('/chat-deposit');
           }}
           loading={tradeLoading}
+          creationError={tradeError?.message ?? null}
+          creationErrorAction={tradeError?.action}
+          onDismissCreationError={clearTradeError}
+          onRetryCreationError={async () => {
+            const ok = await retryTradeFlow();
+            if (ok) navigate('/chat-deposit');
+          }}
       />
   );
 }
 
 function MapRoute() {
   const navigate = useNavigate();
-  const { activeAmount, handleOfferSelected, tradeLoading } = useAppCtx();
+  const { activeAmount, handleOfferSelected, tradeLoading, tradeError, clearTradeError, retryTradeFlow } = useAppCtx();
   return (
       <ExploreMap
           amount={activeAmount}
           loading={tradeLoading}
           onBack={() => navigate('/cashout')}
           onSelectOffer={async (offerId) => {
-            await handleOfferSelected(offerId);
-            navigate('/chat');
+            const ok = await handleOfferSelected(offerId);
+            if (ok) navigate('/chat');
+          }}
+          creationError={tradeError?.message ?? null}
+          creationErrorAction={tradeError?.action}
+          onDismissCreationError={clearTradeError}
+          onRetryCreationError={async () => {
+            const ok = await retryTradeFlow();
+            if (ok) navigate('/chat');
           }}
       />
   );
@@ -500,6 +520,7 @@ function App() {
   const [releaseTxHash, setReleaseTxHash] = useState<string | null>(null);
   const [activeAmount, setActiveAmount] = useState(500);
   const [tradeLoading, setTradeLoading] = useState(false);
+  const [tradeError, setTradeError] = useState<MappedApiError | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [devicePublicKey, setDevicePublicKey] = useState<string | null>(null);
 
@@ -633,9 +654,12 @@ function App() {
     setReleaseTxHash(null);
   };
 
-  const runTradeFlow = async () => {
-    if (!buyerUser || !sellerUser) return;
+  const clearTradeError = () => setTradeError(null);
+
+  const runTradeFlow = async (): Promise<boolean> => {
+    if (!buyerUser || !sellerUser) return false;
     setTradeLoading(true);
+    setTradeError(null);
     try {
       const trade = await createTrade(
         sellerUser.id,
@@ -646,20 +670,30 @@ function App() {
       await revealTrade(trade.id, sellerUser.token);
       setActiveTrade(trade);
       setLockTxHash(lock_tx_hash);
+      return true;
     } catch (e) {
-      console.error("Trade flow failed, continuing as demo", e);
+      const mapped = mapApiError(e);
+      setTradeError(mapped);
+      if (IS_DEMO_MODE) {
+        setActiveTrade({
+          id: `demo-${Date.now()}`,
+          status: 'revealed',
+          secret_hash: 'demo',
+          amount_mxn: activeAmount,
+          lock_tx_hash: 'mock_lock_hash',
+        });
+        setLockTxHash('mock_lock_hash');
+        return true;
+      }
+      return false;
     } finally {
       setTradeLoading(false);
     }
   };
 
-  const handleOfferSelected = async (_offerId: string) => {
-    await runTradeFlow();
-  };
+  const handleOfferSelected = async (_offerId: string) => runTradeFlow();
 
-  const handleDepositOfferSelected = async (_offerId: string) => {
-    await runTradeFlow();
-  };
+  const handleDepositOfferSelected = async (_offerId: string) => runTradeFlow();
 
   const ctx: AppCtx = {
     buyerUser,
@@ -669,6 +703,7 @@ function App() {
     releaseTxHash,
     activeAmount,
     tradeLoading,
+    tradeError,
     flow,
     devicePublicKey,
     setActiveAmount,
@@ -676,6 +711,8 @@ function App() {
     setReleaseTxHash,
     handleOfferSelected,
     handleDepositOfferSelected,
+    clearTradeError,
+    retryTradeFlow: runTradeFlow,
     handleAccountDeleted,
     resetTradeFlow,
     envName,
