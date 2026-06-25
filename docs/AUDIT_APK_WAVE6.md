@@ -272,8 +272,9 @@ lo demás.
 **Etapa 4 — Decisiones de producto / release:**
 10. ~~**P2-2**~~ cerrado #86. ~~**P2-3**~~ cerrado #89.
 
-**Etapa paralela — Research (V-1…V-10):** 🔄 9/10 completas
-- ~~V-1~~✅ ~~V-2~~✅ **V-3** 🔴 sin PR. ~~V-4~~✅ ~~V-5~~✅ ~~V-6~~✅ ~~V-7~~✅ ~~V-8~~✅ ~~V-9~~✅ ~~V-10~~✅
+**Etapa paralela — Research (V-1…V-15):** 🔄 9/15 completas
+- ~~V-1~~✅ ~~V-2~~✅ **V-3**🔴 ~~V-4~~✅ ~~V-5~~✅ ~~V-6~~✅ ~~V-7~~✅ ~~V-8~~✅ ~~V-9~~✅ ~~V-10~~✅
+- V-11🆕 V-12🆕 V-13🆕 V-14🆕 V-15🆕 (publicados 2026-06-25, issues #164–#168)
 
 ### 6.4 Política de asignación y merge (de `DRIPS_TEAM_GUIDE.md`)
 
@@ -308,15 +309,20 @@ transacción. Las respuestas usan solo país/región general y relatos anonimiza
 | ID | Tema | Issue | Qué valida (SDF) | Estado |
 |----|------|-------|------------------|--------|
 | V-1 | Cash-out | #131 | Demanda (digital → efectivo) | ✅ PR #155 · @larryjay007 |
-| V-2 | Cash-in / depósito | #132 | Demanda bidireccional | ✅ PR #159 · @Truphile (integrado manual) |
+| V-2 | Cash-in / depósito | #132 | Demanda bidireccional | ✅ PR #159 · @Truphile |
 | V-3 | Proveedor de liquidez | #133 | Oferta | 🔴 Sin PR — brecha crítica |
 | V-4 | Onboarding no-custodial | #134 | Stellar self-custody usable | ✅ PR #157 · @Shadow-MMN |
-| V-5 | Confianza en el flujo | #135 | Confianza / PMF | ✅ PR #158 · @Truphile (integrado manual) |
-| V-6 | Remesas | #138 | Demanda de remesas cross-border | ✅ PR #146 · @KaruG1999 |
+| V-5 | Confianza en el flujo | #135 | Confianza / PMF | ✅ PR #158 · @Truphile |
+| V-6 | Remesas (receptor) | #138 | Demanda cross-border lado receptor | ✅ PR #146 · @KaruG1999 |
 | V-7 | Alternativas y switching | #139 | Diferenciación | ✅ PR #145 · @barnabasolutayo-lgtm |
 | V-8 | Comisión justa | #140 | Economía unitaria (% sin montos) | ✅ PR #148 · @rosemary21 |
 | V-9 | Seguridad en persona | #141 | De-risk P2P | ✅ PR #147 · @deep-bhikadiya |
 | V-10 | Recurrencia y descubrimiento | #142 | Retención / PMF | ✅ PR #143 · @attyolu |
+| V-11 | Transacción fallida / disputa | #164 | Confianza — recuperación tras fallo | 🆕 Abierto |
+| V-12 | Vivir sin cuenta bancaria | #165 | Demanda — usuarios sin banco | 🆕 Abierto |
+| V-13 | Remesas (emisor) | #166 | Demanda + diferenciación lado emisor | 🆕 Abierto |
+| V-14 | Mental model peso digital / stablecoin | #167 | Capa stablecoin de Stellar | 🆕 Abierto |
+| V-15 | Umbral de primera vez | #168 | PMF — barrera de primera adopción | 🆕 Abierto |
 
 Las preguntas completas (en primera persona) viven en cada issue.
 
