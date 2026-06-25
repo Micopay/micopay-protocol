@@ -35,3 +35,34 @@ Core Flow Validation: End-to-End Liquidity Provider Experience
 5. Top Reason to Abandon the Flow
 
     "Network Issues" & Delay: If the agent says "network is fluctuated" or if the app takes too long to generate the QR code/receipt. In Nigeria, any delay at the point of payment triggers a fear of trapped funds, making it an immediate reason to cancel and walk away.
+
+
+
+
+###132 
+
+V-2 · Market validation: cash-in / deposit context 
+
+Market Validation: Cash-In / Cash-to-Wallet Experience
+
+    Country / General Region: Nigeria (West Africa)
+
+1. Intended Use Case
+
+    Why I'd use it: Honestly, it’s about getting paper money out of my hands and into my phone where it’s actually useful. If I collect cash from a friend or an offline gig, I can't use that paper to pay for AWS bills, local utility tokens, or fund a fintech savings pocket. I need a quick way to drop the cash and see it hit my digital wallet instantly so I can put it to work or send it to family.
+
+2. Current Method Used Today
+
+    What I do now: I walk up to a nearby neighborhood PoS agent. I hand them the physical cash, give them my account details, and wait for them to do a transfer to my wallet on their terminal.
+
+3. Transaction Frequency
+
+    How often: Probably a few times a month. It’s not an everyday thing since most of my transactions are digital-first, but whenever paper cash piles up, I need to clear it out.
+
+4. Trust Barrier with Agents/Shops
+
+    My biggest worry: Network issues, hands down. The fear of handing over cold hard cash and then hearing the agent say "Network is bad, the money hasn't dropped yet" or "It's pending on my side." If the system crashes mid-operation, you're stuck arguing at a kiosk, trying to prove you paid while waiting for a network reversal that could take 24 to 48 hours.
+
+5. Availability of Local Trusted Providers
+
+    Are there shops I trust nearby? Yes. There are established, branded kiosks and shops right on my street that have been there for years. Everyone in the area uses them, and because they are tied to a permanent physical location, they can’t afford to ruin their reputation over a bad transaction.
