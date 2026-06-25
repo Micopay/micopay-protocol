@@ -170,8 +170,8 @@ Las respuestas ya abarcan 6 países en 3 continentes (LATAM, Sur de Asia, Áfric
 | Issue | Asignado a | PR | Prioridad para el caso SDF |
 |-------|-----------|----|-----------------------------|
 | V-1 · Demanda de cash-out | [@larryjay007](https://github.com/larryjay007) | Sin PR aún | 🔴 Crítico — señal central de demanda |
-| V-2 · Contexto de cash-in / depósito | Sin asignar | Sin PR aún | 🔴 Crítico — demanda bidireccional |
-| V-3 · Perspectiva del proveedor de liquidez | Sin asignar | Sin PR aún | 🔴 Crítico — lado de la oferta del mercado |
+| V-2 · Contexto de cash-in / depósito | [@Truphile](https://github.com/Truphile) | Sin PR aún | 🔴 Crítico — demanda bidireccional |
+| V-3 · Perspectiva del proveedor de liquidez | [@3m1n3nc3](https://github.com/3m1n3nc3) | Sin PR aún | 🔴 Crítico — lado de la oferta del mercado |
 | V-4 · Onboarding a wallet no-custodial | [@Shadow-MMN](https://github.com/Shadow-MMN) | Sin PR aún | 🟡 Importante — argumento de usabilidad de Stellar |
 | V-5 · Confianza en el flujo | [@Truphile](https://github.com/Truphile) | Sin PR aún | 🟡 Importante — PMF y riesgo de abandono |
 

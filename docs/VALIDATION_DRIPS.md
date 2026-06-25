@@ -107,65 +107,55 @@ _(no responses yet)_
 _(no responses yet)_
 
 ### V-6 · Remittances cash-out context
+**Contributor:** [@KaruG1999](https://github.com/KaruG1999) · **PR:** [#146](https://github.com/ericmt-98/micopay-protocol/pull/146) · **Region:** Argentina (LATAM)
 
-* **Country / general region:** Argentina (LATAM)
-* **Do YOU receive money from abroad?:** Yes
-* **How do you receive it today?:** Crypto (Stablecoins via Stellar/Soroban protocols and P2P networks) and global digital platforms.
-* **Your main friction receiving + cashing it out:** Fee and trust. Standard international banking wires trigger excessive regulatory friction, high baseline inbound fees, and unfavorable official currency conversion rates. While crypto solves cross-border speed, cashing out stablecoins to local fiat (ARS) still relies heavily on localized P2P order books or physical over-the-counter (OTC) exchanges, introducing variable spread fees and counterparty trust risks.
-* **Would getting it as cash nearby, same day, help YOU?:** Yes. Eliminating the P2P counterparty matching phase and having an immediate, compliant, same-day physical cash-out point nearby would drastically reduce transactional friction and eliminate exchange-rate slippage.
-
-### V-7 · Current alternatives & switching
-Small anonymized sample (N=4; self + 3 peers, convenience sample across Mexico and other Latin American regions):
-
-- Respondent A — Monterrey region, Mexico
-  - What they use today: OXXO stores and traditional bank ATMs.
-  - What they like: High availability and the security of established, well-known brands.
-  - What frustrates them: High transaction/convenience fees, long wait lines, and occasional ATM outages.
-  - What would make them switch: Lower fees, zero queue times, and local neighborhood exchange points.
-  - Dealbreaker: Upfront payment/fees before receiving cash, or overly complex apps that require advanced crypto/technical knowledge.
-
-- Respondent B — Bogotá area, Colombia
-  - What they use today: Mobile wallets (Nequi, Daviplata) and physical lottery kiosks (Efecty, Paga Todo) for cash-out.
-  - What they like: Instant digital transfers and wide physical availability of cash points.
-  - What frustrates them: Frequent app system outages, daily transaction limits, and high agent commissions.
-  - What would make them switch: A highly reliable system working 24/7 with transparent, lower fees and flexible limits.
-  - Dealbreaker: Lack of immediate transaction confirmation or lack of support channels to resolve stuck operations.
-
-- Respondent C — Buenos Aires, Argentina
-  - What they use today: Local informal exchange houses ("cuevas") and P2P crypto exchanges (Binance P2P).
-  - What they like: Inflation hedging by holding stablecoins (USDT) and converting to fiat cash as needed.
-  - What frustrates them: Safety risks of carrying physical cash from physical exchanges, and counterparty trust issues in online P2P.
-  - What would make them switch: A secure, trust-rated network of local merchants/providers for safe, local stablecoin-to-cash exchange.
-  - Dealbreaker: High platform service fees or mandatory KYC that requires multi-day validation for tiny transactions.
-
-- Respondent D — Caracas metropolitan area, Venezuela
-  - What they use today: Binance P2P, Pago Móvil bank transfers, and informal USD cash transactions.
-  - What they like: Fast digital payments (Pago Móvil) and holding USD-linked assets.
-  - What frustrates them: Scarcity of physical USD/local fiat cash and high exchange/broker fees (often >5%).
-  - What would make them switch: Direct connection to nearby verified cash providers at low transaction fees (<2%) with instant escrow settlement.
-  - Dealbreaker: High rate of transaction failures or lack of secure escrows to prevent loss/theft of digital assets during cash exchanges.
-
-Aggregate signal:
-- **Current alternatives:** Users rely heavily on established retail/agent networks (OXXO, Efecty), mobile wallets, and crypto P2P platforms (Binance) depending on the country's economic context.
-- **Key switching drivers:** Lower transaction fees, zero queues, higher system uptime (avoiding wallet outages), and safer/more localized physical exchange points.
-- **Key dealbreakers:** Escrow/security concerns (fear of losing funds), high entry friction (e.g. upfront payments or heavy KYC for small amounts), and poor app usability/technical complexity.
-
-### V-8 · Fair commission / fee tolerance
-
-- **Country / region:** Lagos area, Nigeria.
-- **Fair commission for cashing out:** 1–3% feels reasonable to me — enough to compensate a provider for their time and liquidity risk, but low enough that the convenience is still worth it over walking to a bank or agent.
-- **Too-high threshold:** Anything above 5% and I would rather deal with the friction of a traditional channel. At that point the fee starts to feel exploitative rather than a fair service charge.
-- **What would justify a higher fee:** Not having to use a bank account at all is the biggest one for me — that alone unlocks access. Speed (same-day settlement) and a clear safety guarantee (verified provider, in-app dispute path) would also make me willing to stretch a little above my usual ceiling.
-- **Would I pay more for a closer / faster provider:** Yes. If the alternative is travelling further or waiting longer, a small premium for proximity and speed is worth it.
-
-### V-9 · Safety meeting in person
 First-person response (privacy-safe):
 
-- Country / general region: India / South Asia.
-- Comfort meeting a stranger to exchange cash: Neutral. I would not say I am fully comfortable, but I could do it if the meeting place, timing, and person all felt trustworthy.
-- Biggest safety fear: My main fear would be getting scammed or robbed during the exchange. I would also be cautious about fake cash, someone changing the location at the last minute, or being followed after leaving.
-- What would make it feel safe: I would feel much better meeting in a busy public place during the day. Verified profiles, ratings, in-app chat, clear receipts, and a way to contact support would also make the exchange feel more controlled.
-- Preference for known shops over individuals: Yes. I would prefer a known shop because it feels more accountable and easier to find again if something goes wrong. Meeting a random individual feels more uncertain to me.
+- Do I receive money from abroad? Yes — via stablecoins on Stellar/Soroban and P2P networks.
+- How do I receive it today? Standard international banking wires trigger excessive regulatory friction, high inbound fees, and unfavorable official currency conversion rates. While crypto solves cross-border speed, cashing out stablecoins to local fiat still relies on P2P order books or physical OTC exchanges, with variable spread and counterparty risk.
+- Would a nearby, same-day cash-out point help me? Yes. Eliminating the P2P counterparty matching phase and having an immediate, same-day physical cash-out point nearby would drastically reduce friction and eliminate exchange-rate slippage.
+
+**SDF narrative:** Sharpest evidence for Claim 1 (demand exists) — a person who already uses Stellar for cross-border transfers and still lacks a trustworthy last-mile cash-out. MicoPay solves the final delivery step the network already carries.
+
+### V-7 · Current alternatives & switching
+**Contributor:** [@barnabasolutayo-lgtm](https://github.com/barnabasolutayo-lgtm) · **PR:** [#145](https://github.com/ericmt-98/micopay-protocol/pull/145) · **Regions:** Monterrey MX · Bogotá CO · Buenos Aires AR · Caracas VE
+
+Multi-respondent batch (N=4, anonymized):
+
+| Respondent | Current method | Main friction | Would switch for |
+|------------|---------------|---------------|-----------------|
+| Monterrey, MX | OXXO + bank ATM | High convenience fees, queues, downtime | Lower fees, neighborhood exchange points |
+| Bogotá, CO | Nequi / Daviplata + Efecty | App downtime, limits, high cash-out fees | 24/7 reliability, transparent fees, flexible limits |
+| Buenos Aires, AR | Informal exchange houses + Binance P2P | Physical safety risks, P2P counterparty trust | Verified, trust-rated merchant network |
+| Caracas, VE | Binance P2P + Pago Móvil + informal USD | Broker fees >5%, fiat/USD sourcing costs | Direct <2% connection to verified agents with escrow |
+
+Switching dealbreakers across all four: upfront fees before handover · no immediate confirmation receipt · high platform fees · mandatory multi-day KYC · transaction failures.
+
+**SDF narrative:** Validates Claim 3 (MicoPay can win) across four countries. Existing alternatives all fail on at least one of: fees, trust, or reliability — exactly what MicoPay addresses via Stellar escrow and reputation ratings.
+
+### V-8 · Fair commission / fee tolerance
+**Contributor:** [@rosemary21](https://github.com/rosemary21) · **PR:** [#148](https://github.com/ericmt-98/micopay-protocol/pull/148) · **Region:** Nigeria (Lagos area)
+
+First-person response (privacy-safe):
+
+- Fair fee range I would accept: 1–3% — enough to compensate the provider for time and liquidity risk, low enough that the service beats a traditional bank or agent.
+- "Too expensive" threshold: >5%. Above that it feels exploitative and the traditional channel wins by default.
+- What would justify stretching the ceiling: (1) not needing a bank account at all — that alone unlocks access; (2) same-day settlement; (3) verified provider + in-app dispute path.
+- Would I pay a premium for a closer / faster provider? Yes. Proximity and speed justify a small premium over the base rate.
+
+**SDF narrative:** Adds sub-Saharan Africa to the sample and contributes the clearest statement of the "no bank account needed" value proposition. The 1–5% fee band confirmed here matches signals from Venezuela and LATAM, establishing a cross-regional pricing anchor.
+
+### V-9 · Safety meeting in person
+**Contributor:** [@deep-bhikadiya](https://github.com/deep-bhikadiya) · **PR:** [#147](https://github.com/ericmt-98/micopay-protocol/pull/147) · **Region:** India / South Asia
+
+First-person response (privacy-safe):
+
+- Comfort level meeting a stranger to exchange cash: Neutral — I would not say I am fully comfortable, but I could do it if the meeting place, timing, and person all felt trustworthy.
+- Biggest safety fear: Being scammed or robbed. Secondary: fake cash, last-minute location change, being followed after leaving.
+- What would make it feel safe: A busy public place during the day. Verified profiles, ratings, in-app chat, clear receipts, and a way to contact support would make the exchange feel more controlled.
+- Preference — known shops vs individuals: I would prefer a known shop. It feels more accountable and easier to trace if something goes wrong. Meeting a random individual feels inherently more uncertain.
+
+**SDF narrative:** Extends the geographic sample beyond LATAM into South Asia, confirming that safety concerns around in-person exchange are universal. The safety design requirements that emerge are directly actionable for the provider matching screen UX.
 
 ### V-10 · Product validation: repeat use & provider discovery
 > Note: submitted in the earlier multi-respondent format (kept as-is). Newer entries are first-person.

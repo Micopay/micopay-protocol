@@ -170,8 +170,8 @@ Responses now span 6 countries across 3 continents (LATAM, South Asia, Africa). 
 | Issue | Assignee | PR | Priority for SDF case |
 |-------|----------|----|-----------------------|
 | V-1 · Cash-out demand | [@larryjay007](https://github.com/larryjay007) | None yet | 🔴 Critical — core demand signal |
-| V-2 · Cash-in / deposit context | Unassigned | None yet | 🔴 Critical — bidirectional demand |
-| V-3 · Liquidity provider perspective | Unassigned | None yet | 🔴 Critical — supply side of the market |
+| V-2 · Cash-in / deposit context | [@Truphile](https://github.com/Truphile) | None yet | 🔴 Critical — bidirectional demand |
+| V-3 · Liquidity provider perspective | [@3m1n3nc3](https://github.com/3m1n3nc3) | None yet | 🔴 Critical — supply side of the market |
 | V-4 · Non-custodial wallet onboarding | [@Shadow-MMN](https://github.com/Shadow-MMN) | None yet | 🟡 Important — Stellar usability claim |
 | V-5 · Trust in the flow | [@Truphile](https://github.com/Truphile) | None yet | 🟡 Important — PMF / drop-off risk |
 
