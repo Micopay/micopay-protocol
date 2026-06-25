@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import ErrorBanner from '../components/ErrorBanner';
 import { getTradeHistory, TradeHistoryItem } from '../services/api';
+import { mapApiError, type MappedApiError } from '../utils/apiError';
 
 const STATUS_LABEL: Record<string, { label: string; color: string; bg: string }> = {
   completed: { label: 'Completado', color: 'text-[#1D9E75]', bg: 'bg-[#1D9E75]/10' },
@@ -30,18 +32,27 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
   const [status, setStatus] = useState('all');
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<MappedApiError | null>(null);
 
-  useEffect(() => {
+  const loadHistory = useCallback(() => {
     if (!token) return;
     setLoading(true);
+    setLoadError(null);
     getTradeHistory(token)
       .then((items) => {
         const filtered = status === 'all' ? items : items.filter((t) => t.status === status);
         setTrades(filtered);
       })
-      .catch(() => {})
+      .catch((e) => {
+        setLoadError(mapApiError(e));
+        setTrades([]);
+      })
       .finally(() => setLoading(false));
   }, [token, status, page]);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
 
   const handleFilterChange = (newStatus: string) => {
     setStatus(newStatus);
@@ -75,13 +86,24 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
           ))}
         </section>
 
+        {loadError ? (
+          <ErrorBanner
+            message={loadError.message}
+            action={loadError.action}
+            onRetry={loadHistory}
+            onDismiss={() => setLoadError(null)}
+            supportState="HISTORY"
+            className="mb-4"
+          />
+        ) : null}
+
         {/* Trade List */}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 opacity-50">
             <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
             <p className="text-sm font-medium">Cargando historial...</p>
           </div>
-        ) : trades.length === 0 ? (
+        ) : loadError ? null : trades.length === 0 ? (
           <div className="bg-white rounded-[24px] border border-outline-variant/10 shadow-sm p-12 text-center mt-10">
             <div className="w-16 h-16 bg-surface-container-low rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="material-symbols-outlined text-outline text-3xl">history_toggle_off</span>
