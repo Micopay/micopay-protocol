@@ -26,9 +26,10 @@
 | [#148](https://github.com/ericmt-98/micopay-protocol/pull/148) | [@rosemary21](https://github.com/rosemary21) | #140 | V-8 · Fair commission / fee tolerance | Nigeria (Lagos area) | ✅ Merged |
 | [#169](https://github.com/ericmt-98/micopay-protocol/pull/169) | [@DevSolex](https://github.com/DevSolex) | #133 | V-3 · Liquidity provider perspective | Nigeria (West Africa) | ✅ Merged |
 | [#171](https://github.com/ericmt-98/micopay-protocol/pull/171) | [@Jo-anny](https://github.com/Jo-anny) | #166 | V-13 · Remittance sender context | Europe → Latin America | ✅ Merged |
+| [#173](https://github.com/ericmt-98/micopay-protocol/pull/173) | [@Oluwasuyi-Timilehin](https://github.com/Oluwasuyi-Timilehin) | #165 | V-12 · Living unbanked — daily cash management | Mexico (CDMX) | ✅ Merged |
 
-**Total responses: N=14** (V-1, V-2, V-3, V-4, V-5, V-13 first-person + 1 multi-respondent batch in V-10 + 3 first-person V-6/V-8/V-9 + 3 implicit in V-7 batch)
-**Regions represented:** Nigeria (×4), Mexico, Colombia, Argentina, Venezuela, India, Europe
+**Total responses: N=15** (V-1, V-2, V-3, V-4, V-5, V-12, V-13 first-person + 1 multi-respondent batch in V-10 + 3 first-person V-6/V-8/V-9 + 3 implicit in V-7 batch)
+**Regions represented:** Nigeria (×4), Mexico (×2), Colombia, Argentina, Venezuela, India, Europe
 
 ---
 
@@ -226,6 +227,25 @@ Each contribution advances one or more of the five claims in our funding narrati
 
 ---
 
+### V-12 · Living unbanked — everyday context
+**Contributor:** [@Oluwasuyi-Timilehin](https://github.com/Oluwasuyi-Timilehin) · **PR:** [#173](https://github.com/ericmt-98/micopay-protocol/pull/173) · **Merged:** 2026-06-26
+
+**Format:** First-person, single respondent.
+
+**Region:** Mexico (CDMX metropolitan area)
+
+**Key findings:**
+
+- **Cash storage:** Physical cash at home for daily expenses + Mercado Pago / Spin by OXXO for occasional digital payments — no formal bank account.
+- **Income method:** Cash in hand for gig work and physical sales; occasional SPEI transfers to a relative's account when clients can't pay cash.
+- **Top cash friction:** Physical safety — carrying larger amounts on public transit or in the neighborhood triggers real anxiety about theft or loss/damage of notes.
+- **Workaround for digital payments:** Walk to the nearest OXXO, show a payment code, pay in cash + convenience fee. Or buy prepaid gift cards at the register.
+- **Local agent utility:** Strong yes. A recognized local business (corner shop, pharmacy, bakery) with user ratings and visible escrow lock would be trusted enough to use immediately.
+
+**SDF narrative contribution:** The strongest first-person validation of the core unbanked use case — and it comes from the exact target market (Mexico City). Confirms that the "no bank account" friction is felt daily and that the escrow visibility + local merchant format is the product design that closes the trust gap.
+
+---
+
 ### V-3 · Liquidity provider perspective
 **Contributor:** [@DevSolex](https://github.com/DevSolex) · **PR:** [#169](https://github.com/ericmt-98/micopay-protocol/pull/169) · **Merged:** 2026-06-26
 
@@ -300,9 +320,10 @@ Responses now span 6+ countries across 3 continents (LATAM, South Asia, Africa).
 | V-3 · Liquidity provider perspective | [@DevSolex](https://github.com/DevSolex) | [#169](https://github.com/ericmt-98/micopay-protocol/pull/169) ✅ | Merged — Nigeria (West Africa) |
 | V-4 · Non-custodial wallet onboarding | [@Shadow-MMN](https://github.com/Shadow-MMN) | [#157](https://github.com/ericmt-98/micopay-protocol/pull/157) ✅ | Merged |
 | V-5 · Trust in the flow | [@Truphile](https://github.com/Truphile) | [#158](https://github.com/ericmt-98/micopay-protocol/pull/158) ✅ | Merged — Nigeria (West Africa) |
+| V-12 · Living unbanked | [@Oluwasuyi-Timilehin](https://github.com/Oluwasuyi-Timilehin) | [#173](https://github.com/ericmt-98/micopay-protocol/pull/173) ✅ | Merged — Mexico (CDMX) |
 | V-13 · Remittance sender context | [@Jo-anny](https://github.com/Jo-anny) | [#171](https://github.com/ericmt-98/micopay-protocol/pull/171) ✅ | Merged — Europe → LATAM |
 
-> All five SDF claims now have coverage. Open issues: V-11, V-12, V-14, V-15.
+> All five SDF claims now have coverage. Open issues: V-11, V-14, V-15.
 
 ---
 
@@ -311,7 +332,7 @@ Responses now span 6+ countries across 3 continents (LATAM, South Asia, Africa).
 - **First-person** entries reflect each contributor's own lived experience — not a survey of others.
 - **Convenience sample**, self-selected via Stellar Drips Wave 6. Directional and qualitative, not statistically representative.
 - **Privacy-first:** no names, no contact information, no transaction amounts, no wallet addresses.
-- Current sample size: **N=14 individual perspectives** across **7+ countries / 3 regions**.
+- Current sample size: **N=15 individual perspectives** across **7+ countries / 3 regions**.
 - Report `N` plainly. Let the cross-regional consistency of the patterns speak for itself.
 
 ---

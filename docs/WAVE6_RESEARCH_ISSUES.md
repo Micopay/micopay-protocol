@@ -26,7 +26,7 @@
 > money** — not even ranges. A commission **percentage** (V-3, V-8) is fine. Share only a
 > **general country/region** and your **own anonymized** experience. Responses in English or Spanish.
 
-## The 10 issues
+## The issues
 
 | ID | Issue | Topic | What it validates (SDF) | Status |
 |----|-------|-------|-------------------------|--------|
@@ -41,7 +41,7 @@
 | V-9 | [#141](https://github.com/ericmt-98/micopay-protocol/issues/141) | Safety meeting in person | De-risking P2P adoption | ✅ PR #147 · @deep-bhikadiya |
 | V-10 | [#142](https://github.com/ericmt-98/micopay-protocol/issues/142) | Repeat use & discovery | Retention / sustained usage | ✅ PR #143 · @attyolu |
 | V-11 | [#164](https://github.com/ericmt-98/micopay-protocol/issues/164) | Failed transaction / dispute | Trust recovery after failure | 🆕 Open |
-| V-12 | [#165](https://github.com/ericmt-98/micopay-protocol/issues/165) | Living unbanked | Core demand — bank-free users | 🆕 Open |
+| V-12 | [#165](https://github.com/ericmt-98/micopay-protocol/issues/165) | Living unbanked | Core demand — bank-free users | ✅ PR #173 · @Oluwasuyi-Timilehin |
 | V-13 | [#166](https://github.com/ericmt-98/micopay-protocol/issues/166) | Remittance sender | Cross-border demand (sender side) | ✅ PR #171 · @Jo-anny |
 | V-14 | [#167](https://github.com/ericmt-98/micopay-protocol/issues/167) | Stablecoin / digital peso mental model | Stellar stablecoin layer trust | 🆕 Open |
 | V-15 | [#168](https://github.com/ericmt-98/micopay-protocol/issues/168) | First-time trust threshold | PMF — first adoption barrier | 🆕 Open |

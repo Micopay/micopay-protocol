@@ -26,9 +26,10 @@
 | [#148](https://github.com/ericmt-98/micopay-protocol/pull/148) | [@rosemary21](https://github.com/rosemary21) | #140 | V-8 · Tolerancia a comisiones y tarifas | Nigeria (área de Lagos) | ✅ Mergeado |
 | [#169](https://github.com/ericmt-98/micopay-protocol/pull/169) | [@DevSolex](https://github.com/DevSolex) | #133 | V-3 · Perspectiva del proveedor de liquidez | Nigeria (África Occidental) | ✅ Mergeado |
 | [#171](https://github.com/ericmt-98/micopay-protocol/pull/171) | [@Jo-anny](https://github.com/Jo-anny) | #166 | V-13 · Contexto del remitente — envío al exterior | Europa → América Latina | ✅ Mergeado |
+| [#173](https://github.com/ericmt-98/micopay-protocol/pull/173) | [@Oluwasuyi-Timilehin](https://github.com/Oluwasuyi-Timilehin) | #165 | V-12 · Vida sin cuenta bancaria — gestión diaria de efectivo | México (CDMX) | ✅ Mergeado |
 
-**Total de respuestas: N=14** (V-1, V-2, V-3, V-4, V-5, V-13 en primera persona + 1 lote multi-respondente en V-10 + 3 primera persona V-6/V-8/V-9 + 3 implícitas en el lote de V-7)
-**Regiones representadas:** Nigeria (×4), México, Colombia, Argentina, Venezuela, India, Europa
+**Total de respuestas: N=15** (V-1, V-2, V-3, V-4, V-5, V-12, V-13 en primera persona + 1 lote multi-respondente en V-10 + 3 primera persona V-6/V-8/V-9 + 3 implícitas en el lote de V-7)
+**Regiones representadas:** Nigeria (×4), México (×2), Colombia, Argentina, Venezuela, India, Europa
 
 ---
 
@@ -226,6 +227,25 @@ Cada contribución avanza uno o más de los cinco argumentos de nuestra narrativ
 
 ---
 
+### V-12 · Vida sin cuenta bancaria — gestión diaria de efectivo
+**Contribuidor:** [@Oluwasuyi-Timilehin](https://github.com/Oluwasuyi-Timilehin) · **PR:** [#173](https://github.com/ericmt-98/micopay-protocol/pull/173) · **Mergeado:** 2026-06-26
+
+**Formato:** Primera persona, respondente único.
+
+**Región:** México (área metropolitana de CDMX)
+
+**Hallazgos principales:**
+
+- **Almacenamiento de dinero:** Efectivo físico en casa para gastos diarios + Mercado Pago / Spin by OXXO para pagos digitales ocasionales — sin cuenta bancaria formal.
+- **Método de cobro:** Efectivo en mano por trabajos informales y ventas físicas; transferencias SPEI ocasionales a la cuenta de un familiar cuando los clientes no pueden pagar en efectivo.
+- **Mayor fricción con el efectivo:** Seguridad física — cargar montos más grandes en transporte público o caminando por el barrio genera ansiedad real por el riesgo de robo o pérdida/daño de los billetes.
+- **Solución actual para pagos digitales:** Caminar al OXXO más cercano, mostrar el código de pago, pagar en efectivo + comisión de conveniencia. O comprar tarjetas prepagadas en la tienda.
+- **Utilidad de un agente local:** Fuerte sí. Un negocio local conocido (tienda de barrio, farmacia, panadería) con calificaciones de usuarios y escrow visible sería suficiente confianza para usarlo de inmediato.
+
+**Aporte a la narrativa SDF:** La validación en primera persona más fuerte del caso de uso principal para personas no bancarizadas — y viene del mercado objetivo exacto (Ciudad de México). Confirma que la fricción de "sin cuenta bancaria" se siente a diario y que el diseño de escrow visible + formato de comercio local es lo que cierra la brecha de confianza.
+
+---
+
 ### V-3 · Perspectiva del proveedor de liquidez
 **Contribuidor:** [@DevSolex](https://github.com/DevSolex) · **PR:** [#169](https://github.com/ericmt-98/micopay-protocol/pull/169) · **Mergeado:** 2026-06-26
 
@@ -300,9 +320,10 @@ Las respuestas ya abarcan 6+ países en 3 continentes (LATAM, Sur de Asia, Áfri
 | V-3 · Perspectiva del proveedor de liquidez | [@DevSolex](https://github.com/DevSolex) | [#169](https://github.com/ericmt-98/micopay-protocol/pull/169) ✅ | Mergeado — Nigeria (África Occidental) |
 | V-4 · Onboarding a wallet no-custodial | [@Shadow-MMN](https://github.com/Shadow-MMN) | [#157](https://github.com/ericmt-98/micopay-protocol/pull/157) ✅ | Mergeado |
 | V-5 · Confianza en el flujo | [@Truphile](https://github.com/Truphile) | [#158](https://github.com/ericmt-98/micopay-protocol/pull/158) ✅ | Mergeado — Nigeria (África Occidental) |
+| V-12 · Vida sin cuenta bancaria | [@Oluwasuyi-Timilehin](https://github.com/Oluwasuyi-Timilehin) | [#173](https://github.com/ericmt-98/micopay-protocol/pull/173) ✅ | Mergeado — México (CDMX) |
 | V-13 · Contexto del remitente | [@Jo-anny](https://github.com/Jo-anny) | [#171](https://github.com/ericmt-98/micopay-protocol/pull/171) ✅ | Mergeado — Europa → LATAM |
 
-> Los 5 argumentos SDF tienen cobertura. Issues abiertos: V-11, V-12, V-14, V-15.
+> Los 5 argumentos SDF tienen cobertura. Issues abiertos: V-11, V-14, V-15.
 
 ---
 
@@ -311,7 +332,7 @@ Las respuestas ya abarcan 6+ países en 3 continentes (LATAM, Sur de Asia, Áfri
 - **Primera persona:** cada entrada refleja la experiencia propia del contribuidor — no una encuesta a terceros.
 - **Muestra por conveniencia**, auto-seleccionada a través del programa Stellar Drips Wave 6. Señal direccional y cualitativa, no representativa estadísticamente.
 - **Privacy-first:** sin nombres, sin datos de contacto, sin montos de dinero, sin direcciones de wallet.
-- Tamaño actual de la muestra: **N=14 perspectivas individuales** en **7+ países / 3 regiones**.
+- Tamaño actual de la muestra: **N=15 perspectivas individuales** en **7+ países / 3 regiones**.
 - Reportar `N` con claridad. Dejar que la consistencia de los patrones entre regiones hable por sí sola.
 
 ---

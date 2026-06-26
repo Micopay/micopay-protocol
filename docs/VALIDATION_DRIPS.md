@@ -27,13 +27,13 @@ reviews each PR for privacy before merging.
 A funding/grant case for MicoPay on Stellar rests on a few claims. The research issues each
 supply evidence for one of them:
 
-| Claim                    | Backed by                                         | One-line thesis                                            |
-| ------------------------ | ------------------------------------------------- | ---------------------------------------------------------- |
-| **1. Demand exists**     | V-1 (cash-out), V-2 (cash-in), V-6 (remittances)  | A real, recurring pain converting digital ↔ cash           |
-| **2. Supply exists**     | V-3 (liquidity providers)                         | Real people/businesses would provide cash for a commission |
-| **3. It can win**        | V-7 (alternatives), V-8 (fair fee)                | Better than current options, at a fee users accept         |
-| **4. Stellar is usable** | V-4 (non-custodial onboarding)                    | Mainstream users can handle a self-custodial wallet        |
-| **5. Trust / PMF**       | V-5 (flow trust), V-9 (safety), V-10 (repeat use) | Users would adopt, feel safe, and come back                |
+| Claim                    | Backed by                                                        | One-line thesis                                            |
+| ------------------------ | ---------------------------------------------------------------- | ---------------------------------------------------------- |
+| **1. Demand exists**     | V-1 (cash-out), V-2 (cash-in), V-6 (remittances), V-12 (unbanked) | A real, recurring pain converting digital ↔ cash        |
+| **2. Supply exists**     | V-3 (liquidity providers)                                        | Real people/businesses would provide cash for a commission |
+| **3. It can win**        | V-7 (alternatives), V-8 (fair fee)                               | Better than current options, at a fee users accept         |
+| **4. Stellar is usable** | V-4 (non-custodial onboarding)                                   | Mainstream users can handle a self-custodial wallet        |
+| **5. Trust / PMF**       | V-5 (flow trust), V-9 (safety), V-10 (repeat use)               | Users would adopt, feel safe, and come back                |
 
 > Put together: **demand + supply + a winning, affordable, usable, trusted experience = a
 > credible case that a Stellar P2P cash network serves the financially underserved.**
@@ -58,19 +58,20 @@ _willingness and trust_, which public data can't give. Approximate figures to ve
 
 Fill these in as answers arrive. Keep counts and percentages only.
 
-| Metric                                                              | From | Target signal           |
-| ------------------------------------------------------------------- | ---- | ----------------------- |
-| % reporting cash-out as a recurring need · top friction             | V-1  | demand                  |
-| % with a real cash-in use case · main trust barrier                 | V-2  | bidirectional demand    |
-| % willing to provide liquidity · acceptable commission (%)          | V-3  | supply / unit economics |
-| % who find non-custodial backup clear (vs confusing)                | V-4  | onboarding viability    |
-| Top trust blocker · top reason to abandon                           | V-5  | PMF / drop-off risk     |
-| % who receive remittances · would same-day local cash help          | V-6  | remittance demand       |
-| What they use today · top switch trigger · dealbreaker              | V-7  | differentiation         |
-| Fair commission % (distribution) · "too high" threshold             | V-8  | unit economics          |
-| Comfort meeting a stranger · top safety fear · shops vs individuals | V-9  | safety / de-risking     |
-| Discovery method · repeat-use (yes/maybe/no) · recommend driver     | V-10 | retention / PMF         |
-| Regions represented (count by region) · total respondents (N)       | all  | spread / sample size    |
+| Metric                                                                 | From | Target signal           |
+| ---------------------------------------------------------------------- | ---- | ----------------------- |
+| % reporting cash-out as a recurring need · top friction                | V-1  | demand                  |
+| % with a real cash-in use case · main trust barrier                    | V-2  | bidirectional demand    |
+| % willing to provide liquidity · acceptable commission (%)             | V-3  | supply / unit economics |
+| % who find non-custodial backup clear (vs confusing)                   | V-4  | onboarding viability    |
+| Top trust blocker · top reason to abandon                              | V-5  | PMF / drop-off risk     |
+| % who receive remittances · would same-day local cash help             | V-6  | remittance demand       |
+| What they use today · top switch trigger · dealbreaker                 | V-7  | differentiation         |
+| Fair commission % (distribution) · "too high" threshold                | V-8  | unit economics          |
+| Comfort meeting a stranger · top safety fear · shops vs individuals    | V-9  | safety / de-risking     |
+| Discovery method · repeat-use (yes/maybe/no) · recommend driver        | V-10 | retention / PMF         |
+| Cash storage & income habits · top cash friction · local agent utility | V-12 | bank-free demand        |
+| Regions represented (count by region) · total respondents (N)          | all  | spread / sample size    |
 
 ---
 
@@ -237,7 +238,14 @@ Aggregate signal:
 _(no responses yet)_
 
 ### V-12 · Living unbanked — everyday context
-_(no responses yet)_
+**Contributor:** [@Oluwasuyi-Timilehin](https://github.com/Oluwasuyi-Timilehin) · **PR:** [#173](https://github.com/ericmt-98/micopay-protocol/pull/173)
+
+- **Country / general region:** Mexico (CDMX metropolitan area)
+- **How do you store money today?:** Mostly cash stored at home in a safe place for daily expenses, and a small amount in a mobile wallet (like Mercado Pago or Spin by OXXO) for occasional digital payments.
+- **How do you receive income or payments?:** Cash in hand for local gig work and physical sales, and occasionally via bank transfer (SPEI) to a relative's account when a client does not pay in cash.
+- **What is your biggest friction when handling larger amounts of cash?:** Physical safety is the absolute biggest worry. Carrying larger amounts of cash on public transport or walking around the neighborhood is stressful due to the risk of theft. There's also the constant risk of losing it or having notes damaged.
+- **Have you ever needed to pay for something digital (online service, bill, transfer) without a bank account? What did you do?:** Yes, many times for online services or bills. I have to walk to the nearest OXXO store, show a payment code, and pay in cash (which incurs an extra convenience fee), or buy physical prepaid gift cards at the register.
+- **If there was a local, trusted person in your neighborhood who could convert your cash to a digital wallet instantly — would that be useful? What would make you trust them enough to use them?:** Yes, it would be extremely useful. It would save me trips to convenience stores or bank branches just to deposit cash. To trust them, I would want them to be a recognized local business (like a corner shop, pharmacy, or local bakery) rather than a random individual. I would also need to see ratings from other users in the app, and a secure escrow mechanism that guarantees the digital funds are locked before I hand over physical cash.
 
 ### V-13 · Remittance sender context — sending money abroad
 **Contributor:** [@Jo-anny](https://github.com/Jo-anny) · **PR:** [#171](https://github.com/ericmt-98/micopay-protocol/pull/171)
