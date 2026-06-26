@@ -24,7 +24,7 @@ export async function tradeRoutes(app: FastifyInstance) {
     },
   }, async (request, reply) => {
     const { seller_id, amount_mxn } = request.body as { seller_id: string; amount_mxn: number };
-    const buyerId = request.user.id;
+    const buyerId = (request.user as any).id;
 
     const trade = await tradeService.createTrade({
       sellerId: seller_id,
@@ -44,7 +44,7 @@ export async function tradeRoutes(app: FastifyInstance) {
    * List active trades for the authenticated user.
    */
   app.get('/trades/active', async (request) => {
-    const trades = await tradeService.getActiveTrades(request.user.id);
+    const trades = await tradeService.getActiveTrades((request.user as any).id);
     const safeTrades = trades.map(({ secret_enc, secret_nonce, ...t }: any) => t);
     return { trades: safeTrades };
   });
@@ -54,7 +54,7 @@ export async function tradeRoutes(app: FastifyInstance) {
    * All trades (active + completed) for the authenticated user, newest first.
    */
   app.get('/trades/history', async (request) => {
-    const trades = await tradeService.getTradeHistory(request.user.id);
+    const trades = await tradeService.getTradeHistory((request.user as any).id);
     return { trades };
   });
 
@@ -64,7 +64,7 @@ export async function tradeRoutes(app: FastifyInstance) {
    */
   app.get('/trades/:id', async (request) => {
     const { id } = request.params as { id: string };
-    const trade = await tradeService.getTradeById(id, request.user.id);
+    const trade = await tradeService.getTradeById(id, (request.user as any).id);
 
     const { secret_enc, secret_nonce, ...safeTrade } = trade;
     return { trade: safeTrade };
@@ -76,7 +76,7 @@ export async function tradeRoutes(app: FastifyInstance) {
    */
   app.post('/trades/:id/lock', async (request) => {
     const { id } = request.params as { id: string };
-    return tradeService.lockTrade(id, request.user.id);
+    return tradeService.lockTrade(id, (request.user as any).id);
   });
 
   /**
@@ -85,7 +85,7 @@ export async function tradeRoutes(app: FastifyInstance) {
    */
   app.post('/trades/:id/reveal', async (request) => {
     const { id } = request.params as { id: string };
-    return tradeService.revealTrade(id, request.user.id);
+    return tradeService.revealTrade(id, (request.user as any).id);
   });
 
   /**
@@ -97,7 +97,7 @@ export async function tradeRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     return tradeService.getTradeSecret(
       id,
-      request.user.id,
+      (request.user as any).id,
       request.ip,
       request.headers['user-agent'] || 'unknown',
     );
@@ -109,7 +109,7 @@ export async function tradeRoutes(app: FastifyInstance) {
    */
   app.post('/trades/:id/complete', async (request) => {
     const { id } = request.params as { id: string };
-    return tradeService.completeTrade(id, request.user.id);
+    return tradeService.completeTrade(id, (request.user as any).id);
   });
 
   /**
@@ -118,6 +118,6 @@ export async function tradeRoutes(app: FastifyInstance) {
    */
   app.post('/trades/:id/cancel', async (request) => {
     const { id } = request.params as { id: string };
-    return tradeService.cancelTrade(id, request.user.id);
+    return tradeService.cancelTrade(id, (request.user as any).id);
   });
 }

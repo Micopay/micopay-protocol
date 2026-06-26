@@ -14,12 +14,12 @@ interface MerchantData {
   spread_percent: number;
   min_amount: number;
   max_amount: number;
-  trades_completed: number;
-  completion_rate: number;
-  avg_time_minutes: number;
-  tier: string;
-  total_volume_usdc: number;
-  last_trade_at: string | null;
+  trades_completed?: number;
+  completion_rate?: number;
+  avg_time_minutes?: number;
+  tier?: string;
+  total_volume_usdc?: number;
+  last_trade_at?: string | null;
 }
 
 interface DepositMapProps {
@@ -141,7 +141,7 @@ const DepositMap = ({ onBack, onSelectOffer, loading }: DepositMapProps) => {
                                         <div>
                                             <div className="flex items-center gap-1">
                                                 <h3 className="font-bold text-lg">{merchant.display_name}</h3>
-                                                {merchant.completion_rate >= 0.88 && (
+                                                {merchant.completion_rate !== undefined && merchant.completion_rate >= 0.88 && (
                                                     <span className="material-symbols-outlined text-accent text-sm" style={{ fontVariationSettings: '"FILL" 1' }}>verified</span>
                                                 )}
                                             </div>

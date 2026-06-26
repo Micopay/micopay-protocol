@@ -16,8 +16,8 @@ const TEST_INTENTS = [
 
 async function runTests() {
   if (!process.env.ANTHROPIC_API_KEY) {
-    console.error("❌ ANTHROPIC_API_KEY not set");
-    process.exit(1);
+    console.warn("⚠️ Skipping agent intent test: ANTHROPIC_API_KEY not set");
+    process.exit(0);
   }
 
   for (const intent of TEST_INTENTS) {

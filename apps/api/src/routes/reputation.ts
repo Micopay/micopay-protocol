@@ -116,14 +116,16 @@ export async function reputationRoutes(fastify: FastifyInstance): Promise<void> 
 
         // Calculate tier for each merchant
         const merchantsWithTier = merchants.map((m) => {
+          const tradesCompleted = Number(m.trades_completed) || 0;
+          const completionRate = Number(m.completion_rate) || 0;
           const tier = getTier(
-            parseInt(m.trades_completed) || 0,
-            parseFloat(m.completion_rate) || 0
+            tradesCompleted,
+            completionRate
           );
           return {
             ...m,
-            tier: tier.name,
-            completion_percent: `${(parseFloat(m.completion_rate) * 100).toFixed(1)}%`,
+            tier: tier.name as any,
+            completion_percent: `${(completionRate * 100).toFixed(1)}%`,
           };
         });
 

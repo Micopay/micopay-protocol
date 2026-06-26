@@ -8,10 +8,19 @@ vi.mock("../db/merchants.js", () => ({
   getVerifiedMerchants: vi.fn(),
 }));
 
+vi.mock("../db/schema.js", () => ({
+  query: vi.fn().mockResolvedValue({ rows: [{}] }),
+  getOne: vi.fn(),
+  getMany: vi.fn(),
+  execute: vi.fn(),
+}));
+
 import {
   getMerchantByUserId,
   createMerchant,
   getVerifiedMerchants,
+  MerchantRow,
+  PublicMerchantRow,
 } from "../db/merchants.js";
 import {
   registerMerchant,
@@ -32,11 +41,17 @@ const validInput = {
   max_amount: 5000,
 };
 
-const mockRow = {
+const mockRow: MerchantRow = {
   ...validInput,
   id: "merchant-uuid",
   verification_status: "pending" as const,
   verified_at: null,
+  trades_completed: 0,
+  completion_rate: 0,
+  avg_time_minutes: 0,
+  tier: "espora" as const,
+  total_volume_usdc: 0,
+  last_trade_at: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 };
@@ -150,7 +165,7 @@ describe("registerMerchant — duplicate user", () => {
 
 describe("listVerifiedMerchants", () => {
   it("returns only the public fields from getVerifiedMerchants", async () => {
-    const publicRow = {
+    const publicRow: PublicMerchantRow = {
       id: "merchant-uuid",
       display_name: "Casa de Cambio Juárez",
       latitude: 19.4326,
@@ -162,6 +177,12 @@ describe("listVerifiedMerchants", () => {
       spread_percent: 2,
       min_amount: 100,
       max_amount: 5000,
+      trades_completed: 0,
+      completion_rate: 0,
+      avg_time_minutes: 0,
+      tier: "espora" as const,
+      total_volume_usdc: 0,
+      last_trade_at: null,
     };
     vi.mocked(getVerifiedMerchants).mockResolvedValue([publicRow]);
     const result = await listVerifiedMerchants();

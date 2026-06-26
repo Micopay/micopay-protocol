@@ -34,13 +34,21 @@ vi.mock("@stellar/stellar-sdk", async (importOriginal: () => Promise<typeof impo
       ...actual.rpc,
       assembleTransaction: vi.fn().mockReturnValue(fakeBuilder),
       Server: class {
-        getAccount = vi.fn().mockResolvedValue({ accountId: () => "GTEST", incrementSequenceNumber: vi.fn() });
-        simulateTransaction = vi.fn().mockResolvedValue({ result: null });
-        sendTransaction = vi.fn().mockResolvedValue({ status: "PENDING", hash: "aabbcc" });
-        getTransaction = vi.fn().mockResolvedValue({
-          status: "SUCCESS",
-          returnValue: actual.xdr.ScVal.scvBool(true),
-        });
+        getAccount() {
+          return Promise.resolve({ accountId: () => "GTEST", incrementSequenceNumber: vi.fn() });
+        }
+        simulateTransaction() {
+          return Promise.resolve({ result: null });
+        }
+        sendTransaction() {
+          return Promise.resolve({ status: "PENDING", hash: "aabbcc" });
+        }
+        getTransaction() {
+          return Promise.resolve({
+            status: "SUCCESS",
+            returnValue: actual.xdr.ScVal.scvBool(true),
+          });
+        }
       },
       Api: {
         ...actual.rpc?.Api,

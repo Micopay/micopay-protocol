@@ -2,8 +2,7 @@ import {
   createMerchant,
   getMerchantByUserId as getMerchantByUserIdDb,
   getVerifiedMerchants,
-  updateMerchantAvailability as updateMerchantAvailabilityDb,
-  updateMerchantConfig as updateMerchantConfigDb,
+  getMerchantById as getMerchantByIdDb,
   type CreateMerchantInput,
   type MerchantRow,
   type PublicMerchantRow,
@@ -150,7 +149,7 @@ export async function registerMerchant(
     );
   }
 
-  const existing = await getMerchantByUserId(input.user_id);
+  const existing = await getMerchantByUserIdDb(input.user_id);
   if (existing) {
     throw new ConflictError("A merchant record already exists for this user");
   }
@@ -168,12 +167,5 @@ export async function listVerifiedMerchants(): Promise<PublicMerchantRow[]> {
 }
 
 export async function getMerchantById(id: string): Promise<PublicMerchantRow | null> {
-  return getOne<PublicMerchantRow>(`
-    SELECT id, display_name, latitude, longitude, address_text,
-           hours_open, hours_close, base_rate, spread_percent, min_amount, max_amount,
-           trades_completed, completion_rate, avg_time_minutes, tier,
-           total_volume_usdc, last_trade_at
-    FROM merchants
-    WHERE id = $1 AND verification_status = 'verified'
-  `, [id]);
+  return getMerchantByIdDb(id);
 }

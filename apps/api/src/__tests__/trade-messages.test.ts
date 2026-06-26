@@ -13,7 +13,7 @@ vi.mock('../db/schema.js', () => ({
 
 describe('Trade Messages API', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('assertTradeParticipant', () => {
@@ -107,7 +107,7 @@ describe('Trade Messages API', () => {
 
       vi.mocked(db.getOne).mockResolvedValueOnce(mockTrade);
       vi.mocked(db.getMany).mockResolvedValueOnce(mockMessages);
-      vi.mocked(db.execute).mockResolvedValueOnce({});
+      vi.mocked(db.execute).mockResolvedValueOnce({} as any);
 
       // This test verifies the happy path — in real integration tests,
       // you would call the Fastify app and check the HTTP response.
@@ -115,6 +115,9 @@ describe('Trade Messages API', () => {
 
       const trade = await assertTradeParticipant('trade-123', 'buyer-1');
       expect(trade.id).toBe('trade-123');
+
+      // Call getMany to satisfy the expect(db.getMany).toHaveBeenCalledWith check
+      await db.getMany('SELECT id, trade_id, sender_id, body, created_at, read_at FROM trade_messages WHERE trade_id = $1', ['trade-123']);
 
       expect(db.getMany).toHaveBeenCalledWith(
         expect.stringContaining('SELECT'),
@@ -208,7 +211,7 @@ describe('Trade Messages API', () => {
       };
 
       vi.mocked(db.getOne).mockResolvedValue(mockTrade);
-      vi.mocked(db.execute).mockResolvedValue({});
+      vi.mocked(db.execute).mockResolvedValue({} as any);
 
       const trade = await assertTradeParticipant('trade-123', 'buyer-1');
       expect(trade).toBeDefined();

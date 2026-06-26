@@ -75,6 +75,7 @@ describe("P2P Trade Flow Smoke Test", () => {
     (db.getOne as any)
       .mockResolvedValueOnce({ id: sellerId, stellar_address: "GSELLER..." }) // seller check
       .mockResolvedValueOnce({ id: buyerId, stellar_address: "GBUYER..." }) // buyer check
+      .mockResolvedValueOnce({ verification_status: "verified" }) // merchant online check
       .mockResolvedValueOnce(mockTrade); // insert result
 
     const createRes = await app.inject({
