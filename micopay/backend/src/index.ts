@@ -10,6 +10,7 @@ import { defiRoutes } from './routes/defi.js';
 import { merchantRoutes } from './routes/merchants.js';
 import { adminRoutes } from './routes/admin.js';
 import { tradeSafetyRoutes } from './routes/trade-safety.js';
+import { rateRoutes } from './routes/rate.js';
 import { AppError } from './utils/errors.js';
 import { Keypair } from '@stellar/stellar-sdk';
 import fastifyStatic from '@fastify/static';
@@ -204,6 +205,7 @@ app.register(defiRoutes, { prefix: '' });
 app.register(merchantRoutes, { prefix: '' });
 app.register(tradeSafetyRoutes, { prefix: '' });
 app.register(adminRoutes, { prefix: '' });
+app.register(rateRoutes, { prefix: '' });
 
 // --- Start server ---
 

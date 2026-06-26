@@ -8,12 +8,14 @@ vi.mock('../services/api', () => ({
   getAccountBalance: vi.fn(),
   getCurrentUser: vi.fn(),
   getMerchantTrades: vi.fn(),
+  getXlmMxnRate: vi.fn(),
 }));
 
 const mockGetTradeHistory = vi.mocked(api.getTradeHistory);
 const mockGetAccountBalance = vi.mocked(api.getAccountBalance);
 const mockGetCurrentUser = vi.mocked(api.getCurrentUser);
 const mockGetMerchantTrades = vi.mocked(api.getMerchantTrades);
+const mockGetXlmMxnRate = vi.mocked(api.getXlmMxnRate);
 
 function createProps(overrides = {}) {
   return {
@@ -34,6 +36,7 @@ describe('Home — pending-trades badge', () => {
     mockGetTradeHistory.mockResolvedValue([]);
     mockGetCurrentUser.mockResolvedValue({ verification_status: 'verified' } as any);
     mockGetMerchantTrades.mockResolvedValue([]);
+    mockGetXlmMxnRate.mockResolvedValue({ rate: 18.42, source: 'coingecko', fetchedAt: '2026-06-25T12:00:00Z' });
   });
 
   it('calls getMerchantTrades with merchantToken and "pending"', async () => {
@@ -90,5 +93,35 @@ describe('Home — pending-trades badge', () => {
 
     expect(screen.getByText(/hola, juan/i)).toBeInTheDocument();
     expect(screen.queryByText('0')).not.toBeInTheDocument();
+  });
+});
+
+describe('Home — XLM→MXN rate', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetAccountBalance.mockResolvedValue({ xlm: '250', address: 'GA7ABCDEF12345' });
+    mockGetTradeHistory.mockResolvedValue([]);
+    mockGetCurrentUser.mockResolvedValue({ verification_status: 'verified' } as any);
+    mockGetMerchantTrades.mockResolvedValue([]);
+  });
+
+  it('displays MXN value computed with the fetched rate', async () => {
+    mockGetXlmMxnRate.mockResolvedValue({ rate: 18.42, source: 'coingecko', fetchedAt: '2026-06-25T12:00:00Z' });
+
+    render(<Home {...createProps()} />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/4,605/).length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('shows tilde prefix when rate fetch fails', async () => {
+    mockGetXlmMxnRate.mockRejectedValue(new Error('Network error'));
+
+    render(<Home {...createProps()} />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/~5,000/).length).toBeGreaterThanOrEqual(1);
+    });
   });
 });

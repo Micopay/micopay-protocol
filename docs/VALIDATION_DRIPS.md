@@ -114,7 +114,13 @@ First-person response (privacy-safe):
 
 ### V-3 · Liquidity provider perspective
 
-_(no responses yet)_
+- **Country / general region:** West Africa (Nigeria).
+- **Would YOU provide liquidity (give cash, receive digital balance)?:** Yes — with a few conditions in place first.
+- **Individual or small business?:** Individual. I run a small informal side-hustle alongside a day job; I regularly handle modest cash flows and already do occasional P2P exchanges for people in my circle.
+- **Main motivation:** Extra income from the commission, plus the convenience of converting digital balances I already hold (stablecoins) back into local currency without going through a bank. If neighbours come to me directly, it also builds goodwill and a small reputation locally.
+- **Perceived risks:** The biggest one for me is non-payment or a fake/reversed digital transfer — receiving what looks like a confirmation and then finding the funds were never real or got clawed back. A close second is physical safety: carrying or handing over cash in public can attract attention. I would also be cautious about regulatory ambiguity (is this treated as money-service activity in my jurisdiction?) and about disputes with no clear resolution path if something goes wrong.
+- **Commission I would expect:** 2–3%. Below 2% does not cover my time and liquidity risk; above 4% would probably push users back to informal channels and I would end up sitting idle.
+- **What would make me trust the system enough to try once:** Seeing the USDC locked in escrow *before* I hand over any cash — that single guarantee removes most of my risk. Beyond that: a verified transaction history for the counterparty, clear in-app instructions for each step, and a visible support/dispute path if something breaks. A successful first trade with a small amount would be enough to convince me to continue.
 
 ### V-4 · Non-custodial wallet onboarding
 **Contributor:** [@Shadow-MMN](https://github.com/Shadow-MMN) · **PR:** [#157](https://github.com/ericmt-98/micopay-protocol/pull/157) · **Region:** —
@@ -226,6 +232,29 @@ Aggregate signal:
 - Repeat use looks plausible if the first experience is fast, predictable, and visibly trustworthy.
 - The main risk to repeat use is uncertainty around provider quality, availability, and support.
 - Recommendation is strongest when the experience feels safe, simple, and easy to explain to a friend.
+
+### V-11 · Failed transaction / dispute handling
+_(no responses yet)_
+
+### V-12 · Living unbanked — everyday context
+_(no responses yet)_
+
+### V-13 · Remittance sender context — sending money abroad
+**Contributor:** [@Jo-anny](https://github.com/Jo-anny) · **PR:** [#171](https://github.com/ericmt-98/micopay-protocol/pull/171)
+
+- **Country / general region:** Europe sending to Latin America.
+- **How do I send money abroad today?:** I use a mix of traditional bank transfers and a digital remittance service that delivers to a local bank deposit or mobile wallet. Sometimes I use a crypto-based P2P service when the recipient needs faster access to cash.
+- **What does it cost me?:** It feels like a lot. The total cost is in the high single-digit percent range after both service fees and currency conversion spreads are included.
+- **How long does delivery take?:** Usually same day to next day, but banks can take several days if compliance checks or intermediary banks are involved.
+- **My biggest frustration:** The flow is opaque and uncertain. I rarely know the exact delivered amount until after the transaction clears, and the recipient often has to deal with separate cash-out steps or agent availability.
+- **What does the recipient do with it once it arrives?:** They usually cash out to local currency through a bank deposit or local cash pickup, or receive it into a mobile wallet and withdraw from an agent.
+- **What would make me switch?:** A cheaper, faster, and more transparent service with a reliable, immediate local cash-out path. The one thing that would have to be better is certainty: knowing the final amount received and the cash-out option before I send.
+
+### V-14 · Stablecoin / digital peso mental model
+_(no responses yet)_
+
+### V-15 · First-time trust threshold
+_(no responses yet)_
 
 ---
 

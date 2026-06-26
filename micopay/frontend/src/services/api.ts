@@ -295,6 +295,17 @@ export interface CETESTxResult {
   note?: string;
 }
 
+export interface XlmMxnRate {
+  rate: number;
+  source: string;
+  fetchedAt: string;
+}
+
+export async function getXlmMxnRate(): Promise<XlmMxnRate> {
+  const res = await http.get('/rate/xlm-mxn');
+  return res.data;
+}
+
 export async function getCETESRate(amount = "100"): Promise<CETESRate> {
   const res = await http.get(`/defi/cetes/rate?amount=${amount}`);
   return res.data;

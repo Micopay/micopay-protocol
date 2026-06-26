@@ -5,6 +5,7 @@ import {
   getTradeHistory,
   getAccountBalance,
   getMerchantTrades,
+  getXlmMxnRate,
   TradeHistoryItem,
   getCurrentUser,
 } from '../services/api';
@@ -42,6 +43,9 @@ const Home = ({
   const [xlmBalance, setXlmBalance] = useState<string | null>(null);
   const [stellarAddress, setStellarAddress] = useState<string>("");
   const [pendingCount, setPendingCount] = useState(0);
+  const [xlmMxnRate, setXlmMxnRate] = useState<number | null>(null);
+  const [rateLoading, setRateLoading] = useState(true);
+  const [rateError, setRateError] = useState(false);
   const [balanceError, setBalanceError] = useState<MappedApiError | null>(null);
   const [historyError, setHistoryError] = useState<MappedApiError | null>(null);
   const [pendingError, setPendingError] = useState<MappedApiError | null>(null);
@@ -89,12 +93,34 @@ const Home = ({
     loadPendingCount();
   }, [loadPendingCount]);
 
-  // Convert XLM to approx MXN (1 XLM ≈ 20 MXN, demo rate)
-  const mxnBalance = xlmBalance
-    ? (parseFloat(xlmBalance.replace(/,/g, "")) * 20).toLocaleString("es-MX", {
-        maximumFractionDigits: 2,
+  useEffect(() => {
+    let cancelled = false;
+    setRateLoading(true);
+    setRateError(false);
+    getXlmMxnRate()
+      .then((data) => {
+        if (!cancelled) {
+          setXlmMxnRate(data.rate);
+          setRateLoading(false);
+        }
       })
-    : "—";
+      .catch(() => {
+        if (!cancelled) {
+          setRateError(true);
+          setRateLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const rawXlm = xlmBalance ? parseFloat(xlmBalance.replace(/,/g, "")) : 0;
+  const mxnBalance = !xlmBalance
+    ? "—"
+    : rateLoading
+      ? "—"
+      : rateError
+        ? `~${(rawXlm * 20).toLocaleString("es-MX", { maximumFractionDigits: 2 })}`
+        : (rawXlm * (xlmMxnRate ?? 0)).toLocaleString("es-MX", { maximumFractionDigits: 2 });
 
   const today = new Date().toLocaleDateString("es-MX", {
     weekday: "long",
