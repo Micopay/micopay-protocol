@@ -79,7 +79,6 @@ interface AppCtx {
   setReleaseTxHash: (h: string | null) => void;
   handleOfferSelected: (offerId: string) => Promise<boolean>;
   handleDepositOfferSelected: (offerId: string) => Promise<boolean>;
-  tradeError: MappedApiError | null;
   clearTradeError: () => void;
   retryTradeFlow: () => Promise<boolean>;
   handleAccountDeleted: () => void;
