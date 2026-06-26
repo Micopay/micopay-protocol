@@ -40,6 +40,7 @@
 | V-8 | [#140](https://github.com/ericmt-98/micopay-protocol/issues/140) | Fair commission / fee | Unit economics (acceptable fee %) |
 | V-9 | [#141](https://github.com/ericmt-98/micopay-protocol/issues/141) | Safety meeting in person | De-risking P2P adoption |
 | V-10 | [#142](https://github.com/ericmt-98/micopay-protocol/issues/142) | Repeat use & discovery | Retention / sustained usage |
+| V-12 | [#165](https://github.com/ericmt-98/micopay-protocol/issues/165) | Living without a bank account | User-side demand (bank-free cash management) |
 | V-14 | [#167](https://github.com/ericmt-98/micopay-protocol/issues/167) | Stablecoin & digital peso mental model | Stellar usability & stablecoin mental model (Claim 4) |
 
 ## After answers come in

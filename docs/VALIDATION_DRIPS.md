@@ -29,7 +29,7 @@ supply evidence for one of them:
 
 | Claim | Backed by | One-line thesis |
 |---|---|---|
-| **1. Demand exists** | V-1 (cash-out), V-2 (cash-in), V-6 (remittances) | A real, recurring pain converting digital ↔ cash |
+| **1. Demand exists** | V-1 (cash-out), V-2 (cash-in), V-6 (remittances), V-12 (living bank-free) | A real, recurring pain converting digital ↔ cash |
 | **2. Supply exists** | V-3 (liquidity providers) | Real people/businesses would provide cash for a commission |
 | **3. It can win** | V-7 (alternatives), V-8 (fair fee) | Better than current options, at a fee users accept |
 | **4. Stellar is usable** | V-4 (non-custodial onboarding) | Mainstream users can handle a self-custodial wallet |
@@ -70,6 +70,7 @@ Fill these in as answers arrive. Keep counts and percentages only.
 | Fair commission % (distribution) · "too high" threshold | V-8 | unit economics |
 | Comfort meeting a stranger · top safety fear · shops vs individuals | V-9 | safety / de-risking |
 | Discovery method · repeat-use (yes/maybe/no) · recommend driver | V-10 | retention / PMF |
+| Cash storage & income habits · top cash friction · local agent utility | V-12 | bank-free demand & utility |
 | Regions represented (count by region) · total respondents (N) | all | spread / sample size |
 
 ---
@@ -93,7 +94,14 @@ _(no responses yet)_
 _(no responses yet)_
 
 ### V-3 · Liquidity provider perspective
-_(no responses yet)_
+
+- **Country / general region:** West Africa (Nigeria).
+- **Would YOU provide liquidity (give cash, receive digital balance)?:** Yes — with a few conditions in place first.
+- **Individual or small business?:** Individual. I run a small informal side-hustle alongside a day job; I regularly handle modest cash flows and already do occasional P2P exchanges for people in my circle.
+- **Main motivation:** Extra income from the commission, plus the convenience of converting digital balances I already hold (stablecoins) back into local currency without going through a bank. If neighbours come to me directly, it also builds goodwill and a small reputation locally.
+- **Perceived risks:** The biggest one for me is non-payment or a fake/reversed digital transfer — receiving what looks like a confirmation and then finding the funds were never real or got clawed back. A close second is physical safety: carrying or handing over cash in public can attract attention. I would also be cautious about regulatory ambiguity (is this treated as money-service activity in my jurisdiction?) and about disputes with no clear resolution path if something goes wrong.
+- **Commission I would expect:** 2–3%. Below 2% does not cover my time and liquidity risk; above 4% would probably push users back to informal channels and I would end up sitting idle.
+- **What would make me trust the system enough to try once:** Seeing the USDC locked in escrow *before* I hand over any cash — that single guarantee removes most of my risk. Beyond that: a verified transaction history for the counterparty, clear in-app instructions for each step, and a visible support/dispute path if something breaks. A successful first trade with a small amount would be enough to convince me to continue.
 
 ### V-4 · Non-custodial wallet onboarding
 _(no responses yet)_
@@ -196,6 +204,15 @@ Aggregate signal:
 - Repeat use looks plausible if the first experience is fast, predictable, and visibly trustworthy.
 - The main risk to repeat use is uncertainty around provider quality, availability, and support.
 - Recommendation is strongest when the experience feels safe, simple, and easy to explain to a friend.
+
+### V-12 · Market validation: living without a bank account — daily cash management
+
+* **Country / general region:** Mexico (CDMX metropolitan area)
+* **How do you store money today?:** Mostly cash stored at home in a safe place for daily expenses, and a small amount in a mobile wallet (like Mercado Pago or Spin by OXXO) for occasional digital payments.
+* **How do you receive income or payments?:** Cash in hand for local gig work and physical sales, and occasionally via bank transfer (SPEI) to a relative's account when a client does not pay in cash.
+* **What is your biggest friction when handling larger amounts of cash?:** Physical safety is the absolute biggest worry. Carrying larger amounts of cash on public transport or walking around the neighborhood is stressful due to the risk of theft. There's also the constant risk of losing it or having notes damaged.
+* **Have you ever needed to pay for something digital (online service, bill, transfer) without a bank account? What did you do?:** Yes, many times for online services or bills. I have to walk to the nearest OXXO store, show a payment code, and pay in cash (which incurs an extra convenience fee), or buy physical prepaid gift cards at the register.
+* **If there was a local, trusted person in your neighborhood who could convert your cash to a digital wallet instantly — would that be useful? What would make you trust them enough to use them?:** Yes, it would be extremely useful. It would save me trips to convenience stores or bank branches just to deposit cash. To trust them, I would want them to be a recognized local business (like a corner shop, pharmacy, or local bakery) rather than a random individual. I would also need to see ratings from other users in the app, and a secure escrow mechanism that guarantees the digital funds are locked before I hand over physical cash.
 
 ### V-14 · Product validation: stablecoin and digital peso mental model
 
