@@ -37,7 +37,7 @@ es ahora deployable. Los P0 de frontend son el siguiente foco.
 | ~~🟡 P2-1~~ | ~~1~~ | ~~**Sin CI gate**~~ → ✅ **Resuelto 2026-06-25** |
 | 🔴 P0 | 4 | Identidad doble, trade contra sí mismo, balance falso, fetch roto en APK |
 | 🟠 P1 | 4 | UI descarta datos reales (mapa, economía de oferta, nombres, tipo de cambio) |
-| 🟡 P2 | 2 | DeFi simulado, config de release (CI ya resuelto) |
+| 🟡 P2 | 1 | Config de release APK (P2-3) — DeFi simulado etiquetado ✅, CI ✅ |
 | ⚠️ B pendiente | 3 | B-3 (fallback in-memory), B-4 (seed en prod), B-7 (health real) — trabajo interno |
 
 ---
@@ -134,10 +134,15 @@ es ahora deployable. Los P0 de frontend son el siguiente foco.
 - **Fix:** `getMerchantPins(merchants)` proyecta `lat/lng` reales de la API a posiciones CSS,
   con clamp al rango 12–88% para mantenerlos dentro del viewport.
 
-### P1-3 · Nombres de agente hardcodeados en el recibo
-- **Archivo:** `micopay/frontend/src/App.tsx:345`
+### P1-3 · Nombres de agente hardcodeados en el recibo → 📎 plegado a #160
+- **Archivo:** `micopay/frontend/src/App.tsx:366`
 - **Qué pasa:** `agentName={flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe'}`.
-  El nombre real del comercio (disponible en `seller_username` vía `fetchTradeDetail`) no se usa.
+- **Estado (2026-06-27):** parcialmente preparado — el recibo ya hace `fetchTradeDetail` y guarda
+  `seller_username` en el estado `sellerUsername` (`App.tsx:302,316`), **pero esa variable nunca se
+  lee**: `agentName` sigue hardcodeado. Falta cablear `agentName={sellerUsername ?? fallback}`
+  (literal solo para `IS_DEMO_MODE`).
+- **Decisión:** como toca `App.tsx` (mismo archivo que el epic P0-1/P0-2), **se pliega a #160** en
+  vez de abrir issue aparte, para mantener `App.tsx` como un solo escritor y evitar conflictos.
 - **Criterio de aceptación:** el recibo muestra el `seller_username` real del trade.
 
 ### ~~P1-4 · Tipo de cambio XLM→MXN hardcodeado~~ ✅ Resuelto
@@ -158,13 +163,14 @@ es ahora deployable. Los P0 de frontend son el siguiente foco.
 - Corre `npm run build` en backend y `tsc + vite build` en frontend en cada PR a `main`.
   `vitest` en modo informativo (`continue-on-error: true`) hasta que P0/P1 estabilicen los tests.
 
-### P2-2 · DeFi (CETES / Blend) totalmente simulado
-- **Archivos:** `api.ts:285-374` (`simulated: boolean`), pantallas `CETESScreen.tsx`,
-  `BlendScreen.tsx`. El backend responde `{ simulated: true }`; no se mueve dinero on-chain.
-- **Decisión requerida:** (a) cablear contra protocolos reales, o (b) etiquetar la UI
-  explícitamente como "simulado" para no inducir a error. Hoy hay un feature-gate parcial
-  (`showDefi={!isDemoMode || !isMockStellar}` en `App.tsx:368-374`).
-- **Criterio de aceptación:** ningún flujo presenta una transacción simulada como real sin
+### ~~P2-2 · DeFi (CETES / Blend) totalmente simulado~~ ✅ Resuelto (etiquetado)
+- **Resuelto:** 2026-06-27 · PR [#178](https://github.com/ericmt-98/micopay-protocol/pull/178) (Blend) — CETES ya etiquetaba.
+- **Decisión aplicada (D-3):** DeFi se mantiene simulado y se **etiqueta explícitamente** en la UI; no
+  se cablea contra protocolos reales en Wave 6.
+- **Fix:** `CETESScreen.tsx:216` muestra "¡Prueba simulada!"; `BlendScreen.tsx` pasó de "¡Prueba
+  exitosa!" (ambiguo) a "¡Prueba simulada!" + caption "Demostración — no se movieron fondos reales
+  on-chain.". Persiste el feature-gate `showDefi={!isDemoMode || !isMockStellar}`.
+- **Criterio de aceptación:** ✅ ningún flujo presenta una transacción simulada como real sin
   etiqueta visible.
 
 ### ~~P2-4~~ · ~~`/rate/xlm-mxn` sin caché — riesgo de rate-limit CoinGecko~~ → ✅ **Resuelto 2026-06-26**
@@ -213,13 +219,13 @@ lo demás.
 | P0-5 | Onboarding mínimo: alias + respaldo de clave obligatorio (KYC Nivel 0) | `wave:frontend` | `wave:trust` | medium | ✅ | Sienta base para KYC por niveles (D-4) · pendiente pregunta 3 §9 |
 | ~~P1-2~~ | ~~Mapa grafica comercios reales~~ | — | — | — | — | ✅ **Resuelto** — PR #156 · @Gozirimdev |
 | P1-1 | ExploreMap usa economía real | `wave:frontend` | `wave:retail` | medium | ✅ | Issue #151 publicado, abierto sin asignar |
-| P1-3 | Nombre real del agente en recibo | `wave:frontend` | `wave:retail` | low | ✅ | `ux` · depende de P0-2 (trade real) |
+| P1-3 | Nombre real del agente en recibo | `wave:frontend` | `wave:retail` | low | ✅ | 📎 **Plegado a #160** — `seller_username` ya se fetchea, falta cablear `agentName`; mismo `App.tsx` que P0-1/P0-2 |
 | ~~P1-4~~ | ~~Tipo de cambio XLM→MXN real~~ | — | — | — | — | ✅ **Resuelto** — PR #162 · @josealfredo79 · follow-up: P2-4 caché |
 | ~~P2-4~~ | ~~Caché en-memoria para `/rate/xlm-mxn`~~ | — | — | — | — | ✅ **Resuelto** — PR #172 · @josealfredo79 |
 | B-3 | Desactivar fallback in-memory en prod | `wave:backend` | `wave:trust` | medium | — | **Interno** — `initPg()` aún silencioso; no publicar como Drips |
 | B-4 | No sembrar datos demo en prod | `wave:backend` | `wave:trust` | low | — | **Interno** — `seedData()` sin flag; no publicar como Drips |
 | B-7 | Health/readiness real (DB + config) | `wave:backend` | `wave:trust` | medium | — | **Interno** — `/health` parcial; no publicar como Drips |
-| ~~P2-2~~ | ~~Feature-gate o productizar DeFi~~ | — | — | — | — | Cerrado como issue #86 (wave anterior) |
+| ~~P2-2~~ | ~~Etiquetar DeFi como simulado~~ | — | — | — | — | ✅ **Resuelto** — etiquetado CETES + Blend (PR #178, D-3); issue #86 (wave anterior) |
 | ~~P2-3~~ | ~~Config de release APK~~ | — | — | — | — | Cerrado como issue #89 (wave anterior) |
 
 **Tratamiento especial:**
@@ -265,7 +271,7 @@ lo demás.
 9. **B-3, B-4, B-7** — trabajo interno pendiente. ~~B-2~~✅ ~~B-6~~✅
 
 **Etapa 4 — Decisiones de producto / release:**
-10. ~~**P2-2**~~ cerrado #86. ~~**P2-3**~~ cerrado #89.
+10. ~~**P2-2**~~ ✅ etiquetado simulado (PR #178). **P2-3** (config de release APK) sigue pendiente.
 
 **Etapa paralela — Research (V-1…V-15):** 🔄 14/15 completas
 - ~~V-1~~✅ ~~V-2~~✅ ~~V-3~~✅ ~~V-4~~✅ ~~V-5~~✅ ~~V-6~~✅ ~~V-7~~✅ ~~V-8~~✅ ~~V-9~~✅ ~~V-10~~✅
@@ -276,7 +282,7 @@ lo demás.
 - **Owners internos por track antes de abrir:** retail (P0-1/2/3, P1-*), trust/backend (B-*),
   DX/docs (P2-1).
 - **SLA:** primera review < 24 h; respuesta a aplicación el mismo día.
-- **`wave:needs-product`** en P0-1, P0-3, P2-2: no asignar a contribuidor hasta cerrar §9.
+- **`wave:needs-product`** en P0-1, P0-3: no asignar a contribuidor hasta cerrar §9. (P2-2 ya resuelto.)
 - **Regla de merge:** B-1 y P2-1 NO se entregan a Drips — son Etapa 0 interna. Lo demás se mergea
   por etapas; dentro de una etapa, lo independiente puede ir en cualquier orden.
 - **`complexity: high`** (B-1, P0-1, P0-2): reservar para contribuidores con contexto o tomar
