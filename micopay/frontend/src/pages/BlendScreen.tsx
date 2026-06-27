@@ -103,9 +103,14 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
       <div className="flex items-center gap-2">
         <span className="material-symbols-outlined text-[#1D9E75] text-xl">check_circle</span>
         <p className="font-bold text-[#1D9E75]">
-          {result.simulated ? '¡Prueba exitosa!' : '¡Operación enviada!'}
+          {result.simulated ? '¡Prueba simulada!' : '¡Operación enviada!'}
         </p>
       </div>
+      {result.simulated && (
+        <p className="text-xs text-on-surface-variant">
+          Demostración — no se movieron fondos reales on-chain.
+        </p>
+      )}
       <p className="text-xs text-on-surface-variant font-mono">{shortHash(result.hash)}</p>
       <a
         href={result.explorerUrl}
