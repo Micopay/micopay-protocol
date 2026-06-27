@@ -64,13 +64,14 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
 
     const completePurchase = async () => {
         if (isConfirming || !secretLoaded || secretError) return;
+        if (!activeTrade || !buyerToken) return;
         setIsConfirming(true);
         setCompleteError(null);
         setTradeState('pending_cash');
         try {
             const result = await completeTrade(activeTrade.id, buyerToken);
             setTradeState('completed');
-            setTimeout(() => onSuccess(), 1500);
+            setTimeout(() => onSuccess(result.release_tx_hash), 1500);
         } catch (e) {
             setCompleteError(mapApiError(e));
             setTradeState('revealed');
