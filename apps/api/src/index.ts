@@ -1,6 +1,5 @@
 import "./config.js";
 import Fastify from "fastify";
-import { seedDemoData } from "./scripts/seed.js";
 import fastifyCors from "@fastify/cors";
 import fastifyJwt from "@fastify/jwt";
 import { registerRateLimit } from "./plugins/rate-limit.js";

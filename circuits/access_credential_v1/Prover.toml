@@ -1,5 +1,5 @@
-secret = "2001"
-merkle_root = "0x0a0a5529cb925efbdef7f634c683d7417c187ac3a38d7e2f0c7e5e3cd816c4e9"
-nullifier = "0x063bfbb8dacf7cd7caaeb19d76a66d46d526203632f8e6983e41522c54ae1e78"
+secret = "3001"
+merkle_root = "0x2e659290464c8743ff5af33c28fc627b1a0a1345e32e993b2c4044bcea3d26d5"
+nullifier = "0x0ea9878983c5926d4ba72dbb0325ad0c963edf9c22a629729e8ef453399f7021"
 path_elements = ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
 path_index = ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]

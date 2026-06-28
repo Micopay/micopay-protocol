@@ -77,6 +77,24 @@ fn compute_demo_values() {
     std::println(nullifier);
 }
 
+// Second demo credential (secret=3001) for the inference e2e -- a fresh, unspent
+// credential (agent_alice's secret=2001 nullifier is already burned on-chain).
+// Run: nargo test compute_demo_values_b --show-output
+#[test]
+fn compute_demo_values_b() {
+    let secret: Field = 3001;
+    let leaf = std::hash::pedersen_hash([secret, LEAF_DOMAIN]);
+    let mut node = leaf;
+    for _i in 0..20 {
+        node = std::hash::pedersen_hash([node, 0]);
+    }
+    let root = node;
+    let nullifier = std::hash::pedersen_hash([secret, NULLIFIER_DOMAIN]);
+    std::println(leaf);
+    std::println(root);
+    std::println(nullifier);
+}
+
 // Tests
 
 // Valid spend: membership holds + correct nullifier.
