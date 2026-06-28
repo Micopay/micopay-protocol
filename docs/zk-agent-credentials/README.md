@@ -25,6 +25,7 @@ on-chain (doble-gasto bloqueado). Eso último es el control que evita el consumo
 
 | Archivo | Qué es | Estado |
 |---|---|---|
+| [`STATUS.md`](./STATUS.md) | **Empieza aquí.** Dónde estamos, qué está probado, qué falta, cómo correr el demo. | Vivo |
 | [`HACKATHON.md`](./HACKATHON.md) | One-pager para el hackathon ZK. La idea en 2 minutos. | Listo |
 | [`VALUE_PROP.md`](./VALUE_PROP.md) | Propuesta de valor: por qué escala a muchos negocios + verticales. | Listo |
 | [`SPEC.md`](./SPEC.md) | Spec técnico completo (arquitectura, circuitos, contrato, demos, despliegue). | Listo (framing credencial) |
