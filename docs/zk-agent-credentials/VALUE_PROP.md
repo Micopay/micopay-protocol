@@ -12,6 +12,51 @@
 > —y cuánto le queda— sin revelar quién es ni permitir que nadie ligue su actividad,
 > con esa prueba verificada on-chain en Soroban.**
 
+## La tesis de Stellar: probar que algo es verdad sin revelar nada
+
+Stellar apuesta por *"abierto por defecto, privado cuando se necesita"* y añadió las funciones
+BN254 a Soroban para que los contratos verifiquen pruebas ZK on-chain. Lo que un juez de Stellar
+quiere ver no es "otra app de pagos", sino **una afirmación financiera real probada on-chain sin
+filtrar lo sensible**. ZK solo gana su lugar donde coexisten **algo verdadero que probar** y **algo
+que vale la pena ocultar**; si no hay qué ocultar, una firma normal basta.
+
+**La afirmación que probamos en Soroban:**
+
+> *"Tengo derecho a consumir este recurso —una credencial válida, pagada y sin usar— y no la he
+> gastado antes."*
+
+**Lo que queda oculto (esto es el valor):** quién soy · cuál credencial es · qué pago la financió ·
+el vínculo entre mis distintos consumos.
+
+## Las tres piezas: x402 + credencial + ZK (ninguna reemplaza a otra)
+
+No son tres puertas alternativas ni se apilan en la misma llamada: forman **una tubería** donde cada
+parte hace un trabajo distinto, y **ZK solo actúa donde hay algo que esconder**:
+
+```
+   PAGAR (x402)  ── público ──►  emite N credenciales (hojas en el árbol, raíz on-chain)
+                                          │
+                                          ▼
+   CONSUMIR (credencial + ZK) ── privado ──►  prueba "tengo una credencial válida y sin usar"
+                                              + nullifier (un solo uso)  →  recurso servido
+```
+
+- **x402** = cómo se paga / se compran las credenciales. **Es público y está bien que lo sea** —
+  un pago no tiene nada que ocultar; ZK sobre el pago sería decoración.
+- **credencial** = el secreto que te llevaste de ese pago (el *testigo* de la prueba).
+- **ZK** = en el momento de consumir, prueba que tu secreto está en el conjunto pagado **sin decir
+  cuál ni quién**, y revela solo un *nullifier* para impedir la reutilización.
+
+**El "wow" para Stellar — la desvinculación pago↔consumo:** pagaste a la vista de todos (x402 en
+Stellar), pero consumes en el anonimato, y **nadie —ni siquiera MicoPay— puede unir "quién pagó" con
+"quién consumió"** (no se puede ir de `H(secret)` al pago sin el `secret`). Esa desvinculación,
+verificada con ZK en Soroban, *es* "abierto por defecto, privado cuando se necesita".
+
+> **Escalones más ambiciosos de la misma tesis:** (1) que el conjunto del árbol *sean los propios
+> pagos x402* → probar "soy uno de los que pagaron" sin emisor de confianza; (2) probar **saldo sin
+> revelarlo** ("mi crédito ≥ el costo", range proof) → la forma más pura de probar una verdad
+> numérica ocultando el número. Ver [`AUDIT.md`](./AUDIT.md) §2.4.
+
 ## El insight que lo hace valioso
 
 Normalmente privacidad y control son un trade-off:
