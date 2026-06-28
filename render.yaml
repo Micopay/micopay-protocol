@@ -40,6 +40,8 @@ services:
     rootDir: micopay/backend
     buildCommand: npm install && npm run build
     startCommand: npm run start
+    preDeployCommand: npm run migrate
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
@@ -57,10 +59,20 @@ services:
         value: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
       - key: MXNE_ISSUER_ADDRESS
         value: GBZXN7PIRZGNMHGA7MUUUF4GWMTISGNQ5E72TFL6GDWPE6K4RCAVOALV
+      - key: DATABASE_URL
+        fromDatabase:
+          name: micopay-db
+          property: connectionString
       # Set these as secret env vars in the Render dashboard:
       - key: PLATFORM_SECRET_KEY
         sync: false
       - key: JWT_SECRET
         sync: false
-      - key: DATABASE_URL
+      - key: SECRET_ENCRYPTION_KEY
         sync: false
+
+databases:
+  - name: micopay-db
+    plan: free
+    databaseName: micopay
+    user: micopay
