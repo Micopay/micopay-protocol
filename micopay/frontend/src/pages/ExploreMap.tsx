@@ -35,11 +35,10 @@ function merchantToOffer(m: AvailableMerchant, index: number): Offer {
     id: m.seller_id,
     name: m.username,
     icon: 'storefront',
-    distance: '180 m',
-    walkMinutes: 3,
-    receiveMxn: 495,
-    commissionPct: 1,
-    badge: 'Negocio verificado',
+    distance: formatDistance(m.distance_km),
+    walkMinutes: walkMinutes(m.distance_km),
+    receiveMxn: m.payout_mxn,
+    commissionPct: m.rate_percent,
     isPrimary: index === 0,
   };
 }
