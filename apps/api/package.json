@@ -36,7 +36,6 @@
     "typescript": "^5.7.3"
   },
   "devDependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.61.1",
     "fast-check": "^4.8.0",
     "pino-pretty": "^13.0.0",
     "vitest": "^4.1.8"

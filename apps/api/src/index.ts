@@ -16,6 +16,7 @@ import { merchantRoutes } from "./routes/merchants.js";
 import { tradeMessagesRoutes } from "./routes/trade-messages.js";
 import { zkRoutes } from "./routes/zk.js";
 import { inferenceRoutes } from "./routes/inference.js";
+import { bazaarRoutes } from "./routes/bazaar.js";
 import { initAuthChallengesTable } from "./db/auth.js";
 import { config } from "./config.js";
 
@@ -26,39 +27,46 @@ if (process.env.X402_MOCK_MODE === "true" && NODE_ENV === "production") {
   throw new Error("X402_MOCK_MODE=true is not allowed in production — it bypasses all payment validation");
 }
 
-const app = Fastify({
-  logger: NODE_ENV === "development",
-  trustProxy: true,
-});
+export async function createApp() {
+  const app = Fastify({
+    logger: NODE_ENV === "development",
+    trustProxy: true,
+  });
 
-app.register(fastifyCors, { origin: "*" });
+  app.register(fastifyCors, { origin: "*" });
+  app.register(fastifyJwt, { secret: config.jwtSecret });
 
-app.register(fastifyJwt, { secret: config.jwtSecret });
+  registerRateLimit(app);
 
-registerRateLimit(app);
+  app.register(healthRoutes);
+  app.register(authRoutes);
+  app.register(cashRoutes);
+  app.register(reputationRoutes);
+  app.register(fundRoutes);
+  app.register(serviceRoutes);
+  app.register(demoRoutes);
+  app.register(bazaarRoutes);
 
-app.register(healthRoutes);
-app.register(authRoutes);
-app.register(cashRoutes);
-app.register(reputationRoutes);
-app.register(fundRoutes);
-app.register(serviceRoutes);
-app.register(demoRoutes);
+  if (config.enableInvestments) {
+    app.register(cetesRoutes);
+    app.register(blendRoutes);
+  }
 
-if (config.enableInvestments) {
-  app.register(cetesRoutes);
-  app.register(blendRoutes);
+  app.register(merchantRoutes);
+  app.register(tradeMessagesRoutes);
+  app.register(zkRoutes);
+  app.register(inferenceRoutes);
+
+  return app;
 }
 
-app.register(merchantRoutes);
-app.register(tradeMessagesRoutes);
-app.register(zkRoutes);
-app.register(inferenceRoutes);
-
 async function start() {
+  const app = await createApp();
   await initAuthChallengesTable();
   await app.listen({ port: PORT, host: "0.0.0.0" });
   console.log(`MicoPay API running on http://localhost:${PORT}`);
 }
 
-start();
+if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+  start();
+}
