@@ -260,7 +260,18 @@ async function initPg() {
     pgPool = p;
     pgAvailable = true;
     console.log("✅ PostgreSQL connected");
-  } catch {
+  } catch (err) {
+    // B-3: never fall back to the ephemeral in-memory store in production
+    // unless explicitly opted in. A silent fallback would serve/lose real
+    // user data on a volatile store, so fail fast instead.
+    if (config.isProduction && !config.allowInMemoryDb) {
+      console.error(
+        "❌ PostgreSQL unavailable in production and ALLOW_IN_MEMORY_DB is not set — " +
+          "refusing to start on an ephemeral in-memory store. Exiting.",
+        err instanceof Error ? err.message : err,
+      );
+      process.exit(1);
+    }
     pgAvailable = false;
     console.warn(
       "⚠️  PostgreSQL unavailable — using in-memory store (data resets on restart)",
@@ -271,6 +282,21 @@ async function initPg() {
 await initPg();
 
 export const pool = pgPool;
+
+/**
+ * B-7: live readiness check. Returns true only when a real PostgreSQL
+ * round-trip (`SELECT 1`) succeeds. Returns false on the in-memory fallback
+ * or when the pool has gone away — so it can back a real readiness probe.
+ */
+export async function pingDb(): Promise<boolean> {
+  if (!pgAvailable || !pgPool) return false;
+  try {
+    await pgPool.query("SELECT 1");
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function query(text: string, params?: any[]) {
   if (pgAvailable && pgPool) return pgPool.query(text, params);
@@ -358,4 +384,4 @@ export async function insertUnique<T = any>(
   return (rows[0] as T) ?? null;
 }
 
-export default { pool, query, getOne, getMany, execute, insertUnique };
+export default { pool, query, getOne, getMany, execute, insertUnique, pingDb };

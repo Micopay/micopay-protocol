@@ -38,7 +38,7 @@ es ahora deployable. Los P0 de frontend son el siguiente foco.
 | 🔴 P0 | 4 | Identidad doble, trade contra sí mismo, balance falso, fetch roto en APK |
 | 🟠 P1 | 4 | UI descarta datos reales (mapa, economía de oferta, nombres, tipo de cambio) |
 | 🟡 P2 | 1 | Config de release APK (P2-3) — DeFi simulado etiquetado ✅, CI ✅ |
-| ⚠️ B pendiente | 3 | B-3 (fallback in-memory), B-4 (seed en prod), B-7 (health real) — trabajo interno |
+| ~~⚠️ B pendiente~~ | ~~3~~ | ~~B-3, B-4, B-7~~ → ✅ **Resueltos 2026-06-28** (hardening backend interno) |
 
 ---
 
@@ -222,9 +222,9 @@ lo demás.
 | P1-3 | Nombre real del agente en recibo | `wave:frontend` | `wave:retail` | low | ✅ | 📎 **Plegado a #160** — `seller_username` ya se fetchea, falta cablear `agentName`; mismo `App.tsx` que P0-1/P0-2 |
 | ~~P1-4~~ | ~~Tipo de cambio XLM→MXN real~~ | — | — | — | — | ✅ **Resuelto** — PR #162 · @josealfredo79 · follow-up: P2-4 caché |
 | ~~P2-4~~ | ~~Caché en-memoria para `/rate/xlm-mxn`~~ | — | — | — | — | ✅ **Resuelto** — PR #172 · @josealfredo79 |
-| B-3 | Desactivar fallback in-memory en prod | `wave:backend` | `wave:trust` | medium | — | **Interno** — `initPg()` aún silencioso; no publicar como Drips |
-| B-4 | No sembrar datos demo en prod | `wave:backend` | `wave:trust` | low | — | **Interno** — `seedData()` sin flag; no publicar como Drips |
-| B-7 | Health/readiness real (DB + config) | `wave:backend` | `wave:trust` | medium | — | **Interno** — `/health` parcial; no publicar como Drips |
+| ~~B-3~~ | ~~Desactivar fallback in-memory en prod~~ | — | — | — | — | ✅ **Resuelto 2026-06-28** — `initPg()` hace `process.exit(1)` en prod si PG no conecta (salvo `ALLOW_IN_MEMORY_DB=true`) |
+| ~~B-4~~ | ~~No sembrar datos demo en prod~~ | — | — | — | — | ✅ **Resuelto 2026-06-28** — `seedData()` solo corre con `SEED_DEMO_DATA=true` |
+| ~~B-7~~ | ~~Health/readiness real (DB + config)~~ | — | — | — | — | ✅ **Resuelto 2026-06-28** — `/health` hace ping real `SELECT 1` (`pingDb()`); 503 en prod si DB caída |
 | ~~P2-2~~ | ~~Etiquetar DeFi como simulado~~ | — | — | — | — | ✅ **Resuelto** — etiquetado CETES + Blend (PR #178, D-3); issue #86 (wave anterior) |
 | ~~P2-3~~ | ~~Config de release APK~~ | — | — | — | — | Cerrado como issue #89 (wave anterior) |
 
@@ -267,8 +267,8 @@ lo demás.
 7. ~~**P1-2**~~ ✅ PR #156 · @Gozirimdev. **P1-1** (issue #151, abierto sin asignar).
 8. ~~**P1-4**~~ ✅ PR #162 · @josealfredo79. **P1-3** espera P0-2. ~~**P2-4**~~ ✅ PR #172 · @josealfredo79.
 
-**Etapa 3 — Backend hardening (interno):**
-9. **B-3, B-4, B-7** — trabajo interno pendiente. ~~B-2~~✅ ~~B-6~~✅
+**Etapa 3 — Backend hardening (interno):** ✅ COMPLETA
+9. ~~**B-3, B-4, B-7**~~ ✅ resueltos 2026-06-28. ~~B-2~~✅ ~~B-6~~✅
 
 **Etapa 4 — Decisiones de producto / release:**
 10. ~~**P2-2**~~ ✅ etiquetado simulado (PR #178). **P2-3** (config de release APK) sigue pendiente.
@@ -345,10 +345,11 @@ datos personales ni detalles que identifiquen a participantes.
 
 ## 8. Backend readiness para servidor
 
-> **Actualización 2026-06-25:** B-1 y P2-1 están resueltos (ver tabla abajo). B-5 se trata
-> internamente. B-3, B-4 y B-7 tienen trabajo pendiente puntual.
+> **Actualización 2026-06-28:** B-1, B-2, B-6 y P2-1 resueltos; **B-3, B-4 y B-7 también resueltos
+> (hardening backend interno)**. Solo queda B-5 (Dockerfile/guía de deploy), que se trata
+> internamente. El backend interno ya no tiene pendientes de readiness.
 
-### Estado de los issues internos (verificado 2026-06-25)
+### Estado de los issues internos (verificado 2026-06-28)
 
 | ID | Título | Estado | Evidencia |
 |----|--------|--------|-----------|
@@ -357,9 +358,9 @@ datos personales ni detalles que identifiquen a participantes.
 | **B-2** | Config prod fail-fast si faltan secretos | ✅ **Resuelto** | `validateConfig()` en `src/config.ts:92` lanza error y `start()` crashea via `process.exit(1)` si faltan `DATABASE_URL`, `SECRET_ENCRYPTION_KEY` o variables Stellar en modo real |
 | **B-6** | Migraciones / `init.sql` duplicado | ✅ **Resuelto** | `sql/init.sql` eliminado; schema vive en `src/db/schema.ts`; la tabla duplicada y el `audit_log` doble ya no existen |
 | **B-5** | Dockerfile / guía de deploy | — | Trabajo interno de maintainer; no se publica como issue Drips |
-| **B-3** | Desactivar fallback in-memory en prod | ⚠️ **Pendiente puntual** | `initPg()` corre a nivel de módulo y activa in-memory silenciosamente si Postgres falla. `validateConfig` solo verifica que `DATABASE_URL` no sea string vacío, no conectividad real. Criterio original: proceso falla si PG no conecta en producción |
-| **B-4** | No sembrar datos demo en producción | ⚠️ **Pendiente puntual** | `seedData()` en `src/index.ts:210` siembra sin flag explícito. Criterio original: seed solo corre con `SEED_DEMO_DATA=true` |
-| **B-7** | Health/readiness real | ⚠️ **Parcial** | `/health` expone `hasPlatformKey/hasDbUrl` (checks de string) y `eventListenerHealthy`, pero no verifica conectividad real al pool PG en cada request. Suficiente para demo; no suficiente como readiness probe de producción |
+| **B-3** | Desactivar fallback in-memory en prod | ✅ **Resuelto** | `initPg()` (`src/db/schema.ts`): si PG no conecta y `config.isProduction`, hace `console.error` + `process.exit(1)`; el fallback in-memory solo se permite con `ALLOW_IN_MEMORY_DB=true` (opt-in explícito, ya no silencioso). Verificado: `NODE_ENV=production` sin DB → exit 1 |
+| **B-4** | No sembrar datos demo en producción | ✅ **Resuelto** | `start()` (`src/index.ts`) solo llama `seedData()` si `config.seedDemoData` (`SEED_DEMO_DATA === 'true'`); si no, loguea que se omite. DB de producción nueva ya no se siembra |
+| **B-7** | Health/readiness real | ✅ **Resuelto** | nuevo `pingDb()` hace `SELECT 1` real contra el pool; `/health` lo expone como `dbConnected` y responde **503** en producción si la DB está caída (readiness probe real), además de los checks de config previos |
 
 ---
 

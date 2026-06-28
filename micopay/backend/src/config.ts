@@ -56,8 +56,19 @@ export const config = {
   cetesIssuer: process.env.CETES_ISSUER || 'GCRYUGD5NVARGXT56XEZI5CIFCQETYHAPQQTHO2O3IQZTHDH4LATMYWC',
   blendPoolId: process.env.BLEND_POOL_ID || 'CB5UDFTJ6VFOK63ZHQASNODV4PP2HVGPYRF754LRGO7YRG5SFCAZWTDD',
 
+  // Environment
+  nodeEnv: process.env.NODE_ENV || 'development',
+  isProduction: process.env.NODE_ENV === 'production',
+
   // MVP flags
   mockStellar: process.env.MOCK_STELLAR === 'true',
+
+  // Demo data seeding (B-4): only seed when explicitly enabled
+  seedDemoData: process.env.SEED_DEMO_DATA === 'true',
+
+  // DB fallback (B-3): the ephemeral in-memory store is an explicit opt-in only;
+  // in production a missing PostgreSQL connection is fatal unless this is set.
+  allowInMemoryDb: process.env.ALLOW_IN_MEMORY_DB === 'true',
 
   // Soroban event listener (off by default; polling fallback covers the rest)
   eventListenerEnabled: process.env.EVENT_LISTENER_ENABLED === 'true',

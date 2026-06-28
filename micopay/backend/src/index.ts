@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import fastifyCors from '@fastify/cors';
 import { config, validateConfig } from './config.js';
+import { pingDb } from './db/schema.js';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
 import { tradeRoutes } from './routes/trades.js';
@@ -164,19 +165,29 @@ app.setErrorHandler((error, request, reply) => {
 // Holds the singleton event listener (null when disabled or mock mode).
 let eventListener: EscrowEventListener | null = null;
 
-app.get('/health', async () => ({
-  status: 'ok',
-  timestamp: new Date().toISOString(),
-  mockStellar: config.mockStellar,
-  eventListenerHealthy: eventListener?.isHealthy() ?? false,
-  eventListenerState: eventListener?.currentState() ?? 'disabled',
-  configCheck: {
-    hasPlatformKey: !!config.platformSecretKey,
-    hasContractId: !!config.escrowContractId,
-    hasDbUrl: !!config.databaseUrl,
-    hasSecretKey: !!config.secretEncryptionKey,
-  }
-}));
+app.get('/health', async (_request, reply) => {
+  // B-7: real readiness — actually round-trip to PostgreSQL, don't just
+  // check that a connection string is present.
+  const dbConnected = await pingDb();
+  // In production a live DB is required to be "ready"; outside production the
+  // in-memory fallback is acceptable for demos/tests.
+  const ready = dbConnected || !config.isProduction;
+  if (!ready) reply.code(503);
+  return {
+    status: ready ? 'ok' : 'unavailable',
+    timestamp: new Date().toISOString(),
+    mockStellar: config.mockStellar,
+    dbConnected,
+    eventListenerHealthy: eventListener?.isHealthy() ?? false,
+    eventListenerState: eventListener?.currentState() ?? 'disabled',
+    configCheck: {
+      hasPlatformKey: !!config.platformSecretKey,
+      hasContractId: !!config.escrowContractId,
+      hasDbUrl: !!config.databaseUrl,
+      hasSecretKey: !!config.secretEncryptionKey,
+    }
+  };
+});
 
 // Platform account balance from Horizon (public, no auth needed)
 app.get('/account/balance', async (request) => {
@@ -287,8 +298,16 @@ async function start() {
   try {
     // Validate config at startup. Will throw and crash if critical config is missing.
     validateConfig();
-    
-    await seedData();
+
+    // B-4: only seed demo data when explicitly enabled — never in a fresh prod DB.
+    if (config.seedDemoData) {
+      await seedData();
+    } else {
+      app.log.info(
+        { category: 'seed' },
+        'Skipping demo seed (set SEED_DEMO_DATA=true to enable)',
+      );
+    }
     await app.listen({ port: config.port, host: '0.0.0.0' });
     app.log.info({ category: 'http', port: config.port }, '🍄 Micopay MVP Backend running');
     app.log.info({ category: 'http', mockStellar: config.mockStellar }, `Mock Stellar: ${config.mockStellar ? 'ON (no on-chain verification)' : 'OFF (real Soroban RPC)'}`);
