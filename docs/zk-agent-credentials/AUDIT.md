@@ -19,8 +19,12 @@
 >   (admin = `deployer`), ambos circuitos registrados.
 > - **E2E verificado on-chain:** proof real de `access_credential_v1` → `verify_unique` OK;
 >   segundo envío del mismo proof → `NullifierAlreadyUsed (#10)`. **Burn-once demostrado.**
-> - **Pendientes aún abiertos:** §2.4 (medición de saldo), §3 (cablear consumo real del recurso),
->   §4 (Base/Solana). El resto de §2 queda como histórico de cómo estaba antes del fix.
+> - **§3 RESUELTO (2026-06-28):** `POST /api/v1/inference` gateado por credencial ZK, probado
+>   e2e en testnet — credencial válida → `verify_unique` quema el nullifier → Claude responde
+>   (`credential_spent: true`); reusarla → 409; proof inválido → 400/403. El consumo del recurso
+>   ya está cableado (la credencial es el "ticket" prepagado; x402 vive en la etapa de compra).
+> - **Pendientes aún abiertos:** §2.4 (medición de saldo / "cuánto le queda"), emisión vía x402
+>   (`/api/v1/credentials/buy`), árbol multi-usuario para anonimato creíble (hoy 1 hoja), §4 (Base/Solana).
 
 ---
 

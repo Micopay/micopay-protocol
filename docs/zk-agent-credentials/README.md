@@ -47,8 +47,10 @@ on-chain (doble-gasto bloqueado). Eso último es el control que evita el consumo
 - ✅ **Nullifier determinista por credencial:** el dominio es una constante del circuito que el
   prover no puede rotar → cada credencial se gasta exactamente una vez. `verify_unique` lee el
   nullifier como los últimos 32 bytes (compatible con `reputation_v1`).
-- ⚠️ **"Consumir el recurso" no está cableado:** el endpoint devuelve `{ verified }`, no
-  sirve inferencia real tras verificar. (Siguiente paso.)
+- ✅ **Consumo real cableado y probado e2e (2026-06-28):** `POST /api/v1/inference` gateado por
+  credencial ZK — presentas la prueba → se quema la credencial on-chain → **Claude responde**.
+  Probado en vivo: credencial fresca → respuesta real (`credential_spent: true`); reusarla → 409;
+  proof inválido → 400/403. (Resuelve audit §3.)
 - ⛔ **Base/Solana: 0% construido.** El x402 actual solo entiende Stellar+mock. `BASE_BRIDGE_PLAN.md`
   es diseño post-hackathon.
 
