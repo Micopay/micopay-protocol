@@ -42,8 +42,6 @@ import DebugOverlay from "./components/DebugOverlay";
 import {
   registerUser,
   createTrade,
-  lockTrade,
-  revealTrade,
   fetchTradeDetail,
   UserData,
   TradeData,
@@ -53,12 +51,7 @@ import { readJSON, writeJSON, removeKey } from "./services/secureStorage";
 import { mapApiError, type MappedApiError } from "./utils/apiError";
 import { IS_DEMO_MODE } from "./utils/demoMode";
 
-const USERS_STORAGE_KEY = "micopay_users";
-
-interface StoredUsers {
-  buyer: UserData;
-  seller: UserData;
-}
+const USERS_STORAGE_KEY = "micopay_user";
 
 
 type Flow = "cashout" | "deposit" | null;
@@ -541,6 +534,7 @@ function App() {
   const [activeAmount, setActiveAmount] = useState(500);
   const [tradeLoading, setTradeLoading] = useState(false);
   const [tradeError, setTradeError] = useState<MappedApiError | null>(null);
+  const [pendingSellerId, setPendingSellerId] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [devicePublicKey, setDevicePublicKey] = useState<string | null>(null);
 
@@ -631,25 +625,21 @@ function App() {
         const pubKey = await getPublicKey();
         setDevicePublicKey(pubKey);
 
-        const stored = await readJSON<StoredUsers>(USERS_STORAGE_KEY);
-        if (stored?.buyer) {
-          setBuyerUser(stored.buyer);
-          setSellerUser(stored.seller ?? null);
+        const stored = await readJSON<UserData>(USERS_STORAGE_KEY);
+        if (stored?.id) {
+          setBuyerUser(stored);
+          setSellerUser(stored);
           return;
         }
 
-        // Demo builds auto-provision throwaway buyer/seller users. In real
-        // mode we leave the session empty so ProtectedRoute sends the user
-        // to the login/register screens instead of faking an identity.
+        // Demo builds auto-provision one throwaway user. In real mode we
+        // leave the session empty so ProtectedRoute redirects to login/register.
         if (import.meta.env.VITE_DEMO_MODE === 'true') {
           const ts = Date.now() % 100000;
-          const [buyer, seller] = await Promise.all([
-            registerUser(`juan_${ts}`),
-            registerUser(`farmacia_${ts}`),
-          ]);
-          await writeJSON(USERS_STORAGE_KEY, { buyer, seller });
-          setBuyerUser(buyer);
-          setSellerUser(seller);
+          const user = await registerUser(`demo_${ts}`);
+          await writeJSON(USERS_STORAGE_KEY, user);
+          setBuyerUser(user);
+          setSellerUser(user);
         }
       } catch (e) {
         console.warn("Backend unavailable for registration, using local stub", e);
@@ -661,10 +651,10 @@ function App() {
     initUsers();
   }, []);
 
-  const handleLoginSuccess = (buyer: UserData, seller: UserData | null) => {
-    setBuyerUser(buyer);
-    setSellerUser(seller);
-    writeJSON(USERS_STORAGE_KEY, { buyer, seller });
+  const handleLoginSuccess = (user: UserData, _seller: UserData | null = null) => {
+    setBuyerUser(user);
+    setSellerUser(user);
+    writeJSON(USERS_STORAGE_KEY, user);
   };
 
   const handleAccountDeleted = () => {
@@ -686,20 +676,14 @@ function App() {
 
   const clearTradeError = () => setTradeError(null);
 
-  const runTradeFlow = async (): Promise<boolean> => {
-    if (!buyerUser || !sellerUser) return false;
+  const runTradeFlow = async (sellerId: string): Promise<boolean> => {
+    if (!buyerUser) return false;
+    setPendingSellerId(sellerId);
     setTradeLoading(true);
     setTradeError(null);
     try {
-      const trade = await createTrade(
-        sellerUser.id,
-        activeAmount,
-        buyerUser.token,
-      );
-      const { lock_tx_hash } = await lockTrade(trade.id, sellerUser.token);
-      await revealTrade(trade.id, sellerUser.token);
+      const trade = await createTrade(sellerId, activeAmount, buyerUser.token);
       setActiveTrade(trade);
-      setLockTxHash(lock_tx_hash);
       return true;
     } catch (e) {
       const mapped = mapApiError(e);
@@ -707,7 +691,7 @@ function App() {
       if (IS_DEMO_MODE) {
         setActiveTrade({
           id: `demo-${Date.now()}`,
-          status: 'revealed',
+          status: 'locked',
           secret_hash: 'demo',
           amount_mxn: activeAmount,
           lock_tx_hash: 'mock_lock_hash',
@@ -721,9 +705,14 @@ function App() {
     }
   };
 
-  const handleOfferSelected = async (_offerId: string) => runTradeFlow();
+  const retryTradeFlow = async (): Promise<boolean> => {
+    if (!pendingSellerId) return false;
+    return runTradeFlow(pendingSellerId);
+  };
 
-  const handleDepositOfferSelected = async (_offerId: string) => runTradeFlow();
+  const handleOfferSelected = async (offerId: string) => runTradeFlow(offerId);
+
+  const handleDepositOfferSelected = async (offerId: string) => runTradeFlow(offerId);
 
   const ctx: AppCtx = {
     buyerUser,
@@ -742,7 +731,7 @@ function App() {
     handleOfferSelected,
     handleDepositOfferSelected,
     clearTradeError,
-    retryTradeFlow: runTradeFlow,
+    retryTradeFlow,
     handleAccountDeleted,
     resetTradeFlow,
     envName,
