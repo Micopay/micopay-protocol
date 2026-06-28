@@ -216,7 +216,7 @@ lo demás.
 | P0-2 | Trade contra contraparte real | `wave:frontend`,`wave:backend` | `wave:retail` | high | ✅ | Depende de P0-1 |
 | ~~P0-4~~ | ~~Fix fetch relativo en APK~~ | — | — | — | — | ✅ **Resuelto** — issue #150 cerrado, PR #154 mergeado |
 | P0-3 | Saldo real de la wallet del usuario | `wave:frontend`,`wave:backend` | `wave:retail` | medium | ✅ | Depende de P0-1 |
-| P0-5 | Onboarding mínimo: alias + respaldo de clave obligatorio (KYC Nivel 0) | `wave:frontend` | `wave:trust` | medium | ✅ | Sienta base para KYC por niveles (D-4) · pendiente pregunta 3 §9 |
+| P0-5 | Onboarding mínimo: alias + visibilidad de llave + respaldo escalonado | `wave:frontend` | `wave:trust` | medium | ✅ | 📝 **Borrador listo (§10)** · §9.3 decidido (escalonado) · 🔒 blocked-by #160 — publicar al mergear #160 |
 | ~~P1-2~~ | ~~Mapa grafica comercios reales~~ | — | — | — | — | ✅ **Resuelto** — PR #156 · @Gozirimdev |
 | P1-1 | ExploreMap usa economía real | `wave:frontend` | `wave:retail` | medium | ✅ | Issue #151 publicado, abierto sin asignar |
 | P1-3 | Nombre real del agente en recibo | `wave:frontend` | `wave:retail` | low | ✅ | 📎 **Plegado a #160** — `seller_username` ya se fetchea, falta cablear `agentName`; mismo `App.tsx` que P0-1/P0-2 |
@@ -261,7 +261,7 @@ lo demás.
 3. **P0-1 + P0-2** (issue #160, asignado en Drips) — en curso.
 4. ~~**P0-4**~~ ✅ PR #154 · @josealfredo79.
 5. **P0-3** — espera a que P0-1 aterrice.
-6. **P0-5** — espera resolución §9.3 (nivel de backup obligatorio).
+6. **P0-5** — 📝 borrador listo (§10); §9.3 decidido (escalonado); espera a que #160 mergee para publicar.
 
 **Etapa 2 — "la UI deja de mentir" (P1):** 🔄 Parcialmente completa
 7. ~~**P1-2**~~ ✅ PR #156 · @Gozirimdev. **P1-1** (issue #151, abierto sin asignar).
@@ -400,9 +400,70 @@ datos personales ni detalles que identifiquen a participantes.
    de la dirección Stellar del usuario autenticado?
 2. ¿El onboarding oficial debe ofrecer dos caminos desde el inicio ("crear wallet" e "importar
    clave Stellar") o dejamos importar clave solo desde Perfil por ahora?
-3. ¿Qué nivel de backup exigimos al crear wallet? Hoy se puede exportar la clave desde Perfil,
-   pero no hay paso obligatorio de respaldo durante alta.
+3. ~~¿Qué nivel de backup exigimos al crear wallet?~~ → **Decidido 2026-06-27: respaldo escalonado.**
+   Opcional para explorar la app; **obligatorio antes de la primera operación con fondos reales**
+   (alinea con D-4 / KYC por niveles). Criterio detallado en el borrador de P0-5 (§10).
 
+---
+
+## 10. Borrador de issue listo para publicar — P0-5 (onboarding + respaldo de clave)
+
+> **Estado:** redactado 2026-06-27, **sin publicar todavía**. Bloqueado por #160 (necesita el modelo
+> de una sola identidad por dispositivo para tener "una llave" coherente que mostrar/respaldar).
+> Publicar como issue de Drips **cuando #160 mergee**. Copiar el bloque de abajo a un issue nuevo.
+>
+> Decisión §9.3 incorporada: **respaldo escalonado** (opcional para explorar, obligatorio antes de
+> operar con fondos reales).
+
+---
+
+**Título:** `P0-5 · Onboarding mínimo: pantalla de wallet + visibilidad de llave + respaldo escalonado`
+
+**Labels:** `wave:frontend` · `wave:trust` · `complexity: medium` · `Stellar Wave` · `wave:needs-product`
+
+**Dependencias:** 🔒 **Bloqueado por #160** (una sola identidad por dispositivo). No empezar hasta que #160 mergee.
+
+### Contexto
+La auditoría UX de [@Shadow-MMN](https://github.com/Shadow-MMN) (validación **V-4**) encontró que la app
+hoy:
+- genera el keypair **en silencio**, sin pantalla de onboarding,
+- lo guarda en almacenamiento local **sin notificar** al usuario,
+- **no ofrece** ningún paso de respaldo de la llave secreta.
+
+Para un producto no-custodial esto es una brecha crítica del Argumento 4 (Stellar es usable): si el
+usuario pierde la llave, pierde los fondos para siempre, y hoy ni siquiera sabe que tiene una llave.
+
+### Qué construir
+1. **Pantalla de onboarding al primer inicio:** explicar en lenguaje simple que se creó una wallet
+   en el dispositivo (no-custodial) y qué significa.
+2. **Visibilidad de la llave pública:** mostrar la dirección Stellar (`G...`) del usuario, con opción
+   de copiar.
+3. **Respaldo de la llave secreta de un toque:** botón claro para copiar/exportar la llave secreta
+   (`S...`), con una nota de seguridad prominente (no compartirla, quien la tenga controla los fondos).
+4. **Política de respaldo escalonada (decisión §9.3):**
+   - El respaldo es **opcional** para empezar a explorar la app (no frustrar a quien solo prueba).
+   - Es **obligatorio** antes de la primera operación con fondos reales: si el usuario no ha
+     confirmado el respaldo, bloquear el inicio de un trade con un prompt de respaldo.
+5. **Alias:** conservar el alias actual (3–30 chars) que ya pide `Register.tsx`.
+
+### Criterio de aceptación
+- [ ] Al primer inicio el usuario ve una pantalla que le explica que tiene una wallet no-custodial.
+- [ ] El usuario puede ver y copiar su llave pública (`G...`).
+- [ ] El usuario puede respaldar su llave secreta de un toque, con advertencia de seguridad visible.
+- [ ] El usuario puede explorar la app sin respaldar, **pero** no puede iniciar una operación con
+      fondos reales sin antes confirmar el respaldo (prompt bloqueante una sola vez).
+- [ ] El estado "respaldo confirmado" persiste en el dispositivo.
+- [ ] La llave secreta nunca sale del dispositivo por HTTP (se mantiene el patrón actual de `keystore`).
+
+### Fuera de alcance
+- KYC real (Nivel 1 teléfono / Nivel 2 documento) — no se implementa en Wave 6 (ver D-4).
+- Importar llave existente desde el onboarding — sigue como pregunta abierta §9 (punto 2); por ahora
+  importar solo desde Perfil.
+
+### Notas
+- Privacy-first: no pedir nombre real, teléfono, documento ni datos financieros en el onboarding.
+- Depende del modelo de **una sola identidad por dispositivo** (#160): antes de eso el dispositivo
+  tiene dos keypairs y no hay "una" llave única que mostrar/respaldar.
 
 
 
