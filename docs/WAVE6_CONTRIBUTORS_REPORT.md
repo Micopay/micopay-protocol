@@ -74,7 +74,7 @@ Each contribution advances one or more of the five claims in our funding narrati
 ---
 
 ### V-2 · Cash-in / deposit context
-**Contributor:** [@Truphile](https://github.com/Truphile) · **PR:** [#159](https://github.com/ericmt-98/micopay-protocol/pull/159) · **Merged:** 2026-06-25
+**Contributor:** [@Truphile](https://github.com/Truphile) · **PR:** [#159](https://github.com/ericmt-98/micopay-protocol/pull/159) · **Integrated:** 2026-06-25
 
 **Format:** First-person, single respondent.
 
@@ -110,7 +110,7 @@ Each contribution advances one or more of the five claims in our funding narrati
 ---
 
 ### V-5 · Trust in the cash-in/cash-out flow
-**Contributor:** [@Truphile](https://github.com/Truphile) · **PR:** [#158](https://github.com/ericmt-98/micopay-protocol/pull/158) · **Merged:** 2026-06-25
+**Contributor:** [@Truphile](https://github.com/Truphile) · **PR:** [#158](https://github.com/ericmt-98/micopay-protocol/pull/158) · **Integrated:** 2026-06-25
 
 **Format:** First-person, single respondent.
 
@@ -230,7 +230,7 @@ Each contribution advances one or more of the five claims in our funding narrati
 ---
 
 ### V-14 · Stablecoin / digital peso mental model
-**Contributor:** [@Max-Owolabi](https://github.com/Max-Owolabi) · **PR:** [#170](https://github.com/ericmt-98/micopay-protocol/pull/170) · **Merged:** 2026-06-26
+**Contributor:** [@Max-Owolabi](https://github.com/Max-Owolabi) · **PR:** [#175](https://github.com/ericmt-98/micopay-protocol/pull/175) · **Integrated:** 2026-06-27
 
 **Format:** First-person, single respondent.
 
@@ -288,7 +288,7 @@ Each contribution advances one or more of the five claims in our funding narrati
 ---
 
 ### V-13 · Remittance sender context — sending money abroad
-**Contributor:** [@Jo-anny](https://github.com/Jo-anny) · **PR:** [#171](https://github.com/ericmt-98/micopay-protocol/pull/171) · **Merged:** 2026-06-26
+**Contributor:** [@Jo-anny](https://github.com/Jo-anny) · **PR:** [#171](https://github.com/ericmt-98/micopay-protocol/pull/171) · **Integrated:** 2026-06-26
 
 **Format:** First-person, single respondent.
 
@@ -374,9 +374,9 @@ Responses now span 6+ countries across 3 continents (LATAM, South Asia, Africa).
 - **First-person** entries reflect each contributor's own lived experience — not a survey of others.
 - **Convenience sample**, self-selected via Stellar Drips Wave 6. Directional and qualitative, not statistically representative.
 - **Privacy-first:** no names, no contact information, no transaction amounts, no wallet addresses.
-- Current sample size: **N=16 individual perspectives** across **7+ countries / 3 regions**.
+- Current sample size: **N=17 individual perspectives** across **7+ countries / 3 regions**.
 - Report `N` plainly. Let the cross-regional consistency of the patterns speak for itself.
 
 ---
 
-*Last updated: 2026-06-26 · Maintainer: [@ericmt-98](https://github.com/ericmt-98)*
+*Last updated: 2026-06-27 · Maintainer: [@ericmt-98](https://github.com/ericmt-98)*

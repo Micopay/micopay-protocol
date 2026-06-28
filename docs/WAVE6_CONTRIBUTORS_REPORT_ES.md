@@ -74,7 +74,7 @@ Cada contribución avanza uno o más de los cinco argumentos de nuestra narrativ
 ---
 
 ### V-2 · Contexto de cash-in / depósito
-**Contribuidor:** [@Truphile](https://github.com/Truphile) · **PR:** [#159](https://github.com/ericmt-98/micopay-protocol/pull/159) · **Mergeado:** 2026-06-25
+**Contribuidor:** [@Truphile](https://github.com/Truphile) · **PR:** [#159](https://github.com/ericmt-98/micopay-protocol/pull/159) · **Integrado:** 2026-06-25
 
 **Formato:** Primera persona, respondente único.
 
@@ -110,7 +110,7 @@ Cada contribución avanza uno o más de los cinco argumentos de nuestra narrativ
 ---
 
 ### V-5 · Confianza en el flujo de cash-in/cash-out
-**Contribuidor:** [@Truphile](https://github.com/Truphile) · **PR:** [#158](https://github.com/ericmt-98/micopay-protocol/pull/158) · **Mergeado:** 2026-06-25
+**Contribuidor:** [@Truphile](https://github.com/Truphile) · **PR:** [#158](https://github.com/ericmt-98/micopay-protocol/pull/158) · **Integrado:** 2026-06-25
 
 **Formato:** Primera persona, respondente único.
 
@@ -249,7 +249,7 @@ Cada contribución avanza uno o más de los cinco argumentos de nuestra narrativ
 ---
 
 ### V-14 · Modelo mental de stablecoin y peso digital
-**Contribuidor:** [@Max-Owolabi](https://github.com/Max-Owolabi) · **PR:** [#170](https://github.com/ericmt-98/micopay-protocol/pull/170) · **Mergeado:** 2026-06-26
+**Contribuidor:** [@Max-Owolabi](https://github.com/Max-Owolabi) · **PR:** [#175](https://github.com/ericmt-98/micopay-protocol/pull/175) · **Integrado:** 2026-06-27
 
 **Formato:** Primera persona, respondente único.
 
@@ -288,7 +288,7 @@ Cada contribución avanza uno o más de los cinco argumentos de nuestra narrativ
 ---
 
 ### V-13 · Contexto del remitente — envío de dinero al exterior
-**Contribuidor:** [@Jo-anny](https://github.com/Jo-anny) · **PR:** [#171](https://github.com/ericmt-98/micopay-protocol/pull/171) · **Mergeado:** 2026-06-26
+**Contribuidor:** [@Jo-anny](https://github.com/Jo-anny) · **PR:** [#171](https://github.com/ericmt-98/micopay-protocol/pull/171) · **Integrado:** 2026-06-26
 
 **Formato:** Primera persona, respondente único.
 
@@ -374,9 +374,9 @@ Las respuestas ya abarcan 6+ países en 3 continentes (LATAM, Sur de Asia, Áfri
 - **Primera persona:** cada entrada refleja la experiencia propia del contribuidor — no una encuesta a terceros.
 - **Muestra por conveniencia**, auto-seleccionada a través del programa Stellar Drips Wave 6. Señal direccional y cualitativa, no representativa estadísticamente.
 - **Privacy-first:** sin nombres, sin datos de contacto, sin montos de dinero, sin direcciones de wallet.
-- Tamaño actual de la muestra: **N=16 perspectivas individuales** en **7+ países / 3 regiones**.
+- Tamaño actual de la muestra: **N=17 perspectivas individuales** en **7+ países / 3 regiones**.
 - Reportar `N` con claridad. Dejar que la consistencia de los patrones entre regiones hable por sí sola.
 
 ---
 
-*Última actualización: 2026-06-26 · Maintainer: [@ericmt-98](https://github.com/ericmt-98)*
+*Última actualización: 2026-06-27 · Maintainer: [@ericmt-98](https://github.com/ericmt-98)*
