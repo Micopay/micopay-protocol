@@ -112,6 +112,54 @@ fn compute_pool() {
     }
 }
 
+// Multi-user tree (4 credentials under ONE root) -- proves a credible anonymity
+// set. If main() passes for leaves at different positions with their computed
+// paths, the multi-leaf tree + paths are correct. Run: nargo test test_multi_leaf_tree
+#[test]
+fn test_multi_leaf_tree() {
+    let secrets: [Field; 4] = [5001, 5002, 5003, 5004];
+    let mut leaves: [Field; 4] = [0; 4];
+    for i in 0..4 {
+        leaves[i] = std::hash::pedersen_hash([secrets[i], LEAF_DOMAIN]);
+    }
+
+    // Zero-subtree roots per level (empty leaf = 0): z[0]=0, z[k]=H(z[k-1],z[k-1]).
+    let mut z: [Field; 20] = [0; 20];
+    for k in 1..20 {
+        z[k] = std::hash::pedersen_hash([z[k - 1], z[k - 1]]);
+    }
+
+    // Level-1 internal nodes over the 4 real leaves.
+    let n01 = std::hash::pedersen_hash([leaves[0], leaves[1]]);
+    let n23 = std::hash::pedersen_hash([leaves[2], leaves[3]]);
+    // Level-2 node holding all 4; siblings above are the zero-subtrees.
+    let n0123 = std::hash::pedersen_hash([n01, n23]);
+    let mut node = n0123;
+    for k in 2..20 {
+        node = std::hash::pedersen_hash([node, z[k]]);
+    }
+    let root = node;
+
+    // Path for leaf 0 (index 0): siblings = [leaf1, n23, z2..z19], all left.
+    let mut p0: [Field; 20] = [0; 20];
+    p0[0] = leaves[1];
+    p0[1] = n23;
+    for k in 2..20 { p0[k] = z[k]; }
+    let idx0: [u1; 20] = [0; 20];
+    main(secrets[0], p0, idx0, root, std::hash::pedersen_hash([secrets[0], NULLIFIER_DOMAIN]));
+
+    // Path for leaf 2 (index 2 = bits 0,1): siblings = [leaf3, n01, z2..z19].
+    let mut p2: [Field; 20] = [0; 20];
+    p2[0] = leaves[3];
+    p2[1] = n01;
+    for k in 2..20 { p2[k] = z[k]; }
+    let mut idx2: [u1; 20] = [0; 20];
+    idx2[1] = 1;
+    main(secrets[2], p2, idx2, root, std::hash::pedersen_hash([secrets[2], NULLIFIER_DOMAIN]));
+
+    std::println(root);
+}
+
 // Tests
 
 // Valid spend: membership holds + correct nullifier.
