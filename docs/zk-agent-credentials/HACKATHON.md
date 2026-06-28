@@ -69,7 +69,7 @@ Outcome: **anonymous + finite + double-spend-proof access**, all verified with Z
 
 ## What's real (deployed on Stellar testnet)
 
-- **`ZkVerifierRegistry`** contract: `CC6YHSKDTINV4XSZNVT42XW4GPJIANNKNNKG73HYTO2OJ7DPF55A33UG`
+- **`ZkVerifierRegistry`** contract: `CBOWU3OVOPGN3ME2R7EFK2Z2JZY4XYRB6A3HBTQ2Q2WWPSXK3VREUQC7`
 - **Circuit** `reputation_v1` (Merkle membership + threshold + nullifier), Noir + UltraHonk — the same
   membership-and-nullifier engine the access credential uses.
 - **On-chain verification tx:** `330be3e4eae61901526206d33438e38e5b90a65d16871ef1727d5bc075902974`

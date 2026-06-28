@@ -36,17 +36,19 @@ on-chain (doble-gasto bloqueado). Eso último es el control que evita el consumo
 ## Estado en una mirada (resumen — el detalle está en `AUDIT.md`)
 
 - ✅ **Motor desplegado en testnet:** contrato `ZkVerifierRegistry`
-  (`CC6YHSKDTINV4XSZNVT42XW4GPJIANNKNNKG73HYTO2OJ7DPF55A33UG`), verificación UltraHonk/BN254
+  (`CBOWU3OVOPGN3ME2R7EFK2Z2JZY4XYRB6A3HBTQ2Q2WWPSXK3VREUQC7`), verificación UltraHonk/BN254
   en Soroban, demo verificada on-chain.
 - ✅ **Anti-doble-gasto on-chain:** `verify_unique` registra el `nullifier` y rechaza repeticiones (409).
 - ✅ **Pago por uso:** endpoint `/api/v1/zk/verify` detrás de x402 (0.001 USDC).
-- ⚠️ **Gap principal:** el circuito desplegado es `reputation_v1` (hoja = *tier de reputación*),
-  no existe aún `access_credential_v1` (hoja = *credencial de acceso pagada*). Mismo motor,
-  falta especializar.
-- ⚠️ **El nullifier está ligado al `context`**, no a la credencial — semántica de "reputación",
-  no de "ficha de un solo uso global". Ver `AUDIT.md` §2.
+- ✅ **`access_credential_v1` desplegado y verificado on-chain (2026-06-27):** nuevo circuito
+  burn-once (`leaf=H(secret,0)`, `nullifier=H(secret,1)` con dominio fijo). Proof real verificado
+  en Soroban; un segundo intento del mismo proof se rechaza con `NullifierAlreadyUsed (#10)` →
+  **burn-once demostrado** (resuelve los hallazgos #1 y #2 del audit).
+- ✅ **Nullifier determinista por credencial:** el dominio es una constante del circuito que el
+  prover no puede rotar → cada credencial se gasta exactamente una vez. `verify_unique` lee el
+  nullifier como los últimos 32 bytes (compatible con `reputation_v1`).
 - ⚠️ **"Consumir el recurso" no está cableado:** el endpoint devuelve `{ verified }`, no
-  sirve inferencia real tras verificar.
+  sirve inferencia real tras verificar. (Siguiente paso.)
 - ⛔ **Base/Solana: 0% construido.** El x402 actual solo entiende Stellar+mock. `BASE_BRIDGE_PLAN.md`
   es diseño post-hackathon.
 

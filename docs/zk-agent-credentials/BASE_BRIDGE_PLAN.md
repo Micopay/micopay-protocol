@@ -90,7 +90,7 @@ channels**; Stellar is the **home, the moat, and the hackathon showcase**.
 |---|---|---|
 | x402 middleware | `apps/api/src/middleware/x402.ts` (`verifyPayment` L107, `mock:` L110, 402 challenge L55–73) | 🟦 **Cobrador** — extend to Base + Solana |
 | Replay protection | `apps/api/src/db/x402.ts` | reuse for Base/Solana payment refs |
-| ZKaaS | `apps/api/src/routes/zk.ts` + `contracts/zk-verifier/` (deployed Soroban `CC6YHSKDTINV4XSZNVT42XW4GPJIANNKNNKG73HYTO2OJ7DPF55A33UG`) | 🟩 **Portero** + **the Stellar showcase** |
+| ZKaaS | `apps/api/src/routes/zk.ts` + `contracts/zk-verifier/` (deployed Soroban `CBOWU3OVOPGN3ME2R7EFK2Z2JZY4XYRB6A3HBTQ2Q2WWPSXK3VREUQC7`) | 🟩 **Portero** + **the Stellar showcase** |
 | Service catalog / skill | `apps/api/src/routes/services.ts`, `skill/SKILL.md` | discovery — advertise Base+Solana |
 | Cash-out | `apps/api/src/routes/cash.ts` (MicopayEscrow on Soroban) | 🟥 **Puerta a pesos — PHASE 2** (the moat) |
 | AtomicSwapHTLC | `contracts/atomic-swap/` (deployed, sha256) | ⚙️ reserved for treasury/multi-asset, NOT the USDC hot path |

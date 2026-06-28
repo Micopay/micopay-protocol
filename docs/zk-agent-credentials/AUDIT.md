@@ -9,6 +9,21 @@
 
 ---
 
+> ## ✅ Actualización 2026-06-27 — hallazgos #1 y #2 RESUELTOS
+> - **#2** Se creó el circuito **`access_credential_v1`** (burn-once: `leaf=H(secret,0)`,
+>   `nullifier=H(secret,1)` con dominio fijo). 5/5 tests nargo.
+> - **#1** El nullifier ahora es **determinista por credencial** (el prover no puede rotar el
+>   dominio). `verify_unique` se generalizó a leer el nullifier como los últimos 32 bytes
+>   (compatible con `reputation_v1`). 7/7 tests del contrato.
+> - **Redesplegado** en testnet: `CBOWU3OVOPGN3ME2R7EFK2Z2JZY4XYRB6A3HBTQ2Q2WWPSXK3VREUQC7`
+>   (admin = `deployer`), ambos circuitos registrados.
+> - **E2E verificado on-chain:** proof real de `access_credential_v1` → `verify_unique` OK;
+>   segundo envío del mismo proof → `NullifierAlreadyUsed (#10)`. **Burn-once demostrado.**
+> - **Pendientes aún abiertos:** §2.4 (medición de saldo), §3 (cablear consumo real del recurso),
+>   §4 (Base/Solana). El resto de §2 queda como histórico de cómo estaba antes del fix.
+
+---
+
 ## Veredicto en una línea
 
 El **motor criptográfico es real, está desplegado y respalda la promesa central** (verificación
@@ -24,7 +39,7 @@ hackathon Stellar-only, pero sí hay que decirlo con honestidad.
 
 | Componente | Evidencia en código | Estado |
 |---|---|---|
-| Contrato `ZkVerifierRegistry` | `contracts/zk-verifier/src/lib.rs` | ✅ Desplegado testnet `CC6YHSKD…33UG` |
+| Contrato `ZkVerifierRegistry` | `contracts/zk-verifier/src/lib.rs` | ✅ Desplegado testnet `CBOWU3OV…EUQC7` |
 | Verificación UltraHonk/BN254 en Soroban | `verify()` L87-101 vía `ultrahonk_soroban_verifier` | ✅ Verificada on-chain (tx `330be3e4…`) |
 | Anti-doble-gasto (nullifier on-chain) | `verify_unique()` L109-148 | ✅ Implementado |
 | Registro de VKs admin-only | `register_circuit()` L45-63 + `require_admin()` | ✅ |
