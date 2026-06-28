@@ -16,6 +16,7 @@ import { merchantRoutes } from "./routes/merchants.js";
 import { tradeMessagesRoutes } from "./routes/trade-messages.js";
 import { zkRoutes } from "./routes/zk.js";
 import { inferenceRoutes } from "./routes/inference.js";
+import { credentialRoutes } from "./routes/credentials.js";
 import { initAuthChallengesTable } from "./db/auth.js";
 import { config } from "./config.js";
 
@@ -54,6 +55,7 @@ app.register(merchantRoutes);
 app.register(tradeMessagesRoutes);
 app.register(zkRoutes);
 app.register(inferenceRoutes);
+app.register(credentialRoutes);
 
 async function start() {
   await initAuthChallengesTable();

@@ -95,6 +95,23 @@ fn compute_demo_values_b() {
     std::println(nullifier);
 }
 
+// Credential pool for the x402 "buy" demo: prints root+nullifier for a batch of
+// secrets (each a single-leaf sparse tree). Run: nargo test compute_pool --show-output
+#[test]
+fn compute_pool() {
+    let secrets: [Field; 4] = [4001, 4002, 4003, 4004];
+    for s in secrets {
+        let leaf = std::hash::pedersen_hash([s, LEAF_DOMAIN]);
+        let mut node = leaf;
+        for _i in 0..20 {
+            node = std::hash::pedersen_hash([node, 0]);
+        }
+        std::println(s);          // secret
+        std::println(node);       // root
+        std::println(std::hash::pedersen_hash([s, NULLIFIER_DOMAIN])); // nullifier
+    }
+}
+
 // Tests
 
 // Valid spend: membership holds + correct nullifier.

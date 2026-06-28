@@ -115,6 +115,55 @@ export async function invokeVerify(
   throw new Error(`Timeout waiting for tx: ${sent.hash}`);
 }
 
+/**
+ * Publish a Merkle root on the ZK contract (admin-only). `rootDecimal` is the
+ * 32-byte field root as a decimal string. Used by the credential-issuance flow
+ * to activate a freshly bought credential's tree. Returns the tx hash.
+ */
+export async function setReputationRoot(rootDecimal: string): Promise<string> {
+  const contractId = process.env.ZK_VERIFIER_CONTRACT_ID ?? "";
+  if (!contractId) throw new Error("ZK_VERIFIER_CONTRACT_ID not set");
+  const secret = process.env.ADMIN_SECRET_KEY;
+  if (!secret) throw new Error("ADMIN_SECRET_KEY not set");
+
+  const rpc = new StellarSdk.rpc.Server(RPC_URL);
+  const kp = StellarSdk.Keypair.fromSecret(secret);
+  const account = await rpc.getAccount(kp.publicKey());
+  const contract = new StellarSdk.Contract(contractId);
+
+  // 32-byte big-endian encoding of the field element
+  const rootHex = BigInt(rootDecimal).toString(16).padStart(64, "0");
+  const rootVal = StellarSdk.xdr.ScVal.scvBytes(Buffer.from(rootHex, "hex"));
+
+  let tx = new StellarSdk.TransactionBuilder(account, {
+    fee: "1000000",
+    networkPassphrase: NET,
+  })
+    .addOperation(contract.call("set_reputation_root", rootVal))
+    .setTimeout(180)
+    .build();
+
+  const sim = await rpc.simulateTransaction(tx);
+  if (StellarSdk.rpc.Api.isSimulationError(sim)) {
+    throw new Error(`Simulation error: ${sim.error}`);
+  }
+  tx = StellarSdk.rpc.assembleTransaction(tx, sim).build();
+  tx.sign(kp);
+  const sent = await rpc.sendTransaction(tx);
+  if (sent.status === "ERROR") {
+    throw new Error(`Send error: ${JSON.stringify(sent.errorResult)}`);
+  }
+  let attempts = 0;
+  do {
+    await new Promise((r) => setTimeout(r, 2000));
+    const status = await rpc.getTransaction(sent.hash);
+    if (status.status === "SUCCESS") return sent.hash;
+    if (status.status === "FAILED") throw new Error(`set_reputation_root failed: ${sent.hash}`);
+    attempts++;
+  } while (attempts < 30);
+  throw new Error(`Timeout waiting for tx: ${sent.hash}`);
+}
+
 /** Fetch the current Merkle root published on the ZK contract (decimal string). */
 export async function fetchReputationRoot(): Promise<string | null> {
   const contractId = process.env.ZK_VERIFIER_CONTRACT_ID ?? "";
