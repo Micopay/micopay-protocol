@@ -96,11 +96,13 @@ function generateFallbackAddress(prefix: string): string {
 }
 
 export async function getAuthToken(username: string): Promise<string> {
+  const stellar_address = (await getPublicKey()) ?? generateFallbackAddress(username);
+
   // Step 1: request a one-time challenge from the server
   const { challenge } = await fetch(`${BASE_URL}/auth/challenge`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username }),
+    body: JSON.stringify({ stellar_address }),
   }).then(r => r.json());
 
   // Step 2: sign with the device keypair — private key never leaves the device
@@ -110,7 +112,7 @@ export async function getAuthToken(username: string): Promise<string> {
   const { token } = await fetch(`${BASE_URL}/auth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, challenge, signature }),
+    body: JSON.stringify({ stellar_address, challenge, signature }),
   }).then(r => r.json());
 
   return token;
