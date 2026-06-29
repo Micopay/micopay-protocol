@@ -464,6 +464,16 @@ export interface AvailableMerchant {
   distance_km: number;
   /** Payout the buyer receives for the requested amount. */
   payout_mxn: number;
+  /** Reputation: fraction 0..1 of completed trades (optional) */
+  completion_rate?: number;
+  /** Total completed trades (optional) */
+  trades_completed?: number;
+  /** Reputation tier (optional) */
+  tier?: string;
+  /** Optional seller type flag coming from API (e.g. 'business' | 'individual') */
+  seller_type?: string;
+  /** Backwards-compatible boolean marker for business sellers (optional) */
+  is_business?: boolean;
 }
 
 export interface MerchantsAvailableQuery {

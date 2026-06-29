@@ -214,6 +214,15 @@ function MerchantOfferCard({ merchant, amount, loading, isBest, onSelectOffer }:
                     verified
                   </span>
                 </div>
+                <div className="mt-1 text-sm text-on-surface-variant flex items-center gap-2">
+                  <span>{merchant.completion_rate !== undefined ? `${Math.round(merchant.completion_rate * 100)}% completitud` : '— completitud'}</span>
+                  <span>·</span>
+                  <span>{merchant.trades_completed ?? 0} trades</span>
+                  {merchant.tier && <span className="ml-2 px-2 py-0.5 text-[11px] font-bold rounded-md bg-surface-container-high text-primary">{merchant.tier}</span>}
+                  <span className={`ml-2 px-2 py-0.5 text-[11px] font-bold rounded-md ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                    {((merchant.seller_type === 'business') || merchant.is_business) ? 'Negocio establecido' : 'Individuo'}
+                  </span>
+                </div>
                 <div className="flex items-center gap-1 text-on-surface-variant text-xs">
                   <span className="material-symbols-outlined text-xs">near_me</span>
                   <span>{distanceLabel} de distancia</span>
@@ -264,6 +273,15 @@ function MerchantOfferCard({ merchant, amount, loading, isBest, onSelectOffer }:
           </div>
           <div>
             <h3 className="font-bold text-lg">{merchant.username}</h3>
+            <div className="mt-1 text-sm text-on-surface-variant flex items-center gap-2">
+              <span>{merchant.completion_rate !== undefined ? `${Math.round(merchant.completion_rate * 100)}%` : '—'}</span>
+              <span>·</span>
+              <span>{merchant.trades_completed ?? 0} trades</span>
+              {merchant.tier && <span className="ml-2 px-2 py-0.5 text-[10px] rounded-md bg-surface-container-high text-primary">{merchant.tier}</span>}
+              <span className={`ml-2 px-2 py-0.5 text-[10px] rounded-md ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                {((merchant.seller_type === 'business') || merchant.is_business) ? 'Negocio' : 'Individuo'}
+              </span>
+            </div>
             <div className="flex items-center gap-1 text-on-surface-variant text-xs">
               <span className="material-symbols-outlined text-xs">near_me</span>
               <span>{distanceLabel}</span>
