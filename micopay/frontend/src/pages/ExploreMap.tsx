@@ -28,6 +28,7 @@ interface Offer {
   commissionPct: number;
   badge?: string;
   isPrimary?: boolean;
+  online?: boolean;
 }
 
 function merchantToOffer(m: AvailableMerchant, index: number): Offer {
@@ -40,6 +41,7 @@ function merchantToOffer(m: AvailableMerchant, index: number): Offer {
     receiveMxn: m.payout_mxn,
     commissionPct: m.rate_percent,
     isPrimary: index === 0,
+    online: true,
   };
 }
 
