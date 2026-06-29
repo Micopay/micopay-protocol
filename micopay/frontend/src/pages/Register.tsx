@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { registerUser } from '../services/api';
 import { generateAndStoreKeypair, getPublicKey, exportSecretKey } from '../lib/keystore';
-import { setBackupConfirmed } from '../services/secureStorage';
+import { setBackupConfirmed, writeJSON } from '../services/secureStorage';
+
+const USERS_STORAGE_KEY = 'micopay_user';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -34,8 +36,11 @@ export default function Register() {
       const sec = await exportSecretKey();
       if (!pub || !sec) throw new Error('No se pudo generar tu identidad Stellar');
 
-      await registerUser(username.trim());
-      
+      const userData = await registerUser(username.trim());
+      // Persist session immediately so App.tsx restores it on next load
+      // and the user doesn't have to re-authenticate right after registering.
+      await writeJSON(USERS_STORAGE_KEY, userData);
+
       setPubKey(pub);
       setSecretKey(sec);
       setShowOnboarding(true);
@@ -63,7 +68,8 @@ export default function Register() {
   };
 
   const finishOnboarding = () => {
-    navigate('/login', { replace: true });
+    // Go straight home — session is already persisted, no re-login needed.
+    navigate('/', { replace: true });
   };
 
   if (showOnboarding) {

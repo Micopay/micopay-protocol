@@ -4,7 +4,8 @@ import { UserData, registerUser, getAuthToken } from '../services/api';
 import { writeJSON } from '../services/secureStorage';
 import { generateAndStoreKeypair, keypairExists } from '../lib/keystore';
 
-const USERS_STORAGE_KEY = 'micopay_users';
+// Must match the key used in App.tsx (USERS_STORAGE_KEY = 'micopay_user')
+const USERS_STORAGE_KEY = 'micopay_user';
 
 interface LoginProps {
   onLoginSuccess: (buyer: UserData, seller: UserData | null) => void;
@@ -36,7 +37,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       await ensureKeypair();
       const token = await getAuthToken(username.trim());
       const user: UserData = { id: username.trim(), username: username.trim(), token };
-      await writeJSON(USERS_STORAGE_KEY, { buyer: user, seller: null });
+      // Store as a flat UserData object — App.tsx reads it with readJSON<UserData>
+      await writeJSON(USERS_STORAGE_KEY, user);
       onLoginSuccess(user, null);
       navigate(from, { replace: true });
     } catch (e: unknown) {
