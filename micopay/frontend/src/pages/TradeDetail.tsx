@@ -31,11 +31,9 @@ async function getStoredToken(): Promise<string | null> {
   }
 }
 
-function isCurrentUserBuyer(tradeBuyerId: string): boolean {
+async function isCurrentUserBuyer(tradeBuyerId: string): Promise<boolean> {
   try {
-    const raw = localStorage.getItem('micopay_users');
-    if (!raw) return false;
-    const parsed = JSON.parse(raw);
+    const parsed = await readJSON<{ buyer?: { id: string } }>('micopay_users');
     return parsed?.buyer?.id === tradeBuyerId;
   } catch {
     return false;
@@ -620,6 +618,13 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
   const [showRefundConfirm, setShowRefundConfirm] = useState(false);
   const [isRefunding, setIsRefunding] = useState(false);
   const [refundError, setRefundError] = useState<string | null>(null);
+  const [isBuyer, setIsBuyer] = useState(false);
+
+  useEffect(() => {
+    if (trade?.buyer_id) {
+      isCurrentUserBuyer(trade.buyer_id).then(setIsBuyer);
+    }
+  }, [trade?.buyer_id]);
 
   const fetchTrade = useCallback(async () => {
     if (!id) return;
@@ -752,8 +757,6 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
   if (!trade) {
     return null;
   }
-
-  const isBuyer = isCurrentUserBuyer(trade.buyer_id ?? '');
 
   // Render state-specific view
   const renderStateView = () => {

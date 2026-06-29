@@ -1,4 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { readJSON } from '../services/secureStorage';
+
+async function getAuthToken(): Promise<string> {
+  const token = await readJSON<string>('auth_token');
+  return token ?? '';
+}
 
 export interface TradeMessage {
   id: string;
@@ -82,7 +88,7 @@ export function useChatMessages({
         const response = await fetch(url.toString(), {
           method: 'GET',
           headers: {
-            Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}`,
+            Authorization: `Bearer ${await getAuthToken()}`,
             'Content-Type': 'application/json',
           },
         });
@@ -124,7 +130,7 @@ export function useChatMessages({
       const response = await fetch(url.toString(), {
         method: 'GET',
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}`,
+          Authorization: `Bearer ${await getAuthToken()}`,
           'Content-Type': 'application/json',
         },
       });
@@ -221,7 +227,7 @@ export function useChatMessages({
         const response = await fetch(`${apiBaseUrl}/trades/${tradeId}/messages`, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}`,
+            Authorization: `Bearer ${await getAuthToken()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ body: trimmed }),
