@@ -298,6 +298,16 @@ I would immediately walk away if the platform lacked user verification or encour
 
 If the entire experience was smooth, secure, and exactly as the platform promised, I would gladly recommend it. A simple onboarding process, reliable transaction completion, and the confidence that my issue would be resolved if anything went wrong would make me comfortable suggesting it to friends.
 
+### V-17 · Accepting "dollars" and receiving pesos (merchant side)
+
+First-person response (privacy-safe):
+
+- **What kind of small business is it and what payment methods do you accept today?**: I run a small corner shop (abarrotes) in Mexico. Currently, we accept cash, debit/credit cards, and occasionally direct bank transfers (SPEI). We accept these because customers expect it, and refusing cards means losing sales.
+- **What is the most annoying part of the payment methods you accept now?**: The 3-4% fee on card terminals is painful for small margins, and sometimes the settlement is delayed until the next business day. Handling physical cash is also a security risk and requires time-consuming trips to the bank to deposit.
+- **Would you accept a payment where the customer pays "in dollars" and you receive pesos that settle the same day? What would worry you?**: Yes, I would definitely accept it if it settles the same day. My main worry would be the exchange rate—if it's a poor rate, it eats into the profit. I'd also worry about the reliability of the app and whether the "same day" settlement happens instantly or takes hours.
+- **Would you want to settle in a stable digital peso or in physical cash — or both? Which would be your default?**: I would want the option for both, but my default would be a stable digital peso. It's safer than keeping physical cash in the register, and I can use the digital balance to pay my suppliers or transfer it to my main bank account.
+- **Would you be interested in also handing out cash to customers (as a paid liquidity provider) using the same app? What commission % would feel fair for that?**: Yes. Since we receive a lot of cash from daily sales, handing it out to customers in exchange for a digital balance (plus a commission) would be a great way to "deposit" our cash without going to the bank. A commission of around 2-3% would feel fair and make it worth the effort.
+
 ---
 
 ## How findings feed Wave 6 product work
