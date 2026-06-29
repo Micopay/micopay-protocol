@@ -412,7 +412,7 @@ function SuccessRoute() {
             seller_id: sellerUser?.id ?? '',
             buyer_id: buyerUser?.id ?? '',
           }}
-          agentName={flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe'}
+          agentName={sellerUsername ?? (flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe')}
           onHome={() => {
             resetTradeFlow();
             navigate('/');
