@@ -28,6 +28,10 @@ interface Offer {
   commissionPct: number;
   badge?: string;
   isPrimary?: boolean;
+  completionRate?: number;
+  tradesCompleted?: number;
+  tier?: string;
+  isBusiness?: boolean;
   online?: boolean;
 }
 
@@ -41,6 +45,10 @@ function merchantToOffer(m: AvailableMerchant, index: number): Offer {
     receiveMxn: m.payout_mxn,
     commissionPct: m.rate_percent,
     isPrimary: index === 0,
+    completionRate: m.completion_rate ?? 0,
+    tradesCompleted: m.trades_completed ?? 0,
+    tier: m.tier ?? undefined,
+    isBusiness: (m.seller_type === 'business') || (m.is_business === true) || false,
   };
 }
 
@@ -193,6 +201,17 @@ const ExploreMap = ({
                               <span className="material-symbols-outlined text-sm">directions_walk</span>
                               {offer.distance} · {offer.walkMinutes} min
                             </p>
+                            <div className="mt-2 flex items-center gap-2">
+                              <span className="text-[12px] text-on-surface-variant">{offer.completionRate !== undefined ? `${Math.round(offer.completionRate * 100)}% completitud` : '— completitud'}</span>
+                              <span className="text-[12px] text-on-surface-variant">·</span>
+                              <span className="text-[12px] text-on-surface-variant">{offer.tradesCompleted ?? 0} trades</span>
+                              {offer.tier && (
+                                <span className="ml-2 px-2 py-0.5 text-[11px] font-bold rounded-md bg-surface-container-high text-primary">{offer.tier}</span>
+                              )}
+                              <span className={`ml-2 px-2 py-0.5 text-[11px] font-bold rounded-md ${offer.isBusiness ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                                {offer.isBusiness ? 'Negocio establecido' : 'Individuo'}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -254,11 +273,20 @@ const ExploreMap = ({
                         </div>
                         <div>
                           <h3 className="font-headline font-bold text-on-surface">{offer.name}</h3>
-                          {offer.badge && (
+                            {offer.badge && (
                             <span className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
                               {offer.badge}
                             </span>
                           )}
+                            <div className="mt-1 text-sm text-on-surface-variant flex items-center gap-2">
+                              <span>{offer.completionRate !== undefined ? `${Math.round(offer.completionRate * 100)}%` : '—'}</span>
+                              <span>·</span>
+                              <span>{offer.tradesCompleted ?? 0} trades</span>
+                              {offer.tier && <span className="ml-2 px-2 py-0.5 text-[10px] rounded-md bg-surface-container-high text-primary">{offer.tier}</span>}
+                              <span className={`ml-2 px-2 py-0.5 text-[10px] rounded-md ${offer.isBusiness ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                                {offer.isBusiness ? 'Negocio' : 'Individuo'}
+                              </span>
+                            </div>
                           {isSelected && (
                             <span className="ml-2 text-[11px] font-bold text-primary bg-white px-2 py-0.5 rounded-md">
                               Seleccionado en mapa
