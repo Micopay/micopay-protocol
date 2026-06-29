@@ -17,6 +17,7 @@ import Home from "./pages/Home";
 import CashoutRequest from "./pages/CashoutRequest";
 import DepositRequest from "./pages/DepositRequest";
 import ExploreMap from "./pages/ExploreMap";
+import TradeConfirmationPage from "./pages/TradeConfirmation";
 import DepositMap from "./pages/DepositMap";
 import ChatRoom from "./pages/ChatRoom";
 import DepositChat from "./pages/DepositChat";
@@ -203,6 +204,19 @@ function MapRoute() {
           amount={activeAmount}
           loading={tradeLoading}
           onBack={() => navigate('/cashout')}
+          onProceedToConfirm={(offer) => {
+            navigate('/confirm', {
+              state: {
+                merchantId: offer.id,
+                merchantName: offer.name,
+                receiveMxn: offer.receiveMxn,
+                commissionPct: offer.commissionPct,
+                amountMxn: activeAmount,
+                flow: 'cashout',
+                nearbyCount: offer.nearbyCount,
+              },
+            });
+          }}
           onSelectOffer={async (offerId) => {
             const ok = await handleOfferSelected(offerId);
             if (ok) navigate('/chat');
@@ -215,6 +229,45 @@ function MapRoute() {
             if (ok) navigate('/chat');
           }}
       />
+  );
+}
+
+function ConfirmRoute() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { handleOfferSelected, tradeLoading, tradeError, clearTradeError } = useAppCtx();
+  const state = location.state as {
+    merchantName: string;
+    merchantId: string;
+    receiveMxn: number;
+    commissionPct: number;
+    amountMxn: number;
+    flow: 'cashout' | 'deposit';
+    nearbyCount: number;
+  } | null;
+
+  if (!state?.merchantId) {
+    return <Navigate to="/map" replace />;
+  }
+
+  return (
+    <TradeConfirmationPage
+      merchantName={state.merchantName}
+      merchantId={state.merchantId}
+      receiveMxn={state.receiveMxn}
+      commissionPct={state.commissionPct}
+      amountMxn={state.amountMxn}
+      flow={state.flow ?? 'cashout'}
+      nearbyCount={state.nearbyCount}
+      loading={tradeLoading}
+      errorMessage={tradeError?.message ?? null}
+      onBack={() => navigate(-1)}
+      onConfirm={async () => {
+        const ok = await handleOfferSelected(state.merchantId);
+        if (ok) navigate('/chat');
+        return ok;
+      }}
+    />
   );
 }
 
@@ -483,6 +536,7 @@ const HIDE_BOTTOMNAV_ROUTES = new Set([
   "/login",
   "/register",
   "/merchant-settings",
+  "/confirm",
   "/chat",
   "/chat-deposit",
   "/qr-reveal",
@@ -799,6 +853,7 @@ function App() {
                 <Route path="/cashout" element={<ProtectedRoute><CashoutRoute /></ProtectedRoute>} />
                 <Route path="/deposit" element={<ProtectedRoute><DepositRoute /></ProtectedRoute>} />
                 <Route path="/map" element={<ProtectedRoute><MapRoute /></ProtectedRoute>} />
+                <Route path="/confirm" element={<ProtectedRoute><ConfirmRoute /></ProtectedRoute>} />
                 <Route path="/map-deposit" element={<ProtectedRoute><MapDepositRoute /></ProtectedRoute>} />
                 <Route path="/chat" element={<ProtectedRoute><ChatRoute /></ProtectedRoute>} />
                 <Route path="/chat-deposit" element={<ProtectedRoute><ChatDepositRoute /></ProtectedRoute>} />

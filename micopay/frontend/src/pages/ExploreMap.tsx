@@ -43,9 +43,18 @@ function merchantToOffer(m: AvailableMerchant, index: number): Offer {
   };
 }
 
+export interface OfferConfirmData {
+  id: string;
+  name: string;
+  receiveMxn: number;
+  commissionPct: number;
+  nearbyCount: number;
+}
+
 interface ExploreMapProps {
   onBack: () => void;
   onSelectOffer: (offerId: string) => void;
+  onProceedToConfirm?: (offer: OfferConfirmData) => void;
   amount?: number;
   loading?: boolean;
   creationError?: string | null;
@@ -57,6 +66,7 @@ interface ExploreMapProps {
 const ExploreMap = ({
   onBack,
   onSelectOffer,
+  onProceedToConfirm,
   amount = 500,
   loading = false,
   creationError,
@@ -199,7 +209,19 @@ const ExploreMap = ({
                         </div>
                       </div>
                       <button
-                        onClick={() => onSelectOffer(offer.id)}
+                        onClick={() => {
+                          if (onProceedToConfirm) {
+                            onProceedToConfirm({
+                              id: offer.id,
+                              name: offer.name,
+                              receiveMxn: offer.receiveMxn,
+                              commissionPct: offer.commissionPct,
+                              nearbyCount: offers.length,
+                            });
+                          } else {
+                            onSelectOffer(offer.id);
+                          }
+                        }}
                         disabled={loading}
                         className="w-full h-[52px] bg-gradient-to-r from-primary to-primary-container text-white font-headline font-bold rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
                       >
@@ -249,7 +271,19 @@ const ExploreMap = ({
                       </div>
                     </div>
                     <button
-                      onClick={() => onSelectOffer(offer.id)}
+                      onClick={() => {
+                        if (onProceedToConfirm) {
+                          onProceedToConfirm({
+                            id: offer.id,
+                            name: offer.name,
+                            receiveMxn: offer.receiveMxn,
+                            commissionPct: offer.commissionPct,
+                            nearbyCount: offers.length,
+                          });
+                        } else {
+                          onSelectOffer(offer.id);
+                        }
+                      }}
                       disabled={loading}
                       className="w-full py-3 border border-primary text-primary font-bold rounded-xl active:scale-95 transition-all disabled:opacity-70"
                     >
