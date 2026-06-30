@@ -9,6 +9,12 @@ import {
   cleanupExpiredChallenges,
 } from '../db/auth.js';
 
+const authRateLimitConfig = {
+  max: 5,
+  timeWindow: '1 minute',
+  keyGenerator: (request: { ip: string }) => request.ip,
+};
+
 export async function authRoutes(app: FastifyInstance & { jwt: any }) {
   /**
    * POST /auth/challenge
@@ -16,6 +22,9 @@ export async function authRoutes(app: FastifyInstance & { jwt: any }) {
    * Persisted to DB so it survives restarts and works across multiple instances.
    */
   app.post('/auth/challenge', {
+    config: {
+      rateLimit: authRateLimitConfig,
+    },
     schema: {
       body: {
         type: 'object',
@@ -48,6 +57,9 @@ export async function authRoutes(app: FastifyInstance & { jwt: any }) {
    * In production: verify using Stellar SDK's Keypair.verify().
    */
   app.post('/auth/token', {
+    config: {
+      rateLimit: authRateLimitConfig,
+    },
     schema: {
       body: {
         type: 'object',

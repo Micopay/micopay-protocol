@@ -29,6 +29,8 @@ import History from "./pages/History";
 import TradeDetail from "./pages/TradeDetail";
 import CETESScreen from "./pages/CETESScreen";
 import BlendScreen from "./pages/BlendScreen";
+import KYCScreen from "./pages/KYCScreen";
+
 import MerchantInbox from "./pages/MerchantInbox";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
@@ -412,7 +414,7 @@ function SuccessRoute() {
             seller_id: sellerUser?.id ?? '',
             buyer_id: buyerUser?.id ?? '',
           }}
-          agentName={flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe'}
+          agentName={sellerUsername ?? (flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe')}
           onHome={() => {
             resetTradeFlow();
             navigate('/');
@@ -455,6 +457,16 @@ function CetesRoute() {
       />
   );
 }
+
+function KYCApprovedNextRoute() {
+  const navigate = useNavigate();
+  // After approved, continue to CETES + deposit flow.
+  useEffect(() => {
+    navigate('/cetes');
+  }, [navigate]);
+  return null;
+}
+
 
 function BlendRoute() {
   const navigate = useNavigate();
@@ -910,6 +922,12 @@ function App() {
                 <Route path="/success" element={<ProtectedRoute><SuccessRoute /></ProtectedRoute>} />
                 <Route path="/explore" element={<ProtectedRoute><ExploreRoute /></ProtectedRoute>} />
                 <Route path="/cetes" element={<ProtectedRoute><CetesRoute /></ProtectedRoute>} />
+                <Route path="/kyc" element={<ProtectedRoute><KYCScreen onApproved={() => {
+                  // Cache hit will redirect into CETES screen; this matches the acceptance criteria.
+                  window.location.hash = '/#/cetes';
+                }} /></ProtectedRoute>} />
+                <Route path="/kyc-approved" element={<ProtectedRoute><KYCApprovedNextRoute /></ProtectedRoute>} />
+
                 <Route path="/blend" element={<ProtectedRoute><BlendRoute /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><ProfileRoute /></ProtectedRoute>} />
                 <Route path="/privacy" element={<ProtectedRoute><PrivacyRoute /></ProtectedRoute>} />

@@ -5,7 +5,7 @@ import { getTradeStateDebugOverride, normalizeTradeState, TradeState } from '../
 import ErrorBanner from '../components/ErrorBanner';
 import SupportLink from '../components/SupportLink';
 import { mapApiError, type MappedApiError } from '../utils/apiError';
-import { DEMO_QR_PAYLOAD, IS_DEMO_MODE } from '../utils/demoMode';
+import { getDemoQrPayload, IS_DEMO_MODE } from '../utils/demoMode';
 
 interface QRRevealProps {
     activeTrade: TradeData | null;
@@ -39,7 +39,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
             })
             .catch((e) => {
                 if (IS_DEMO_MODE) {
-                    setQrPayload(DEMO_QR_PAYLOAD);
+                    setQrPayload(getDemoQrPayload());
                     setSecretLoaded(true);
                 } else {
                     setSecretError(mapApiError(e));
