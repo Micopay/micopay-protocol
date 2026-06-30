@@ -7,6 +7,10 @@ import { executeAtomicSwapBackground } from "../lib/soroban.js";
 const CONTRACT_A = process.env.ATOMIC_SWAP_CONTRACT_A ?? "CCDOUXIXSFXT2HTJAJGFNUJN6CKCYX2M6AL2BHHPEF6ISNHP2BGLS4KX";
 const CONTRACT_B = process.env.ATOMIC_SWAP_CONTRACT_B ?? "CBLCGG44QQILWEIVBXDSZSLH7NI7SGJQKXQ7WTKP3W3YSXOBTGMZKSNN";
 
+const ALLOWED_ASSETS = new Set(["USDC", "XLM", "MXNe"]);
+const MAX_AMOUNT_USD = 100; // Maximum amount per swap (USD)
+const DEMO_AGENT_ADDRESS = process.env.DEMO_AGENT_PUBLIC_KEY ?? "GDEMOAGENTADDRESSXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"; // Placeholder, should be set in env
+
 const SYSTEM_PROMPT = `
 Eres el agente de atomic swaps de Micopay Protocol.
 
@@ -136,6 +140,38 @@ async function executeTool(
   }
 }
 
+function validatePlan(plan: any): void {
+  // Validate assets are allowed
+  if (!ALLOWED_ASSETS.has(plan.sell_asset)) {
+    throw new Error(`Invalid sell_asset: ${plan.sell_asset}. Allowed assets: ${Array.from(ALLOWED_ASSETS).join(", ")}`);
+  }
+  if (!ALLOWED_ASSETS.has(plan.buy_asset)) {
+    throw new Error(`Invalid buy_asset: ${plan.buy_asset}. Allowed assets: ${Array.from(ALLOWED_ASSETS).join(", ")}`);
+  }
+
+  // Validate amounts
+  const sellAmountNum = parseFloat(plan.sell_amount);
+  const buyAmountNum = parseFloat(plan.buy_amount);
+  if (isNaN(sellAmountNum) || sellAmountNum <= 0) {
+    throw new Error(`Invalid sell_amount: ${plan.sell_amount}`);
+  }
+  if (isNaN(buyAmountNum) || buyAmountNum <= 0) {
+    throw new Error(`Invalid buy_amount: ${plan.buy_amount}`);
+  }
+
+  // Simple USD estimate for max amount check
+  const estimatedUsd = (plan.sell_asset === "USDC" ? sellAmountNum : 
+                         plan.sell_asset === "XLM" ? sellAmountNum * 0.1 : sellAmountNum * 0.05); // Rough estimates
+  if (estimatedUsd > MAX_AMOUNT_USD) {
+    throw new Error(`Amount exceeds maximum allowed (${MAX_AMOUNT_USD} USD)`);
+  }
+
+  // Validate counterparty address (in demo mode, should match expected counterparty)
+  if (DEMO_AGENT_ADDRESS && plan.counterparty_address !== DEMO_AGENT_ADDRESS) {
+    throw new Error(`Invalid counterparty_address`);
+  }
+}
+
 async function planSwap(
   intent: string,
   userAddress: string,
@@ -226,6 +262,16 @@ export async function agentRoutes(fastify: FastifyInstance): Promise<void> {
       try {
         const plan = await planSwap(body.intent, body.user_address ?? "GUNKOWN", API_BASE);
 
+        // Validate the plan before storing
+        const planToValidate = {
+          sell_asset: (plan.amounts as any).sell_asset,
+          sell_amount: (plan.amounts as any).sell_amount,
+          buy_asset: (plan.amounts as any).buy_asset,
+          buy_amount: (plan.amounts as any).buy_amount,
+          counterparty_address: (plan.counterparty as any).address,
+        };
+        validatePlan(planToValidate);
+
         // Store plan so execute can retrieve it by plan_id
         planStore.set(plan.id as string, {
           id:                   plan.id as string,
@@ -267,6 +313,9 @@ export async function agentRoutes(fastify: FastifyInstance): Promise<void> {
       if (!plan) {
         return reply.status(404).send({ error: "plan_id not found — call /api/v1/swaps/plan first" });
       }
+
+      // Validate the plan before execution (double check!)
+      validatePlan(plan);
 
       const initiatorSecret    = process.env.PLATFORM_SECRET_KEY;
       const counterpartySecret = process.env.DEMO_AGENT_SECRET_KEY;

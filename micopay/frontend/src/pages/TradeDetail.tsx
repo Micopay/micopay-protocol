@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate, useParams, Link } from 'react-router-dom';
+
 import {
   fetchTradeDetail,
   completeTrade,
@@ -23,19 +24,19 @@ interface TradeDetailProps {
 }
 
 async function getStoredToken(): Promise<string | null> {
+  // Deprecated: TradeDetail should rely on AppContext-provided tokens,
+  // but keeping a safe fallback avoids breaking existing flows.
   try {
-    const stored = await readJSON<{ buyer?: { token: string }; seller?: { token: string } }>('micopay_users');
+    const stored = await readJSON<{ buyer?: { token: string }; seller?: { token: string } }>('micopay_user');
     return stored?.buyer?.token ?? stored?.seller?.token ?? null;
   } catch {
     return null;
   }
 }
 
-function isCurrentUserBuyer(tradeBuyerId: string): boolean {
+async function isCurrentUserBuyer(tradeBuyerId: string): Promise<boolean> {
   try {
-    const raw = localStorage.getItem('micopay_users');
-    if (!raw) return false;
-    const parsed = JSON.parse(raw);
+    const parsed = await readJSON<{ buyer?: { id: string } }>('micopay_users');
     return parsed?.buyer?.id === tradeBuyerId;
   } catch {
     return false;
@@ -620,6 +621,13 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
   const [showRefundConfirm, setShowRefundConfirm] = useState(false);
   const [isRefunding, setIsRefunding] = useState(false);
   const [refundError, setRefundError] = useState<string | null>(null);
+  const [isBuyer, setIsBuyer] = useState(false);
+
+  useEffect(() => {
+    if (trade?.buyer_id) {
+      isCurrentUserBuyer(trade.buyer_id).then(setIsBuyer);
+    }
+  }, [trade?.buyer_id]);
 
   const fetchTrade = useCallback(async () => {
     if (!id) return;
@@ -752,8 +760,6 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
   if (!trade) {
     return null;
   }
-
-  const isBuyer = isCurrentUserBuyer(trade.buyer_id ?? '');
 
   // Render state-specific view
   const renderStateView = () => {

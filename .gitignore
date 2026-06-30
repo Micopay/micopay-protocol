@@ -3,6 +3,12 @@ node_modules/
 dist/
 npm-debug.log*
 
+# Build/typecheck scratch output (should never be committed)
+tsc_check.txt
+tsc_out.txt
+**/tsc_check.txt
+**/tsc_out.txt
+
 # Rust
 target/
 **/*.rs.bk

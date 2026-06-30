@@ -45,6 +45,7 @@
 | V-13 | [#166](https://github.com/ericmt-98/micopay-protocol/issues/166) | Remittance sender | Cross-border demand (sender side) | ✅ PR #171 · @Jo-anny |
 | V-14 | [#167](https://github.com/ericmt-98/micopay-protocol/issues/167) | Stablecoin / digital peso mental model | Stellar stablecoin layer trust | ✅ PR #170 · @Max-Owolabi |
 | V-15 | [#168](https://github.com/ericmt-98/micopay-protocol/issues/168) | First-time trust threshold | PMF — first adoption barrier | 🆕 Open |
+| V-22 | [#237](https://github.com/ericmt-98/micopay-protocol/issues/237) | Key recovery — self-custody trust | Validates passkey recovery architecture (Claim 4) | ✅ PR · contributor |
 
 ## After answers come in
 

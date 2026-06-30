@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { authMiddleware } from "../middleware/auth.middleware.js";
+import { verifyWebhookSignature } from "../lib/webhook-auth.js";
 
 // Stub routes for A-5 (onramp SPEI) and A-6 (offramp CETES→SPEI) — Drips
 // These return the correct response shape without calling Etherfuse.
@@ -160,11 +161,20 @@ export async function rampRoutes(fastify: FastifyInstance): Promise<void> {
     }
   );
 
-  // Public webhook endpoint (Etherfuse calls this when SPEI arrives)
+  // Webhook endpoint (Etherfuse calls this when SPEI arrives)
+  // Protected by HMAC signature verification — see webhook-auth.ts
   fastify.post<{ Body: unknown }>(
     "/defi/ramp/webhook",
-    async (_request, reply) => {
-      // Stub: accept and acknowledge without verification
+    async (request, reply) => {
+      const signature = request.headers["x-webhook-signature"] as string | undefined;
+      const timestamp = request.headers["x-webhook-timestamp"] as string | undefined;
+
+      const { valid, error } = verifyWebhookSignature(request.body, signature, timestamp);
+      if (!valid) {
+        return reply.status(401).send({ error: `webhook signature verification failed: ${error}` });
+      }
+
+      // Stub: accept and acknowledge
       return reply.status(200).send({ received: true });
     }
   );
