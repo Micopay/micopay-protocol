@@ -214,6 +214,7 @@ function MerchantOfferCard({ merchant, amount, loading, isBest, onSelectOffer }:
                     verified
                   </span>
                 </div>
+
                 <div className="mt-1 text-sm text-on-surface-variant flex items-center gap-2">
                   <span>{merchant.completion_rate !== undefined ? `${Math.round(merchant.completion_rate * 100)}% completitud` : '— completitud'}</span>
                   <span>·</span>
