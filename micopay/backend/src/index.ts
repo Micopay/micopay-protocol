@@ -3,6 +3,7 @@ import fastifyJwt from '@fastify/jwt';
 import fastifyCors from '@fastify/cors';
 import { config, validateConfig } from './config.js';
 import { pingDb } from './db/schema.js';
+import { runMigrations } from './db/migrate.js';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
 import { tradeRoutes } from './routes/trades.js';
@@ -377,6 +378,16 @@ async function start() {
   try {
     // Validate config at startup. Will throw and crash if critical config is missing.
     validateConfig();
+
+    // Ensure the schema exists before seeding/serving. Idempotent; only runs
+    // against a real PostgreSQL connection (the in-memory store needs no migrations).
+    if (await pingDb()) {
+      try {
+        await runMigrations();
+      } catch (err) {
+        app.log.error({ err, category: 'db' }, '[db] Boot migrations failed');
+      }
+    }
 
     // B-4: only seed demo data when explicitly enabled — never in a fresh prod DB.
     if (config.seedDemoData) {

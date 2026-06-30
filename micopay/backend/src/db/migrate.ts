@@ -36,14 +36,17 @@ function orderedFiles(): SqlFile[] {
   ];
 }
 
-async function main(): Promise<void> {
+/**
+ * Apply all pending migrations. Idempotent and safe to call on every boot.
+ * Throws on failure (caller decides whether to exit).
+ */
+export async function runMigrations(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
-    console.error('❌ DATABASE_URL is not set — cannot run migrations.');
-    process.exit(1);
+    throw new Error('DATABASE_URL is not set — cannot run migrations.');
   }
 
-  const pool = new Pool({ connectionString: databaseUrl, connectionTimeoutMillis: 10_000 });
+  const pool = new Pool({ connectionString: databaseUrl, connectionTimeoutMillis: 15_000 });
 
   try {
     await pool.query(
@@ -85,7 +88,16 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// CLI entrypoint: only run + exit when invoked directly (e.g. `npm run migrate`),
+// not when imported by the server for boot-time migrations.
+const invokedDirectly =
+  process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+
+if (invokedDirectly) {
+  runMigrations()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}
