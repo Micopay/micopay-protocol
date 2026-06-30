@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { SENDABLE_ASSETS, getAsset } from '../constants/assets';
 import { useWalletBalance } from '../hooks/useWalletBalance';
 import { useQRScanner } from '../hooks/useQRScanner';
@@ -20,6 +21,7 @@ function extractAddress(raw: string): string {
 }
 
 const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
+  const { t } = useTranslation();
   const { tokens, loading: balLoading } = useWalletBalance();
   const { scan } = useQRScanner();
 
@@ -50,9 +52,9 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
     if (res.value) {
       setDestination(extractAddress(res.value));
     } else if (res.error === 'scanner_unavailable') {
-      setScanMsg('El escáner solo está disponible en la app móvil. Pega la dirección.');
+      setScanMsg(t('send.scannerUnavailable'));
     } else if (res.permState && res.permState !== 'granted') {
-      setScanMsg('Permiso de cámara denegado. Actívalo en Ajustes o pega la dirección.');
+      setScanMsg(t('send.cameraPermission'));
     }
   };
 
@@ -80,11 +82,12 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
     return (
       <ResultScreen
         ok
-        title="¡Pago enviado!"
-        subtitle={`Enviaste ${amount} ${assetCode}`}
+        title={t('send.successTitle')}
+        subtitle={t('send.successSubtitle', { amount, asset: assetCode })}
         hashUrl={result.explorerUrl}
+        explorerLabel={t('send.viewExplorer')}
         onPrimary={onDone}
-        primaryLabel="Listo"
+        primaryLabel={t('send.done')}
       />
     );
   }
@@ -92,12 +95,12 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
     return (
       <ResultScreen
         ok={false}
-        title="No se pudo enviar"
+        title={t('send.errorTitle')}
         subtitle={error ?? 'Error desconocido'}
         onPrimary={reset}
-        primaryLabel="Reintentar"
+        primaryLabel={t('send.retry')}
         onSecondary={onBack}
-        secondaryLabel="Cancelar"
+        secondaryLabel={t('send.cancel')}
       />
     );
   }
@@ -112,7 +115,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
         >
           <span className="material-symbols-outlined text-primary">arrow_back</span>
         </button>
-        <h1 className="font-headline font-bold text-lg">{step === 'review' ? 'Confirmar envío' : 'Enviar'}</h1>
+        <h1 className="font-headline font-bold text-lg">{step === 'review' ? t('send.confirmTitle') : t('send.title')}</h1>
       </header>
 
       <main className="flex-1 mt-[calc(5rem+env(safe-area-inset-top))] px-6 pb-28 max-w-md mx-auto w-full space-y-6">
@@ -120,7 +123,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
           <>
             {/* Asset selector */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">Activo</label>
+              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">{t('send.asset')}</label>
               <div className="grid grid-cols-4 gap-2">
                 {SENDABLE_ASSETS.map((a) => (
                   <button
@@ -136,18 +139,18 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
                 ))}
               </div>
               <p className="text-[11px] text-outline mt-2">
-                Disponible: <span className="font-bold text-on-surface">{balLoading ? '…' : available.toLocaleString('es-MX', { maximumFractionDigits: asset.decimals })} {asset.code}</span>
+                {t('send.available')} <span className="font-bold text-on-surface">{balLoading ? '…' : available.toLocaleString('es-MX', { maximumFractionDigits: asset.decimals })} {asset.code}</span>
               </p>
             </div>
 
             {/* Destination */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">Destinatario</label>
+              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">{t('send.recipient')}</label>
               <div className="flex gap-2">
                 <input
                   value={destination}
                   onChange={(e) => setDestination(e.target.value)}
-                  placeholder="Dirección Stellar (G…)"
+                  placeholder={t('send.recipientPlaceholder')}
                   spellCheck={false}
                   autoCapitalize="none"
                   className="flex-1 min-w-0 bg-surface-container-low border border-outline-variant/20 rounded-2xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-primary transition-colors"
@@ -156,13 +159,13 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
                   <span className="material-symbols-outlined">qr_code_scanner</span>
                 </button>
               </div>
-              {destination && !destValid && <p className="text-[11px] text-error mt-1">La dirección no es válida.</p>}
+              {destination && !destValid && <p className="text-[11px] text-error mt-1">{t('send.invalidAddress')}</p>}
               {scanMsg && <p className="text-[11px] text-outline mt-1">{scanMsg}</p>}
             </div>
 
             {/* Amount */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">Monto</label>
+              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">{t('send.amount')}</label>
               <div className="relative">
                 <input
                   value={amount}
@@ -181,17 +184,17 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
                   MÁX
                 </button>
               </div>
-              {overBalance && <p className="text-[11px] text-error mt-1">Saldo insuficiente.</p>}
+              {overBalance && <p className="text-[11px] text-error mt-1">{t('send.insufficientBalance')}</p>}
             </div>
 
             {/* Memo */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">Nota (opcional)</label>
+              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">{t('send.memo')}</label>
               <input
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 maxLength={28}
-                placeholder="Concepto del pago"
+                placeholder={t('send.memoPlaceholder')}
                 className="w-full bg-surface-container-low border border-outline-variant/20 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
               />
             </div>
@@ -201,7 +204,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
               disabled={!canContinue}
               className="w-full h-[52px] bg-primary text-white font-bold rounded-2xl active:scale-[0.98] transition-all disabled:opacity-40"
             >
-              Continuar
+              {t('send.continue')}
             </button>
           </>
         ) : (
@@ -209,19 +212,19 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
           <>
             <div className="bg-white rounded-[24px] border border-outline-variant/10 shadow-sm p-6 space-y-4">
               <div className="text-center pb-2">
-                <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant">Vas a enviar</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant">{t('send.youWillSend')}</p>
                 <p className="text-3xl font-headline font-extrabold mt-1" style={{ color: asset.color }}>
                   {amountNum.toLocaleString('es-MX', { maximumFractionDigits: asset.decimals })} {asset.code}
                 </p>
               </div>
               <div className="h-px bg-outline-variant/10" />
-              <Row label="Para" value={`${destination.slice(0, 8)}…${destination.slice(-6)}`} mono />
-              {memo.trim() && <Row label="Nota" value={memo.trim()} />}
-              <Row label="Red" value="Stellar · Testnet" />
-              <Row label="Comisión de red" value="~0.001 XLM" />
+              <Row label={t('send.to')} value={`${destination.slice(0, 8)}…${destination.slice(-6)}`} mono />
+              {memo.trim() && <Row label={t('send.note')} value={memo.trim()} />}
+              <Row label={t('send.network')} value={t('send.networkName')} />
+              <Row label={t('send.fee')} value={t('send.feeValue')} />
             </div>
             <p className="text-[11px] text-outline text-center px-4">
-              Revisa la dirección con cuidado. Los envíos en blockchain no se pueden revertir.
+              {t('send.warning')}
             </p>
             <button
               onClick={handleSend}
@@ -231,10 +234,10 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
               {step === 'sending' ? (
                 <>
                   <span className="material-symbols-outlined animate-spin">progress_activity</span>
-                  Enviando…
+                  {t('send.sending')}
                 </>
               ) : (
-                'Confirmar y enviar'
+                t('send.confirmSend')
               )}
             </button>
           </>
@@ -258,6 +261,7 @@ function ResultScreen({
   title,
   subtitle,
   hashUrl,
+  explorerLabel,
   onPrimary,
   primaryLabel,
   onSecondary,
@@ -267,6 +271,7 @@ function ResultScreen({
   title: string;
   subtitle: string;
   hashUrl?: string;
+  explorerLabel?: string;
   onPrimary: () => void;
   primaryLabel: string;
   onSecondary?: () => void;
@@ -283,7 +288,7 @@ function ResultScreen({
       <p className="text-on-surface-variant mb-8">{subtitle}</p>
       {hashUrl && (
         <a href={hashUrl} target="_blank" rel="noopener noreferrer" className="text-primary font-bold text-sm flex items-center gap-1 mb-8">
-          Ver en el explorador <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+          {explorerLabel ?? 'Ver en el explorador'} <span className="material-symbols-outlined text-[18px]">open_in_new</span>
         </a>
       )}
       <button onClick={onPrimary} className="w-full max-w-xs h-[52px] bg-primary text-white font-bold rounded-2xl active:scale-[0.98] transition-all">

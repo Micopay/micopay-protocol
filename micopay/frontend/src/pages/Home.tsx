@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Logo } from '../components/Logo';
 import ErrorBanner from '../components/ErrorBanner';
 import {
@@ -13,13 +14,13 @@ import { useWalletBalance } from '../hooks/useWalletBalance';
 
 const EXPLORER = "https://stellar.expert/explorer/testnet/tx";
 
-const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  completed: { label: "Completado", color: "text-[#1D9E75]" },
-  locked: { label: "Bloqueado", color: "text-primary" },
-  revealing: { label: "Revelando", color: "text-primary" },
-  pending: { label: "Pendiente", color: "text-outline" },
-  cancelled: { label: "Cancelado", color: "text-error" },
-  refunded: { label: "Reembolsado", color: "text-outline" },
+const STATUS_COLOR: Record<string, string> = {
+  completed: "text-[#1D9E75]",
+  locked: "text-primary",
+  revealing: "text-primary",
+  pending: "text-outline",
+  cancelled: "text-error",
+  refunded: "text-outline",
 };
 
 interface HomeProps {
@@ -146,6 +147,8 @@ const Home = ({
     month: "long",
   });
 
+  const { t } = useTranslation();
+
   const [availability, setAvailabilityState] = useState<
     "online" | "offline" | "paused"
   >("online");
@@ -219,10 +222,10 @@ const Home = ({
             </span>
             <div className="flex-1">
               <p className="text-sm font-bold text-error">
-                Operaciones pausadas
+                {t('home.operationsPaused')}
               </p>
               <p className="text-[11px] text-error/80">
-                No aparecerás en el mapa hasta que reanudes.
+                {t('home.operationsPausedDesc')}
               </p>
             </div>
           </div>
@@ -230,7 +233,7 @@ const Home = ({
         {/* Saludo */}
         <section className="mb-8">
           <h1 className="font-headline font-extrabold text-3xl text-on-surface leading-tight mb-1">
-            Hola, {username || '...'} 👋
+            {t('home.greeting', { name: username || '...' })}
           </h1>
           <p className="text-on-surface-variant font-medium opacity-70 capitalize">
             {today}
@@ -277,7 +280,7 @@ const Home = ({
           </div>
           <div className="flex justify-between items-start relative z-10 mb-6">
             <p className="text-[10px] font-bold tracking-[0.15em] text-white/70 uppercase">
-              VALOR TOTAL · STELLAR TESTNET
+              {t('home.totalValue')}
             </p>
             <div className="flex items-center justify-center bg-white/10 rounded-full p-1">
               <span
@@ -290,16 +293,16 @@ const Home = ({
           </div>
           <div className="relative z-10 mb-4">
             <h2 className="text-[36px] font-headline font-extrabold text-white tracking-tight">
-              {balanceLoading ? "Cargando…" : walletBalanceError ? "--" : mxnBalance}
+              {balanceLoading ? t('home.loadingBalance') : walletBalanceError ? "--" : mxnBalance}
             </h2>
             <div className="flex items-center gap-2 mt-1">
               <span className="w-2.5 h-2.5 rounded-full bg-[#5DCAA5] animate-pulse shadow-[0_0_8px_#5DCAA5]"></span>
               <p className="text-[#5DCAA5] text-sm font-bold">
                 {walletBalanceError
-                  ? 'No disponible'
+                  ? t('home.notAvailable')
                   : balanceLoading
-                    ? 'Cargando balance…'
-                    : 'Stellar Testnet'}
+                    ? t('home.loadingBalanceStatus')
+                    : t('home.stellarTestnet')}
               </p>
             </div>
           </div>
@@ -308,7 +311,7 @@ const Home = ({
         {/* Activos */}
         <section className="mb-8">
           <h2 className="text-[11px] font-bold text-outline-variant uppercase tracking-[0.15em] mb-4">
-            Activos
+            {t('home.assets')}
           </h2>
           <div className="bg-white rounded-[20px] border border-outline-variant/10 shadow-sm divide-y divide-outline-variant/10">
             {/* XLM */}
@@ -371,7 +374,7 @@ const Home = ({
         {/* Actividad */}
         <section className="mb-8">
           <h2 className="text-[11px] font-bold text-outline-variant uppercase tracking-[0.15em] mb-4">
-            Actividad reciente
+            {t('home.recentActivity')}
           </h2>
 
           {historyError ? (
@@ -391,15 +394,15 @@ const Home = ({
                 receipt_long
               </span>
               <p className="text-sm text-outline font-medium">
-                Sin transacciones aún
+                {t('home.noTransactions')}
               </p>
             </div>
           ) : (
             <div className="bg-white rounded-[20px] border border-outline-variant/10 shadow-sm divide-y divide-outline-variant/10">
               {trades.map((trade) => {
-                const s = STATUS_LABEL[trade.status] ?? {
-                  label: trade.status,
-                  color: "text-outline",
+                const s = {
+                  label: t(`home.status.${trade.status}`, { defaultValue: trade.status }),
+                  color: STATUS_COLOR[trade.status] ?? "text-outline",
                 };
                 const date = new Date(trade.created_at).toLocaleString(
                   "es-MX",
@@ -482,26 +485,26 @@ const Home = ({
         <div className="flex flex-col items-center gap-4">
           <button
             onClick={onNavigateCashout}
-            aria-label="Convertir a efectivo"
+            aria-label={t('home.cashout')}
             className="w-full h-[56px] bg-gradient-to-r from-primary to-primary-container text-white font-bold rounded-xl shadow-md active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <span aria-hidden="true" className="material-symbols-outlined">
               payments
             </span>
-            Convertir a efectivo
+            {t('home.cashout')}
           </button>
           <button
             onClick={onNavigateDeposit}
-            aria-label="Depositar efectivo"
+            aria-label={t('home.deposit')}
             className="w-full h-[56px] bg-gradient-to-r from-[#1D9E75] to-[#14815F] text-white font-bold rounded-xl shadow-md active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <span aria-hidden="true" className="material-symbols-outlined">
               add_circle
             </span>
-            Depositar efectivo
+            {t('home.deposit')}
           </button>
           <p className="text-sm text-on-surface-variant font-medium opacity-60">
-            Encuentra a alguien cerca en minutos
+            {t('home.findNearby')}
           </p>
         </div>
       </main>

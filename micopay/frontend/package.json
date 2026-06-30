@@ -28,10 +28,12 @@
     "@stellar/stellar-sdk": "^13.3.0",
     "axios": "^1.13.6",
     "clsx": "^2.1.1",
+    "i18next": "^26.3.4",
     "lucide-react": "^0.577.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-i18next": "^17.0.8",
     "react-router-dom": "^6.28.0",
     "tailwind-merge": "^3.5.0"
   },

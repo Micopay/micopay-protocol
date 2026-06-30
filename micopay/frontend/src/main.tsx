@@ -5,6 +5,7 @@ import { Capacitor } from '@capacitor/core'
 import App from './App'
 import ClaimQR from './pages/ClaimQR'
 import './index.css'
+import './i18n'
 
 // Android hardware back button → browser history. Plays well with HashRouter.
 // On native iOS/web this listener simply doesn't fire (no-op).
