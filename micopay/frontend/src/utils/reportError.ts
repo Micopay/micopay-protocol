@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { readJSON } from '../services/secureStorage';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
@@ -14,13 +15,13 @@ export function reportClientError(payload: {
   stack?: string;
   context?: Record<string, unknown>;
 }) {
-  const token = localStorage.getItem('token');
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-
   // Fire and forget — don't let a reporting failure break the UX
-  axios.post(`${BASE_URL}/client-errors`, {
-    ...payload,
-    app_version: import.meta.env.VITE_APP_VERSION ?? 'dev',
-  }, { headers }).catch(() => {});
+  readJSON<string>('token').then((token) => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return axios.post(`${BASE_URL}/client-errors`, {
+      ...payload,
+      app_version: import.meta.env.VITE_APP_VERSION ?? 'dev',
+    }, { headers });
+  }).catch(() => {});
 }

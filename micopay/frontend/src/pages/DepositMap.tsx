@@ -1,6 +1,11 @@
 import MapSim from '../components/MapSim';
 import { useMerchantsAvailable } from '../hooks/useMerchantsAvailable';
-import type { AvailableMerchant } from '../services/api';
+import {
+  effectiveFeePercent,
+  MAX_EFFECTIVE_FEE_PERCENT,
+  type AvailableMerchant,
+} from '../services/api';
+import { PLATFORM_FEE_PERCENT } from '../constants/trade';
 import ErrorBanner from '../components/ErrorBanner';
 import type { ApiErrorAction } from '../utils/apiError';
 
@@ -22,6 +27,49 @@ interface DepositMapProps {
   creationErrorAction?: ApiErrorAction;
   onDismissCreationError?: () => void;
   onRetryCreationError?: () => void;
+  /** Effective-fee threshold (%) above which a warning is shown. Defaults to the shared guardrail. */
+  maxEffectiveFeePercent?: number;
+}
+
+// ─── Effective cost (provider + platform) + over-threshold warning ────────────
+
+function EffectiveFeeNote({
+  commissionPct,
+  platformFeePct,
+  maxPct,
+}: {
+  commissionPct: number;
+  platformFeePct: number;
+  maxPct: number;
+}) {
+  const totalPct = effectiveFeePercent(commissionPct, platformFeePct);
+  const exceeds = totalPct > maxPct;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2 border-t border-outline-variant/10 pt-3">
+        <span className="text-xs text-on-surface-variant font-label uppercase">
+          Costo total efectivo
+        </span>
+        <span className={`text-sm font-bold tabular-nums ${exceeds ? 'text-error' : 'text-on-surface'}`}>
+          {totalPct.toFixed(1)}%
+        </span>
+      </div>
+      <p className="text-[11px] text-on-surface-variant">
+        Plataforma {platformFeePct}% + proveedor {commissionPct}%
+      </p>
+      {exceeds && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-lg border border-error/30 bg-error/5 px-3 py-2"
+        >
+          <span className="material-symbols-outlined text-error text-base leading-none">warning</span>
+          <p className="text-[12px] font-medium text-error leading-snug">
+            El costo total supera el {maxPct}%. Compara con otra oferta antes de continuar.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Loading skeleton ─────────────────────────────────────────────────────────
@@ -179,11 +227,20 @@ interface MerchantCardProps {
   loading: boolean;
   isBest: boolean;
   onSelectOffer: (id: string) => void;
+  maxEffectiveFeePercent: number;
 }
 
-function MerchantOfferCard({ merchant, amount, loading, isBest, onSelectOffer }: MerchantCardProps) {
+function MerchantOfferCard({
+  merchant,
+  amount,
+  loading,
+  isBest,
+  onSelectOffer,
+  maxEffectiveFeePercent,
+}: MerchantCardProps) {
   const commissionMxn = (amount - merchant.payout_mxn).toFixed(2);
   const distanceLabel = formatDistance(merchant.distance_km);
+  const platformFeePct = merchant.platform_fee_pct ?? PLATFORM_FEE_PERCENT;
 
   if (isBest) {
     return (
@@ -212,6 +269,15 @@ function MerchantOfferCard({ merchant, amount, loading, isBest, onSelectOffer }:
                     style={{ fontVariationSettings: '"FILL" 1' }}
                   >
                     verified
+                  </span>
+                </div>
+                <div className="mt-1 text-sm text-on-surface-variant flex items-center gap-2">
+                  <span>{merchant.completion_rate !== undefined ? `${Math.round(merchant.completion_rate * 100)}% completitud` : '— completitud'}</span>
+                  <span>·</span>
+                  <span>{merchant.trades_completed ?? 0} trades</span>
+                  {merchant.tier && <span className="ml-2 px-2 py-0.5 text-[11px] font-bold rounded-md bg-surface-container-high text-primary">{merchant.tier}</span>}
+                  <span className={`ml-2 px-2 py-0.5 text-[11px] font-bold rounded-md ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                    {((merchant.seller_type === 'business') || merchant.is_business) ? 'Negocio establecido' : 'Individuo'}
                   </span>
                 </div>
                 <div className="flex items-center gap-1 text-on-surface-variant text-xs">
@@ -243,6 +309,12 @@ function MerchantOfferCard({ merchant, amount, loading, isBest, onSelectOffer }:
             </div>
           </div>
 
+          <EffectiveFeeNote
+            commissionPct={merchant.rate_percent}
+            platformFeePct={platformFeePct}
+            maxPct={maxEffectiveFeePercent}
+          />
+
           <button
             onClick={() => onSelectOffer(merchant.seller_id)}
             disabled={loading}
@@ -264,6 +336,15 @@ function MerchantOfferCard({ merchant, amount, loading, isBest, onSelectOffer }:
           </div>
           <div>
             <h3 className="font-bold text-lg">{merchant.username}</h3>
+            <div className="mt-1 text-sm text-on-surface-variant flex items-center gap-2">
+              <span>{merchant.completion_rate !== undefined ? `${Math.round(merchant.completion_rate * 100)}%` : '—'}</span>
+              <span>·</span>
+              <span>{merchant.trades_completed ?? 0} trades</span>
+              {merchant.tier && <span className="ml-2 px-2 py-0.5 text-[10px] rounded-md bg-surface-container-high text-primary">{merchant.tier}</span>}
+              <span className={`ml-2 px-2 py-0.5 text-[10px] rounded-md ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                {((merchant.seller_type === 'business') || merchant.is_business) ? 'Negocio' : 'Individuo'}
+              </span>
+            </div>
             <div className="flex items-center gap-1 text-on-surface-variant text-xs">
               <span className="material-symbols-outlined text-xs">near_me</span>
               <span>{distanceLabel}</span>
@@ -275,10 +356,13 @@ function MerchantOfferCard({ merchant, amount, loading, isBest, onSelectOffer }:
           <span className="text-on-surface font-bold">${merchant.payout_mxn.toFixed(2)} MXN</span>
         </div>
       </div>
+      <EffectiveFeeNote
+        commissionPct={merchant.rate_percent}
+        platformFeePct={platformFeePct}
+        maxPct={maxEffectiveFeePercent}
+      />
       <div className="flex justify-between items-center border-t border-outline-variant/10 pt-4">
-        <p className="text-xs text-on-surface-variant">
-          Comisión {merchant.rate_percent}% · {distanceLabel}
-        </p>
+        <p className="text-xs text-on-surface-variant">{distanceLabel} de distancia</p>
         <button
           onClick={() => onSelectOffer(merchant.seller_id)}
           disabled={loading}
@@ -302,6 +386,7 @@ const DepositMap = ({
   creationErrorAction = 'retry',
   onDismissCreationError,
   onRetryCreationError,
+  maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
 }: DepositMapProps) => {
   const { state, refetch } = useMerchantsAvailable({
     amount_mxn: amount,
@@ -388,6 +473,7 @@ const DepositMap = ({
                 loading={loading}
                 isBest={idx === 0}
                 onSelectOffer={onSelectOffer}
+                maxEffectiveFeePercent={maxEffectiveFeePercent}
               />
             ))}
           </div>
