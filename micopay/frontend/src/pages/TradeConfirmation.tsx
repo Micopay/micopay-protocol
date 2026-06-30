@@ -2,6 +2,7 @@ import {
   PLATFORM_FEE_PERCENT,
   platformFeeMxnFromAmount,
 } from '../constants/trade';
+import { effectiveFeePercent, MAX_EFFECTIVE_FEE_PERCENT } from '../services/api';
 
 export interface TradeConfirmationPageProps {
   merchantName: string;
@@ -16,6 +17,8 @@ export interface TradeConfirmationPageProps {
   onConfirm: () => Promise<boolean>;
   loading?: boolean;
   errorMessage?: string | null;
+  /** Effective-fee threshold (%) above which a warning is shown. Defaults to the shared guardrail. */
+  maxEffectiveFeePercent?: number;
 }
 
 export default function TradeConfirmationPage({
@@ -30,10 +33,14 @@ export default function TradeConfirmationPage({
   onConfirm,
   loading = false,
   errorMessage,
+  maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
 }: TradeConfirmationPageProps) {
   const totalFee = amountMxn - receiveMxn;
   const platformFee = platformFeeMxnFromAmount(amountMxn);
   const providerFee = totalFee - platformFee;
+  // Combined effective cost the user actually pays: provider commission + platform fee.
+  const effectivePct = effectiveFeePercent(commissionPct);
+  const exceedsThreshold = effectivePct > maxEffectiveFeePercent;
 
   const title = flow === 'cashout' ? 'Confirmar retiro' : 'Confirmar depósito';
   const agentType = flow === 'cashout' ? 'Agente de retiro' : 'Punto de depósito';
@@ -101,6 +108,15 @@ export default function TradeConfirmationPage({
             </div>
 
             <div className="flex justify-between gap-4 border-t border-outline-variant/15 pt-3">
+              <dt className="text-on-surface-variant">Costo total efectivo</dt>
+              <dd
+                className={`font-bold tabular-nums ${exceedsThreshold ? 'text-error' : 'text-on-surface'}`}
+              >
+                {effectivePct.toFixed(1)}%
+              </dd>
+            </div>
+
+            <div className="flex justify-between gap-4 border-t border-outline-variant/15 pt-3">
               <dt className="text-on-surface-variant">Estado del agente</dt>
               <dd className={`flex items-center gap-1.5 font-medium ${merchantOnline ? 'text-green-700' : 'text-red-600'}`}>
                 <span className={`w-2 h-2 rounded-full inline-block ${merchantOnline ? 'bg-green-500' : 'bg-red-500'}`} />
@@ -116,6 +132,19 @@ export default function TradeConfirmationPage({
             </div>
           </dl>
         </section>
+
+        {exceedsThreshold && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-xl border border-error/30 bg-error/5 px-4 py-3"
+          >
+            <span className="material-symbols-outlined text-error text-base leading-none">warning</span>
+            <p className="text-sm font-medium text-error leading-snug">
+              El costo total efectivo ({effectivePct.toFixed(1)}%) supera el {maxEffectiveFeePercent}% recomendado.
+              Revísalo antes de confirmar, o vuelve al mapa para elegir otra oferta.
+            </p>
+          </div>
+        )}
 
         <button
           type="button"
