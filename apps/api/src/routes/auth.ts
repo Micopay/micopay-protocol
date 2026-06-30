@@ -10,7 +10,7 @@ import {
 } from '../db/auth.js';
 
 const authRateLimitConfig = {
-  max: 5,
+  max: 30,
   timeWindow: '1 minute',
   keyGenerator: (request: { ip: string }) => request.ip,
 };
