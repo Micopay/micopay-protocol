@@ -88,8 +88,8 @@ const DepositChat = ({
                             <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>task_alt</span>
                         </div>
                         <div className="flex flex-col gap-1 min-w-0">
-                            <p className="text-sm font-bold text-primary font-headline">Oferta aceptada · Saldo bloqueado en garantía</p>
-                            <p className="text-xs text-on-surface/60">Tu depósito está protegido por el contrato inteligente.</p>
+                            <p className="text-sm font-bold text-primary font-headline">Agente encontrado · Activos digitales en garantía</p>
+                            <p className="text-xs text-on-surface/60">El agente bloqueó los activos que recibirás. Ve a su ubicación y entrégale el efectivo.</p>
                             {lockTxHash ? (
                                 <a
                                     href={`${STELLAR_EXPLORER}/${lockTxHash}`}
@@ -188,7 +188,7 @@ const DepositChat = ({
                             disabled={isSending}
                         >
                             <span className="material-symbols-outlined !text-[20px]">qr_code_2</span>
-                            Ver mi QR de depósito
+                            Ver mi QR para el agente
                         </button>
                     </div>
                     {sendError && (

@@ -299,13 +299,13 @@ function MerchantOfferCard({
 
           <div className="bg-surface-container-low rounded-lg p-4 flex justify-between items-center">
             <div className="space-y-1">
-              <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-tight">Envías</p>
+              <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-tight">Entregas en efectivo</p>
               <p className="font-bold text-on-surface">${amount} MXN</p>
             </div>
             <span className="material-symbols-outlined text-outline-variant">trending_flat</span>
             <div className="space-y-1 text-right">
-              <p className="text-[10px] text-accent uppercase font-bold tracking-tight">Recibes</p>
-              <p className="font-bold text-on-surface text-lg">${merchant.payout_mxn.toFixed(2)} MXN</p>
+              <p className="text-[10px] text-accent uppercase font-bold tracking-tight">Recibes en wallet</p>
+              <p className="font-bold text-on-surface text-lg">${merchant.payout_mxn.toFixed(2)} MXNe</p>
             </div>
           </div>
 
@@ -320,7 +320,7 @@ function MerchantOfferCard({
             disabled={loading}
             className="w-full h-[46px] bg-gradient-to-r from-primary to-primary-container text-white font-semibold rounded-lg shadow-md active:scale-95 duration-200 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-wait"
           >
-            {loading ? 'Bloqueando fondos…' : 'Aceptar esta oferta'}
+            {loading ? 'Conectando con el agente…' : 'Elegir este agente'}
           </button>
         </div>
       </div>
@@ -353,7 +353,7 @@ function MerchantOfferCard({
         </div>
         <div className="text-right flex-shrink-0">
           <span className="block text-xs text-on-surface-variant font-label uppercase">Recibes</span>
-          <span className="text-on-surface font-bold whitespace-nowrap">${merchant.payout_mxn.toFixed(2)} MXN</span>
+          <span className="text-on-surface font-bold whitespace-nowrap">${merchant.payout_mxn.toFixed(2)} MXNe</span>
         </div>
       </div>
       <EffectiveFeeNote
