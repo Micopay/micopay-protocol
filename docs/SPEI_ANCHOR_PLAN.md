@@ -15,19 +15,20 @@
 
 ### Estrategia de mocks para Drips (A-4/A-5/A-6)
 
-Los contribuidores de frontend no necesitan la API key de Etherfuse. El equipo core agrega rutas stub en el backend que devuelven respuestas con la forma correcta de JSON (sin llamar a Etherfuse). Cuando el equipo conecte la API real, el frontend no cambia nada — solo el backend.
+Los contribuidores de frontend no necesitan la API key de Etherfuse. El equipo core ya agregó rutas stub en el backend (`apps/api/src/routes/kyc.ts` y `ramp.ts`, commit `24dd1d9`) que devuelven respuestas con la forma correcta de JSON sin llamar a Etherfuse. Cuando el equipo conecte la API real, el frontend no cambia nada — solo el backend.
 
-**Stubs necesarios antes de desbloquear A-4:**
-- `POST /defi/kyc/submit` → `{ customerId: "mock-kyc-123", status: "pending" }`
-- `POST /defi/kyc/documents` → `{ uploaded: true }`
+**Stubs para A-4 (KYC hosted flow) — disponibles:**
+- `POST /defi/kyc/start` → `{ onboardingUrl: "https://...stub=true", expiresAt: "<now+15min>" }`
 - `GET /defi/kyc/status` → `{ status: "approved" }` (en sandbox siempre aprueba)
 
-**Stubs necesarios antes de desbloquear A-5/A-6:**
-- `POST /defi/bank-account` → `{ bankAccountId: "mock-bank-456", clabe: "<clabe_ingresada>" }`
-- `POST /defi/ramp/quote` → `{ quoteId: "mock-q-789", exchangeRate: "17.50", destinationAmount: "0.0571", expiresAt: "<now+2min>" }`
-- `POST /defi/ramp/order` → `{ orderId: "mock-o-001", depositClabe: "646180157000000004", depositAmount: "1000.00", depositBankName: "Etherfuse MX", depositAccountHolder: "Etherfuse MX", withdrawAnchorAccount: "GABPM7AXX...", withdrawMemo: "bW9ja21lbW8xMjM0NTY3ODkw", withdrawMemoType: "hash" }`
-- `GET /defi/ramp/order/:id` → `{ status: "completed" }` (después de 5s simulados)
-- `POST /defi/ramp/order/:id/regenerate_tx` → misma forma que el order original
+> El stub de `/defi/kyc/start` devuelve una URL placeholder. El contribuidor puede construir la pantalla (botón → abre URL → polling) contra ella; la URL real de Etherfuse llega cuando A-2 conecte la API.
+
+**Stubs para A-5/A-6 — disponibles:**
+- `POST /defi/bank-account` → `{ bankAccountId, clabe }`
+- `POST /defi/ramp/quote` → `{ quoteId, exchangeRate, destinationAmount, expiresAt: "<now+2min>" }`
+- `POST /defi/ramp/order` → onramp: `{ orderId, depositClabe, depositAmount, depositBankName, depositAccountHolder }` · offramp (`useAnchor: true`): `{ orderId, withdrawAnchorAccount, withdrawMemo, withdrawMemoType: "hash" }`
+- `GET /defi/ramp/order/:id` → `{ status: "funded" }` los primeros 10s → `{ status: "completed" }`
+- `POST /defi/ramp/order/:id/regenerate_tx` → nueva cuenta + memo
 
 ## Resumen de flujos
 
@@ -137,65 +138,73 @@ Respuesta esperada (subset):
 
 ---
 
-## A-2 · Backend: KYC routes (submit / documents / status)
+## A-2 · Backend: KYC via flujo hosted de Etherfuse
 
-**Complejidad:** alta | **Depende de:** A-1
+**Complejidad:** media | **Depende de:** A-1
+
+### Decisión: flujo hosted, no programmatic
+
+Etherfuse ofrece dos caminos de onboarding:
+- **Programmatic:** recolectamos CURP, RFC, selfie, liveness en nuestra UI y los enviamos por API. Control total, pero implica construir captura de documentos + integración de liveness — semanas de trabajo y carga regulatoria sobre nosotros.
+- **Hosted (elegido):** generamos una URL firmada; el usuario completa **todo** (identidad, documentos, liveness, firma de acuerdos) en la página de Etherfuse. Etherfuse almacena los datos. Nosotros solo abrimos la URL y consultamos el estado.
+
+MicoPay usa **hosted** — es más rápido, no almacenamos datos sensibles de KYC, y el liveness check (requisito SPEI/CNBV) lo maneja Etherfuse.
 
 ### API de Etherfuse a usar
 
-- `POST /customers` — crear registro de cliente con datos personales
-- `POST /kyc/submit` — enviar CURP, RFC, fecha de nacimiento, ocupacion, domicilio
-- `POST /kyc/documents` — subir selfie, ID oficial, comprobante de domicilio
+- `POST /ramp/customer` — crear el customer, obtener `customerId`
+- `POST /ramp/onboarding-url` — genera la URL hosted (presigned, expira en **15 minutos**)
 - `GET /kyc/status` — consultar estado (pending / approved / rejected)
 
 ### Que construir
 
-Tres rutas en `apps/api/src/routes/kyc.ts`:
+Dos rutas en `apps/api/src/routes/kyc.ts`:
 
-**`POST /defi/kyc/submit`**
+**`POST /defi/kyc/start`**
+Crea el customer en Etherfuse (si no existe), genera la onboarding URL y la devuelve. Guarda el `customerId` en `users`.
+
+Body de Etherfuse `POST /ramp/onboarding-url`:
 ```json
 {
-  "firstName": "Maria",
-  "lastName": "Garcia",
-  "email": "maria@example.com",
-  "phone": "+521234567890",
-  "curp": "GARM990101MDFRC001",
-  "rfc": "GARM990101AB9",
-  "dateOfBirth": "1999-01-01",
-  "occupation": "comerciante",
-  "address": {
-    "street": "Av. Insurgentes 100",
-    "city": "CDMX",
-    "region": "CDMX",
-    "postalCode": "06600"
-  }
+  "customerId": "<uuid>",
+  "bankAccountId": "<uuid>",
+  "publicKey": "<stellar_pubkey_del_usuario>",
+  "blockchain": "stellar",
+  "userInfo": { "email": "...", "displayName": "..." }
 }
 ```
-Crea el cliente en Etherfuse y envia la solicitud de KYC. Guarda el `customerId` en `users`.
-
-**`POST /defi/kyc/documents`**
-Recibe multipart/form-data con `selfie`, `id_document`, `proof_of_address`. Los reenvía a Etherfuse.
+Respuesta a devolver al frontend:
+```json
+{
+  "onboardingUrl": "https://api.sand.etherfuse.com/onboarding?org_id=...&signature=...",
+  "expiresAt": "2026-06-28T10:45:00Z"
+}
+```
 
 **`GET /defi/kyc/status`**
 ```json
 { "status": "pending" | "approved" | "rejected", "rejectionReason": "..." }
 ```
 
+### Punto a resolver con el sandbox
+
+El body de `onboarding-url` pide `bankAccountId`, pero la página hosted **también** vincula la cuenta bancaria. Verificar en el sandbox si `bankAccountId` es opcional o si hay que pre-registrar la CLABE antes. Si es opcional, A-2 no depende de A-3.
+
 ### Archivos a tocar
 
 | Archivo | Que cambia |
 |---------|-----------|
-| `apps/api/src/routes/kyc.ts` | Nuevo archivo con las 3 rutas |
-| `apps/api/src/index.ts` | Registrar `kycRoutes` |
+| `apps/api/src/routes/kyc.ts` | Reemplazar stubs con llamadas reales a Etherfuse |
+| `apps/api/src/index.ts` | `kycRoutes` ya registrado |
 | `micopay/sql/migrations/` | Migracion para columna `kyc_customer_id` en `users` |
 
 ### Criterio de aceptacion
 
-- [ ] `POST /defi/kyc/submit` crea el cliente en Etherfuse sandbox y guarda el `customerId`.
-- [ ] `POST /defi/kyc/documents` sube los archivos y retorna confirmacion.
+- [ ] `POST /defi/kyc/start` crea el customer en Etherfuse sandbox y devuelve una `onboardingUrl` válida con `expiresAt`.
 - [ ] `GET /defi/kyc/status` retorna el estado real desde Etherfuse (no mock).
 - [ ] Las rutas requieren token de usuario valido (middleware de auth existente).
-- [ ] En sandbox, un KYC con datos ficticios retorna `approved` automaticamente.
+- [ ] El `customerId` se persiste en `users` para no recrearlo en cada intento.
+- [ ] En sandbox, completar el hosted flow con datos ficticios resulta en `approved`.
 - [ ] `tsc --noEmit` pasa sin errores.
 
 ---
@@ -277,33 +286,34 @@ Etherfuse llama este endpoint cuando el SPEI es recibido. Verificar firma del we
 
 ---
 
-## A-4 · Frontend: pantalla KYC (CURP / RFC / documentos)
+## A-4 · Frontend: pantalla KYC (flujo hosted de Etherfuse)
 
-**Complejidad:** alta | **Depende de:** A-2
+**Complejidad:** media | **Depende de:** A-2 (o sus stubs)
+
+### Decisión: hosted, no formulario propio
+
+**No construimos formulario de CURP/RFC ni captura de documentos.** Etherfuse maneja todo eso en su página hosted. El frontend solo: (1) pide la URL al backend, (2) la abre, (3) hace polling del estado. Mucho menos trabajo y cero datos sensibles en la app.
 
 ### Que construir
 
-Nueva pantalla `micopay/frontend/src/pages/KYCScreen.tsx` con dos pasos:
+Nueva pantalla `micopay/frontend/src/pages/KYCScreen.tsx`:
 
-**Paso 1 — Datos personales**
-- Nombre completo, fecha de nacimiento, telefono, ocupacion, domicilio
-- **CURP** (18 caracteres — validacion de formato regex)
-- **RFC** (13 caracteres)
+**Paso 1 — Introducción**
+- Explicar que se va a verificar identidad con Etherfuse (un paso único)
+- Botón "Verificar mi identidad"
 
-**Paso 2 — Documentos**
-- Selfie (camara o galeria)
-- Identificacion oficial (INE, pasaporte)
-- Comprobante de domicilio
+**Paso 2 — Abrir flujo hosted**
+- Al tocar el botón: `POST /defi/kyc/start` → obtener `onboardingUrl`
+- Abrir la URL. En Capacitor usar `@capacitor/browser` (`Browser.open({ url })`) para abrirla en el navegador del sistema, no en un `<a href>`. Si el plugin no está instalado, agregarlo (es ligero) o usar `window.open` como fallback.
+- La URL **expira en 15 minutos** — generarla justo al tocar el botón, no antes.
 
-En Android: `input type="file" accept="image/*" capture="user"` dentro de WebView de Capacitor.
-
-**Estado post-envio**
-Polling a `GET /defi/kyc/status` cada 5 segundos:
+**Paso 3 — Espera y verificación**
+Al regresar a la app (evento `appStateChange` de `@capacitor/app`, o un botón "Ya completé la verificación"), hacer polling a `GET /defi/kyc/status` cada 5 segundos:
 - `pending` → "Verificando identidad..."
-- `approved` → navegar al flujo SPEI
-- `rejected` → motivo + opcion de reintentar
+- `approved` → navegar al flujo SPEI + cachear en `secureStorage`
+- `rejected` → motivo + botón para reintentar (regenera la URL)
 
-El estado `approved` se cachea en `secureStorage` con clave `kyc_status`.
+El estado `approved` se cachea en `secureStorage` con clave `kyc_status` para no repetir el flujo.
 
 **Punto de entrada:** si el usuario toca "Depositar via SPEI" en `CETESScreen` sin KYC aprobado, navegar a `KYCScreen`.
 
@@ -311,17 +321,18 @@ El estado `approved` se cachea en `secureStorage` con clave `kyc_status`.
 
 | Archivo | Que cambia |
 |---------|-----------|
-| `micopay/frontend/src/pages/KYCScreen.tsx` | Nuevo archivo |
-| `micopay/frontend/src/services/api.ts` | Agregar `submitKYC()`, `uploadKYCDocuments()`, `getKYCStatus()` |
+| `micopay/frontend/src/pages/KYCScreen.tsx` | Nuevo archivo (intro + abrir URL + polling) |
+| `micopay/frontend/src/services/api.ts` | Agregar `startKYC()` y `getKYCStatus()` |
 | `micopay/frontend/src/App.tsx` | Agregar ruta `/kyc` |
 
 ### Criterio de aceptacion
 
-- [ ] CURP y RFC validados con regex antes de enviar.
-- [ ] Los documentos se suben correctamente via `POST /defi/kyc/documents`.
-- [ ] El polling muestra estado en tiempo real.
-- [ ] En sandbox, KYC con datos ficticios se aprueba automaticamente.
+- [ ] El botón "Verificar mi identidad" llama a `POST /defi/kyc/start` y abre la `onboardingUrl` en el navegador del sistema.
+- [ ] Al regresar a la app, el polling a `GET /defi/kyc/status` muestra el estado en tiempo real.
+- [ ] `approved` navega al flujo SPEI; `rejected` permite reintentar.
+- [ ] En sandbox (con stubs), el estado retorna `approved` y el flujo se completa end-to-end.
 - [ ] Estado `approved` cacheado en `secureStorage`.
+- [ ] No se recolecta ni almacena CURP, RFC, ni documentos en el frontend.
 - [ ] `tsc --noEmit` pasa sin errores.
 
 ---

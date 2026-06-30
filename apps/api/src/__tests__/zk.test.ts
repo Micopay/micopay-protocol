@@ -1,8 +1,24 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
 import Fastify, { FastifyInstance } from "fastify";
 import { zkRoutes } from "../routes/zk.js";
 
-// Stub all Soroban/network calls so tests run offline
+// Shared mock functions — defined with vi.hoisted() so they're accessible inside vi.mock()
+// (vi.mock() factories are hoisted before imports, so outer-scope let/const aren't ready yet).
+const mockGetAccount = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ accountId: () => "GTEST", incrementSequenceNumber: vi.fn() })
+);
+const mockSimulateTransaction = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ result: null })
+);
+const mockSendTransaction = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ status: "PENDING", hash: "aabbcc" })
+);
+const mockGetTransaction = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ status: "SUCCESS", returnValue: null })
+);
+
+// Stub all Soroban/network calls so tests run offline.
+// The Server class uses the shared hoisted mocks so per-test overrides work.
 vi.mock("@stellar/stellar-sdk", async (importOriginal: () => Promise<typeof import("@stellar/stellar-sdk")>) => {
   const actual = await importOriginal();
 
@@ -33,14 +49,13 @@ vi.mock("@stellar/stellar-sdk", async (importOriginal: () => Promise<typeof impo
     rpc: {
       ...actual.rpc,
       assembleTransaction: vi.fn().mockReturnValue(fakeBuilder),
+      // Each new Server() instance delegates to the shared hoisted mock fns,
+      // so tests can use mockResolvedValueOnce / mockRejectedValueOnce directly.
       Server: class {
-        getAccount = vi.fn().mockResolvedValue({ accountId: () => "GTEST", incrementSequenceNumber: vi.fn() });
-        simulateTransaction = vi.fn().mockResolvedValue({ result: null });
-        sendTransaction = vi.fn().mockResolvedValue({ status: "PENDING", hash: "aabbcc" });
-        getTransaction = vi.fn().mockResolvedValue({
-          status: "SUCCESS",
-          returnValue: actual.xdr.ScVal.scvBool(true),
-        });
+        getAccount = mockGetAccount;
+        simulateTransaction = mockSimulateTransaction;
+        sendTransaction = mockSendTransaction;
+        getTransaction = mockGetTransaction;
       },
       Api: {
         ...actual.rpc?.Api,
@@ -64,6 +79,18 @@ describe("ZK Routes", () => {
     await app.ready();
   });
 
+  beforeEach(() => {
+    // Reset shared mocks to safe defaults before each test to avoid state leakage.
+    mockGetAccount.mockReset();
+    mockGetAccount.mockResolvedValue({ accountId: () => "GTEST", incrementSequenceNumber: vi.fn() });
+    mockSimulateTransaction.mockReset();
+    mockSimulateTransaction.mockResolvedValue({ result: null });
+    mockSendTransaction.mockReset();
+    mockSendTransaction.mockResolvedValue({ status: "PENDING", hash: "aabbcc" });
+    mockGetTransaction.mockReset();
+    mockGetTransaction.mockResolvedValue({ status: "SUCCESS", returnValue: null });
+  });
+
   afterAll(async () => {
     await app.close();
   });
@@ -73,10 +100,11 @@ describe("ZK Routes", () => {
       const res = await app.inject({ method: "GET", url: "/api/v1/zk/circuits" });
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
-      expect(body.circuits).toHaveLength(2);
+      expect(body.circuits).toHaveLength(3);
       const ids = body.circuits.map((c: { circuit_id: string }) => c.circuit_id);
       expect(ids).toContain("poseidon_preimage");
       expect(ids).toContain("reputation_v1");
+      expect(ids).toContain("access_credential_v1");
     });
 
     it("includes payment info", async () => {
@@ -188,6 +216,7 @@ describe("ZK Routes", () => {
     });
 
     it("returns verified result for reputation_v1 with 4 inputs and mock payment", async () => {
+      // fetchReputationRoot: simulateTransaction returns { result: null } → root=null → check skipped
       const res = await app.inject({
         method: "POST",
         url: "/api/v1/zk/verify",
@@ -210,46 +239,19 @@ describe("ZK Routes", () => {
     });
 
     it("returns 400 when reputation_v1 merkle_root does not match on-chain root", async () => {
-      // Override the simulateTransaction mock for this test only so that
-      // fetchReputationRoot returns a specific known on-chain root,
-      // then submit a proof whose public_inputs[0] differs from that root.
-      //
-      // The top-level vi.mock already stubs rpc.Server; we override getTransaction
-      // globally to return FAILED for the root-fetch call by making simulateTransaction
-      // return a scvBytes value that represents root "99999999999999999999999999999".
-      //
-      // Simplest approach: use the route's own stale-root guard by providing a
-      // root that can never match (the global mock returns null for root fetch,
-      // so the guard is non-fatal). We test the guard logic by temporarily
-      // making fetchReputationRoot return a concrete value via module-level mock override.
-
-      // The existing global mock makes simulateTransaction return { result: null },
-      // so fetchReputationRoot returns null and the guard is skipped (non-fatal per spec).
-      // To test the guard: override to return a specific on-chain root.
-
-      // We use vi.doMock to change the rpc.Server behavior for this call:
-      // Temporarily patch the module-level rpc.Server mock to return a root value.
+      // Make fetchReputationRoot() return a concrete on-chain root by having
+      // simulateTransaction return a scvBytes ScVal on the first call.
       const StellarModule = await import("@stellar/stellar-sdk");
-      const originalSimulate = StellarModule.rpc.Server.prototype.simulateTransaction;
 
       const onChainRootDec = "99999999999999999999999999999";
       const onChainRootHex = BigInt(onChainRootDec).toString(16).padStart(64, "0");
       const onChainRootBuf = Buffer.from(onChainRootHex, "hex");
 
-      // Patch: first call to simulateTransaction returns the on-chain root
-      let callCount = 0;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (StellarModule.rpc.Server.prototype as any).simulateTransaction = vi.fn().mockImplementation(async () => {
-        callCount++;
-        if (callCount === 1) {
-          // root fetch call
-          return {
-            result: { retval: StellarModule.xdr.ScVal.scvBytes(onChainRootBuf) },
-          };
-        }
-        // verify call — return a normal success
-        return { result: null };
+      // First call: fetchReputationRoot → return the on-chain root
+      mockSimulateTransaction.mockResolvedValueOnce({
+        result: { retval: StellarModule.xdr.ScVal.scvBytes(onChainRootBuf) },
       });
+      // Subsequent calls (invokeVerify) use the default { result: null }
 
       const res = await app.inject({
         method: "POST",
@@ -267,13 +269,76 @@ describe("ZK Routes", () => {
         },
       });
 
-      // Restore
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (StellarModule.rpc.Server.prototype as any).simulateTransaction = originalSimulate;
-
       expect(res.statusCode).toBe(400);
       const body = JSON.parse(res.body);
       expect(body.error).toMatch(/merkle_root/);
+    });
+
+    // SEC-08 — Fatal Merkle root guard: RPC failure must reject with 503, not silently pass through.
+    // Before the fix the catch block was non-fatal and a fabricated root could bypass the check
+    // during an RPC outage window.
+    it("returns 503 for reputation_v1 when RPC is unreachable (SEC-08 fatal guard)", async () => {
+      mockGetAccount.mockRejectedValueOnce(new Error("ECONNREFUSED: RPC endpoint unreachable"));
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/zk/verify",
+        headers: { "x-payment": MOCK_PAYMENT_HEADER },
+        payload: {
+          circuit_id: "reputation_v1",
+          proof: VALID_PROOF_B64,
+          public_inputs: [
+            "99999999999999999999999", // fabricated root — would bypass check if non-fatal
+            "2",
+            "333333333333333333333333",
+            "444444444444444444444444",
+          ],
+        },
+      });
+
+      expect(res.statusCode).toBe(503);
+      const body = JSON.parse(res.body);
+      expect(body.error).toMatch(/Merkle root/);
+    });
+
+    it("returns 503 for access_credential_v1 when RPC is unreachable (SEC-08 fatal guard)", async () => {
+      mockGetAccount.mockRejectedValueOnce(new Error("Request timeout"));
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/zk/verify",
+        headers: { "x-payment": MOCK_PAYMENT_HEADER },
+        payload: {
+          circuit_id: "access_credential_v1",
+          proof: VALID_PROOF_B64,
+          public_inputs: [
+            "99999999999999999999999", // fabricated root
+            "444444444444444444444444",
+          ],
+        },
+      });
+
+      expect(res.statusCode).toBe(503);
+      const body = JSON.parse(res.body);
+      expect(body.error).toMatch(/Merkle root/);
+    });
+
+    it("poseidon_preimage is unaffected by RPC failure (no Merkle root check)", async () => {
+      // poseidon_preimage is NOT in ROOTED_CIRCUITS, so fetchReputationRoot is never
+      // called. Even if the RPC were down for the root fetch, the circuit should succeed.
+      // (In this test the mocks are healthy, verifying that no extraneous root fetch occurs.)
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/zk/verify",
+        headers: { "x-payment": MOCK_PAYMENT_HEADER },
+        payload: {
+          circuit_id: "poseidon_preimage",
+          proof: VALID_PROOF_B64,
+          public_inputs: ["9876543210123456789"],
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
     });
 
     // Replay attack: same proof submitted twice → second must be rejected (409).
@@ -303,11 +368,7 @@ describe("ZK Routes", () => {
 
       // Second submission — contract rejects; getTransaction returns FAILED
       // with error detail "Error(Contract, #10)" in the result XDR
-      const StellarModule = await import("@stellar/stellar-sdk");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const origGetTx = (StellarModule.rpc.Server.prototype as any).getTransaction;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (StellarModule.rpc.Server.prototype as any).getTransaction = vi.fn().mockResolvedValueOnce({
+      mockGetTransaction.mockResolvedValueOnce({
         status: "FAILED",
         resultMetaXdr: "Error(Contract, #10)",
       });
@@ -317,8 +378,6 @@ describe("ZK Routes", () => {
         headers: { "x-payment": MOCK_PAYMENT_HEADER },
         payload,
       });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (StellarModule.rpc.Server.prototype as any).getTransaction = origGetTx;
 
       expect(second.statusCode).toBe(409);
       expect(JSON.parse(second.body).error).toMatch(/Nullifier already used/);

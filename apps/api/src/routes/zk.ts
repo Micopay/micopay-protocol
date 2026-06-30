@@ -169,6 +169,9 @@ export async function zkRoutes(fastify: FastifyInstance): Promise<void> {
 
       // 6. For rooted circuits: cross-check public_inputs[0] (merkle_root) against
       //    the published on-chain root so a prover can't use a fabricated root.
+      //    SEC-08: RPC failure is FATAL — a silently-skipped root check opens a
+      //    window where an attacker can submit a proof with a fabricated root while
+      //    the RPC is unreachable. Reject with 503 instead of letting the proof through.
       if (ROOTED_CIRCUITS.has(circuit_id)) {
         try {
           const onChainRoot = await fetchReputationRoot();
@@ -179,8 +182,10 @@ export async function zkRoutes(fastify: FastifyInstance): Promise<void> {
             });
           }
         } catch (err) {
-          // Non-fatal if root unavailable — let contract decide
-          fastify.log.warn({ err }, "Could not fetch on-chain root");
+          fastify.log.error({ err }, "Could not fetch on-chain root — rejecting request to prevent fabricated-root attack");
+          return reply.status(503).send({
+            error: "Cannot verify Merkle root: on-chain root unavailable. Try again later.",
+          });
         }
       }
 
@@ -227,39 +232,40 @@ export async function zkRoutes(fastify: FastifyInstance): Promise<void> {
   });
 }
 
-// Fetch current reputation root from ZK contract
+// Fetch current reputation root from ZK contract.
+// Returns null when the contract has no root set or the contract ID is unconfigured.
+// Throws on RPC/network errors so the caller can treat unavailability as fatal (SEC-08).
 async function fetchReputationRoot(): Promise<string | null> {
   const contractId = process.env.ZK_VERIFIER_CONTRACT_ID ?? "";
   if (!contractId) return null;
-  try {
-    const rpc = new StellarSdk.rpc.Server(RPC_URL);
-    const signerKP = StellarSdk.Keypair.fromSecret(
-      process.env.ADMIN_SECRET_KEY ?? ""
-    );
-    const account = await rpc.getAccount(signerKP.publicKey());
-    const contract = new StellarSdk.Contract(contractId);
 
-    const tx = new StellarSdk.TransactionBuilder(account, {
-      fee: "100",
-      networkPassphrase: NET,
-    })
-      .addOperation(contract.call("get_reputation_root"))
-      .setTimeout(30)
-      .build();
+  // No try-catch here — network failures propagate so the route handler can reject
+  // the request rather than silently skipping the Merkle root check.
+  const rpc = new StellarSdk.rpc.Server(RPC_URL);
+  const signerKP = StellarSdk.Keypair.fromSecret(
+    process.env.ADMIN_SECRET_KEY ?? ""
+  );
+  const account = await rpc.getAccount(signerKP.publicKey());
+  const contract = new StellarSdk.Contract(contractId);
 
-    const sim = await rpc.simulateTransaction(tx);
-    if (StellarSdk.rpc.Api.isSimulationError(sim)) return null;
+  const tx = new StellarSdk.TransactionBuilder(account, {
+    fee: "100",
+    networkPassphrase: NET,
+  })
+    .addOperation(contract.call("get_reputation_root"))
+    .setTimeout(30)
+    .build();
 
-    const ret = (sim as StellarSdk.rpc.Api.SimulateTransactionSuccessResponse).result?.retval;
-    if (!ret) return null;
-    // Contract returns Result<Bytes, Error> — extract Ok(bytes) value
-    // ScVal is scvVec with first element being the discriminant for Ok
-    if (ret.switch().name === "scvBytes") {
-      const buf = ret.bytes();
-      return BigInt("0x" + Buffer.from(buf).toString("hex")).toString();
-    }
-    return null;
-  } catch {
-    return null;
+  const sim = await rpc.simulateTransaction(tx);
+  if (StellarSdk.rpc.Api.isSimulationError(sim)) return null;
+
+  const ret = (sim as StellarSdk.rpc.Api.SimulateTransactionSuccessResponse).result?.retval;
+  if (!ret) return null;
+  // Contract returns Result<Bytes, Error> — extract Ok(bytes) value
+  // ScVal is scvVec with first element being the discriminant for Ok
+  if (ret.switch().name === "scvBytes") {
+    const buf = ret.bytes();
+    return BigInt("0x" + Buffer.from(buf).toString("hex")).toString();
   }
+  return null;
 }

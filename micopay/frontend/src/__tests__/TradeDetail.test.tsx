@@ -4,15 +4,41 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import TradeDetail from '../pages/TradeDetail';
 import * as api from '../services/api';
 
+const mockGetTrade = vi.fn();
+
 // Mock the API module
 vi.mock('../services/api', () => ({
-  getTrade: vi.fn(),
+  fetchTradeDetail: vi.fn(async (id, token) => {
+    const trade = await mockGetTrade(id, token);
+    return { trade, merchant_unavailable: false, seller_username: 'seller-username' };
+  }),
   completeTrade: vi.fn(),
-  cancelTrade: vi.fn(),
+  cancelTradeRequest: vi.fn(),
+  refundTradeRequest: vi.fn(),
   getToken: vi.fn(),
 }));
 
-const mockGetTrade = vi.mocked(api.getTrade);
+// Robust localStorage mock for tests
+const store: Record<string, string> = {};
+const mockLocalStorage = {
+  getItem: vi.fn((key: string) => store[key] || null),
+  setItem: vi.fn((key: string, value: string) => { store[key] = value.toString(); }),
+  removeItem: vi.fn((key: string) => { delete store[key]; }),
+  clear: vi.fn(() => { for (const k in store) { delete store[k]; } }),
+  key: vi.fn((index: number) => Object.keys(store)[index] || null),
+  length: 0,
+};
+Object.defineProperty(mockLocalStorage, 'length', {
+  get: () => Object.keys(store).length,
+});
+global.localStorage = mockLocalStorage as any;
+if (global.window) {
+  Object.defineProperty(global.window, 'localStorage', {
+    value: mockLocalStorage,
+    writable: true,
+  });
+}
+
 const mockGetToken = vi.mocked(api.getToken);
 
 const createMockTrade = (status: string) => ({
@@ -46,6 +72,7 @@ describe('TradeDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    localStorage.setItem('micopay_users', JSON.stringify({ buyer: { token: 'mock-token', id: 'buyer-1' } }));
   });
 
   describe('Route registration', () => {
@@ -155,12 +182,13 @@ describe('TradeDetail', () => {
 
     it('should render expired state', async () => {
       mockGetTrade.mockResolvedValue(createMockTrade('expired'));
+      localStorage.setItem('micopay_users', JSON.stringify({ buyer: { token: 'mock-token', id: 'buyer-different' } }));
 
       renderWithRouter();
 
       await waitFor(() => {
         expect(screen.getByText('Expirado')).toBeInTheDocument();
-        expect(screen.getByText(/operación expirada/i)).toBeInTheDocument();
+        expect(screen.getByText(/expirada/i)).toBeInTheDocument();
         expect(screen.getByText(/volver al inicio/i)).toBeInTheDocument();
       });
     });
@@ -179,7 +207,8 @@ describe('TradeDetail', () => {
       renderWithRouter();
 
       await waitFor(() => {
-        expect(screen.getByText(/trade no encontrado/i)).toBeInTheDocument();
+        expect(screen.getByText(/Algo salió mal/i)).toBeInTheDocument();
+        expect(screen.getByText(/La operación que buscas no existe o fue eliminada/i)).toBeInTheDocument();
         expect(screen.getByText(/volver al inicio/i)).toBeInTheDocument();
       });
     });
@@ -192,8 +221,8 @@ describe('TradeDetail', () => {
       renderWithRouter();
 
       await waitFor(() => {
-        expect(screen.getByText(/sin acceso/i)).toBeInTheDocument();
-        expect(screen.getByText(/no tienes permiso/i)).toBeInTheDocument();
+        expect(screen.getByText(/no tienes acceso/i)).toBeInTheDocument();
+        expect(screen.getByText(/no tienes permiso para ver esta operación/i)).toBeInTheDocument();
         expect(screen.getByText(/volver al inicio/i)).toBeInTheDocument();
       });
     });
@@ -206,21 +235,21 @@ describe('TradeDetail', () => {
       renderWithRouter();
 
       await waitFor(() => {
-        expect(screen.getByText(/error de conexión/i)).toBeInTheDocument();
+        expect(screen.getByText(/sin conexión/i)).toBeInTheDocument();
         expect(screen.getByText(/reintentar/i)).toBeInTheDocument();
       });
     });
   });
 
   describe('Auth recovery', () => {
-    it('should redirect to login when not authenticated and save redirect path', async () => {
+    it('should redirect to home when not authenticated', async () => {
       mockGetToken.mockReturnValue(null);
+      localStorage.removeItem('micopay_users');
 
       renderWithRouter('/trade/trade-123');
 
       await waitFor(() => {
-        expect(screen.getByText('Login Page')).toBeInTheDocument();
-        expect(localStorage.getItem('pendingTradeRedirect')).toBe('/trade/trade-123');
+        expect(screen.getByText('Home Page')).toBeInTheDocument();
       });
     });
 
@@ -232,7 +261,7 @@ describe('TradeDetail', () => {
 
       await waitFor(() => {
         expect(screen.getByText(/detalle de operación/i)).toBeInTheDocument();
-        expect(screen.queryByText('Login Page')).not.toBeInTheDocument();
+        expect(screen.queryByText('Home Page')).not.toBeInTheDocument();
       });
     });
   });

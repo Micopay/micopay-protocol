@@ -2,6 +2,8 @@ import axios from 'axios';
 import { extractApiErrorPayload, toApiError } from '../utils/apiError';
 import { signChallenge, getPublicKey } from '../lib/keystore';
 import { removeKey } from './secureStorage';
+import { PLATFORM_FEE_PERCENT } from '../constants/trade';
+
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -10,6 +12,33 @@ const http = axios.create({ baseURL: BASE_URL });
 function authHeaders(token: string) {
   return { headers: { Authorization: `Bearer ${token}` } };
 }
+
+// ─── DeFi: KYC (Etherfuse hosted flow) ─────────────────────────────────────
+
+export type KYCStatus = 'pending' | 'approved' | 'rejected';
+
+export interface KYCStatusResponse {
+  status: KYCStatus;
+  reason?: string | null;
+}
+
+/**
+ * Generates a short-lived (≈15 min) onboarding URL.
+ * URL must be generated at button touch (not earlier).
+ */
+export async function startKYC(): Promise<{ onboardingUrl: string }>{
+  const res = await http.post('/defi/kyc/start', {});
+  return res.data;
+}
+
+/**
+ * Poll KYC verification status.
+ */
+export async function getKYCStatus(): Promise<KYCStatusResponse> {
+  const res = await http.get('/defi/kyc/status');
+  return res.data;
+}
+
 
 export interface UserData {
   id: string;
@@ -50,6 +79,21 @@ export interface TradeDetailResponse {
   seller_username: string | null;
 }
 
+export interface RampQuote {
+  id: string;
+  amount_in: number;
+  amount_out: number;
+  expires_at: string;
+}
+
+export interface RampOrder {
+  id: string;
+  status: string;
+  withdrawAnchorAccount?: string;
+  withdrawMemo?: string;
+  withdrawMemoType?: string;
+}
+
 export async function fetchTradeDetail(tradeId: string, buyerToken: string): Promise<TradeDetailResponse> {
   const res = await http.get(`/trades/${tradeId}`, authHeaders(buyerToken));
   return res.data;
@@ -60,6 +104,26 @@ export interface CancelTradeResponse {
   status: 'cancelled';
   refund_expected: boolean;
   lock_tx_hash: string | null;
+}
+
+export async function getOfframpQuote(cetesAmount: string, token: string): Promise<RampQuote> {
+  const res = await http.post('/defi/ramp/quote', { type: 'offramp', amount: cetesAmount }, authHeaders(token));
+  return res.data;
+}
+
+export async function createOfframpOrder(quoteId: string, token: string): Promise<RampOrder> {
+  const res = await http.post('/defi/ramp/order', { quote_id: quoteId, useAnchor: true }, authHeaders(token));
+  return res.data;
+}
+
+export async function regenerateOfframpTx(orderId: string, token: string): Promise<RampOrder> {
+  const res = await http.post(`/defi/ramp/order/${orderId}/regenerate_tx`, {}, authHeaders(token));
+  return res.data;
+}
+
+export async function getRampOrder(orderId: string, token: string): Promise<RampOrder> {
+  const res = await http.get(`/defi/ramp/order/${orderId}`, authHeaders(token));
+  return res.data;
 }
 
 export async function cancelTradeRequest(tradeId: string, buyerToken: string): Promise<CancelTradeResponse> {
@@ -96,11 +160,13 @@ function generateFallbackAddress(prefix: string): string {
 }
 
 export async function getAuthToken(username: string): Promise<string> {
+  const stellar_address = (await getPublicKey()) ?? generateFallbackAddress(username);
+
   // Step 1: request a one-time challenge from the server
   const { challenge } = await fetch(`${BASE_URL}/auth/challenge`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username }),
+    body: JSON.stringify({ stellar_address }),
   }).then(r => r.json());
 
   // Step 2: sign with the device keypair — private key never leaves the device
@@ -110,7 +176,7 @@ export async function getAuthToken(username: string): Promise<string> {
   const { token } = await fetch(`${BASE_URL}/auth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, challenge, signature }),
+    body: JSON.stringify({ stellar_address, challenge, signature }),
   }).then(r => r.json());
 
   return token;
@@ -401,6 +467,8 @@ export interface UserProfile {
   min_trade_mxn?: number;
   max_trade_mxn?: number;
   daily_cap_mxn?: number;
+  kyc_status?: string;
+  clabe?: string;
 }
 
 export async function getMyProfile(token: string): Promise<UserProfile> {
@@ -464,6 +532,37 @@ export interface AvailableMerchant {
   distance_km: number;
   /** Payout the buyer receives for the requested amount. */
   payout_mxn: number;
+  /** Reputation: fraction 0..1 of completed trades (optional) */
+  completion_rate?: number;
+  /** Total completed trades (optional) */
+  trades_completed?: number;
+  /** Reputation tier (optional) */
+  tier?: string;
+  /** Optional seller type flag coming from API (e.g. 'business' | 'individual') */
+  seller_type?: string;
+  /** Backwards-compatible boolean marker for business sellers (optional) */
+  is_business?: boolean;
+  /** Platform fee (%) for this merchant. Falls back to PLATFORM_FEE_PERCENT if absent. */
+  platform_fee_pct?: number;
+}
+
+/**
+ * Effective-fee guardrail. Validations V-1/V-3/V-7/V-8 found a universal ceiling:
+ * users abandon MicoPay when the *total* cost exceeds ~5%. The UI warns above this
+ * threshold. Kept here (not hardcoded in components) so it can be tuned centrally.
+ */
+export const MAX_EFFECTIVE_FEE_PERCENT = 5;
+
+/**
+ * Total effective cost the user pays = provider commission + platform fee.
+ * `platformPct` defaults to the shared `PLATFORM_FEE_PERCENT` constant because the
+ * `/merchants/available` response does not (yet) carry a per-merchant platform fee.
+ */
+export function effectiveFeePercent(
+  providerPct: number,
+  platformPct: number = PLATFORM_FEE_PERCENT,
+): number {
+  return providerPct + platformPct;
 }
 
 export interface MerchantsAvailableQuery {
@@ -526,6 +625,86 @@ export async function merchantConfirmScan(
   } catch (e: unknown) {
     const { message } = extractApiErrorPayload(e);
     throw new Error(message);
+  }
+}
+
+// ─── DeFi: SPEI Onramp / Offramp (Etherfuse) ─────────────────────────────
+
+export interface RampQuote {
+  quoteId: string;
+  type: 'onramp' | 'offramp';
+  exchangeRate: string;
+  sourceAmount: string;
+  destinationAmount: string;
+  expiresAt: string;
+}
+
+export interface RampOrder {
+  orderId: string;
+  depositClabe?: string;
+  depositAmount?: string;
+  depositBankName?: string;
+  depositAccountHolder?: string;
+  withdrawAnchorAccount?: string;
+  withdrawMemo?: string;
+  withdrawMemoType?: string;
+}
+
+export interface RampOrderStatus {
+  orderId: string;
+  status: 'pending' | 'funded' | 'completed' | 'failed';
+  type: 'onramp' | 'offramp';
+  stellarTxHash?: string;
+}
+
+export interface BankAccountResult {
+  bankAccountId: string;
+  clabe: string;
+}
+
+export async function getRampQuote(
+  type: 'onramp' | 'offramp',
+  sourceAmount: string,
+  token: string,
+): Promise<RampQuote> {
+  const res = await http.post(
+    '/defi/ramp/quote',
+    { type, sourceAsset: 'MXN', targetAsset: 'CETES', sourceAmount },
+    authHeaders(token),
+  );
+  return res.data as RampQuote;
+}
+
+export async function createRampOrder(
+  quoteId: string,
+  bankAccountId: string,
+  token: string,
+): Promise<RampOrder> {
+  const res = await http.post(
+    '/defi/ramp/order',
+    { quoteId, bankAccountId },
+    authHeaders(token),
+  );
+  return res.data as RampOrder;
+}
+
+export async function getRampOrderStatus(
+  orderId: string,
+  token: string,
+): Promise<RampOrderStatus> {
+  const res = await http.get(`/defi/ramp/order/${orderId}`, authHeaders(token));
+  return res.data as RampOrderStatus;
+}
+
+export async function registerBankAccount(
+  clabe: string,
+  token: string,
+): Promise<BankAccountResult> {
+  try {
+    const res = await http.post('/defi/bank-account', { clabe }, authHeaders(token));
+    return res.data as BankAccountResult;
+  } catch (e: unknown) {
+    throw toApiError(extractApiErrorPayload(e));
   }
 }
 

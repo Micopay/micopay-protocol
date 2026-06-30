@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import MapSim from '../components/MapSim';
 import { useMerchantsAvailable } from '../hooks/useMerchantsAvailable';
-import type { AvailableMerchant } from '../services/api';
+import {
+  effectiveFeePercent,
+  MAX_EFFECTIVE_FEE_PERCENT,
+  type AvailableMerchant,
+} from '../services/api';
+import { PLATFORM_FEE_PERCENT } from '../constants/trade';
 import ErrorBanner from '../components/ErrorBanner';
 import type { ApiErrorAction } from '../utils/apiError';
 
@@ -25,9 +30,17 @@ interface Offer {
   distance: string;
   walkMinutes: number;
   receiveMxn: number;
+  /** Provider commission (%). */
   commissionPct: number;
+  /** Platform fee (%) — the other half of the effective cost. */
+  platformFeePct: number;
   badge?: string;
   isPrimary?: boolean;
+  completionRate?: number;
+  tradesCompleted?: number;
+  tier?: string;
+  isBusiness?: boolean;
+  online?: boolean;
 }
 
 function merchantToOffer(m: AvailableMerchant, index: number): Offer {
@@ -39,7 +52,13 @@ function merchantToOffer(m: AvailableMerchant, index: number): Offer {
     walkMinutes: walkMinutes(m.distance_km),
     receiveMxn: m.payout_mxn,
     commissionPct: m.rate_percent,
+    platformFeePct: m.platform_fee_pct ?? PLATFORM_FEE_PERCENT,
     isPrimary: index === 0,
+    completionRate: m.completion_rate ?? 0,
+    tradesCompleted: m.trades_completed ?? 0,
+    tier: m.tier ?? undefined,
+    isBusiness: (m.seller_type === 'business') || (m.is_business === true) || false,
+    online: true,
   };
 }
 
@@ -49,7 +68,7 @@ export interface OfferConfirmData {
   receiveMxn: number;
   commissionPct: number;
   nearbyCount: number;
-  online: boolean;
+  online?: boolean;
 }
 
 interface ExploreMapProps {
@@ -62,6 +81,51 @@ interface ExploreMapProps {
   creationErrorAction?: ApiErrorAction;
   onDismissCreationError?: () => void;
   onRetryCreationError?: () => void;
+  /** Effective-fee threshold (%) above which a warning is shown. Defaults to the shared guardrail. */
+  maxEffectiveFeePercent?: number;
+}
+
+// ─── Effective cost (provider + platform) + over-threshold warning ────────────
+
+function EffectiveFeeNote({
+  commissionPct,
+  platformFeePct,
+  maxPct,
+}: {
+  commissionPct: number;
+  platformFeePct: number;
+  maxPct: number;
+}) {
+  const totalPct = effectiveFeePercent(commissionPct, platformFeePct);
+  const exceeds = totalPct > maxPct;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold text-outline uppercase tracking-wider">
+          Costo total efectivo
+        </span>
+        <span
+          className={`text-sm font-bold tabular-nums ${exceeds ? 'text-error' : 'text-on-surface'}`}
+        >
+          {totalPct.toFixed(1)}%
+        </span>
+      </div>
+      <p className="text-[11px] text-outline font-medium">
+        Plataforma {platformFeePct}% + proveedor {commissionPct}%
+      </p>
+      {exceeds && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-error/30 bg-error/5 px-3 py-2"
+        >
+          <span className="material-symbols-outlined text-error text-base leading-none">warning</span>
+          <p className="text-[12px] font-medium text-error leading-snug">
+            El costo total supera el {maxPct}%. Compara con otra oferta antes de continuar.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 const ExploreMap = ({
@@ -74,6 +138,7 @@ const ExploreMap = ({
   creationErrorAction = 'retry',
   onDismissCreationError,
   onRetryCreationError,
+  maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
 }: ExploreMapProps) => {
   const [selectedMerchantId, setSelectedMerchantId] = useState<string | null>(null);
   const selectedOfferRef = useRef<HTMLElement | null>(null);
@@ -192,6 +257,17 @@ const ExploreMap = ({
                               <span className="material-symbols-outlined text-sm">directions_walk</span>
                               {offer.distance} · {offer.walkMinutes} min
                             </p>
+                            <div className="mt-2 flex items-center gap-2">
+                              <span className="text-[12px] text-on-surface-variant">{offer.completionRate !== undefined ? `${Math.round(offer.completionRate * 100)}% completitud` : '— completitud'}</span>
+                              <span className="text-[12px] text-on-surface-variant">·</span>
+                              <span className="text-[12px] text-on-surface-variant">{offer.tradesCompleted ?? 0} trades</span>
+                              {offer.tier && (
+                                <span className="ml-2 px-2 py-0.5 text-[11px] font-bold rounded-md bg-surface-container-high text-primary">{offer.tier}</span>
+                              )}
+                              <span className={`ml-2 px-2 py-0.5 text-[11px] font-bold rounded-md ${offer.isBusiness ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                                {offer.isBusiness ? 'Negocio establecido' : 'Individuo'}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -209,6 +285,13 @@ const ExploreMap = ({
                           </p>
                         </div>
                       </div>
+                      <div className="mb-6 p-4 bg-white/50 rounded-2xl">
+                        <EffectiveFeeNote
+                          commissionPct={offer.commissionPct}
+                          platformFeePct={offer.platformFeePct}
+                          maxPct={maxEffectiveFeePercent}
+                        />
+                      </div>
                       <button
                         onClick={() => {
                           if (onProceedToConfirm) {
@@ -218,7 +301,7 @@ const ExploreMap = ({
                               receiveMxn: offer.receiveMxn,
                               commissionPct: offer.commissionPct,
                               nearbyCount: offers.length,
-                              online: offer.online ?? true,
+                              online: (offer as any).online ?? true,
                             });
                           } else {
                             onSelectOffer(offer.id);
@@ -253,11 +336,20 @@ const ExploreMap = ({
                         </div>
                         <div>
                           <h3 className="font-headline font-bold text-on-surface">{offer.name}</h3>
-                          {offer.badge && (
+                            {offer.badge && (
                             <span className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
                               {offer.badge}
                             </span>
                           )}
+                            <div className="mt-1 text-sm text-on-surface-variant flex items-center gap-2">
+                              <span>{offer.completionRate !== undefined ? `${Math.round(offer.completionRate * 100)}%` : '—'}</span>
+                              <span>·</span>
+                              <span>{offer.tradesCompleted ?? 0} trades</span>
+                              {offer.tier && <span className="ml-2 px-2 py-0.5 text-[10px] rounded-md bg-surface-container-high text-primary">{offer.tier}</span>}
+                              <span className={`ml-2 px-2 py-0.5 text-[10px] rounded-md ${offer.isBusiness ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                                {offer.isBusiness ? 'Negocio' : 'Individuo'}
+                              </span>
+                            </div>
                           {isSelected && (
                             <span className="ml-2 text-[11px] font-bold text-primary bg-white px-2 py-0.5 rounded-md">
                               Seleccionado en mapa
@@ -272,6 +364,13 @@ const ExploreMap = ({
                         </p>
                       </div>
                     </div>
+                    <div className="mb-4">
+                      <EffectiveFeeNote
+                        commissionPct={offer.commissionPct}
+                        platformFeePct={offer.platformFeePct}
+                        maxPct={maxEffectiveFeePercent}
+                      />
+                    </div>
                     <button
                       onClick={() => {
                         if (onProceedToConfirm) {
@@ -281,7 +380,8 @@ const ExploreMap = ({
                             receiveMxn: offer.receiveMxn,
                             commissionPct: offer.commissionPct,
                             nearbyCount: offers.length,
-                            online: offer.online ?? true,
+                            online: (offer as any).online ?? true,
+
                           });
                         } else {
                           onSelectOffer(offer.id);

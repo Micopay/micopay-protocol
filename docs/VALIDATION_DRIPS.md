@@ -298,6 +298,126 @@ I would immediately walk away if the platform lacked user verification or encour
 
 If the entire experience was smooth, secure, and exactly as the platform promised, I would gladly recommend it. A simple onboarding process, reliable transaction completion, and the confidence that my issue would be resolved if anything went wrong would make me comfortable suggesting it to friends.
 
+### V-16 · Spending digital dollars at a store (consumer side)
+**Contributor:** [@Emelie-Dev](https://github.com/Emelie-Dev) · **PR:** #274 · **Region:** Mexico (central region)
+
+- **Country / general region:** Mexico (central region)
+- **What I normally use today at small shops, market stalls, or restaurants:** Mostly a mix of cash and card. For very small neighborhood purchases I still expect to use cash, while at restaurants or more established shops I usually prefer card or a local wallet app if they accept it.
+- **Have I ever wanted to pay a local merchant directly from a crypto/stablecoin balance?:** Yes, mainly because I like the idea of keeping value in digital dollars without needing an extra cash-out step first.
+- **What stopped me:** In practice, almost no local merchant wants to receive crypto directly, and I do not want to explain wallets, networks, or confirmations at the checkout counter. The moment a payment feels experimental or slow, it becomes stressful for both me and the merchant.
+- **Would a wallet with a single "dollars" balance that pays the shop in pesos feel useful, confusing, or risky?:** Useful if it is presented like a normal payment flow. The value is obvious: I can hold digital dollars and still pay locally in pesos. It becomes confusing if the app exposes too much blockchain language, or risky if the exchange rate and confirmation are not crystal clear before I approve.
+- **What I would need to see on screen at the moment of paying to trust it went through:** The merchant name, the exact peso amount the shop will receive, the exchange rate used, the total fee, and a very clear success state with a timestamp or receipt. I would also want an immediate status indicator so there is no awkward uncertainty while standing at the counter.
+- **What would make me choose this over my current payment method?:** Fast checkout, no hidden fees, better reliability than card terminals, and confidence that my digital dollar balance is being converted fairly. It would be especially attractive if it helped me avoid carrying cash while still working at ordinary local businesses.
+- **What would make me avoid it?:** Any delay during checkout, unclear pricing, failed transactions, or anything that forces the merchant to trust my explanation instead of the app showing a definitive result. If it feels harder than cash or card, I would not use it in person.
+
+**SDF narrative:** Supports Claim 6 (retail demand) from Mexico by showing a concrete consumer-side use case: keeping savings in digital dollars while spending seamlessly at peso-denominated local merchants. The adoption requirement is clear: the product must hide blockchain complexity and present a checkout experience that is as fast and legible as cash or card.
+
+---
+
+### V-17 · Accepting "dollars" and receiving pesos (merchant side)
+**Contributor:** [@Danitello123](https://github.com/Danitello123) · **PR:** #285 · **Region:** Mexico
+
+First-person response (privacy-safe):
+
+- **What kind of small business is it and what payment methods do you accept today?**: I run a small corner shop (abarrotes) in Mexico. Currently, we accept cash, debit/credit cards, and occasionally direct bank transfers (SPEI). We accept these because customers expect it, and refusing cards means losing sales.
+- **What is the most annoying part of the payment methods you accept now?**: The 3-4% fee on card terminals is painful for small margins, and sometimes the settlement is delayed until the next business day. Handling physical cash is also a security risk and requires time-consuming trips to the bank to deposit.
+- **Would you accept a payment where the customer pays "in dollars" and you receive pesos that settle the same day? What would worry you?**: Yes, I would definitely accept it if it settles the same day. My main worry would be the exchange rate—if it's a poor rate, it eats into the profit. I'd also worry about the reliability of the app and whether the "same day" settlement happens instantly or takes hours.
+- **Would you want to settle in a stable digital peso or in physical cash — or both? Which would be your default?**: I would want the option for both, but my default would be a stable digital peso. It's safer than keeping physical cash in the register, and I can use the digital balance to pay my suppliers or transfer it to my main bank account.
+- **Would you be interested in also handing out cash to customers (as a paid liquidity provider) using the same app? What commission % would feel fair for that?**: Yes. Since we receive a lot of cash from daily sales, handing it out to customers in exchange for a digital balance (plus a commission) would be a great way to "deposit" our cash without going to the bank. A commission of around 2-3% would feel fair and make it worth the effort.
+
+---
+
+### V-18 · NFC / contactless tap-to-pay familiarity & trust
+**Contributor:** [@adepoju2006](https://github.com/adepoju2006) · **PR:** _(this PR)_
+
+_Wave 6 · batch 2 (V-16…V-25) · Validates Claim 4 + 6 — payment UX feasibility · Vertical B (Retail)_
+
+- **Country / general region:** West Africa (Nigeria).
+- **Have I used tap-to-pay (NFC) with a phone or card? How often?:** Rarely — "sometimes," and almost always with a contactless card rather than a phone. In daily life here the dominant rails are chip-and-PIN on POS terminals, instant bank transfers from a banking app, and USSD codes. Contactless terminals exist but are not the norm, so I don't reach for tap as a default; I only use it on the few modern terminals that clearly support it.
+- **Do I trust the tap more or less than a PIN, a QR scan, or cash? Why?:** Less than chip-and-PIN and less than a confirmed bank transfer, because both of those have an explicit "I approved this" moment (I enter a PIN, or I confirm an amount on my own screen). Tap completes so fast and so passively that it feels like nothing happened — there's no deliberate confirmation that I controlled. QR feels natural and trustworthy here because scan-to-transfer and USSD are already the everyday mental model. Cash I trust completely; it's just inconvenient and risky to carry.
+- **Has an NFC payment ever failed or felt uncertain?:** Yes. A tap once didn't register cleanly — the terminal gave an ambiguous beep and I couldn't tell if it went through. I was afraid that tapping again would charge me twice, so I just stood there unsure until the cashier checked their side. The core problem was the absence of a clear, immediate confirmation on *my* device.
+- **If a local shop accepted NFC from a "dollars" wallet, would tapping feel natural, or would I prefer QR?:** I would prefer to scan a QR. In this market QR/transfer is the established habit, and for a foreign-currency ("dollars") wallet I'd specifically want to *see* the merchant and confirm the details before approving — a QR flow shows me who I'm paying and lets me review on my own phone first. A blind tap into an unfamiliar dollar wallet would feel novel and a little risky.
+- **The single on-screen signal that would make me confident the payment succeeded:** An immediate, unmistakable success state on my own phone right after the tap: a green checkmark with the merchant's name and the paid amount, ideally accompanied by a short haptic buzz and my updated balance so I can see the funds actually moved. The confirmation has to be on my screen, not only on the merchant's terminal.
+
+---
+
+### V-20 · Receiving part of your pay in digital dollars (worker side)
+**Contributor:** [@codex-agent](https://github.com/codex-agent) · **PR:** #235 · **Region:** Mexico (central region)
+
+First-person response (privacy-safe):
+
+- **How I get paid today:** Mostly bank transfer (SPEI), sometimes mixed with cash in hand for side work.
+- **What is good and bad about it:** Bank transfer is convenient for paying bills and buying online, but local bank rails can be slow or unavailable at the worst times. Cash is flexible for daily spending, but carrying it is inconvenient and risky.
+- **If I already try to hold dollars/stablecoins:** Yes. I sometimes keep part of my savings in digital dollars through a self-custodial wallet because local purchasing power can fluctuate. The hardest part is moving between digital dollars and local cash quickly when needed.
+- **Would I want payroll split into digital dollars:** Yes, as an option. I would use it to keep a portion of income in a more stable unit while still receiving local currency for day-to-day expenses. I would not want it to be mandatory.
+- **What must be true for me to trust it:** Reliable same-day cash-out nearby, clear places to spend directly without extra hops, transparent fees before confirmation, and a recovery path if I lose access to my phone.
+- **What would make me refuse it outright:** Delayed access to funds, unclear or variable fees, no support for failed transactions, forced full-dollar payroll with no local-currency option, or any setup that requires trusting an unverified person without escrow.
+
+---
+
+### V-22 · Key recovery — what makes self-custody trustworthy
+**Contributor:** [@Shalom-margort](https://github.com/Shalom-margort) · **PR:** #281 · **Issue:** [#237](https://github.com/ericmt-98/micopay-protocol/issues/237) · **Region:** Latin America
+
+**Context:** V-4 showed that MicoPay hides the raw key behind a clean onboarding. V-14 named "losing the key with no recovery" as the top fear. This section tests whether passkey-based recovery actually earns trust over the traditional seed-phrase model.
+
+**1. Have you ever used a self-custody wallet where you held the keys or seed phrase? How did managing the backup feel?**
+
+Yes. The experience ranged from mildly stressful to genuinely anxiety-inducing depending on the amount stored. Writing down a 24-word seed phrase felt like a single point of failure — one piece of paper, one house fire, one bad moment of inattention, and everything is gone. The responsibility is real in a way that a bank account never is: there is no support line to call. Most people I know who tried self-custody either kept very small amounts (not worth the stress of losing) or gave up and went back to a custodial exchange.
+
+**2. Have you ever lost access to an account or wallet and had to go through a recovery process? What happened?**
+
+Yes — a mobile authenticator app on a phone that was stolen. The recovery involved a mix of backup codes I had written down months earlier and a support ticket that took several days. The backup codes worked, but the experience reinforced how fragile manual backup is: most people do not actually write those codes down, and even if they do, finding them later under pressure is difficult. For a crypto wallet with no support ticket option, the same situation would have meant a permanent, unrecoverable loss.
+
+**3. When someone explains passkey recovery to you — "your phone's biometric (Face ID / fingerprint) backs up to iCloud or Google and recovers your wallet key" — does that feel safer, riskier, or about the same as a seed phrase? Why?**
+
+Safer, for most users. The mental model is familiar: I already trust my phone to unlock my bank app, my email, and my health data. Offloading the key backup to a system that already handles it — and that has account recovery I understand (Apple ID / Google account password reset) — removes the single point of failure that makes seed phrases terrifying. The residual concern is that it ties security to the cloud account: if someone takes over my Google or Apple account, they could in principle reach my wallet. But that threat model is already the reality for most people's email and banking — so it is not a new fear, just a known one with known mitigations (2FA on the cloud account).
+
+**4. What would you need to see in the app to trust that your funds are safe if you lose or break your phone?**
+
+Three things, in order of importance:
+- A clear, early explanation of *what* backs up the key and *where* — not buried in a settings menu, shown during onboarding before any funds are added.
+- A dry-run recovery test accessible at any time: let me simulate losing my phone and restoring to a new device before real money is at stake. If I can see it work, I believe it works.
+- A visible, persistent indicator (not a nag, just a status) that the backup is active and current — the same way iOS shows "iCloud Backup: On" in settings.
+
+**5. Would knowing MicoPay uses passkey/biometric recovery (instead of a seed phrase) make you more or less likely to try it for the first time?**
+
+More likely. The seed phrase requirement is the single biggest drop-off point for crypto onboarding with non-technical users in this region. Removing it — and replacing it with something that maps to an experience people already have — lowers the psychological cost of trying. The remaining hesitation is not about the mechanism itself but about the education: does the app explain clearly enough what happens if I lose both my phone *and* my Google/Apple account? That edge case needs a plain-language answer somewhere visible.
+
+**Aggregate signal for Claim 4 (Stellar self-custody usable by normal users):**
+
+- Seed phrases are a known barrier: the responsibility without a fallback is what stops most non-technical users from committing real funds to self-custody.
+- Passkey recovery maps to a mental model people already trust (biometrics + cloud backup for banking and email).
+- The architecture decision is sound, but trust requires three UX companions: early explanation, a testable dry run, and a persistent backup-status indicator.
+- The remaining risk to adoption is the double-loss edge case (phone + cloud account simultaneously compromised or lost) — address it in plain language during onboarding.
+
+---
+
+### V-19 · Freelancer / remote worker paid by clients abroad
+**Contributor:** [@Thoni76](https://github.com/Thoni76) · **PR:** #292 · **Issue:** [#234](https://github.com/ericmt-98/micopay-protocol/issues/234) · **Region:** LATAM
+
+First-person response (privacy-safe):
+
+- **How clients/employers abroad pay you today:** I get paid mostly via Wise (which deposits into my local bank) and occasionally via direct crypto (USDC) to a self-custodial wallet for tech-savvy clients.
+- **What's the worst part of receiving that money:** The worst part is the unpredictability. With traditional platforms, there are intermediary bank fees that appear out of nowhere, and the exchange rate used is typically lower than the real market rate. For crypto, having to navigate P2P exchanges to get local fiat is stressful due to scams and the risk of my local bank freezing my account for P2P transfers.
+- **Roughly what share of the payment is lost to fees + exchange spread combined:** I lose about 5% to 8% overall, sometimes more if the transaction is small due to flat wire fees.
+- **Would receiving "dollars" you could then cash out locally or spend at a store solve a real problem for you? Which part matters most:** Yes, absolutely. Cost predictability and certainty of the final local value matter most. If I receive exactly the agreed dollar amount and can convert it to local currency on demand at a transparent rate, it removes all the stress of hidden spread margins and bank delays.
+- **What would make you not trust getting paid this way:** I wouldn't trust it if the off-ramp to local currency was run by unverified individuals rather than trusted local shops, or if there were hidden fees during the cash-out process.
+
+**SDF narrative:** Confirms that remote workers in LATAM face a 5-8% friction and high unpredictability using current rails. The primary demand driver for dollar-inflow (Vertical C) is certainty of the final local value and a safe, reliable cash-out path without the risk of bank freezes.
+
+---
+
+### V-23 · Peso vs dollar — what you prefer to hold
+**Contributor:** [@Danitello123](https://github.com/Danitello123) · **PR:** #286 · **Region:** South America
+
+First-person response (privacy-safe):
+
+- **In your country/region, when you have money you don't need right now, do you prefer to keep it in your local currency, in dollars, or something else? Why?**: In my region (South America), I strongly prefer to keep money in dollars (or USD-pegged stablecoins) for savings, and only keep what I need for the week in local currency. The local currency loses purchasing power too quickly.
+- **Has inflation or devaluation ever changed how you store money? What did you do?**: Yes. After seeing savings lose value over a few months, I shifted my strategy entirely. I started converting my salary to stablecoins or physical dollars immediately upon receiving it.
+- **If an app let you hold "dollars" but spend and cash out in your local currency automatically, would you trust the conversion happening behind the scenes — or would you want to see and control the rate?**: I would want to see and control the rate, or at least have a very clear, transparent exchange rate shown before any transaction. Hidden spreads are a major concern, so trusting an invisible conversion is difficult.
+- **Would you rather the app show your balance in dollars, in your local currency, or let you switch?**: I would strongly prefer the ability to switch, but my default view would be dollars. It helps me know my true purchasing power, while switching to local currency helps when I need to make a specific local purchase.
+- **What would make you distrust a "digital dollar" or "digital peso" — what would make it feel as real as cash?**: I would distrust it if the app frequently went down during high volatility, or if withdrawals were paused. It feels as real as cash when I can instantly and seamlessly convert it to local currency and withdraw it at a local agent or ATM without jumping through hoops.
+
 ---
 
 ## How findings feed Wave 6 product work
