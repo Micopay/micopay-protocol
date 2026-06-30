@@ -989,7 +989,7 @@ function App() {
             <div className="flex flex-col min-h-screen bg-[#F4FAFF]">
               <Routes>
                 <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
-                <Route path="/register" element={<Register />} />
+                <Route path="/register" element={<Register onLoginSuccess={handleLoginSuccess} />} />
                 <Route path="/" element={<ProtectedRoute><HomeRoute /></ProtectedRoute>} />
                 <Route path="/history" element={<ProtectedRoute><HistoryRoute /></ProtectedRoute>} />
                 <Route path="/trade/:id" element={<ProtectedRoute><TradeDetailRoute /></ProtectedRoute>} />

@@ -165,7 +165,7 @@ function generateFallbackAddress(prefix: string): string {
   return address.substring(0, 56);
 }
 
-export async function getAuthToken(username: string): Promise<string> {
+export async function getAuthToken(username: string, _retry = false): Promise<string> {
   const stellar_address = (await getPublicKey()) ?? generateFallbackAddress(username);
 
   // Step 1: request a one-time challenge from the server
@@ -188,8 +188,15 @@ export async function getAuthToken(username: string): Promise<string> {
     body: JSON.stringify({ stellar_address, challenge, signature }),
   });
   const tokenData = await tokenRes.json();
+
+  // 404 = user not in DB (e.g. DB was reset). Auto-register with device keypair and retry once.
+  if (tokenRes.status === 404 && !_retry) {
+    await registerUser(username);
+    return getAuthToken(username, true);
+  }
+
   const token: string | undefined = tokenData.token;
-  if (!token) throw new Error(`Token exchange failed (${tokenRes.status}): ${tokenData.error ?? 'no token'}`);
+  if (!token) throw new Error(`${tokenData.error ?? `Auth failed (${tokenRes.status})`}`);
 
   return token;
 }

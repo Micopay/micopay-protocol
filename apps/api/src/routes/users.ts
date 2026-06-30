@@ -29,13 +29,40 @@ export async function userRoutes(app: FastifyInstance & { jwt: any }) {
       phone_hash?: string;
     };
 
-    // Check for existing user
-    const existing = await db.getOne(
-      'SELECT id FROM users WHERE stellar_address = $1 OR username = $2',
-      [stellar_address, username],
+    // Check if username already exists (device keypair may have changed).
+    const byUsername = await db.getOne(
+      'SELECT id, stellar_address, username FROM users WHERE username = $1',
+      [username],
     );
-    if (existing) {
-      throw new ConflictError('User with this address or username already exists');
+    if (byUsername) {
+      // Update the stellar_address to the current device keypair and re-issue JWT.
+      await db.execute(
+        'UPDATE users SET stellar_address = $1 WHERE id = $2',
+        [stellar_address, byUsername.id],
+      );
+      await db.execute(
+        'UPDATE wallets SET stellar_address = $1 WHERE user_id = $2',
+        [stellar_address, byUsername.id],
+      );
+      const updatedUser = await db.getOne(
+        'SELECT id, stellar_address, username FROM users WHERE id = $1',
+        [byUsername.id],
+      );
+      const token = app.jwt.sign(
+        { id: updatedUser.id, stellar_address: updatedUser.stellar_address },
+        { expiresIn: config.jwtExpiry },
+      );
+      reply.status(200);
+      return { user: updatedUser, token };
+    }
+
+    // Check for conflicting stellar_address under a different username.
+    const byAddress = await db.getOne(
+      'SELECT id FROM users WHERE stellar_address = $1',
+      [stellar_address],
+    );
+    if (byAddress) {
+      throw new ConflictError('That Stellar address is already linked to another account');
     }
 
     // Create user
