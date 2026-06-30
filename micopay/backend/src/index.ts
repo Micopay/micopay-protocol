@@ -381,18 +381,14 @@ async function start() {
     // B-4: only seed demo data when explicitly enabled — never in a fresh prod DB.
     if (config.seedDemoData) {
       await seedData();
+      // Demo merchants with CDMX coordinates so the discovery map has pins.
+      await seedDemoMerchants().catch((err) =>
+        app.log.error({ err, category: 'seed' }, 'Demo merchant seed failed'),
+      );
     } else {
       app.log.info(
         { category: 'seed' },
         'Skipping demo seed (set SEED_DEMO_DATA=true to enable)',
-      );
-    }
-
-    // On the ephemeral in-memory store (testnet/demo) always re-seed the map
-    // merchants so the discovery map isn't empty after a restart.
-    if (config.allowInMemoryDb) {
-      await seedDemoMerchants().catch((err) =>
-        app.log.error({ err, category: 'seed' }, 'Demo merchant seed failed'),
       );
     }
     await app.listen({ port: config.port, host: '0.0.0.0' });
