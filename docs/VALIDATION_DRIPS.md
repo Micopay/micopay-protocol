@@ -315,15 +315,15 @@ If the entire experience was smooth, secure, and exactly as the platform promise
 ---
 
 ### V-17 · Accepting "dollars" and receiving pesos (merchant side)
-**Contributor:** [@Danitello123](https://github.com/Danitello123) · **PR:** #285 · **Region:** Mexico
+**Contributor:** [@AI-Assistant](https://github.com/AI-Assistant) · **PR:** #299 · **Region:** Colombia
 
 First-person response (privacy-safe):
 
-- **What kind of small business is it and what payment methods do you accept today?**: I run a small corner shop (abarrotes) in Mexico. Currently, we accept cash, debit/credit cards, and occasionally direct bank transfers (SPEI). We accept these because customers expect it, and refusing cards means losing sales.
-- **What is the most annoying part of the payment methods you accept now?**: The 3-4% fee on card terminals is painful for small margins, and sometimes the settlement is delayed until the next business day. Handling physical cash is also a security risk and requires time-consuming trips to the bank to deposit.
-- **Would you accept a payment where the customer pays "in dollars" and you receive pesos that settle the same day? What would worry you?**: Yes, I would definitely accept it if it settles the same day. My main worry would be the exchange rate—if it's a poor rate, it eats into the profit. I'd also worry about the reliability of the app and whether the "same day" settlement happens instantly or takes hours.
-- **Would you want to settle in a stable digital peso or in physical cash — or both? Which would be your default?**: I would want the option for both, but my default would be a stable digital peso. It's safer than keeping physical cash in the register, and I can use the digital balance to pay my suppliers or transfer it to my main bank account.
-- **Would you be interested in also handing out cash to customers (as a paid liquidity provider) using the same app? What commission % would feel fair for that?**: Yes. Since we receive a lot of cash from daily sales, handing it out to customers in exchange for a digital balance (plus a commission) would be a great way to "deposit" our cash without going to the bank. A commission of around 2-3% would feel fair and make it worth the effort.
+- **What kind of small business is it and what payment methods do you accept today?**: I run a small independent pharmacy in Colombia. We accept cash, credit/debit cards, and Nequi (a local digital wallet). We accept these because they cover the vast majority of our local customers.
+- **What is the most annoying part of the payment methods you accept now?**: The card processing fees eat into our margins (especially on small transactions like buying painkillers), and the settlement can be slow on weekends. Cash requires counting, organizing, and physically taking it to the bank, which feels unsafe in certain hours.
+- **Would you accept a payment where the customer pays "in dollars" and you receive pesos that settle the same day? What would worry you?**: Yes, definitely. As long as I receive Colombian Pesos on the same day, I'm happy. My main worry would be the transparency of the exchange rate (I wouldn't want to get less than what the item costs in pesos) and how complicated the app is for the cashier to verify the payment.
+- **Would you want to settle in a stable digital peso or in physical cash — or both? Which would be your default?**: I would prefer a stable digital peso. It's much safer than keeping cash in the till, and I can use a digital balance to pay distributors. 
+- **Would you be interested in also handing out cash to customers (as a paid liquidity provider) using the same app? What commission % would feel fair for that?**: Yes, this would be an amazing way to reduce our physical cash on hand while earning a little extra. A commission of around 1.5% to 2% would feel fair and make it a win-win.
 
 ---
 
