@@ -224,5 +224,18 @@
     "noAgentsAvailable": "No agents available",
     "noAgentsDesc": "No nearby agent can handle ${{amount}} MXN right now. Try a different amount or later.",
     "changeAmount": "Change amount"
+  },
+  "exploreScreen": {
+    "title": "Explore",
+    "subtitle": "Discover new ways to use your money",
+    "investCetes": "Invest in CETES",
+    "cetesRateBadge": "~{{rate}}% annual · Backed by the Mexican government",
+    "cetesDesc": "Buy tokenized CETES directly from your wallet using XLM, USDC or MXNe. Etherfuse custodies them on-chain — sell anytime and get your pesos via SPEI or back to your wallet.",
+    "viewCetes": "View available CETES",
+    "requestLoan": "Request a loan",
+    "blendSubtitle": "Instant liquidity with Blend",
+    "blendDesc": "Use your CETES or crypto as collateral and get liquidity in seconds — no giving up your assets, no paperwork.",
+    "viewHowMuch": "See how much I can borrow",
+    "poweredBy": "Powered by Stellar, Etherfuse and Blend"
   }
 }
