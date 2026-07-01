@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import MapSim from '../components/MapSim';
 import { useMerchantsAvailable } from '../hooks/useMerchantsAvailable';
 import {
@@ -96,13 +97,14 @@ function EffectiveFeeNote({
   platformFeePct: number;
   maxPct: number;
 }) {
+  const { t } = useTranslation();
   const totalPct = effectiveFeePercent(commissionPct, platformFeePct);
   const exceeds = totalPct > maxPct;
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] font-bold text-outline uppercase tracking-wider">
-          Costo total efectivo
+          {t('map.totalEffectiveCost')}
         </span>
         <span
           className={`text-sm font-bold tabular-nums ${exceeds ? 'text-error' : 'text-on-surface'}`}
@@ -111,7 +113,7 @@ function EffectiveFeeNote({
         </span>
       </div>
       <p className="text-[11px] text-outline font-medium">
-        Plataforma {platformFeePct}% + proveedor {commissionPct}%
+        {t('map.feeBreakdown', { platformPct: platformFeePct, providerPct: commissionPct })}
       </p>
       {exceeds && (
         <div
@@ -120,7 +122,7 @@ function EffectiveFeeNote({
         >
           <span className="material-symbols-outlined text-error text-base leading-none">warning</span>
           <p className="text-[12px] font-medium text-error leading-snug">
-            El costo total supera el {maxPct}%. Compara con otra oferta antes de continuar.
+            {t('map.feeExceedsWarning', { maxPct })}
           </p>
         </div>
       )}
@@ -140,6 +142,7 @@ const ExploreMap = ({
   onRetryCreationError,
   maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
 }: ExploreMapProps) => {
+  const { t } = useTranslation();
   const [selectedMerchantId, setSelectedMerchantId] = useState<string | null>(null);
   const selectedOfferRef = useRef<HTMLElement | null>(null);
   const { state, refetch } = useMerchantsAvailable({

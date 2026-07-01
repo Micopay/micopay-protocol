@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { 
+import { useTranslation } from 'react-i18next';
+import {
   getCETESRate, 
   buyCETES, 
   sellCETES, 
@@ -27,6 +28,7 @@ type SourceAsset = 'XLM' | 'USDC' | 'MXNe';
 type ReceiveMethod = 'wallet' | 'spei';
 
 const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('buy');
   const [receiveMethod, setReceiveMethod] = useState<ReceiveMethod>('wallet');
   const [amount, setAmount] = useState('');
@@ -60,7 +62,7 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
       return () => clearTimeout(timer);
     } else if (countdown === 0 && quote) {
       setQuote(null);
-      setError("La cotización ha expirado. Por favor, solicita una nueva.");
+      setError(t('cetes.quoteExpired'));
     }
   }, [countdown, quote]);
 
@@ -146,7 +148,7 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
 
   const handleConfirmSPEI = async () => {
     if (!quote || !userToken || !rate?.cetesIssuer) {
-      setError("Información incompleta para confirmar el retiro.");
+      setError(t('cetes.incompleteInfo'));
       return;
     }
     
@@ -203,11 +205,11 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
         <div>
-          <h1 className="font-headline font-bold text-lg leading-tight">CETES Tokenizados</h1>
-          <p className="text-[11px] text-on-surface-variant">Bonos del Gobierno de México · Etherfuse</p>
+          <h1 className="font-headline font-bold text-lg leading-tight">{t('cetes.title')}</h1>
+          <p className="text-[11px] text-on-surface-variant">{t('cetes.subtitle')}</p>
         </div>
         <div className="ml-auto bg-primary/10 border border-primary/20 rounded-full px-3 py-1">
-          <span className="text-primary font-bold text-sm">{rate?.apy ?? 5.6}% anual</span>
+          <span className="text-primary font-bold text-sm">{t('cetes.annual', { rate: rate?.apy ?? 5.6 })}</span>
         </div>
       </header>
 
@@ -218,9 +220,9 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
               <span className="material-symbols-outlined text-primary">trending_up</span>
             </div>
             <div>
-              <p className="font-bold text-on-surface text-base">Tasa de rendimiento</p>
+              <p className="font-bold text-on-surface text-base">{t('cetes.yieldRate')}</p>
               {rateLoading ? (
-                <p className="text-xs text-outline">Cargando…</p>
+                <p className="text-xs text-outline">{t('cetes.loading')}</p>
               ) : (
                 <p className="text-xs text-on-surface-variant">{rate?.note}</p>
               )}
@@ -229,28 +231,28 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-white/60 rounded-2xl p-3 text-center">
               <p className="text-2xl font-extrabold text-primary">{rate?.apy ?? 5.6}%</p>
-              <p className="text-xs text-on-surface-variant mt-1">Rendimiento anual</p>
+              <p className="text-xs text-on-surface-variant mt-1">{t('cetes.annualYield')}</p>
             </div>
             <div className="bg-white/60 rounded-2xl p-3 text-center">
               <p className="text-2xl font-extrabold text-on-surface">
                 {rateLoading ? '…' : `${(rate?.apy ?? 5.6) / 12}`.slice(0, 4)}%
               </p>
-              <p className="text-xs text-on-surface-variant mt-1">Rendimiento mensual</p>
+              <p className="text-xs text-on-surface-variant mt-1">{t('cetes.monthlyYield')}</p>
             </div>
           </div>
         </div>
 
         <div className="flex flex-col gap-2 bg-surface-container-low rounded-2xl p-1">
           <div className="flex gap-2">
-            {(['buy', 'sell'] as Tab[]).map((t) => (
+            {(['buy', 'sell'] as Tab[]).map((tabOption) => (
               <button
-                key={t}
-                onClick={() => { setTab(t); setTxResult(null); setError(null); setQuote(null); setRampOrderId(null); }}
+                key={tabOption}
+                onClick={() => { setTab(tabOption); setTxResult(null); setError(null); setQuote(null); setRampOrderId(null); }}
                 className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all ${
-                  tab === t ? 'bg-white text-primary shadow-sm' : 'text-on-surface-variant'
+                  tab === tabOption ? 'bg-white text-primary shadow-sm' : 'text-on-surface-variant'
                 }`}
               >
-                {t === 'buy' ? 'Comprar CETES' : 'Vender CETES'}
+                {tabOption === 'buy' ? t('cetes.buy') : t('cetes.sell')}
               </button>
             ))}
           </div>
@@ -263,7 +265,7 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
                   receiveMethod === 'wallet' ? 'bg-white text-primary shadow-sm border border-outline-variant/10' : 'text-on-surface-variant'
                 }`}
               >
-                A Wallet (DEX)
+                {t('cetes.toWallet')}
               </button>
               {canUseSpei && (
                 <button
@@ -272,7 +274,7 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
                     receiveMethod === 'spei' ? 'bg-white text-primary shadow-sm border border-outline-variant/10' : 'text-on-surface-variant'
                   }`}
                 >
-                  A Cuenta SPEI
+                  {t('cetes.toSpei')}
                 </button>
               )}
             </div>
@@ -285,7 +287,7 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
             <>
               <div>
                 <label className="block text-xs font-bold text-on-surface-variant mb-2 uppercase tracking-wide">
-                  Cantidad de CETES a vender
+                  {t('cetes.sellAmountLabel')}
                 </label>
                 <input
                   type="number"
@@ -302,11 +304,11 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
 
               {quote && (
                 <div className="bg-primary/5 rounded-2xl px-4 py-3 flex flex-col items-center">
-                  <span className="text-sm text-on-surface-variant">Recibirás en tu cuenta SPEI</span>
+                  <span className="text-sm text-on-surface-variant">{t('cetes.willReceiveSpei')}</span>
                   <span className="text-2xl font-extrabold text-primary">${quote.amount_out.toFixed(2)} MXN</span>
                   {!rampOrderId && (
                     <span className="text-xs text-error mt-2 font-bold">
-                      La cotización expira en: {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+                      {t('cetes.quoteExpires')} {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
                     </span>
                   )}
                 </div>
@@ -316,14 +318,14 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
                 <div className={`border rounded-2xl px-4 py-3 space-y-2 text-center ${
                   orderState === 'refunded' ? 'bg-error/10 border-error/20' : 'bg-[#e6f9f1] border-[#1D9E75]/20'
                 }`}>
-                  {orderState === 'pending' && <p className="font-bold text-[#1D9E75] animate-pulse">Enviando CETES a Etherfuse...</p>}
-                  {orderState === 'funded' && <p className="font-bold text-[#1D9E75] animate-pulse">CETES recibidos, procesando SPEI...</p>}
-                  {orderState === 'completed' && <p className="font-bold text-[#1D9E75]">MXN depositados en tu cuenta SPEI</p>}
-                  {orderState === 'refunded' && <p className="font-bold text-error">Operación rechazada, CETES devueltos.</p>}
-                  
+                  {orderState === 'pending' && <p className="font-bold text-[#1D9E75] animate-pulse">{t('cetes.sendingToEtherfuse')}</p>}
+                  {orderState === 'funded' && <p className="font-bold text-[#1D9E75] animate-pulse">{t('cetes.cetesReceivedProcessing')}</p>}
+                  {orderState === 'completed' && <p className="font-bold text-[#1D9E75]">{t('cetes.speiDeposited')}</p>}
+                  {orderState === 'refunded' && <p className="font-bold text-error">{t('cetes.rejectedRefunded')}</p>}
+
                   {txResult && (
                     <a href={txResult.explorerUrl} target="_blank" rel="noopener noreferrer" className="flex justify-center items-center gap-1 text-xs text-primary font-bold">
-                      Ver envío on-chain <span className="material-symbols-outlined text-sm">open_in_new</span>
+                      {t('cetes.viewOnchain')} <span className="material-symbols-outlined text-sm">open_in_new</span>
                     </a>
                   )}
                 </div>
@@ -341,7 +343,7 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
                   disabled={txLoading || !amount || parseFloat(amount) <= 0}
                   className="w-full bg-primary text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 transition-all"
                 >
-                  {txLoading ? 'Cotizando...' : 'Cotizar Retiro'}
+                  {txLoading ? t('cetes.quoting') : t('cetes.quoteWithdrawal')}
                 </button>
               ) : !rampOrderId ? (
                 <button
@@ -352,9 +354,9 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
                   {txLoading ? (
                     <>
                       <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
-                      Procesando transacción…
+                      {t('cetes.processingTx')}
                     </>
-                  ) : 'Confirmar Retiro'}
+                  ) : t('cetes.confirmWithdrawal')}
                 </button>
               ) : null}
             </>
@@ -362,7 +364,7 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
             <>
               <div>
                 <label className="block text-xs font-bold text-on-surface-variant mb-2 uppercase tracking-wide">
-                  {tab === 'buy' ? 'Pagar con' : 'Recibir en'}
+                  {tab === 'buy' ? t('cetes.payWith') : t('cetes.receiveIn')}
                 </label>
                 <div className="flex gap-2">
                   {(['XLM', 'USDC', 'MXNe'] as SourceAsset[]).map((a) => (
@@ -383,7 +385,7 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
 
               <div>
                 <label className="block text-xs font-bold text-on-surface-variant mb-2 uppercase tracking-wide">
-                  {tab === 'buy' ? `Cantidad en ${sourceAsset}` : 'Cantidad en CETES'}
+                  {tab === 'buy' ? t('cetes.amountIn', { asset: sourceAsset }) : t('cetes.amountInCetes')}
                 </label>
                 <input
                   type="number"
@@ -400,7 +402,7 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
               {amount && parseFloat(amount) > 0 && (
                 <div className="bg-primary/5 rounded-2xl px-4 py-3 flex justify-between items-center">
                   <span className="text-sm text-on-surface-variant">
-                    {tab === 'buy' ? 'Recibirás ~' : 'Recibirás ~'}
+                    {t('cetes.willReceive')}
                   </span>
                   <span className="font-bold text-on-surface">
                     {cetesPreview()} {tab === 'buy' ? 'CETES' : sourceAsset}
@@ -419,7 +421,7 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-[#1D9E75] text-xl">check_circle</span>
                     <p className="font-bold text-[#1D9E75]">
-                      {txResult.simulated ? '¡Prueba simulada!' : '¡Operación enviada!'}
+                      {txResult.simulated ? t('cetes.simulatedSuccess') : t('cetes.txSent')}
                     </p>
                   </div>
                   <p className="text-xs text-on-surface-variant">
@@ -427,7 +429,7 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
                   </p>
                   {txResult.cetesReceived && (
                     <p className="text-sm font-bold text-on-surface">
-                      +{txResult.cetesReceived} CETES acreditados
+                      {t('cetes.creditedCetes', { amount: txResult.cetesReceived })}
                     </p>
                   )}
                   <a
@@ -436,7 +438,7 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
                     rel="noopener noreferrer"
                     className="flex items-center gap-1 text-xs text-primary font-bold"
                   >
-                    Ver en el explorador Stellar
+                    {t('cetes.viewOnStellarExplorer')}
                     <span className="material-symbols-outlined text-sm">open_in_new</span>
                   </a>
                 </div>
@@ -450,16 +452,16 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
                 {txLoading ? (
                   <>
                     <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
-                    Procesando…
+                    {t('cetes.processing')}
                   </>
                 ) : tab === 'buy' ? (
                   <>
-                    Comprar CETES
+                    {t('cetes.buy')}
                     <span className="material-symbols-outlined text-lg">arrow_forward</span>
                   </>
                 ) : (
                   <>
-                    Vender CETES
+                    {t('cetes.sell')}
                     <span className="material-symbols-outlined text-lg">swap_horiz</span>
                   </>
                 )}
@@ -476,14 +478,14 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
             <span className="material-symbols-outlined text-primary">account_balance_wallet</span>
           </div>
           <div className="flex-1">
-            <p className="font-bold text-on-surface text-sm">¿Sin cripto?</p>
-            <p className="text-xs text-on-surface-variant">Conecta tu banco vía SPEI para empezar</p>
+            <p className="font-bold text-on-surface text-sm">{t('cetes.noCrypto')}</p>
+            <p className="text-xs text-on-surface-variant">{t('cetes.connectBank')}</p>
           </div>
           <span className="material-symbols-outlined text-on-surface-variant">chevron_right</span>
         </button>
 
         <p className="text-center text-xs text-outline pb-4">
-          CETES tokenizados por Etherfuse · Red Stellar · {rate?.network ?? 'TESTNET'}
+          {t('cetes.footer', { network: rate?.network ?? 'TESTNET' })}
         </p>
       </main>
     </div>
