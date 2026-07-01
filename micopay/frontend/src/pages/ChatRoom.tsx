@@ -13,17 +13,19 @@ interface ChatRoomProps {
     apiBaseUrl?: string;
     token?: string | null;
     isProvider?: boolean;
+    counterpartyName?: string | null;
 }
 
-const ChatRoom = ({ 
+const ChatRoom = ({
     tradeId,
     userId,
-    onBack, 
-    onViewQR, 
+    onBack,
+    onViewQR,
     lockTxHash,
     apiBaseUrl = 'http://localhost:3000',
     token,
     isProvider = false,
+    counterpartyName,
 }: ChatRoomProps) => {
     const { t } = useTranslation();
     const {
@@ -97,11 +99,11 @@ const ChatRoom = ({
                     </button>
                     <div className="flex items-center gap-2">
                         <div className="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center text-white font-bold">
-                            FG
+                            {(counterpartyName ?? '—').slice(0, 2).toUpperCase()}
                         </div>
                         <div>
                             <h1 className="font-headline font-bold text-lg tracking-tight leading-tight text-on-surface">
-                                Farmacia Guadalupe
+                                {counterpartyName ?? '—'}
                             </h1>
                             <div className="flex items-center gap-1">
                                 <span className="material-symbols-outlined text-sm text-primary" style={{ fontVariationSettings: '"FILL" 1' }}>

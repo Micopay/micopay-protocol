@@ -12,9 +12,10 @@ interface DepositChatProps {
     lockTxHash?: string | null;
     apiBaseUrl?: string;
     token?: string | null;
+    counterpartyName?: string | null;
 }
 
-const DepositChat = ({ 
+const DepositChat = ({
     tradeId,
     userId,
     onBack,
@@ -22,6 +23,7 @@ const DepositChat = ({
     lockTxHash,
     apiBaseUrl = 'http://localhost:3000',
     token,
+    counterpartyName,
 }: DepositChatProps) => {
     const { t } = useTranslation();
     const {
@@ -90,7 +92,7 @@ const DepositChat = ({
                     </button>
                     <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                            <h1 className="font-headline font-bold text-lg tracking-tight text-[#0B1E26]">Tienda Don Pepe</h1>
+                            <h1 className="font-headline font-bold text-lg tracking-tight text-[#0B1E26]">{counterpartyName ?? '—'}</h1>
                             <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-primary/20">
                                 <span className="material-symbols-outlined !text-[12px]" style={{ fontVariationSettings: '"FILL" 1' }}>verified</span>
                                 {t('chatRoom.verified').toUpperCase()}
