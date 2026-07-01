@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChatMessages } from '../hooks/useChatMessages';
+import { buildTxUrl } from '../utils/stellarExplorer';
 
 interface DepositChatProps {
     tradeId: string;
@@ -9,8 +10,6 @@ interface DepositChatProps {
     lockTxHash?: string | null;
     apiBaseUrl?: string;
 }
-
-const STELLAR_EXPLORER = 'https://stellar.expert/explorer/testnet/tx';
 
 const DepositChat = ({ 
     tradeId,
@@ -92,7 +91,7 @@ const DepositChat = ({
                             <p className="text-xs text-on-surface/60">El agente bloqueó los activos que recibirás. Ve a su ubicación y entrégale el efectivo.</p>
                             {lockTxHash ? (
                                 <a
-                                    href={`${STELLAR_EXPLORER}/${lockTxHash}`}
+                                    href={buildTxUrl(lockTxHash)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary transition-colors font-mono truncate mt-1"

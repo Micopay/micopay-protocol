@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChatMessages } from '../hooks/useChatMessages';
 import { getTrade } from '../services/api';
+import { buildTxUrl } from '../utils/stellarExplorer';
 
 interface ChatRoomProps {
     tradeId: string;
@@ -12,8 +13,6 @@ interface ChatRoomProps {
     token?: string | null;
     isProvider?: boolean;
 }
-
-const STELLAR_EXPLORER = 'https://stellar.expert/explorer/testnet/tx';
 
 const ChatRoom = ({ 
     tradeId,
@@ -154,7 +153,7 @@ const ChatRoom = ({
                             <p className="text-sm font-semibold text-primary">✓ Oferta aceptada · Saldo bloqueado en garantía</p>
                             {lockTxHash ? (
                                 <a
-                                    href={`${STELLAR_EXPLORER}/${lockTxHash}`}
+                                    href={buildTxUrl(lockTxHash)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary transition-colors font-mono truncate"

@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getPublicKey } from '../lib/keystore';
 
+const HORIZON_URL = import.meta.env.VITE_HORIZON_URL || 'https://horizon-testnet.stellar.org';
+
 export interface TokenBalance {
   code: string;
   balance: number;
@@ -64,7 +66,7 @@ export function useWalletBalance(): UseWalletBalanceResult {
 
         setStellarAddress(address);
 
-        const res = await fetch(`https://horizon-testnet.stellar.org/accounts/${address}`);
+        const res = await fetch(`${HORIZON_URL}/accounts/${address}`);
         if (!active) return;
 
         if (res.status === 404) {

@@ -1,6 +1,7 @@
 import { Keypair, TransactionBuilder, Operation, Memo, Networks, Asset, Horizon } from '@stellar/stellar-sdk';
 import { exportSecretKey } from '../lib/keystore';
 import { Buffer } from 'buffer';
+import { buildTxUrl } from '../utils/stellarExplorer';
 
 const HORIZON_URL = import.meta.env.VITE_HORIZON_URL || 'https://horizon-testnet.stellar.org';
 const NETWORK_PASSPHRASE = import.meta.env.VITE_NETWORK_PASSPHRASE || Networks.TESTNET;
@@ -46,7 +47,7 @@ export async function sendCETESToEtherfuse(
     const response = await server.submitTransaction(tx);
     return {
       hash: response.hash,
-      explorerUrl: `https://stellar.expert/explorer/testnet/tx/${response.hash}`
+      explorerUrl: buildTxUrl(response.hash)
     };
   } catch (error: any) {
     if (error?.response?.data?.extras?.result_codes?.transaction === 'tx_too_late') {
