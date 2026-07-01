@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
-import { getSecret, completeTrade, TradeData } from '../services/api';
+import { getSecret, completeTrade, revealTrade, lockTrade, TradeData } from '../services/api';
+import { ensureTrustline } from '../services/payment';
 import { getTradeStateDebugOverride, normalizeTradeState, TradeState } from '../components/TradeStateBadge';
 import ErrorBanner from '../components/ErrorBanner';
 import SupportLink from '../components/SupportLink';
@@ -28,28 +29,39 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
     const [completeError, setCompleteError] = useState<MappedApiError | null>(null);
     const [tradeState, setTradeState] = useState<TradeState>('locked');
 
-    const loadSecret = useCallback(() => {
+    const loadSecret = useCallback(async () => {
         if (!activeTrade || !sellerToken) return;
 
         setSecretLoading(true);
         setSecretError(null);
 
-        getSecret(activeTrade.id, sellerToken)
-            .then(({ qr_payload }) => {
-                setQrPayload(qr_payload);
+        try {
+            // This is the seller's own screen, so drive the whole
+            // pending -> locked -> revealing chain here if needed — nothing
+            // else in the app triggers the lock/reveal steps on its own.
+            if (activeTrade.status === 'pending') {
+                const escrowAssetCode = import.meta.env.VITE_ESCROW_ASSET_CODE || 'USDC';
+                await ensureTrustline(escrowAssetCode);
+                await lockTrade(activeTrade.id, sellerToken);
+            }
+            // Swallow errors here: if the trade was already revealed (stale
+            // local status), the reveal call 409s but getSecret still works.
+            await revealTrade(activeTrade.id, sellerToken).catch(() => {});
+            const { qr_payload } = await getSecret(activeTrade.id, sellerToken);
+            setQrPayload(qr_payload);
+            setSecretLoaded(true);
+        } catch (e) {
+            if (IS_DEMO_MODE) {
+                setQrPayload(getDemoQrPayload());
                 setSecretLoaded(true);
-            })
-            .catch((e) => {
-                if (IS_DEMO_MODE) {
-                    setQrPayload(getDemoQrPayload());
-                    setSecretLoaded(true);
-                } else {
-                    setSecretError(mapApiError(e));
-                    setQrPayload(null);
-                    setSecretLoaded(false);
-                }
-            })
-            .finally(() => setSecretLoading(false));
+            } else {
+                setSecretError(mapApiError(e));
+                setQrPayload(null);
+                setSecretLoaded(false);
+            }
+        } finally {
+            setSecretLoading(false);
+        }
     }, [activeTrade, sellerToken]);
 
     useEffect(() => {
