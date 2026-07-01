@@ -21,15 +21,6 @@ const STATUS_COLORS: Record<string, string> = {
   refunded: 'bg-gray-100 text-gray-800',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Pendiente',
-  locked: 'Bloqueado',
-  revealing: 'Revelando',
-  completed: 'Completado',
-  cancelled: 'Cancelado',
-  refunded: 'Reembolsado',
-};
-
 const STATUS_ICONS: Record<string, string> = {
   pending: 'hourglass_top',
   locked: 'lock',
@@ -85,9 +76,10 @@ function TradeConfirmationCard({
   data: MerchantConfirmResult;
   onDismiss: () => void;
 }) {
+  const { t } = useTranslation();
   const countdown = useCountdown(data.expires_at);
   const statusColor = STATUS_COLORS[data.status] || 'bg-gray-100 text-gray-800';
-  const statusLabel = STATUS_LABELS[data.status] || data.status;
+  const statusLabel = t(`home.status.${data.status}`, { defaultValue: data.status });
   const statusIcon = STATUS_ICONS[data.status] || 'info';
 
   return (
@@ -133,11 +125,11 @@ function TradeConfirmationCard({
         {/* Details */}
         <div className="bg-gray-50 rounded-xl p-4 space-y-3 text-sm">
           <div className="flex justify-between items-center">
-            <span className="text-gray-500">Comprador</span>
+            <span className="text-gray-500">{t('inbox.buyer')}</span>
             <span className="font-semibold text-on-surface">{data.buyer_handle}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-gray-500">Estado</span>
+            <span className="text-gray-500">{t('inbox.status')}</span>
             <span
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${statusColor}`}
             >
@@ -360,11 +352,11 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
   }, [pushEnabled, token, activeFilter]);
 
   const filters = [
-    { key: 'all', label: 'Todos' },
-    { key: 'pending', label: 'Pendientes' },
-    { key: 'locked', label: 'Bloqueados' },
-    { key: 'revealing', label: 'Revelando' },
-    { key: 'completed', label: 'Completados' },
+    { key: 'all', label: t('inbox.filterAll') },
+    { key: 'pending', label: t('home.status.pending') },
+    { key: 'locked', label: t('home.status.locked') },
+    { key: 'revealing', label: t('home.status.revealing') },
+    { key: 'completed', label: t('home.status.completed') },
   ];
 
   return (
@@ -477,7 +469,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
         ) : trades.length === 0 ? (
           <div className="text-center py-12">
             <span className="material-symbols-outlined text-6xl text-gray-300 mb-4">inbox</span>
-            <p className="text-gray-500">{t('inbox.noTrades')}{activeFilter !== 'all' ? ` con estado "${STATUS_LABELS[activeFilter]}"` : ''}</p>
+            <p className="text-gray-500">{t('inbox.noTrades')}{activeFilter !== 'all' ? t('inbox.withStatus', { status: t(`home.status.${activeFilter}`) }) : ''}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -495,7 +487,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
                       STATUS_COLORS[trade.status] || 'bg-gray-100'
                     }`}
                   >
-                    {STATUS_LABELS[trade.status] || trade.status}
+                    {t(`home.status.${trade.status}`, { defaultValue: trade.status })}
                   </span>
                 </div>
                 <p className="font-bold text-lg">${trade.amount_mxn} MXN</p>
