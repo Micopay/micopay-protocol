@@ -420,6 +420,58 @@ First-person response (privacy-safe):
 
 ---
 
+### V-21 · Small employer paying people in digital dollars
+**Contributor:** [@manueldezman](https://github.com/manueldezman) · **PR:** #300 · **Issue:** [#236](https://github.com/ericmt-98/micopay-protocol/issues/236) · **Region:** Nigeria
+
+First-person response (privacy-safe):
+
+- **How do I pay people today?:** I use a mix of fiat and stablecoins.
+- **What is the most painful part?:** I do not have a major issue with the payment rails themselves when I use crypto; the annoying part is having to repeat the same payout process manually over time.
+- **Have I paid someone in another country?:** Yes. Using stablecoins made that relatively easy.
+- **Would automated dispersal in digital dollars save real effort?:** Yes. It would save time and reduce the frustration of repeating the same transfer workflow multiple times a year.
+- **What would worry me most?:** Privacy. I would not want to expose my wallet balance in exchange for automation.
+- **Would I want a roster/budget rule before trusting automation?:** Yes. A rule that limits a key to paying only a registered roster and only within a period budget would make the setup feel safer and more controlled.
+- **What would stop me from ever using it?:** Any solution that weakens privacy or makes my wallet holdings too visible.
+
+**SDF narrative:** Confirms Claim 7 (payroll supply) from the employer side in Nigeria — cross-border payout in stablecoins is already easy; the friction is repetitive manual work, not the rails. Automated dispersal is wanted, but only behind a privacy-preserving, roster/budget-limited key — a concrete product requirement for the payroll-supply feature.
+
+---
+
+### V-24 · Corner shop as a liquidity provider (supply bootstrap)
+**Contributor:** [@samueloyibodevv](https://github.com/samueloyibodevv) · **PR:** #309 · **Issue:** [#239](https://github.com/ericmt-98/micopay-protocol/issues/239) · **Validates:** Claim 2 (supply density / chicken-and-egg of the moat) · **Region:** West Africa
+
+**Context:** V-3 validated an individual provider. The vision needs density — established local businesses (shops, pharmacies, bakeries) doubling as cash-out points. This section tests the established-business angle and the open question: how do the first providers join before there's cash-out volume?
+
+First-person response (privacy-safe):
+
+- **What kind of local business, and does it already handle a lot of cash day to day:** I help run a neighborhood convenience shop — the kind of place that also sells airtime, data, and takes the occasional bill payment for regulars. Cash is the lifeblood of it; a large share of daily sales is still physical cash, and we keep a working float on hand to make change and to settle with suppliers. Handling and counting cash is already part of the daily routine.
+- **Would earning a commission for handing out cash to app users (with the customer's dollars locked in escrow first) be attractive, or more hassle than it's worth:** Genuinely attractive, *if* the escrow part is real and obvious. We already act as an informal cash point — people ask us to break large notes or do small transfers all the time, mostly as a favor. Turning that into a paid, structured service is appealing because the cash is just sitting in the till anyway. The hassle only appears if the app is slow, the confirmation is ambiguous, or I have to argue with a customer about whether their funds "really" cleared. With clean escrow and an instant, unambiguous release, it's barely more work than a normal sale.
+- **What commission percentage would make it worth my time and cash-on-hand:** Around 2–4% per cash-out would make it clearly worth it for me. Below ~1.5% it competes with just selling goods off the same float and isn't worth tying up cash; above ~4% I'd worry customers feel gouged and stop coming. The sweet spot has to beat what I'd earn rotating that cash through normal stock.
+- **What I'd need before handing over any cash — what proof the customer's funds are really locked:** A clear in-app state on *my* device (not just the customer's phone) showing the customer's dollars are held in escrow and earmarked for this specific payout, with a unique reference code I can match. Ideally I tap to release and the escrow settles to me on confirmation — so the money is locked the moment they request, and I only hand over physical cash after my own screen says "funds secured / ready to release." I will not trust a screenshot or the customer's word; the proof has to come from the system to me directly.
+- **Without many customers at the start, what would make me sign up anyway:** Three things. First, **foot traffic** — being listed as a cash-out point pulls new people into the shop who then also buy something while they're here, so even a few app users a week is upside. Second, **convenience for my own digital dollars** — if I can also cash my *own* digital balance in and out through the same system, it's useful to me from day one regardless of customer volume. Third, **reputation/being early** — being one of the first trusted points in the neighborhood is good standing, and the bar to start is low because the cash is already in my till.
+
+**SDF narrative:** Confirms Claim 2 from the established-business angle — a cash-heavy corner shop already plays an informal cash-point role and would formalize it for a **2–4%** commission, contingent on *merchant-side* proof that the customer's dollars are escrowed (a system-to-merchant locked state with a matchable reference, release-on-confirm). The chicken-and-egg is bridged by non-volume incentives: foot traffic into the shop, the merchant cashing their *own* digital dollars through the same rails, and early-mover reputation — all of which make signing up rational before cash-out demand materializes.
+
+---
+
+### V-25 · Paying bills & services from a digital wallet
+**Contributor:** [@samueloyibodevv](https://github.com/samueloyibodevv) · **PR:** #308 · **Issue:** [#240](https://github.com/ericmt-98/micopay-protocol/issues/240) · **Validates:** Claim 1/5 (digital-economy access, retention) · **Region:** West Africa
+
+**Context:** V-2 framed cash-in as "the gateway to the digital economy." This section tests the recurring reason people would keep value in the wallet at all — the everyday digital payments that cash can't reach.
+
+First-person response (privacy-safe):
+
+- **What digital things I regularly need to pay for that are hard or impossible with cash:** Phone airtime and mobile data top-ups, electricity (prepaid meter tokens), streaming subscriptions, app-store and software subscriptions, and occasionally cloud hosting for side projects. None of these accept physical cash directly — they all assume you already have a card or a bank-linked wallet.
+- **How I pay for those today when my money is in cash:** The workaround is a chain of middlemen. I either find a neighborhood agent/kiosk who takes my cash and pays the bill from their own digital balance, or I send cash to a friend with a card and have them pay online for me. Each hop adds a "convenience fee" on top of the real price, and for cross-border digital services (cloud, app stores) there's an extra exchange-rate margin baked in that I never get to see.
+- **Roughly what the workaround costs me:** Between the agent markup and the hidden exchange spread on foreign-currency services, I lose somewhere around 5–10% versus the sticker price — more on small top-ups where a flat fee hits harder, less on larger bills.
+- **If a wallet let me cash-in once and then pay all those digital things directly, how often I'd actually use it:** Very often — realistically several times a week. Airtime and data alone are a near-daily need, and bill pay is monthly-but-unavoidable. Collapsing the agent/friend chain into one direct payment is exactly the friction that would make me keep a balance in the wallet instead of converting back to cash.
+- **Which would keep me coming back — bill pay, cash-out, spending at shops, or saving in dollars:** Bill pay is the hook that creates the habit, because it's recurring and the cash workaround is genuinely painful. But what makes me *keep* a balance rather than cash out each time is saving in dollars — the combination of "my money holds its value" plus "I can pay my bills straight from it" is what earns retention. Cash-out is the safety net I need to *exist* to trust the system, even if I rarely use it.
+- **What would make me stop using it after the first try:** A failed bill payment where the money leaves my wallet but the service (the meter token, the airtime) never arrives, with no clear refund or dispute path. Also: hidden fees revealed only after I confirm, a confusing or scary first top-up, or the app being down exactly when a bill is due.
+
+**SDF narrative:** Confirms Claim 1/5 — the everyday digital payments cash can't reach (top-ups, prepaid utilities, subscriptions, cloud) are the recurring reason to hold value in the wallet. Bill pay drives habit formation; saving in dollars drives retention; reliable cash-out is the trust precondition. The decisive failure mode to engineer against is the "money left, service never arrived" payment with no visible dispute/refund path.
+
+---
+
 ## Batch 2 — Retail, payroll & the integrated economy (V-16…V-25)
 
 > Published 2026-06-29 (milestone #18). These extend the validation beyond the cash-out wedge into
