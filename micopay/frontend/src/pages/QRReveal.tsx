@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
 import { getSecret, completeTrade, TradeData } from '../services/api';
 import { getTradeStateDebugOverride, normalizeTradeState, TradeState } from '../components/TradeStateBadge';
@@ -18,6 +19,7 @@ interface QRRevealProps {
 }
 
 const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat, onSuccess }: QRRevealProps) => {
+    const { t } = useTranslation();
     const [isConfirming, setIsConfirming] = useState(false);
     const [qrPayload, setQrPayload] = useState<string | null>(null);
     const [secretLoaded, setSecretLoaded] = useState(false);
@@ -93,7 +95,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
                     <div className="flex flex-col">
                         <div className="flex items-center gap-2">
                             <h1 className="font-headline font-bold text-lg text-on-surface">Farmacia Guadalupe</h1>
-                            <span className="bg-secondary-container text-secondary text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Verificado</span>
+                            <span className="bg-secondary-container text-secondary text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">{t('qrReveal.verified')}</span>
                         </div>
                     </div>
                 </div>
@@ -108,7 +110,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
                     <div className="inline-flex items-center gap-2 bg-primary-container/10 border border-primary-container/20 px-4 py-2 rounded-full">
                         <span aria-hidden="true" className="material-symbols-outlined text-primary text-sm" style={{ fontVariationSettings: '"FILL" 1' }}>check_circle</span>
                         <span className="text-primary font-semibold text-sm">
-                            {secretLoaded ? '✓ Garantía en cadena · Fondos bloqueados' : '✓ Oferta aceptada · Saldo bloqueado'}
+                            {secretLoaded ? t('qrReveal.onchainEscrowLocked') : t('qrReveal.offerAcceptedLocked')}
                         </span>
                     </div>
                 </div>
@@ -137,11 +139,11 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
                                 className="flex-1 py-2 px-4 rounded-lg border border-primary text-primary font-bold text-sm hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
                             >
                                 <span aria-hidden="true" className="material-symbols-outlined text-sm">chat</span>
-                                Abrir chat
+                                {t('qrReveal.openChat')}
                             </button>
                             <button aria-label="Ver ubicación del agente" className="flex-1 py-2 px-4 rounded-lg border border-primary text-primary font-bold text-sm hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary">
                                 <span aria-hidden="true" className="material-symbols-outlined text-sm">location_on</span>
-                                Ubicación
+                                {t('qrReveal.location')}
                             </button>
                         </div>
                     </div>
@@ -149,7 +151,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
 
                 {/* QR Section */}
                 <section className="mb-10 text-center">
-                    <h2 className="text-[11px] font-bold text-outline-variant uppercase tracking-[0.2em] mb-6">TU CÓDIGO DE INTERCAMBIO</h2>
+                    <h2 className="text-[11px] font-bold text-outline-variant uppercase tracking-[0.2em] mb-6">{t('qrReveal.exchangeCode')}</h2>
 
                     {secretLoading ? (
                         <div className="flex flex-col items-center gap-3 py-12">
@@ -157,7 +159,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
                                 <div className="absolute inset-0 border-4 border-surface-container-high rounded-full"></div>
                                 <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
                             </div>
-                            <p className="text-sm font-medium text-outline">Generando código seguro…</p>
+                            <p className="text-sm font-medium text-outline">{t('qrReveal.generatingCode')}</p>
                         </div>
                     ) : secretError ? (
                         <ErrorBanner
@@ -184,7 +186,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
                                 <p className="mt-2 font-headline font-black text-2xl text-on-surface">${amount} MXN</p>
                                 {secretLoaded && (
                                     <p className="text-[10px] text-primary mt-1 font-mono opacity-70">
-                                        Soroban HTLC · Testnet
+                                        {t('qrReveal.htlcTestnet')}
                                     </p>
                                 )}
                             </div>
@@ -214,7 +216,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
                             className="w-full py-4 rounded-2xl bg-primary text-on-primary font-bold text-base flex items-center justify-center gap-2 active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:pointer-events-none"
                         >
                             <span aria-hidden="true" className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>check_circle</span>
-                            Ya recibí el efectivo
+                            {t('qrReveal.receivedCash')}
                         </button>
                     ) : (
                         <div className="flex flex-col items-center gap-3 py-4">
@@ -222,14 +224,14 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, onBack, onChat
                                 <div className="absolute inset-0 border-4 border-surface-container-high rounded-full"></div>
                                 <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
                             </div>
-                            <p className="text-sm font-medium text-outline">Confirmando operación…</p>
+                            <p className="text-sm font-medium text-outline">{t('qrReveal.confirming')}</p>
                         </div>
                     )}
                 </section>
 
                 <footer className="mt-12 text-center pb-10 space-y-3">
                     <p className="text-[12px] text-outline leading-relaxed px-6 font-medium">
-                        Si no se confirma en 30 min, la operación se cancelará automáticamente y tus fondos serán liberados.
+                        {t('qrReveal.autoCancelNotice')}
                     </p>
                     <SupportLink tradeId={activeTrade?.id} state="QR_REVEAL" />
                 </footer>
