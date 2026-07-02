@@ -40,8 +40,13 @@ x402 = el pago · credencial = el ticket · ZK = lo que hace el gasto anónimo y
 | Tubería completa e2e (comprar → gastar) | ✅ | comprar 4001 → proof → inference → Claude responde |
 
 **Hechos clave**
-- Contrato `ZkVerifierRegistry`: `CBOWU3OVOPGN3ME2R7EFK2Z2JZY4XYRB6A3HBTQ2Q2WWPSXK3VREUQC7` (admin = identidad stellar-cli `deployer`).
-- Circuitos registrados: `reputation_v1` (4 inputs), `access_credential_v1` (2 inputs: `[merkle_root, nullifier]`).
+- Contrato `ZkVerifierRegistry`: `CCZHC456HBJRTZP45V5AT3ILHP3MOVH36MHR7HUWQHV2JLN6MJEITXB2` (redeployado
+  2026-07-02 tras la Fase 0 — el WASM anterior en `CBOWU3OVOPGN3ME2R7EFK2Z2JZY4XYRB6A3HBTQ2Q2WWPSXK3VREUQC7`
+  quedó obsoleto, no lo uses). Admin = misma identidad stellar-cli `deployer`.
+- Circuitos registrados: `poseidon_preimage`, `reputation_v1` (4 inputs), `access_credential_v1`
+  (2 inputs: `[merkle_root, nullifier]`) — las tres VKs, `deploy-zk.ts` tenía a `access_credential_v1`
+  faltante en `register` y se corrigió en este redeploy.
+- Raíz del pool demo (`credential_pool.json`, 4 credenciales) republicada: `0x14c2e3a5cbe2cd94f080c87e3344d0d03f94f71507d3617b3a17e9b333a821f7`.
 - Endpoints nuevos: `apps/api/src/routes/credentials.ts` (buy), `routes/inference.ts` (spend), helper `lib/zkVerify.ts`.
 - Pool demo: `apps/api/demo/credential_pool.json` (secrets 4001-4004).
 
