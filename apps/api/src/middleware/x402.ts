@@ -61,11 +61,18 @@ const BASE_CHAIN_ID = parseInt(process.env.BASE_CHAIN_ID ?? "84532", 10);
 const BASE_NETWORK_NAME = "base-sepolia";
 const BASE_USDC_ADDRESS = (process.env.BASE_USDC_ADDRESS ??
   "0x036CbD53842c5426634e7929541eC2318f3dCF7e") as `0x${string}`;
-// Circle's USDC EIP-712 domain — "USD Coin" / "2" is standard across every
-// chain Circle issues native USDC on (incl. Base), but confirm against
-// basescan before relying on this for a real settlement, per the plan's
-// standing caveat that the x402/USDC specifics should be re-verified.
-const BASE_USDC_DOMAIN_NAME = process.env.BASE_USDC_NAME ?? "USD Coin";
+// EIP-712 domain for BASE_USDC_ADDRESS. Circle's OFFICIAL mainnet USDC
+// contracts use name()="USD Coin", but this specific default testnet
+// address (0x036CbD5...) does NOT — confirmed by calling name()/version()
+// directly against Base Sepolia: name()="USDC", version()="2". Guessing
+// "USD Coin" here produced a live "FiatTokenV2: invalid signature" revert
+// during WP4 smoke testing even though our own off-chain verifyTypedData
+// check passed (it was internally consistent with the agent's signer, but
+// neither matched the contract's real domain separator). If you point
+// BASE_USDC_ADDRESS at a different deployment, re-verify with:
+//   cast call <address> "name()(string)" --rpc-url $BASE_RPC_URL
+//   cast call <address> "version()(string)" --rpc-url $BASE_RPC_URL
+const BASE_USDC_DOMAIN_NAME = process.env.BASE_USDC_NAME ?? "USDC";
 const BASE_USDC_DOMAIN_VERSION = process.env.BASE_USDC_VERSION ?? "2";
 const PLATFORM_BASE_ADDRESS = (process.env.PLATFORM_BASE_ADDRESS ?? "") as `0x${string}` | "";
 const X402_FACILITATOR_URL = process.env.X402_FACILITATOR_URL ?? "";
