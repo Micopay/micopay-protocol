@@ -226,6 +226,23 @@ como limitación conocida del demo, no como bloqueante).
 **Verify:** `curl /api/v1/services | grep base`; el servicio aparece en la búsqueda/discovery de
 agentic.market y es invocable end-to-end con x402 desde ahí (no solo listado — probado).
 
+**Estado (2026-07-02):** 1 y 2 hechos y comiteados (`services.ts` v1.3.0 con `payment_networks:
+["stellar","base"]` + entradas `credential_buy`/`inference`; `SKILL.md` con sección "Paying from
+Base"). El paso 3 (registro externo) **investigado, no ejecutado** — requiere una instancia
+públicamente desplegada (no localhost) con las wallets de Base fondeadas, ninguna de las dos
+condiciones se cumple todavía. Hallazgos de la investigación:
+- **agentic.market indexa automáticamente** cuando el **facilitator de Coinbase CDP** procesa un
+  pago en un endpoint con la "Bazaar discovery extension" habilitada — sin registro manual
+  separado. Esto implicaría apuntar `X402_FACILITATOR_URL` al facilitator de CDP en vez del
+  genérico `https://x402.org/facilitator` que dejamos como default en WP1 — decisión pendiente,
+  no confirmé la URL exacta del facilitator de CDP para Base Sepolia ni el flag de la extensión
+  Bazaar (la documentación de CDP no la expone en las páginas que pude leer).
+- **Alternativa manual:** `x402-list.com` tiene un link "[submit yours]" de auto-servicio en su
+  directorio — más simple, no depende de qué facilitator uses.
+- Ninguna opción tiene sentido hoy: no hay URL pública que un indexador externo pueda alcanzar,
+  y sin fondeo no hay pagos reales que demostrar. Ejecutar este paso cuando: (a) WP1 esté fondeado,
+  (b) haya una URL pública real sirviendo esto (Render u otro).
+
 ---
 
 ## 3. Orden de ejecución

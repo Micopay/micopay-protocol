@@ -1,8 +1,8 @@
 # MicoPay Protocol — Agent Skill
 
-**Payment:** x402 (USDC on Stellar) — no API keys, no signup
+**Payment:** x402 (USDC on Stellar or Base) — no API keys, no signup
 **Discovery:** `GET /api/v1/services`
-**Network:** Stellar Testnet
+**Networks:** Stellar Testnet, Base Sepolia
 
 ---
 
@@ -39,6 +39,54 @@ X-Payment: <signed_xdr>
 
 ---
 
+## Paying from Base
+
+Every priced endpoint also accepts USDC on **Base Sepolia** — the 402 response's
+`accepts[]` array lists both options (`stellar-usdc` and `exact`/`base-sepolia`);
+don't hardcode one, read `accepts[]` and pick the network you're on.
+
+```
+POST /api/v1/credentials/buy
+→ 402 {
+    "accepts": [
+      { "scheme": "stellar-usdc", "network": "testnet", "payTo": "G...", "asset": "G...", "maxAmountRequired": "0.01" },
+      { "scheme": "exact", "network": "base-sepolia", "payTo": "0x...", "asset": "0x036CbD53...", "maxAmountRequired": "10000" }
+    ]
+  }
+```
+
+Base payments use **EIP-3009** (`transferWithAuthorization`) — sign an off-chain
+authorization with your agent's own key (no relayer, no gas, no ETH needed on
+your end), base64-encode the x402 JSON envelope, send it as `X-Payment`:
+
+```json
+{
+  "x402Version": 1,
+  "scheme": "exact",
+  "network": "base-sepolia",
+  "payload": {
+    "signature": "0x...",
+    "authorization": {
+      "from": "0x...", "to": "0x...", "value": "10000",
+      "validAfter": "...", "validBefore": "...", "nonce": "0x..."
+    }
+  }
+}
+```
+
+A full working reference implementation — discovers the payment requirement,
+signs, pays, buys an anonymous ZK credential, and spends it at `/inference` —
+lives at [`examples/agent/`](../examples/agent). It never touches a Stellar
+account: it pays on Base, MicoPay verifies anonymous trust and settles on
+Stellar/Soroban behind the API.
+
+**The flagship Base-payable flow:** `credential_buy` (x402, public payment) →
+`inference` (ZK proof, anonymous spend, nullifier burned on Soroban) — pay
+once, spend privately, unlinkable to the purchase. See `credential_buy` and
+`inference` in the service catalog below.
+
+---
+
 ## Endpoints
 
 ### Free (no payment)
@@ -59,6 +107,8 @@ X-Payment: <signed_xdr>
 | `GET /api/v1/reputation/:address` | $0.0005 | Verify merchant on-chain reputation |
 | `POST /api/v1/cash/request` | $0.01 | Initiate USDC → MXN physical cash exchange |
 | `POST /api/v1/fund` | $0.10 min | Fund the MicoPay project (meta-demo) |
+| `POST /api/v1/credentials/buy` | $0.01 | Buy an anonymous, single-use ZK access credential (Stellar or Base) |
+| `POST /api/v1/inference` | free* | *Spend a credential bought above — the ZK proof is the payment proof |
 
 ---
 
