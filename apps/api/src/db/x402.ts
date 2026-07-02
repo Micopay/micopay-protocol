@@ -28,18 +28,15 @@ export async function initX402Tables(): Promise<void> {
 }
 
 export async function isPaymentUsed(txHash: string): Promise<boolean> {
-  const payment = await getOne<Pick<X402PaymentRow, 'tx_hash' | 'used' | 'expires_at'>>(
-    'SELECT tx_hash, used, expires_at FROM x402_payments WHERE tx_hash = $1',
+  // SEC-A2: a spent payment must be replay-proof forever, not just for 5
+  // minutes — the old `expires_at` check let the exact same tx_hash serve a
+  // second credential once its row "expired", even though it was `used`.
+  const payment = await getOne<Pick<X402PaymentRow, 'tx_hash' | 'used'>>(
+    'SELECT tx_hash, used FROM x402_payments WHERE tx_hash = $1',
     [txHash]
   );
 
-  if (!payment) return false;
-
-  if (new Date() > new Date(payment.expires_at)) {
-    return false;
-  }
-
-  return payment.used;
+  return payment?.used ?? false;
 }
 
 export async function markPaymentUsed(
@@ -48,6 +45,8 @@ export async function markPaymentUsed(
   amountUsdc: string,
   service: string
 ): Promise<void> {
+  // expires_at is kept for schema/audit compatibility but no longer drives
+  // replay logic (see isPaymentUsed) — a used payment record is permanent.
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
   await query(`
@@ -57,8 +56,16 @@ export async function markPaymentUsed(
   `, [txHash, payerAddress, amountUsdc, service, expiresAt.toISOString()]);
 }
 
+/**
+ * SEC-A2: `used` payment rows are the permanent replay-protection record and
+ * must never be deleted. Only unused/stale rows (if this table ever grows a
+ * "reserved but not yet paid" concept) would be safe to prune here — today
+ * every row markPaymentUsed() creates is `used = TRUE`, so this is a no-op
+ * until such a concept exists. Kept (rather than removed) so callers don't
+ * need to change, and so it's the obvious place to add real pruning logic later.
+ */
 export async function cleanupExpiredPayments(): Promise<number> {
-  const result = await query('DELETE FROM x402_payments WHERE expires_at < NOW() AND used = TRUE');
+  const result = await query('DELETE FROM x402_payments WHERE expires_at < NOW() AND used = FALSE');
   return result.rowCount ?? 0;
 }
 

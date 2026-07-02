@@ -9,6 +9,19 @@ const ADMIN_KEY: Symbol = symbol_short!("ADMIN");
 const VK_MAP_KEY: Symbol = symbol_short!("VK_MAP");
 const ROOT_KEY: Symbol = symbol_short!("REP_ROOT");
 
+// WP 0.7: nullifiers are meant to be burn-once FOREVER, but Soroban persistent
+// entries still expire without periodic TTL extension — there is no way to
+// mark an entry as permanently alive in a single call. The network caps any
+// one extend_ttl at `state_archival.max_entry_ttl` ledgers from now (confirmed
+// via `stellar network settings` against testnet: 3,110,400 ledgers, ~180 days
+// at the 5s target ledger close time). The previous 200_000-ledger extend_to
+// (~11.6 days) meant a burned credential's replay protection could lapse in
+// under two weeks unless something re-extended it. Use the network's actual
+// per-call ceiling, and expose `refresh_nullifier` (below) so an off-chain
+// keeper can top it back up before it lapses.
+const NULLIFIER_TTL_MAX: u32 = 3_110_400;
+const NULLIFIER_TTL_THRESHOLD: u32 = NULLIFIER_TTL_MAX / 2;
+
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -23,6 +36,7 @@ pub enum ZkError {
     VerificationFailed = 8,
     ReputationRootNotSet = 9,
     NullifierAlreadyUsed = 10,
+    UnknownNullifier = 11,
 }
 
 #[contract]
@@ -150,8 +164,25 @@ impl ZkVerifierRegistry {
         env.storage().persistent().set(&nullifier, &true);
         env.storage()
             .persistent()
-            .extend_ttl(&nullifier, 100_000, 200_000);
+            .extend_ttl(&nullifier, NULLIFIER_TTL_THRESHOLD, NULLIFIER_TTL_MAX);
 
+        Ok(())
+    }
+
+    /// Keeper hook: re-extend a nullifier's TTL before it lapses. Permissionless
+    /// — extending TTL only pays rent to keep the burn-once record alive, it
+    /// cannot forge, clear, or otherwise affect which nullifiers are recorded.
+    /// A single extend_ttl call can only reach NULLIFIER_TTL_MAX ledgers into
+    /// the future (the network's max_entry_ttl), so an off-chain keeper should
+    /// call this periodically for nullifiers recorded via `verify_unique`
+    /// before their current TTL window runs out.
+    pub fn refresh_nullifier(env: Env, nullifier: Bytes) -> Result<(), ZkError> {
+        if !env.storage().persistent().has(&nullifier) {
+            return Err(ZkError::UnknownNullifier);
+        }
+        env.storage()
+            .persistent()
+            .extend_ttl(&nullifier, NULLIFIER_TTL_THRESHOLD, NULLIFIER_TTL_MAX);
         Ok(())
     }
 

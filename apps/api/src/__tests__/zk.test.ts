@@ -74,6 +74,9 @@ describe("ZK Routes", () => {
   beforeAll(async () => {
     process.env.ZK_VERIFIER_CONTRACT_ID = "CA000000000000000000000000000000000000000000000000000000";
     process.env.ADMIN_SECRET_KEY = "SCZANGBA5AKIA4HF6DVRZ53VBZ7GVMQXMKKFZWQ5MEBOU2CTKXEJC4";
+    // SEC-C2: the mock payment bypass now requires an explicit opt-in outside
+    // production — these tests exercise MOCK_PAYMENT_HEADER, so opt in here.
+    process.env.X402_MOCK_MODE = "true";
     app = Fastify({ logger: false });
     await app.register(zkRoutes);
     await app.ready();
@@ -216,7 +219,41 @@ describe("ZK Routes", () => {
     });
 
     it("returns verified result for reputation_v1 with 4 inputs and mock payment", async () => {
-      // fetchReputationRoot: simulateTransaction returns { result: null } → root=null → check skipped
+      // The root check now fails closed on a null return (SEC-C4), so this
+      // test must mock a genuine matching on-chain root instead of relying
+      // on the old (vulnerable) "null root -> check skipped" behavior.
+      const StellarModule = await import("@stellar/stellar-sdk");
+      const onChainRootDec = "111111111111111111111111";
+      const onChainRootHex = BigInt(onChainRootDec).toString(16).padStart(64, "0");
+      const onChainRootBuf = Buffer.from(onChainRootHex, "hex");
+      mockSimulateTransaction.mockResolvedValueOnce({
+        result: { retval: StellarModule.xdr.ScVal.scvBytes(onChainRootBuf) },
+      });
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/zk/verify",
+        headers: { "x-payment": MOCK_PAYMENT_HEADER },
+        payload: {
+          circuit_id: "reputation_v1",
+          proof: VALID_PROOF_B64,
+          public_inputs: [
+            onChainRootDec,
+            "2",
+            "333333333333333333333333",
+            "444444444444444444444444",
+          ],
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(typeof body.verified).toBe("boolean");
+      expect(body.circuit_id).toBe("reputation_v1");
+    });
+
+    it("returns 503 for reputation_v1 when on-chain root fetch returns null without throwing (SEC-C4)", async () => {
+      // Default mock: simulateTransaction resolves { result: null } — no
+      // exception, just an empty/unreadable result. Must fail closed too.
       const res = await app.inject({
         method: "POST",
         url: "/api/v1/zk/verify",
@@ -232,10 +269,7 @@ describe("ZK Routes", () => {
           ],
         },
       });
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.body);
-      expect(typeof body.verified).toBe("boolean");
-      expect(body.circuit_id).toBe("reputation_v1");
+      expect(res.statusCode).toBe(503);
     });
 
     it("returns 400 when reputation_v1 merkle_root does not match on-chain root", async () => {

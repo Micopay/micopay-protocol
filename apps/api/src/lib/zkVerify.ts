@@ -35,6 +35,30 @@ export class NullifierAlreadyUsedError extends Error {
   }
 }
 
+// WP 0.5 (key separation): verify/verify_unique carry NO require_admin() check
+// in the contract — anyone can call them, ADMIN_SECRET_KEY was only ever there
+// to pay gas. But it's also the SAME key with register_circuit/set_reputation_root
+// rights, and it was being loaded into the hot, request-triggered verify path on
+// every paid call — the highest-volume, most externally-triggerable use of the
+// key. If that process/env is ever compromised, the blast radius included full
+// contract governance, not just gas spend. OPERATOR_SECRET_KEY is a plain funded
+// account with no special contract rights, used only to sign/submit verify calls;
+// ADMIN_SECRET_KEY stays reserved for actual config-changing calls
+// (setReputationRoot, register_circuit) and CLI/offline use.
+let warnedMissingOperatorKey = false;
+function getOperatorSecret(): string {
+  const operator = process.env.OPERATOR_SECRET_KEY;
+  if (operator) return operator;
+  if (!warnedMissingOperatorKey) {
+    console.warn(
+      "[zkVerify] OPERATOR_SECRET_KEY not set — falling back to ADMIN_SECRET_KEY for verify calls. " +
+        "Set a dedicated OPERATOR_SECRET_KEY (no contract admin rights needed) to keep the admin key out of the hot request path."
+    );
+    warnedMissingOperatorKey = true;
+  }
+  return process.env.ADMIN_SECRET_KEY ?? "";
+}
+
 // Encode decimal field element strings to concatenated 32-byte big-endian buffers.
 // Matches the raw Bytes encoding expected by UltraHonkVerifier::verify().
 export function encodePublicInputs(inputs: string[]): Buffer {
@@ -62,9 +86,7 @@ export async function invokeVerify(
   }
 
   const rpc = new StellarSdk.rpc.Server(RPC_URL);
-  const signerKP = StellarSdk.Keypair.fromSecret(
-    process.env.ADMIN_SECRET_KEY ?? ""
-  );
+  const signerKP = StellarSdk.Keypair.fromSecret(getOperatorSecret());
   const account = await rpc.getAccount(signerKP.publicKey());
   const contract = new StellarSdk.Contract(contractId);
 
@@ -170,9 +192,8 @@ export async function fetchReputationRoot(): Promise<string | null> {
   if (!contractId) return null;
   try {
     const rpc = new StellarSdk.rpc.Server(RPC_URL);
-    const signerKP = StellarSdk.Keypair.fromSecret(
-      process.env.ADMIN_SECRET_KEY ?? ""
-    );
+    // Read-only simulate — doesn't need admin rights, just a valid account.
+    const signerKP = StellarSdk.Keypair.fromSecret(getOperatorSecret());
     const account = await rpc.getAccount(signerKP.publicKey());
     const contract = new StellarSdk.Contract(contractId);
 

@@ -31,6 +31,10 @@ if (process.env.X402_MOCK_MODE === "true" && NODE_ENV === "production") {
   throw new Error("X402_MOCK_MODE=true is not allowed in production — it bypasses all payment validation");
 }
 
+if (process.env.ALLOW_CLIENT_ROOTS === "true" && NODE_ENV === "production") {
+  throw new Error("ALLOW_CLIENT_ROOTS=true is not allowed in production — it lets any payer overwrite the shared credential pool's trust anchor");
+}
+
 export async function createApp() {
   const app = Fastify({
     logger: NODE_ENV === "development",

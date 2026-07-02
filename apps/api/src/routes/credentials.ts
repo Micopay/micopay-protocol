@@ -52,6 +52,25 @@ export async function credentialRoutes(fastify: FastifyInstance): Promise<void> 
         merkle_root?: string;
       };
       if (body.commitment && body.merkle_root) {
+        // WP 0.4 (root governance): the contract has ONE global root slot,
+        // shared with Mode B's pool. Publishing `body.merkle_root` as-is means
+        // ANY paying client can overwrite that slot with a root for a tree
+        // they fully control — hijacking the trust anchor Mode B depends on,
+        // then self-issuing unlimited valid-looking credentials for the price
+        // of one purchase. The real fix (server-side batch-anchoring of
+        // collected commitments into one tree it builds itself, or a
+        // multi-root contract) needs a Pedersen/Merkle engine ported to TS —
+        // none exists here today; tree construction is currently offline-only
+        // via `nargo test compute_demo_values`. Until that lands, refuse to
+        // self-service publish a client-dictated root unless explicitly
+        // opted into for demo/dev use.
+        if (!(process.env.ALLOW_CLIENT_ROOTS === "true" && process.env.NODE_ENV !== "production")) {
+          return reply.status(403).send({
+            error:
+              "Client-generated roots are disabled (set ALLOW_CLIENT_ROOTS=true outside production). " +
+              "Publishing an unvalidated client root would let any payer hijack the shared credential pool's trust anchor.",
+          });
+        }
         let tx: string | null = null;
         try {
           const current = await fetchReputationRoot();
