@@ -1,10 +1,97 @@
 # 🍄 MicoPay
 
-**The mobile app that turns digital dollars into physical pesos — trustlessly, on Stellar.**
+**Private, verifiable resource access for AI agents — built on Stellar/Soroban ZK, reachable from Base.**
 
-> One escrow engine, one growing ecosystem: a consumer app for cash-in/cash-out, tokenized
-> investment (CETES) and a bank ramp — and an open protocol that extends that same escrow to
-> AI agents, other chains, and private (ZK) access.
+> Also the mobile app that turns digital dollars into physical pesos, trustlessly, on Stellar
+> (see [below](#what-is-micopay)). One escrow engine, one growing ecosystem — the ZK Agent
+> Credentials layer below is the newest, most active surface.
+
+---
+
+## 🔐 ZK Agent Credentials — private, verifiable, single-use access
+
+> Full docs, audit trail, and work-package history:
+> [`docs/zk-agent-credentials/`](./docs/zk-agent-credentials/STATUS.md).
+
+**The problem.** AI agents already pay per API call over x402 — but every payment is public,
+on-chain, permanent. Anyone can reconstruct an agent's full consumption pattern: which APIs, how
+often, how much. Paying became an accidental confession of strategy.
+
+**The fix.** Separate *paying* from *using*. An agent buys an anonymous access credential
+(public x402 payment — a payment has nothing to hide), then *spends* it with a zero-knowledge
+proof that reveals only "I hold one valid, unused credential" — never which one, never who holds
+it. The nullifier burns on-chain, so it can be spent exactly once. Verified on **Stellar/Soroban**
+using BN254 host functions (`g1_msm`, `pairing_check`, Protocol 25/26).
+
+```
+BUY    POST /api/v1/credentials/buy   (x402, PUBLIC payment — Stellar or Base)
+       → issue an anonymous credential + activate its Merkle root on-chain
+            │
+SPEND  POST /api/v1/inference          (credential + ZK proof, ANONYMOUS)
+       → verify_unique() burns the nullifier on-chain → Claude responds
+            │
+REUSE  same proof again → 409 NullifierAlreadyUsed (rejected on-chain, not app-level)
+```
+
+### What's real — deployed and verified on Stellar testnet
+
+- **`ZkVerifierRegistry`** (Soroban/Rust): `CCZHC456HBJRTZP45V5AT3ILHP3MOVH36MHR7HUWQHV2JLN6MJEITXB2`
+  — 3 circuits registered: `access_credential_v1` 🏆 (flagship, burn-once anonymous access),
+  `reputation_v1` (private tier proof, same engine), `poseidon_preimage` (building block).
+  Source: [`contracts/zk-verifier/src/lib.rs`](./contracts/zk-verifier/src/lib.rs).
+- **Full pipeline, verified live, not simulated:** buy → real ZK proof (Noir/UltraHonk) → spend →
+  real Claude completion → reuse rejected with `409`. Runnable end-to-end via
+  `POST /api/v1/demo/run-zk` ([`apps/api/src/routes/demo.ts`](./apps/api/src/routes/demo.ts)) or
+  the **"🔐 ZK Access"** tab in the dashboard
+  ([`apps/web/src/components/ZKDemoTerminal.tsx`](./apps/web/src/components/ZKDemoTerminal.tsx)).
+- **Security audit closed, not just run.** An independent audit against the payment/ZK pipeline
+  found 7 issues (payment settlement wasn't actually confirmed on-chain, a mock-payment bypass
+  reachable outside dev, a fail-open Merkle root check, a dead replay-protection store, a client
+  could hijack the shared credential pool's trust root, one key held both hot gas-paying and cold
+  admin rights, nullifier TTL lapsed in ~12 days) — **all 7 fixed and the contract redeployed**
+  with the fixes live. Full writeup:
+  [`docs/zk-agent-credentials/AUDIT_2026-07.md`](./docs/zk-agent-credentials/AUDIT_2026-07.md).
+
+### Reachable from Base — not just Stellar
+
+Agents live where the x402 volume is (Base), not necessarily on Stellar. Every priced endpoint
+now accepts USDC on **Base Sepolia** via canonical **EIP-3009** (`transferWithAuthorization`),
+alongside Stellar — same middleware, same credential, same anonymity guarantee:
+
+- **Payment verification** ([`apps/api/src/middleware/x402.ts`](./apps/api/src/middleware/x402.ts)):
+  server-built EIP-712 domain (never trusts a client-supplied domain), BigInt amount comparison,
+  both `validAfter`/`validBefore` checked, atomic claim-before-settle (closes a concurrent
+  double-spend window), facilitator-primary settlement with a self-submit fallback.
+- **Verified live against the real network**, not just mocked: a real EIP-3009 signature,
+  submitted to the actual deployed Base Sepolia USDC contract, real on-chain settlement, a real
+  credential issued — see [`examples/agent/`](./examples/agent), a standalone reference agent
+  that never imports `@stellar/stellar-sdk` or touches a Stellar key. Found and fixed a real
+  signature bug (wrong EIP-712 domain name) by actually running it against testnet, not just
+  reading the code.
+- **Wallet provisioned**, hot/cold key separation by design: a treasury address that only ever
+  *receives* payments (its key is deliberately kept out of any file the server reads) and a
+  separate relayer key that only pays gas. **Not yet funded with testnet ETH/USDC** — the code
+  path is complete and tested, the live balance is the one remaining step before a funded demo.
+- **Not yet built:** Circle CCTP (Base→Stellar settlement bridge) is designed but not implemented
+  — see [Roadmap](#roadmap). Listing on agentic.market is researched, not executed (needs a public
+  deployment first). Full plan and review:
+  [`docs/zk-agent-credentials/BASE_IMPLEMENTATION_PLAN_2026-07.md`](./docs/zk-agent-credentials/BASE_IMPLEMENTATION_PLAN_2026-07.md).
+
+### Circuits
+
+| Circuit | What it proves | Role |
+|---|---|---|
+| `access_credential_v1` 🏆 | "I hold a valid, unspent credential in this set" — without revealing which, who I am, or linking my uses | **Flagship.** Merkle membership + single-use nullifier. |
+| `reputation_v1` | "My reputation tier is ≥ T" — without revealing identity, address, or exact score | Same engine, leaf = tier. |
+| `poseidon_preimage` | "I know the secret behind this hash" — without revealing it | Building block for HTLC coordination. |
+
+Built with **Noir + UltraHonk (barretenberg)**; hash is BN254 **Pedersen** (`poseidon::bn254` isn't
+exported in nargo 1.0.0-beta.9). Toolchain pins: [`TOOLCHAIN.md`](./TOOLCHAIN.md). Product
+narrative + demo script: [`docs/zk-agent-credentials/NARRATIVA_VENDIBLE_2026-07.md`](./docs/zk-agent-credentials/NARRATIVA_VENDIBLE_2026-07.md).
+
+---
+
+## What is MicoPay?
 
 > 🌎 **PULSO Hackathon — NearX × Stellar Development Foundation.** Live on Stellar **testnet**,
 > validated with real customer-discovery interviews across LATAM (Mexico, Argentina, Colombia)
@@ -15,8 +102,6 @@
 > see [`docs/AUDIT_APK_WAVE6.md`](./docs/AUDIT_APK_WAVE6.md) and [Contributing](#contributing-drips).
 
 ---
-
-## What is MicoPay?
 
 MicoPay starts as **a mobile app for financial access in Mexico** — and grows into **an open
 escrow protocol** that any AI agent or chain can plug into.
@@ -201,67 +286,28 @@ agents with real liquidity broadcast.
 > chain can broadcast an intent and get matched to a MicoPay provider — walking their user to physical
 > MXN cash without ever touching a CEX or a bridge.
 
-### 🔗 Cross-chain bridges — Base (CCTP) and XRPL
+### 🔗 Cross-chain — Base (x402 + CCTP) and XRPL
 
 The dollars are already multichain; the last mile is in Mexico. MicoPay routes value to where it's
 cheapest to move, then lands it as pesos:
 
-- **Base → Stellar via Circle CCTP**: an agent (or user) pays USDC on Base → CCTP burns it at source
-  and mints **native USDC on Stellar** → moving it on Stellar costs fractions of a cent → the escrow
-  lands it as physical pesos. A peso-native payment door that's capital-light and non-custodial.
+- **Base x402 payment acceptance — built and tested live.** See the
+  [ZK Agent Credentials](#-zk-agent-credentials--private-verifiable-single-use-access) section
+  above for what's actually implemented (EIP-3009, real testnet verification, the example agent).
+- **Base → Stellar via Circle CCTP — designed, not built.** An agent pays USDC on Base → CCTP
+  burns it at source and mints **native USDC on Stellar** → moving it on Stellar costs fractions
+  of a cent → the escrow lands it as physical pesos. This bridge leg (treasury rebalancing, not
+  per-call) is roadmap — see [Roadmap](#roadmap).
 - **XRPL**: planned as an additional inbound rail for the same escrow.
 
 The user never sees a chain — the frontend abstracts all routing. The defensible asset is the
 physical liquidity network; chains are just inputs that fill it.
 
-### 🔐 ZK-as-a-Service — private resource access for AI agents
+### 🔐 ZK Agent Credentials — see top of this README
 
-> **Real-World ZK on Stellar — live on testnet.** Full docs:
-> [`docs/zk-agent-credentials/`](./docs/zk-agent-credentials/STATUS.md).
-
-**Prove you have the right to consume a resource — without revealing who you are or linking your
-activity.** AI agents buy an **anonymous access credential** (x402) and spend it to consume resources
-(e.g. Claude inference). The payment is public; the spend is anonymous and **unlinkable to the
-purchase** — verified with zero-knowledge on Soroban. This is exactly Stellar's thesis (*"open by
-default, private when needed"*).
-
-```
-BUY    POST /api/v1/credentials/buy   (x402, PUBLIC payment)
-       → issue an anonymous credential + activate its Merkle root on-chain
-            │
-SPEND  POST /api/v1/inference          (credential + ZK, ANONYMOUS)
-       → ZK proof "I hold a valid, unspent credential" → burn its nullifier
-         on-chain → Claude responds
-```
-
-- **x402** = how you pay (public — a payment has nothing to hide).
-- **credential** = the prepaid ticket (a secret whose commitment lives in the tree).
-- **ZK** = makes the spend anonymous + unlinkable; the on-chain **nullifier** makes each credential
-  **single-use** (anti-spam / no over-consumption).
-
-Even MicoPay can't link a spend back to a purchase (you can't go from `H(secret)` to the commitment
-without the secret).
-
-**Verified on-chain (Stellar testnet):** Contract `ZkVerifierRegistry`
-`CBOWU3OVOPGN3ME2R7EFK2Z2JZY4XYRB6A3HBTQ2Q2WWPSXK3VREUQC7`. End-to-end demo: buy a credential via
-x402 → generate its ZK proof → `POST /api/v1/inference` → **real Claude completion**
-(`credential_spent: true`). Re-spending the same credential → `409 NullifierAlreadyUsed` (burn-once
-proven on-chain).
-
-| Circuit | What it proves | Role |
-|---|---|---|
-| `access_credential_v1` 🏆 | "I hold a valid, unspent credential in this set" — without revealing which, who I am, or linking my uses | **Flagship.** Burn-once anonymous access (Merkle membership + single-use nullifier). |
-| `reputation_v1` | "My reputation tier is ≥ T" — without revealing identity, address, or exact score | Same engine, leaf = tier. Private reputation as an access credential. |
-| `poseidon_preimage` | "I know the secret behind this hash" — without revealing it | Building block for HTLC coordination and cross-chain swaps. |
-
-**Why a VK registry (not one contract per circuit):** UltraHonk verification is bound to a circuit via
-its verification key. A registry keyed by `circuit_id` makes ZKaaS an actual *service* — new circuits
-are **registered, not redeployed** — and it's the security boundary: the API never accepts a
-caller-supplied VK. Built with **Noir + UltraHonk (barretenberg)**, verified inside Soroban via the
-BN254 host functions (`g1_msm`, `pairing_check` — Protocol 25/26). Hash is BN254 **Pedersen**.
-Status & backlog: [`docs/zk-agent-credentials/STATUS.md`](./docs/zk-agent-credentials/STATUS.md) ·
-value: [`VALUE_PROP.md`](./docs/zk-agent-credentials/VALUE_PROP.md) · toolchain pins:
-[`TOOLCHAIN.md`](./TOOLCHAIN.md).
+The full write-up (problem, how it works, what's deployed, the Fase 0 security audit, and the
+Base integration) now leads this README:
+[jump to it](#-zk-agent-credentials--private-verifiable-single-use-access).
 
 ---
 
@@ -277,8 +323,9 @@ just a slide.
 | **Stellar DEX** (`pathPaymentStrictSend`) | CETES buy/sell swaps in the app | Connected; mainnet needs liquidity |
 | **Etherfuse anchor (SPEI)** | bank on/off-ramp ↔ CETES | Architecture + stubs; SDK for mainnet |
 | **x402 over Stellar USDC** | pay-per-call agent access | Live on testnet |
-| **Soroban ZK verifier** (`ZkVerifierRegistry`, BN254) | anonymous credentials / reputation | **Deployed on testnet**, 3 circuits |
-| **Circle CCTP → native Stellar USDC** | Base inbound rail | Designed (peso-native door) |
+| **x402 over Base (EIP-3009)** | pay-per-call agent access from Base | **Built + tested live**; wallets not yet funded |
+| **Soroban ZK verifier** (`ZkVerifierRegistry`, BN254) | anonymous credentials / reputation | **Deployed on testnet**, 3 circuits, Fase 0 audit closed |
+| **Circle CCTP → native Stellar USDC** | Base settlement bridge | Designed, not implemented |
 
 ---
 
@@ -430,7 +477,15 @@ micopay-protocol/
 ├── contracts/
 │   ├── htlc-core/              # HashedTimeLock trait (Rust, shared)
 │   ├── atomic-swap/            # AtomicSwapHTLC — cross-chain HTLC, 15 tests
-│   └── micopay-escrow/         # P2P escrow with platform fee, 17 tests
+│   ├── micopay-escrow/         # P2P escrow with platform fee, 17 tests
+│   └── zk-verifier/            # ZkVerifierRegistry — ZK Agent Credentials, 9 tests
+├── circuits/
+│   ├── access_credential_v1/   # 🏆 flagship: burn-once anonymous access (Noir)
+│   ├── reputation_v1/          # private reputation-tier proof (Noir)
+│   └── poseidon_preimage/      # hash pre-image building block (Noir)
+├── examples/
+│   └── agent/                  # standalone reference agent — pays x402 on Base, spends a ZK
+│                                # credential, never touches a Stellar account
 ├── micopay/
 │   ├── backend/                # MicoPay P2P backend (Node.js, port 3002)
 │   ├── frontend/               # Mobile app (React/Vite, port 5181)  ← the product
@@ -452,15 +507,32 @@ micopay-protocol/
 │   │       ├── cetes.ts        # CETES rate/buy/sell (Etherfuse + DEX)
 │   │       ├── reputation.ts   # on-chain merchant reputation + NFT soulbound
 │   │       ├── bazaar.ts       # cross-chain intent broadcasting + Soroban lock
-│   │       ├── demo.ts         # end-to-end agent demo runner
+│   │       ├── credentials.ts  # buy an anonymous ZK access credential (x402)
+│   │       ├── inference.ts    # spend a credential (ZK proof + nullifier burn) → Claude
+│   │       ├── zk.ts           # pay-per-verification ZK endpoint
+│   │       ├── demo.ts         # end-to-end agent demos: cash flow + ZK credential flow
 │   │       └── fund.ts         # meta-demo: protocol funds itself
+│   │   └── src/middleware/
+│   │       └── x402.ts         # payment verification — Stellar XDR + Base EIP-3009
+│   │   └── src/lib/
+│   │       └── zkVerify.ts     # shared on-chain ZK verify/root helpers
+│   │   └── demo/
+│   │       ├── credential_pool.json  # demo credential pool (shared Merkle root)
+│   │       └── zk_demo_proof.json    # pre-generated real proof fixture for the live demo
 │   └── web/                    # Protocol dashboard (React, port 5186)
 │       └── src/components/
-│           ├── DemoTerminal.tsx    # Live demo with tx hashes
+│           ├── DemoTerminal.tsx    # Live cash-flow demo with tx hashes
+│           ├── ZKDemoTerminal.tsx  # Live ZK credential demo: buy → spend → reuse rejected
 │           ├── BazaarFeed.tsx      # Agent intent social layer
 │           ├── ReputationPanel.tsx # Interactive reputation check
 │           ├── ServiceCatalog.tsx  # Full API catalog with x402 explainer
 │           └── FundWidget.tsx      # Live funding stats + meta-demo
+├── docs/
+│   └── zk-agent-credentials/   # ZK Agent Credentials: status, audit, plans, narrative
+│       ├── STATUS.md                          # current state, what's built, what's next
+│       ├── AUDIT_2026-07.md                    # Fase 0 security audit (7 findings, all closed)
+│       ├── BASE_IMPLEMENTATION_PLAN_2026-07.md # Base wallet + x402 acceptance, reviewed
+│       └── DEMO_RECORDING_PLAN_2026-07.md      # demo fixture + endpoint + script prep
 └── skill/
     └── SKILL.md                # Agent autodiscovery (Claude tool use / OpenAI functions)
 ```
@@ -469,12 +541,13 @@ micopay-protocol/
 
 ## Contracts (Soroban/Rust)
 
-**37 unit tests, all passing:**
+**46 unit tests, all passing:**
 
 ```bash
 cd contracts && cargo test
 # atomic-swap:    15 tests ✓
 # micopay-escrow: 17 tests ✓
+# zk-verifier:     9 tests ✓
 
 cd micopay/contracts/escrow && cargo test
 # micopay-escrow: 5 tests ✓
@@ -484,7 +557,7 @@ cd micopay/contracts/escrow && cargo test
 - `MicopayEscrow`: `CBQINHLR3M7NZAPQY7EJ3TWOE22R57LMFDVEMOK3C3X7ZIBFWHVQQP3A`
 - `AtomicSwapHTLC A`: `CCDOUXIXSFXT2HTJAJGFNUJN6CKCYX2M6AL2BHHPEF6ISNHP2BGLS4KX`
 - `AtomicSwapHTLC B`: `CBLCGG44QQILWEIVBXDSZSLH7NI7SGJQKXQ7WTKP3W3YSXOBTGMZKSNN`
-- `ZkVerifierRegistry`: `CBOWU3OVOPGN3ME2R7EFK2Z2JZY4XYRB6A3HBTQ2Q2WWPSXK3VREUQC7` — ZKaaS, 3 circuits registered (`access_credential_v1` + `reputation_v1` + `poseidon_preimage`)
+- `ZkVerifierRegistry`: `CCZHC456HBJRTZP45V5AT3ILHP3MOVH36MHR7HUWQHV2JLN6MJEITXB2` — ZKaaS, 3 circuits registered (`access_credential_v1` + `reputation_v1` + `poseidon_preimage`), redeployed 2026-07-02 with the Fase 0 security fixes
 
 ### MicopayEscrow — `contracts/micopay-escrow`
 
@@ -522,7 +595,8 @@ Contracts reviewed against the Soroban security checklist:
 - ✅ State machine prevents double-spend / double-release
 - ✅ Events emitted for all state changes (full auditability)
 - ✅ `opt-level = "z"`, `lto = true`, `panic = "abort"` in release profile
-- ✅ x402: USDC issuer verified, tx hash replay protection (in-memory Set), mock mode only in testnet browser UI
+- ✅ x402: USDC issuer verified, durable Postgres replay protection (falls back to in-memory only if
+  the DB is unreachable), mock-payment bypass requires explicit opt-in and is refused in production
 
 ---
 
@@ -530,9 +604,10 @@ Contracts reviewed against the Soroban security checklist:
 
 | Timeline | Feature |
 |---|---|
-| **Today** | Stellar testnet — full end-to-end flow, real on-chain Soroban HTLC; CETES (DEX) + SPEI anchor + Blend UI with mainnet-ready architecture; **ZKaaS live** — anonymous reputation proofs verified on-chain |
+| **Today** | Stellar testnet — full end-to-end flow, real on-chain Soroban HTLC; CETES (DEX) + SPEI anchor + Blend UI with mainnet-ready architecture; **ZK Agent Credentials live**, Fase 0 security audit closed; **Base x402 payment acceptance built and tested live** (EIP-3009, real testnet settlement) — wallets provisioned, not yet funded |
+| **Immediate next** | Fund the Base treasury/relayer wallets → run the funded end-to-end demo; list on agentic.market (researched, needs a public deployment first) |
 | **1–3 months** | Real P2P matching engine + open provider registration; live Etherfuse SDK (CETES + SPEI); production merchant onboarding CDMX; Telegram bot |
-| **3–6 months** | AtomicSwapHTLC relayer live: ETH/BTC → MXN cash (no bridges, no custodians); Base → Stellar via Circle CCTP peso door |
+| **3–6 months** | AtomicSwapHTLC relayer live: ETH/BTC → MXN cash (no bridges, no custodians); Circle CCTP Base→Stellar settlement bridge (treasury rebalancing, not per-call) |
 | **6–12 months** | WhatsApp integration, mainnet launch, 100+ merchants CDMX, XRPL inbound rail |
 | **12+ months** | Multi-city + LATAM expansion (AR/CO), retail tap-to-pay, agent reputation network, DAO governance |
 
