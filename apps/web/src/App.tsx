@@ -2,6 +2,7 @@ import { useState } from "react";
 import FundWidget from "./components/FundWidget";
 import ServiceCatalog from "./components/ServiceCatalog";
 import DemoTerminal from "./components/DemoTerminal";
+import ZKDemoTerminal from "./components/ZKDemoTerminal";
 import ReputationPanel from "./components/ReputationPanel";
 import BazaarFeed from "./components/BazaarFeed";
 import DemoBanner from "./components/DemoBanner";
@@ -12,7 +13,7 @@ import { UserData } from "./services/api";
 const API_URL =
   (import.meta as any).env?.VITE_API_URL ?? "http://localhost:3000";
 
-type Tab = "demo" | "bazaar" | "reputation" | "fund" | "services";
+type Tab = "demo" | "zk" | "bazaar" | "reputation" | "fund" | "services";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("demo");
@@ -36,6 +37,7 @@ export default function App() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "demo", label: "⚡ Demo" },
+    { id: "zk", label: "🔐 ZK Access" },
     { id: "bazaar", label: "🕸️ Bazaar" },
     { id: "reputation", label: "⭐ Reputación" },
     { id: "fund", label: "💚 Fund MicoPay" },
@@ -178,6 +180,7 @@ export default function App() {
       {/* Content */}
       <main style={{ padding: "1.5rem", maxWidth: "900px", margin: "0 auto" }}>
         {activeTab === "demo" && <DemoTerminal apiUrl={API_URL} />}
+        {activeTab === "zk" && <ZKDemoTerminal apiUrl={API_URL} />}
         {activeTab === "bazaar" && <BazaarFeed apiUrl={API_URL} />}
         {activeTab === "reputation" && <ReputationPanel apiUrl={API_URL} />}
         {activeTab === "fund" && <FundWidget apiUrl={API_URL} />}
