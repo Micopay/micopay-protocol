@@ -6,34 +6,21 @@ import ZKDemoTerminal from "./components/ZKDemoTerminal";
 import ReputationPanel from "./components/ReputationPanel";
 import BazaarFeed from "./components/BazaarFeed";
 import DemoBanner from "./components/DemoBanner";
-import LoginPage from "./pages/LoginPage";
 import { useDemoStatus } from "./hooks/useDemoStatus";
-import { UserData } from "./services/api";
 
 const API_URL =
   (import.meta as any).env?.VITE_API_URL ?? "http://localhost:3000";
 
 type Tab = "demo" | "zk" | "bazaar" | "reputation" | "fund" | "services";
 
+// No login gate here on purpose: this dashboard is a human observer console
+// for the agent economy demo, not something an agent itself ever sees — the
+// whole pitch is agents talk to the API directly, no account, no API key.
+// (The login screen this used to show was copied from the mobile app's
+// App Store review flow, where it does make sense — it doesn't here.)
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("demo");
   const { isDemoMode } = useDemoStatus();
-  const [user, setUser] = useState<UserData | null>(null);
-
-  // Show login page when not authenticated
-  if (!user) {
-    return (
-      <div
-        className="min-h-screen bg-gray-950 text-gray-100"
-        style={{ fontFamily: "monospace" }}
-      >
-        <DemoBanner isDemoMode={isDemoMode} />
-        <div style={{ marginTop: isDemoMode ? "28px" : undefined }}>
-          <LoginPage isDemoMode={isDemoMode} onLogin={setUser} />
-        </div>
-      </div>
-    );
-  }
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "demo", label: "⚡ Demo" },
