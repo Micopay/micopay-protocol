@@ -69,17 +69,24 @@ export function encodePublicInputs(inputs: string[]): Buffer {
   return Buffer.concat(bufs);
 }
 
+export interface VerifyResult {
+  verified: boolean;
+  txHash: string;
+}
+
 /**
  * Invoke the on-chain verifier. For nullifier-bearing circuits this calls
- * verify_unique (which records the nullifier → burn-once). Returns true if the
- * proof verifies, false if the proof is invalid.
+ * verify_unique (which records the nullifier → burn-once). `verified` is
+ * true if the proof checks out, false if invalid. `txHash` is always the
+ * real Soroban transaction hash for this call, verified/invalid alike —
+ * useful for surfacing an explorer link (e.g. in the demo UI).
  * Throws NullifierAlreadyUsedError if the credential was already spent.
  */
 export async function invokeVerify(
   circuitId: string,
   proofBuf: Buffer,
   publicInputs: string[]
-): Promise<boolean> {
+): Promise<VerifyResult> {
   const contractId = process.env.ZK_VERIFIER_CONTRACT_ID ?? "";
   if (!contractId) {
     throw new Error("ZK_VERIFIER_CONTRACT_ID env var not set");
@@ -129,8 +136,8 @@ export async function invokeVerify(
   do {
     await new Promise((r) => setTimeout(r, 2000));
     const status = await rpc.getTransaction(sent.hash);
-    if (status.status === "SUCCESS") return true;
-    if (status.status === "FAILED") return false;
+    if (status.status === "SUCCESS") return { verified: true, txHash: sent.hash };
+    if (status.status === "FAILED") return { verified: false, txHash: sent.hash };
     attempts++;
   } while (attempts < MAX_RETRIES);
 

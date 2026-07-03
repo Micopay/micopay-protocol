@@ -110,10 +110,11 @@ export async function zkRoutes(fastify: FastifyInstance): Promise<void> {
 
       // 7. Invoke contract
       try {
-        const verified = await invokeVerify(circuit_id, proofBuf, public_inputs);
+        const { verified, txHash } = await invokeVerify(circuit_id, proofBuf, public_inputs);
         return reply.send({
           verified,
           circuit_id,
+          tx_hash: txHash,
           payer: (request as typeof request & { payerAddress?: string }).payerAddress,
         });
       } catch (err) {

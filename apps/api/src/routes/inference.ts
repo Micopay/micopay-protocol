@@ -117,8 +117,9 @@ export async function inferenceRoutes(fastify: FastifyInstance): Promise<void> {
 
       // 4. SPEND the credential: verify the proof AND burn its nullifier on-chain.
       let verified: boolean;
+      let verifyTxHash: string;
       try {
-        verified = await invokeVerify(circuit_id, proofBuf, public_inputs);
+        ({ verified, txHash: verifyTxHash } = await invokeVerify(circuit_id, proofBuf, public_inputs));
       } catch (err) {
         if (err instanceof NullifierAlreadyUsedError) {
           return reply.status(409).send({
@@ -154,6 +155,7 @@ export async function inferenceRoutes(fastify: FastifyInstance): Promise<void> {
           completion,
           model: MODEL,
           credential_spent: true,
+          verify_tx_hash: verifyTxHash,
           usage: msg.usage,
         });
       } catch (err) {
