@@ -1,7 +1,8 @@
 import Fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import fastifyCors from '@fastify/cors';
-import { config, validateConfig } from './config.js';
+import fastifyHelmet from '@fastify/helmet';
+import { config, validateConfig, getCorsOptions } from './config.js';
 import { pingDb } from './db/schema.js';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
@@ -73,33 +74,36 @@ app.get('/.well-known/assetlinks.json', async (_request, reply) => {
   }
 });
 
-// CORS — explicit allowlist for Capacitor WebView + dev/prod web origins.
-// Extra origins can be added via CORS_EXTRA_ORIGINS (comma-separated).
-const DEFAULT_ALLOWED_ORIGINS = [
-  'https://localhost',       // Android (capacitor.config androidScheme: 'https')
-  'capacitor://localhost',   // iOS default scheme
-  'ionic://localhost',       // iOS alternate scheme
-  'http://localhost',        // Android/Capacitor localhost fallback
-  'http://localhost:5173',   // Vite dev server default
-  'http://localhost:5181',   // micopay frontend dev server
-  'http://localhost:3000',   // same-origin requests during dev
-];
-const EXTRA = (process.env.CORS_EXTRA_ORIGINS ?? '')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
-const ALLOWED_ORIGINS = [...DEFAULT_ALLOWED_ORIGINS, ...EXTRA];
+// --- Security Plugins ---
 
-app.register(fastifyCors, {
-  // Allow requests with no Origin header (curl, native HTTP clients) and any
-  // entry in the allowlist. Reject anything else.
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true);
-    if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-    cb(new Error(`Origin not allowed: ${origin}`), false);
+// Register security headers via @fastify/helmet
+app.register(fastifyHelmet, {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "https://soroban-testnet.stellar.org", "https://soroban.stellar.org", "https://horizon-testnet.stellar.org"],
+    },
   },
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+  referrerPolicy: {
+    policy: "strict-origin-when-cross-origin",
+  },
+  hsts: {
+    maxAge: 31536000, // 1 year
+    includeSubDomains: true,
+    preload: true,
+  },
+  frameguard: {
+    action: "deny",
+  },
+  noSniff: true,
+  xssFilter: true,
 });
+
+// Register CORS with secure configuration
+app.register(fastifyCors, getCorsOptions());
 
 // JWT
 app.register(fastifyJwt, {
@@ -312,6 +316,12 @@ async function start() {
     app.log.info({ category: 'http', port: config.port }, '🍄 Micopay MVP Backend running');
     app.log.info({ category: 'http', mockStellar: config.mockStellar }, `Mock Stellar: ${config.mockStellar ? 'ON (no on-chain verification)' : 'OFF (real Soroban RPC)'}`);
     app.log.info({ category: 'http', database: config.databaseUrl.replace(/\/\/.*@/, '//***@') }, 'Database connected');
+    
+    // Log security configuration on startup
+    app.log.info({ category: 'security' }, `[SECURITY] NODE_ENV: ${config.nodeEnv}`);
+    app.log.info({ category: 'security' }, `[SECURITY] CORS Allowed Origins: ${config.corsAllowedOrigins.length > 0 ? config.corsAllowedOrigins.join(', ') : 'NONE (all CORS requests rejected)'}`);
+    app.log.info({ category: 'security' }, `[SECURITY] Security Headers: Helmet enabled with CSP, HSTS, X-Frame-Options, X-Content-Type-Options`);
+    
     await startEventListener();
   } catch (err) {
     app.log.error(err);

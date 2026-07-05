@@ -27,6 +27,23 @@ if (process.env.NODE_ENV !== 'production') {
   loadEnv();
 }
 
+/**
+ * Parse CORS_ALLOWED_ORIGINS from environment variable.
+ * Format: comma-separated list of origins (e.g., "https://example.com,https://app.example.com")
+ * Defaults to localhost in development, empty array in production.
+ */
+function parseAllowedOrigins(originsEnv: string | undefined, nodeEnv: string | undefined): string[] {
+  if (!originsEnv) {
+    // Development: allow localhost
+    if (nodeEnv !== 'production') {
+      return ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5173'];
+    }
+    // Production: empty array means no CORS (must be explicitly configured)
+    return [];
+  }
+  return originsEnv.split(',').map((origin) => origin.trim()).filter((origin) => origin.length > 0);
+}
+
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   databaseUrl: process.env.DATABASE_URL || 'postgresql://localhost:5432/micopay_dev',
@@ -57,7 +74,6 @@ export const config = {
   blendPoolId: process.env.BLEND_POOL_ID || 'CB5UDFTJ6VFOK63ZHQASNODV4PP2HVGPYRF754LRGO7YRG5SFCAZWTDD',
 
   // Environment
-  nodeEnv: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',
 
   // MVP flags
@@ -98,6 +114,10 @@ export const config = {
   merchantCancelPauseThreshold: parseInt(process.env.MERCHANT_CANCEL_PAUSE_THRESHOLD || '5', 10),
   merchantDisputePauseThreshold: parseInt(process.env.MERCHANT_DISPUTE_PAUSE_THRESHOLD || '3', 10),
   adminApiKey: process.env.ADMIN_API_KEY || '',
+
+  // CORS & Security
+  corsAllowedOrigins: parseAllowedOrigins(process.env.CORS_ALLOWED_ORIGINS, process.env.NODE_ENV),
+  nodeEnv: process.env.NODE_ENV || 'development',
 } as const;
 
 export function validateConfig() {
@@ -147,5 +167,40 @@ export function validateConfig() {
   if (errors.length > 0) {
     throw new Error("Configuration Validation Failed:\n" + errors.map(e => `  - ${e}`).join("\n"));
   }
+}
+
+/**
+ * Configure CORS based on environment and allowed origins.
+ * Development: allows localhost and 127.0.0.1
+ * Production: requires explicit CORS_ALLOWED_ORIGINS configuration
+ */
+export function getCorsOptions() {
+  const origins = config.corsAllowedOrigins;
+
+  if (origins.length === 0) {
+    // Fail-safe: if no origins configured in production, reject all CORS
+    if (config.nodeEnv === 'production') {
+      console.warn('[SECURITY] No CORS origins configured in production. CORS requests will be rejected.');
+      return {
+        origin: false,
+        credentials: false,
+      };
+    }
+    // Development with no explicit config: use defaults
+    return {
+      origin: true,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    };
+  }
+
+  // Specific origins configured
+  return {
+    origin: origins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    maxAge: 86400, // 24 hours
+  };
 }
 
