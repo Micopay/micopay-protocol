@@ -63,8 +63,6 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
     <!-- Required for Android 13+ to show push notification permission dialog -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 

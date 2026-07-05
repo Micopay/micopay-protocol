@@ -90,6 +90,22 @@ export const config = {
   mockStellar: process.env.MOCK_STELLAR === "true",
   enableInvestments: process.env.ENABLE_INVESTMENTS === "true" || process.env.DEMO_MODE === "true",
 
+  // Base (BASE_IMPLEMENTATION_PLAN_2026-07.md, WP1)
+  x402AcceptChains: (process.env.X402_ACCEPT_CHAINS || "stellar")
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean),
+  baseRpcUrl: process.env.BASE_RPC_URL || "https://sepolia.base.org",
+  baseChainId: parseInt(process.env.BASE_CHAIN_ID || "84532", 10),
+  baseUsdcAddress: process.env.BASE_USDC_ADDRESS || "",
+  // Treasury address only — deliberately no private key counterpart here,
+  // see .env.example. It receives transferWithAuthorization payments and
+  // never signs in the hot path.
+  platformBaseAddress: process.env.PLATFORM_BASE_ADDRESS || "",
+  x402FacilitatorUrl: process.env.X402_FACILITATOR_URL || "",
+  relayerEvmPrivateKey: process.env.RELAYER_EVM_PRIVATE_KEY || "",
+
+
   // Demo mode — forced false in production (see deriveDemoMode)
   demoMode: deriveDemoMode(process.env.DEMO_MODE, process.env.NODE_ENV),
 } as const;

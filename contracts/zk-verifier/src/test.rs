@@ -1,6 +1,8 @@
 #![cfg(test)]
 use super::*;
-use soroban_sdk::{testutils::Address as _, Env};
+use soroban_sdk::{
+    testutils::storage::Persistent as _, testutils::Address as _, Env,
+};
 
 fn make_env() -> Env {
     Env::default()
@@ -140,4 +142,51 @@ fn test_verify_unique_prevents_nullifier_replay() {
     assert!(result.is_err(), "replayed nullifier must be rejected");
     let err = result.unwrap_err().unwrap();
     assert_eq!(err, ZkError::NullifierAlreadyUsed, "should be NullifierAlreadyUsed");
+}
+
+#[test]
+fn test_refresh_nullifier_extends_ttl() {
+    let env = make_env();
+    let (client, _) = deploy_and_init(&env);
+    env.mock_all_auths();
+
+    let nullifier_bytes = [0xddu8; 32];
+    let nullifier = Bytes::from_slice(&env, &nullifier_bytes);
+    env.as_contract(&client.address, || {
+        env.storage().persistent().set(&nullifier, &true);
+        // Give it a short initial TTL so refresh has room to extend it.
+        env.storage().persistent().extend_ttl(&nullifier, 10, 10);
+    });
+
+    let ttl_before = env.as_contract(&client.address, || {
+        env.storage().persistent().get_ttl(&nullifier)
+    });
+
+    client.refresh_nullifier(&nullifier);
+
+    let ttl_after = env.as_contract(&client.address, || {
+        env.storage().persistent().get_ttl(&nullifier)
+    });
+
+    assert!(
+        ttl_after > ttl_before,
+        "refresh_nullifier should extend the TTL (before={ttl_before}, after={ttl_after})"
+    );
+    assert_eq!(
+        ttl_after, NULLIFIER_TTL_MAX,
+        "refresh_nullifier should extend to the network max TTL"
+    );
+}
+
+#[test]
+fn test_refresh_nullifier_rejects_unknown_nullifier() {
+    let env = make_env();
+    let (client, _) = deploy_and_init(&env);
+    env.mock_all_auths();
+
+    let unknown = Bytes::from_slice(&env, &[0xeeu8; 32]);
+    let result = client.try_refresh_nullifier(&unknown);
+    assert!(result.is_err(), "refreshing an unrecorded nullifier should fail");
+    let err = result.unwrap_err().unwrap();
+    assert_eq!(err, ZkError::UnknownNullifier);
 }

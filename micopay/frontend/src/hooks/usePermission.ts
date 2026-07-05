@@ -83,39 +83,3 @@ export function useLocationPermission() {
   return { state, check, request, openSettings: openAppSettings };
 }
 
-export function usePushPermission() {
-  const [state, setState] = useState<PermState>('unknown');
-
-  const check = useCallback(async (): Promise<PermState> => {
-    if (!Capacitor.isNativePlatform()) { setState('granted'); return 'granted'; }
-    try {
-      const { PushNotifications } = await import('@capacitor/push-notifications');
-      const result = await PushNotifications.checkPermissions();
-      const next: PermState =
-        result.receive === 'granted' ? 'granted' :
-        result.receive === 'denied' ? 'permanently_denied' : 'prompt';
-      setState(next);
-      return next;
-    } catch { return 'unknown'; }
-  }, []);
-
-  const request = useCallback(async (): Promise<PermState> => {
-    if (!Capacitor.isNativePlatform()) { setState('granted'); return 'granted'; }
-    try {
-      const { PushNotifications } = await import('@capacitor/push-notifications');
-      const checked = await PushNotifications.checkPermissions();
-      if (checked.receive === 'granted') { setState('granted'); return 'granted'; }
-      if (checked.receive === 'denied') { setState('permanently_denied'); return 'permanently_denied'; }
-      const req = await PushNotifications.requestPermissions();
-      const next: PermState = req.receive === 'granted' ? 'granted' : 'denied';
-      if (next === 'granted') {
-        // Register to obtain FCM token once permission is granted
-        PushNotifications.register().catch(() => {});
-      }
-      setState(next);
-      return next;
-    } catch { setState('unknown'); return 'unknown'; }
-  }, []);
-
-  return { state, check, request, openSettings: openAppSettings };
-}

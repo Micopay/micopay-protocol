@@ -11,9 +11,32 @@ export interface TradeMessage {
   isOwn: boolean;
 }
 
+/** Raw shape returned by the backend (snake_case, no isOwn/senderRole). */
+interface RawTradeMessage {
+  id: string;
+  trade_id: string;
+  sender_id: string;
+  body: string;
+  created_at: string;
+}
+
+function mapMessage(raw: RawTradeMessage, userId: string): TradeMessage {
+  return {
+    id: raw.id,
+    tradeId: raw.trade_id,
+    senderId: raw.sender_id,
+    senderRole: raw.sender_id === userId ? 'buyer' : 'merchant',
+    body: raw.body,
+    createdAt: raw.created_at,
+    readAt: null,
+    isOwn: raw.sender_id === userId,
+  };
+}
+
 interface UseChatMessagesOptions {
   tradeId: string;
   userId: string;
+  token: string | null | undefined;
   apiBaseUrl?: string;
 }
 
@@ -53,6 +76,7 @@ interface UseChatMessagesReturn {
 export function useChatMessages({
   tradeId,
   userId,
+  token,
   apiBaseUrl = 'http://localhost:3000',
 }: UseChatMessagesOptions): UseChatMessagesReturn {
   const [messages, setMessages] = useState<TradeMessage[]>([]);
@@ -82,7 +106,7 @@ export function useChatMessages({
         const response = await fetch(url.toString(), {
           method: 'GET',
           headers: {
-            Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}`,
+            Authorization: `Bearer ${token ?? ''}`,
             'Content-Type': 'application/json',
           },
         });
@@ -92,7 +116,7 @@ export function useChatMessages({
         }
 
         const data = await response.json();
-        const newMessages = (data.messages || []) as TradeMessage[];
+        const newMessages = ((data.messages || []) as RawTradeMessage[]).map((m) => mapMessage(m, userId));
 
         // Update last message time for polling
         if (newMessages.length > 0) {
@@ -106,7 +130,7 @@ export function useChatMessages({
         setError(err instanceof Error ? err : new Error(String(err)));
       }
     },
-    [tradeId, apiBaseUrl]
+    [tradeId, apiBaseUrl, token, userId]
   );
 
   /**
@@ -124,7 +148,7 @@ export function useChatMessages({
       const response = await fetch(url.toString(), {
         method: 'GET',
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}`,
+          Authorization: `Bearer ${token ?? ''}`,
           'Content-Type': 'application/json',
         },
       });
@@ -136,7 +160,7 @@ export function useChatMessages({
       }
 
       const data = await response.json();
-      const newMessages = (data.messages || []) as TradeMessage[];
+      const newMessages = ((data.messages || []) as RawTradeMessage[]).map((m) => mapMessage(m, userId));
 
       // Merge with existing messages, deduplicating by ID
       setMessages((prev) => {
@@ -154,7 +178,7 @@ export function useChatMessages({
       // Silently continue polling
       console.warn('Poll error:', err);
     }
-  }, [tradeId, apiBaseUrl]);
+  }, [tradeId, apiBaseUrl, token, userId]);
 
   /**
    * Initial load on mount, then start polling.
@@ -221,7 +245,7 @@ export function useChatMessages({
         const response = await fetch(`${apiBaseUrl}/trades/${tradeId}/messages`, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}`,
+            Authorization: `Bearer ${token ?? ''}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ body: trimmed }),
@@ -232,7 +256,8 @@ export function useChatMessages({
           throw new Error(errorData.message || `Failed to send: ${response.statusText}`);
         }
 
-        const sentMessage = await response.json();
+        const { message: rawSentMessage } = (await response.json()) as { message: RawTradeMessage };
+        const sentMessage = mapMessage(rawSentMessage, userId);
 
         // Replace optimistic message with real response
         setMessages((prev) =>
@@ -258,7 +283,7 @@ export function useChatMessages({
         setIsSending(false);
       }
     },
-    [tradeId, userId, apiBaseUrl]
+    [tradeId, userId, apiBaseUrl, token]
   );
 
   /**

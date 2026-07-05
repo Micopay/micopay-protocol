@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useChatMessages } from '../hooks/useChatMessages';
+import { buildTxUrl } from '../utils/stellarExplorer';
+import { getTrade } from '../services/api';
 
 interface DepositChatProps {
     tradeId: string;
@@ -8,18 +11,21 @@ interface DepositChatProps {
     onViewQR: () => void;
     lockTxHash?: string | null;
     apiBaseUrl?: string;
+    token?: string | null;
+    counterpartyName?: string | null;
 }
 
-const STELLAR_EXPLORER = 'https://stellar.expert/explorer/testnet/tx';
-
-const DepositChat = ({ 
+const DepositChat = ({
     tradeId,
     userId,
-    onBack, 
-    onViewQR, 
+    onBack,
+    onViewQR,
     lockTxHash,
-    apiBaseUrl = 'http://localhost:3000'
+    apiBaseUrl = 'http://localhost:3000',
+    token,
+    counterpartyName,
 }: DepositChatProps) => {
+    const { t } = useTranslation();
     const {
         messages,
         isLoading,
@@ -28,15 +34,35 @@ const DepositChat = ({
         isSending,
         sendError,
         retryLoad,
-    } = useChatMessages({ tradeId, userId, apiBaseUrl });
+    } = useChatMessages({ tradeId, userId, token, apiBaseUrl });
 
     const [inputValue, setInputValue] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    
+    const [fetchedLockTxHash, setFetchedLockTxHash] = useState<string | null>(null);
+    const displayLockTxHash = fetchedLockTxHash ?? lockTxHash;
+
     // Auto-scroll to bottom when messages change
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
+
+    // Poll the real trade so the lock tx hash shows up once the counterparty locks funds.
+    useEffect(() => {
+        if (!token || !tradeId) return;
+
+        const fetchTradeStatus = async () => {
+            try {
+                const trade = await getTrade(tradeId, token);
+                if (trade.lock_tx_hash) setFetchedLockTxHash(trade.lock_tx_hash);
+            } catch (e) {
+                console.warn('Failed to fetch trade status', e);
+            }
+        };
+
+        fetchTradeStatus();
+        const interval = setInterval(fetchTradeStatus, 5000);
+        return () => clearInterval(interval);
+    }, [token, tradeId]);
 
     const handleSendMessage = async () => {
         if (!inputValue.trim()) return;
@@ -66,13 +92,13 @@ const DepositChat = ({
                     </button>
                     <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                            <h1 className="font-headline font-bold text-lg tracking-tight text-[#0B1E26]">Tienda Don Pepe</h1>
+                            <h1 className="font-headline font-bold text-lg tracking-tight text-[#0B1E26]">{counterpartyName ?? '—'}</h1>
                             <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-primary/20">
                                 <span className="material-symbols-outlined !text-[12px]" style={{ fontVariationSettings: '"FILL" 1' }}>verified</span>
-                                VERIFICADO
+                                {t('chatRoom.verified').toUpperCase()}
                             </span>
                         </div>
-                        <span className="text-xs text-on-surface/60 font-medium">Agente Autorizado</span>
+                        <span className="text-xs text-on-surface/60 font-medium">{t('chatRoom.authorizedAgent')}</span>
                     </div>
                 </div>
                 <button className="p-2 text-[#0B1E26] opacity-70 hover:bg-[#E7F6FF] transition-colors rounded-full">
@@ -88,21 +114,21 @@ const DepositChat = ({
                             <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>task_alt</span>
                         </div>
                         <div className="flex flex-col gap-1 min-w-0">
-                            <p className="text-sm font-bold text-primary font-headline">Oferta aceptada · Saldo bloqueado en garantía</p>
-                            <p className="text-xs text-on-surface/60">Tu depósito está protegido por el contrato inteligente.</p>
-                            {lockTxHash ? (
+                            <p className="text-sm font-bold text-primary font-headline">{t('chatRoom.agentFoundTitle')}</p>
+                            <p className="text-xs text-on-surface/60">{t('chatRoom.agentFoundDesc')}</p>
+                            {displayLockTxHash ? (
                                 <a
-                                    href={`${STELLAR_EXPLORER}/${lockTxHash}`}
+                                    href={buildTxUrl(displayLockTxHash)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary transition-colors font-mono truncate mt-1"
                                 >
                                     <span className="material-symbols-outlined text-[14px]">open_in_new</span>
-                                    Ver en Stellar Testnet
-                                    <span className="truncate opacity-60">· {lockTxHash.substring(0, 12)}…</span>
+                                    {t('chatRoom.viewOnStellarTestnet')}
+                                    <span className="truncate opacity-60">· {displayLockTxHash.substring(0, 12)}…</span>
                                 </a>
                             ) : (
-                                <p className="text-xs text-on-surface/40 mt-1">Confirmando en blockchain…</p>
+                                <p className="text-xs text-on-surface/40 mt-1">{t('chatRoom.confirmingOnChain')}</p>
                             )}
                         </div>
                     </div>
@@ -121,13 +147,13 @@ const DepositChat = ({
                         <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
                             <span className="material-symbols-outlined text-red-600 text-lg">error</span>
                             <div className="flex flex-col gap-2 flex-1">
-                                <p className="text-sm font-semibold text-red-700">Couldn't load messages</p>
+                                <p className="text-sm font-semibold text-red-700">{t('chatRoom.couldntLoadMessages')}</p>
                                 <p className="text-xs text-red-600">{error.message}</p>
                                 <button
                                     onClick={retryLoad}
                                     className="text-xs font-semibold text-red-700 hover:underline"
                                 >
-                                    [Retry]
+                                    {t('chatRoom.retry')}
                                 </button>
                             </div>
                         </div>
@@ -138,15 +164,15 @@ const DepositChat = ({
                 <div className="flex-grow px-6 py-4 flex flex-col gap-6">
                     {!isLoading && messages.length > 0 && (
                         <div className="flex justify-center">
-                            <span className="bg-surface-container-low text-on-surface/40 text-[10px] font-bold tracking-widest px-3 py-1 rounded-full uppercase">Hoy</span>
+                            <span className="bg-surface-container-low text-on-surface/40 text-[10px] font-bold tracking-widest px-3 py-1 rounded-full uppercase">{t('chatRoom.today')}</span>
                         </div>
                     )}
 
                     {!isLoading && !error && messages.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-12 text-center">
                             <span className="material-symbols-outlined text-[48px] text-outline/40 mb-3">chat_bubble</span>
-                            <p className="text-sm text-on-surface/60 font-medium">No messages yet</p>
-                            <p className="text-xs text-on-surface/40 mt-1">Start the conversation</p>
+                            <p className="text-sm text-on-surface/60 font-medium">{t('chatRoom.noMessagesYet')}</p>
+                            <p className="text-xs text-on-surface/40 mt-1">{t('chatRoom.startConversation')}</p>
                         </div>
                     )}
 
@@ -180,20 +206,20 @@ const DepositChat = ({
                     <div className="grid grid-cols-2 gap-3">
                         <button className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl border border-primary/20 bg-white text-primary font-bold text-sm hover:bg-surface-container-low transition-all active:scale-95 disabled:opacity-50" disabled={isSending}>
                             <span className="material-symbols-outlined !text-[20px]">location_on</span>
-                            Compartir ubicación
+                            {t('chatRoom.shareLocation')}
                         </button>
-                        <button 
+                        <button
                             onClick={onViewQR}
                             className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-primary to-primary-container text-white font-bold text-sm shadow-lg shadow-primary/20 hover:brightness-110 transition-all active:scale-95 disabled:opacity-50"
                             disabled={isSending}
                         >
                             <span className="material-symbols-outlined !text-[20px]">qr_code_2</span>
-                            Ver mi QR de depósito
+                            {t('chatRoom.viewMyQrAgent')}
                         </button>
                     </div>
                     {sendError && (
                         <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">
-                            Send failed: {sendError.message}
+                            {t('chatRoom.sendFailed', { error: sendError.message })}
                         </div>
                     )}
                     <div className="flex items-center gap-3 bg-white border-b border-outline-variant/20 py-2">
@@ -206,7 +232,7 @@ const DepositChat = ({
                                 onChange={(e) => setInputValue(e.target.value)}
                                 onKeyDown={handleKeyDown}
                                 className="w-full bg-transparent border-none focus:ring-0 text-sm font-medium placeholder:text-on-surface/30 disabled:opacity-50" 
-                                placeholder="Escribe un mensaje..." 
+                                placeholder={t('chatRoom.messagePlaceholder')}
                                 type="text"
                                 disabled={isSending}
                             />

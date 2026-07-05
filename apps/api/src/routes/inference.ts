@@ -87,24 +87,39 @@ export async function inferenceRoutes(fastify: FastifyInstance): Promise<void> {
 
       // 3. Cross-check the credential-set root against the on-chain root, so a
       //    prover can't use a fabricated root with their own leaf.
+      //    SEC-C4 (mirrors SEC-08 in routes/zk.ts): RPC failure is FATAL — a
+      //    silently-skipped root check opens a window where an attacker can
+      //    submit a proof with a fabricated root while the RPC is unreachable.
+      //    This is the route that actually serves the resource, so it's the
+      //    one that matters — reject with 503 instead of letting the proof through.
       if (ROOTED_CIRCUITS.has(circuit_id)) {
         try {
           const onChainRoot = await fetchReputationRoot();
-          if (onChainRoot && public_inputs[0] !== onChainRoot) {
+          // fetchReputationRoot() returns null (not a throw) for missing
+          // config, RPC simulation errors, and unreadable return values — all
+          // of those must fail closed too, not just thrown exceptions.
+          if (!onChainRoot) {
+            throw new Error("on-chain root unavailable (null return)");
+          }
+          if (public_inputs[0] !== onChainRoot) {
             return reply.status(400).send({
               error: "public_inputs[0] (merkle_root) does not match on-chain root",
               on_chain_root: onChainRoot,
             });
           }
         } catch (err) {
-          fastify.log.warn({ err }, "Could not fetch on-chain root");
+          fastify.log.error({ err }, "Could not fetch on-chain root — rejecting request to prevent fabricated-root attack");
+          return reply.status(503).send({
+            error: "Cannot verify Merkle root: on-chain root unavailable. Try again later.",
+          });
         }
       }
 
       // 4. SPEND the credential: verify the proof AND burn its nullifier on-chain.
       let verified: boolean;
+      let verifyTxHash: string;
       try {
-        verified = await invokeVerify(circuit_id, proofBuf, public_inputs);
+        ({ verified, txHash: verifyTxHash } = await invokeVerify(circuit_id, proofBuf, public_inputs));
       } catch (err) {
         if (err instanceof NullifierAlreadyUsedError) {
           return reply.status(409).send({
@@ -140,6 +155,7 @@ export async function inferenceRoutes(fastify: FastifyInstance): Promise<void> {
           completion,
           model: MODEL,
           credential_spent: true,
+          verify_tx_hash: verifyTxHash,
           usage: msg.usage,
         });
       } catch (err) {

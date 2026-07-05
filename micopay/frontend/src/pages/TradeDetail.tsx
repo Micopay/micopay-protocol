@@ -1,12 +1,15 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate, useParams, Link } from 'react-router-dom';
+
 import {
   fetchTradeDetail,
   completeTrade,
   cancelTradeRequest,
   refundTradeRequest,
+  lockTrade,
   TradeDetailResponse,
 } from '../services/api';
+import { ensureTrustline } from '../services/payment';
 import { errorMessages } from '../constants/errorMessages';
 import { readJSON } from '../services/secureStorage';
 
@@ -22,24 +25,27 @@ interface TradeDetailProps {
   onBack: () => void;
 }
 
-async function getStoredToken(): Promise<string | null> {
+async function getStoredUser(): Promise<{ id: string; token: string } | null> {
   try {
-    const stored = await readJSON<{ buyer?: { token: string }; seller?: { token: string } }>('micopay_users');
-    return stored?.buyer?.token ?? stored?.seller?.token ?? null;
+    return await readJSON<{ id: string; token: string }>('micopay_user');
   } catch {
     return null;
   }
 }
 
-function isCurrentUserBuyer(tradeBuyerId: string): boolean {
-  try {
-    const raw = localStorage.getItem('micopay_users');
-    if (!raw) return false;
-    const parsed = JSON.parse(raw);
-    return parsed?.buyer?.id === tradeBuyerId;
-  } catch {
-    return false;
-  }
+async function getStoredToken(): Promise<string | null> {
+  const stored = await getStoredUser();
+  return stored?.token ?? null;
+}
+
+async function isCurrentUserBuyer(tradeBuyerId: string): Promise<boolean> {
+  const stored = await getStoredUser();
+  return stored?.id === tradeBuyerId;
+}
+
+async function isCurrentUserSeller(tradeSellerId: string): Promise<boolean> {
+  const stored = await getStoredUser();
+  return stored?.id === tradeSellerId;
 }
 
 const TRADE_POLL_INTERVAL = 5000;
@@ -120,7 +126,21 @@ function SupportLink() {
 
 // ── State-specific views ────────────────────────────────────────────────────
 
-function PendingView({ trade, onCancel }: { trade: TradeDetailData; onCancel: () => void }) {
+function PendingView({
+  trade,
+  onCancel,
+  isSeller,
+  onLock,
+  locking,
+  lockError,
+}: {
+  trade: TradeDetailData;
+  onCancel: () => void;
+  isSeller: boolean;
+  onLock: () => void;
+  locking: boolean;
+  lockError: string | null;
+}) {
   const countdown = useCountdown(trade.expires_at ?? null);
 
   return (
@@ -130,9 +150,13 @@ function PendingView({ trade, onCancel }: { trade: TradeDetailData; onCancel: ()
           hourglass_top
         </span>
       </div>
-      <h2 className="text-2xl font-bold text-on-surface mb-2">Esperando al vendedor</h2>
+      <h2 className="text-2xl font-bold text-on-surface mb-2">
+        {isSeller ? 'Bloquea los fondos para iniciar' : 'Esperando al vendedor'}
+      </h2>
       <p className="text-on-surface-variant mb-6">
-        El vendedor aún no ha bloqueado los fondos. Tu operación está segura en garantía.
+        {isSeller
+          ? 'Firma con tu llave para bloquear los fondos en el contrato de garantía.'
+          : 'El vendedor aún no ha bloqueado los fondos. Tu operación está segura en garantía.'}
       </p>
 
       <div className="bg-surface-container-low rounded-xl p-4 w-full mb-6">
@@ -150,9 +174,36 @@ function PendingView({ trade, onCancel }: { trade: TradeDetailData; onCancel: ()
         </div>
       </div>
 
+      {lockError && (
+        <div className="mb-4 w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+          {lockError}
+        </div>
+      )}
+
+      {isSeller && (
+        <button
+          onClick={onLock}
+          disabled={locking}
+          className="w-full py-3 mb-4 rounded-xl bg-primary text-white font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          {locking ? (
+            <>
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              Bloqueando…
+            </>
+          ) : (
+            <>
+              <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>lock</span>
+              Bloquear fondos
+            </>
+          )}
+        </button>
+      )}
+
       <button
         onClick={onCancel}
-        className="w-full py-3 rounded-xl border border-error text-error font-semibold hover:bg-error/5 transition-colors"
+        disabled={locking}
+        className="w-full py-3 rounded-xl border border-error text-error font-semibold hover:bg-error/5 transition-colors disabled:opacity-50"
       >
         Cancelar operación
       </button>
@@ -342,7 +393,20 @@ function CancelledView() {
   );
 }
 
-function ExpiredView({ isBuyer, onRefund, refunding, trade }: { isBuyer: boolean; onRefund: () => void; refunding: boolean; trade: TradeDetailData }) {
+/**
+ * Shown both for the (currently unreachable — the backend never persists
+ * status='expired') 'expired' state and for a 'cancelled' trade that still
+ * has real on-chain funds pending refund (lock_tx_hash set, release_tx_hash
+ * unset). See docs/AUDIT_MOBILE_MAINNET.md finding B3.
+ */
+function ExpiredView({ canRefund, onRefund, refunding, trade, title, description }: {
+  canRefund: boolean;
+  onRefund: () => void;
+  refunding: boolean;
+  trade: TradeDetailData;
+  title: string;
+  description: string;
+}) {
   return (
     <div className="flex flex-col items-center text-center">
       <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-6">
@@ -350,10 +414,8 @@ function ExpiredView({ isBuyer, onRefund, refunding, trade }: { isBuyer: boolean
           schedule
         </span>
       </div>
-      <h2 className="text-2xl font-bold text-on-surface mb-2">Operación expirada</h2>
-      <p className="text-on-surface-variant mb-6">
-        El tiempo para completar esta operación ha expirado.
-      </p>
+      <h2 className="text-2xl font-bold text-on-surface mb-2">{title}</h2>
+      <p className="text-on-surface-variant mb-6">{description}</p>
 
       <div className="bg-surface-container-low rounded-xl p-4 w-full mb-6">
         <div className="flex justify-between items-center mb-2">
@@ -366,7 +428,9 @@ function ExpiredView({ isBuyer, onRefund, refunding, trade }: { isBuyer: boolean
         </div>
       </div>
 
-      {isBuyer ? (
+      {/* Either participant may trigger the refund — the contract always pays
+          out to the seller (whoever locked funds) regardless of who calls it. */}
+      {canRefund ? (
         <button
           onClick={onRefund}
           disabled={refunding}
@@ -620,6 +684,19 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
   const [showRefundConfirm, setShowRefundConfirm] = useState(false);
   const [isRefunding, setIsRefunding] = useState(false);
   const [refundError, setRefundError] = useState<string | null>(null);
+  const [isBuyer, setIsBuyer] = useState(false);
+  const [isSeller, setIsSeller] = useState(false);
+  const [isLocking, setIsLocking] = useState(false);
+  const [lockError, setLockError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (trade?.buyer_id) {
+      isCurrentUserBuyer(trade.buyer_id).then(setIsBuyer);
+    }
+    if (trade?.seller_id) {
+      isCurrentUserSeller(trade.seller_id).then(setIsSeller);
+    }
+  }, [trade?.buyer_id, trade?.seller_id]);
 
   const fetchTrade = useCallback(async () => {
     if (!id) return;
@@ -679,6 +756,32 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
   // Handle complete (navigate to success)
   const handleComplete = () => {
     fetchTrade(); // Refresh to get completed state
+  };
+
+  // Handle lock (seller signs lock() with their own device key)
+  const handleLock = async () => {
+    if (!trade || isLocking) return;
+    const effectiveToken = (buyerToken ?? sellerToken) ?? (await getStoredToken());
+    if (!effectiveToken) return;
+
+    setIsLocking(true);
+    setLockError(null);
+    try {
+      // Lazily create the trustline for whatever asset this escrow deployment
+      // settles in — a no-op if it already exists. Configurable because the
+      // same contract code can be deployed with different token_ids (e.g.
+      // MXNe on one environment, USDC on another); hardcoding the asset code
+      // here would silently create the wrong trustline if pointed at a
+      // differently-configured escrow.
+      const escrowAssetCode = import.meta.env.VITE_ESCROW_ASSET_CODE || 'USDC';
+      await ensureTrustline(escrowAssetCode);
+      await lockTrade(trade.id, effectiveToken);
+      fetchTrade(); // Refresh to get locked state
+    } catch (e: any) {
+      setLockError(e?.response?.data?.message || e?.message || 'No se pudo bloquear los fondos. Intenta de nuevo.');
+    } finally {
+      setIsLocking(false);
+    }
   };
 
   // Handle refund
@@ -753,13 +856,20 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
     return null;
   }
 
-  const isBuyer = isCurrentUserBuyer(trade.buyer_id ?? '');
-
   // Render state-specific view
   const renderStateView = () => {
     switch (trade.status) {
       case 'pending':
-        return <PendingView trade={trade} onCancel={handleCancel} />;
+        return (
+          <PendingView
+            trade={trade}
+            onCancel={handleCancel}
+            isSeller={isSeller}
+            onLock={handleLock}
+            locking={isLocking}
+            lockError={lockError}
+          />
+        );
       case 'locked':
         return <LockedView trade={trade} />;
       case 'revealing':
@@ -769,13 +879,49 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
       case 'completed':
         return <CompletedView trade={trade} />;
       case 'cancelled':
+        // A cancelled trade can still have real funds sitting in escrow —
+        // cancelling only stops the app-level flow, it doesn't itself settle
+        // on-chain (see docs/AUDIT_MOBILE_MAINNET.md finding B3). A backend
+        // sweep auto-refunds these once the contract timeout passes, but we
+        // also surface a manual "Recuperar fondos" retry here so the user
+        // isn't just waiting on a background job with no visible feedback.
+        if (trade.lock_tx_hash && !trade.release_tx_hash) {
+          return (
+            <ExpiredView
+              canRefund={isBuyer || isSeller}
+              onRefund={handleRefundClick}
+              refunding={isRefunding}
+              trade={trade}
+              title="Reembolso pendiente"
+              description="Esta operación fue cancelada. Tus fondos siguen en el contrato y se liberan automáticamente — también puedes recuperarlos ahora."
+            />
+          );
+        }
         return <CancelledView />;
       case 'expired':
-        return <ExpiredView isBuyer={isBuyer} onRefund={handleRefundClick} refunding={isRefunding} trade={trade} />;
+        return (
+          <ExpiredView
+            canRefund={isBuyer || isSeller}
+            onRefund={handleRefundClick}
+            refunding={isRefunding}
+            trade={trade}
+            title="Operación expirada"
+            description="El tiempo para completar esta operación ha expirado."
+          />
+        );
       case 'refunded':
         return <RefundedView trade={trade} />;
       default:
-        return <PendingView trade={trade} onCancel={handleCancel} />;
+        return (
+          <PendingView
+            trade={trade}
+            onCancel={handleCancel}
+            isSeller={isSeller}
+            onLock={handleLock}
+            locking={isLocking}
+            lockError={lockError}
+          />
+        );
     }
   };
 
@@ -812,8 +958,10 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
         )}
       </main>
 
-      {/* Refund confirmation dialog */}
-      {trade.status === 'expired' && (
+      {/* Refund confirmation dialog — 'expired' is currently unreachable
+          (the backend never persists that status), so this also covers a
+          'cancelled' trade with funds still pending refund (see B3 above). */}
+      {(trade.status === 'expired' || (trade.status === 'cancelled' && trade.lock_tx_hash && !trade.release_tx_hash)) && (
         <RefundConfirmDialog
           open={showRefundConfirm}
           amount={trade.amount_mxn}

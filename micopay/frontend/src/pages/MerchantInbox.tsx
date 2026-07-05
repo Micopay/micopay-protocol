@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQRScanner } from '../hooks/useQRScanner';
-import { usePushNotifications } from '../hooks/usePushNotifications';
 import {
   getMerchantTrades,
   merchantConfirmScan,
@@ -19,15 +19,6 @@ const STATUS_COLORS: Record<string, string> = {
   completed: 'bg-green-100 text-green-800',
   cancelled: 'bg-red-100 text-red-800',
   refunded: 'bg-gray-100 text-gray-800',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Pendiente',
-  locked: 'Bloqueado',
-  revealing: 'Revelando',
-  completed: 'Completado',
-  cancelled: 'Cancelado',
-  refunded: 'Reembolsado',
 };
 
 const STATUS_ICONS: Record<string, string> = {
@@ -85,9 +76,10 @@ function TradeConfirmationCard({
   data: MerchantConfirmResult;
   onDismiss: () => void;
 }) {
+  const { t } = useTranslation();
   const countdown = useCountdown(data.expires_at);
   const statusColor = STATUS_COLORS[data.status] || 'bg-gray-100 text-gray-800';
-  const statusLabel = STATUS_LABELS[data.status] || data.status;
+  const statusLabel = t(`home.status.${data.status}`, { defaultValue: data.status });
   const statusIcon = STATUS_ICONS[data.status] || 'info';
 
   return (
@@ -133,11 +125,11 @@ function TradeConfirmationCard({
         {/* Details */}
         <div className="bg-gray-50 rounded-xl p-4 space-y-3 text-sm">
           <div className="flex justify-between items-center">
-            <span className="text-gray-500">Comprador</span>
+            <span className="text-gray-500">{t('inbox.buyer')}</span>
             <span className="font-semibold text-on-surface">{data.buyer_handle}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-gray-500">Estado</span>
+            <span className="text-gray-500">{t('inbox.status')}</span>
             <span
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${statusColor}`}
             >
@@ -266,19 +258,16 @@ interface MerchantInboxProps {
 // ── Main component ─────────────────────────────────────────────────────────
 
 const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
+  const { t } = useTranslation();
   const [trades, setTrades] = useState<MerchantTrade[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [scanView, setScanView] = useState<ScanView>({ type: 'idle' });
   const { scan } = useQRScanner();
 
-  // Initialize push notifications for merchant
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-  const { isEnabled: pushEnabled } = usePushNotifications({
-    isMerchant: !!token,
-    userToken: token,
-    apiUrl,
-  });
+  // Push notifications require Firebase/FCM setup — disabled until configured.
+  // The polling fallback below (every 30s) covers trade updates in the meantime.
+  const pushEnabled = false;
 
   const handleScan = useCallback(async () => {
     if (!token) return;
@@ -363,11 +352,11 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
   }, [pushEnabled, token, activeFilter]);
 
   const filters = [
-    { key: 'all', label: 'Todos' },
-    { key: 'pending', label: 'Pendientes' },
-    { key: 'locked', label: 'Bloqueados' },
-    { key: 'revealing', label: 'Revelando' },
-    { key: 'completed', label: 'Completados' },
+    { key: 'all', label: t('inbox.filterAll') },
+    { key: 'pending', label: t('home.status.pending') },
+    { key: 'locked', label: t('home.status.locked') },
+    { key: 'revealing', label: t('home.status.revealing') },
+    { key: 'completed', label: t('home.status.completed') },
   ];
 
   return (
@@ -376,7 +365,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
         <button onClick={onBack} className="material-symbols-outlined text-primary">
           arrow_back
         </button>
-        <h1 className="font-headline font-bold text-lg flex-1">Bandeja de entrada</h1>
+        <h1 className="font-headline font-bold text-lg flex-1">{t('inbox.title')}</h1>
         <button
           onClick={handleScan}
           aria-label="Escanear QR del cliente"
@@ -385,11 +374,11 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
           <span aria-hidden="true" className="material-symbols-outlined text-sm">
             qr_code_scanner
           </span>
-          Escanear
+          {t('inbox.scan')}
         </button>
       </header>
 
-      <main className="pt-24 px-6 pb-32">
+      <main className="pt-[calc(6rem+env(safe-area-inset-top))] px-6 pb-32">
         {/* Push notification disabled banner with polling fallback */}
         {!pushEnabled && token && (
           <div className="mb-4 rounded-2xl p-4 bg-amber-50 border border-amber-200">
@@ -397,11 +386,11 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
               <span className="material-symbols-outlined text-amber-600">notifications_off</span>
               <div className="flex-1">
                 <p className="text-sm text-amber-900 font-medium">
-                  Las notificaciones están deshabilitadas. La bandeja se actualiza automáticamente cada 30 segundos.
+                  {t('inbox.pollBanner')}
                 </p>
                 <p className="text-xs text-amber-800 mt-1">
                   <a href="#" onClick={(e) => { e.preventDefault(); }} className="underline">
-                    Habilitar notificaciones
+                    {t('inbox.enableNotif')}
                   </a>
                 </p>
               </div>
@@ -480,7 +469,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
         ) : trades.length === 0 ? (
           <div className="text-center py-12">
             <span className="material-symbols-outlined text-6xl text-gray-300 mb-4">inbox</span>
-            <p className="text-gray-500">No hay operaciones {activeFilter !== 'all' ? `con estado "${STATUS_LABELS[activeFilter]}"` : ''}</p>
+            <p className="text-gray-500">{t('inbox.noTrades')}{activeFilter !== 'all' ? t('inbox.withStatus', { status: t(`home.status.${activeFilter}`) }) : ''}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -498,20 +487,20 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
                       STATUS_COLORS[trade.status] || 'bg-gray-100'
                     }`}
                   >
-                    {STATUS_LABELS[trade.status] || trade.status}
+                    {t(`home.status.${trade.status}`, { defaultValue: trade.status })}
                   </span>
                 </div>
                 <p className="font-bold text-lg">${trade.amount_mxn} MXN</p>
                 {trade.status === 'locked' && (
                   <div className="mt-2 flex items-center gap-1.5 text-sm text-emerald-600">
                     <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: '"FILL" 1' }}>lock</span>
-                    <span className="font-medium">USDC locked in escrow &middot; ${trade.amount_mxn.toLocaleString('es-MX')} MXN</span>
+                    <span className="font-medium">{t('inbox.locked', { amount: trade.amount_mxn.toLocaleString('es-MX') })}</span>
                   </div>
                 )}
                 {trade.status === 'pending' && (
                   <div className="mt-2 flex items-center gap-1.5 text-sm text-amber-600">
                     <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: '"FILL" 1' }}>hourglass_top</span>
-                    <span className="font-medium">Awaiting escrow lock</span>
+                    <span className="font-medium">{t('inbox.pending')}</span>
                   </div>
                 )}
               </div>

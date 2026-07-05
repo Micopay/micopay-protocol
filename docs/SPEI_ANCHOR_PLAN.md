@@ -2,33 +2,80 @@
 
 > Fuente: documentación de Etherfuse (`docs.etherfuse.com`), investigada 2026-06-28.
 
+> ⚠️ **Corrección de ubicación (2026-06-30):** todo este plan y los issues #220-225 apuntan a `apps/api/src/routes/{kyc,ramp,cetes}.ts`. Eso es un error — **`apps/api` no es lo que corre en producción.** El servicio real detrás de `https://micopay-api.onrender.com` (el que usa la app móvil) ejecuta el código de **`micopay/backend`**, confirmado comparando las respuestas reales de `/defi/cetes/rate` y `/health` contra ambos repos. La implementación real y verificada vive en:
+> - `micopay/backend/src/routes/kyc.ts`, `ramp.ts`, y la sección nueva en `defi.ts` (`GET /defi/ramp/assets`)
+> - `micopay/backend/src/services/etherfuse.service.ts`
+> - `micopay/backend/src/lib/webhook-auth.ts`
+> - `micopay/sql/migrations/20260630220000_etherfuse_ramp.up.sql`
+>
+> La copia en `apps/api` (commits `ceb2f3b`/`8caea7d`) sigue ahí pero **no se despliega — es código muerto para este propósito.** No la uses como referencia de qué está realmente en producción.
+
 ## Estado de los issues
 
 | Issue | GitHub | Responsable | Notas |
 |-------|--------|-------------|-------|
-| A-1 · Backend: API client + `/ramp/assets` | [#220](https://github.com/ericmt-98/micopay-protocol/issues/220) cerrado | **Equipo core** | Requiere API key de Etherfuse — trabajo interno |
-| A-2 · Backend: KYC routes | [#221](https://github.com/ericmt-98/micopay-protocol/issues/221) cerrado | **Equipo core** | Requiere API key de Etherfuse — trabajo interno |
-| A-3 · Backend: CLABE + quote + order + webhook | [#222](https://github.com/ericmt-98/micopay-protocol/issues/222) cerrado | **Equipo core** | Requiere API key de Etherfuse — trabajo interno |
+| A-1 · Backend: API client + `/ramp/assets` | [#220](https://github.com/ericmt-98/micopay-protocol/issues/220) cerrado | **Equipo core** | **Hecho 2026-06-30** — ver "Estado real de A-1" abajo |
+| A-2 · Backend: KYC routes | [#221](https://github.com/ericmt-98/micopay-protocol/issues/221) cerrado | **Equipo core** | **Hecho 2026-06-30** — ver "Estado real de A-2/A-3" abajo |
+| A-3 · Backend: CLABE + quote + order + webhook | [#222](https://github.com/ericmt-98/micopay-protocol/issues/222) cerrado | **Equipo core** | **Hecho 2026-06-30** (sin probar order/webhook end-to-end — ver notas) |
 | A-4 · Frontend: pantalla KYC | [#223](https://github.com/ericmt-98/micopay-protocol/issues/223) abierto | **Drips** | Trabaja contra stubs del backend (ver abajo) |
 | A-5 · Frontend: onramp SPEI en CETESScreen | [#224](https://github.com/ericmt-98/micopay-protocol/issues/224) abierto | **Drips** | Trabaja contra stubs del backend (ver abajo) |
 | A-6 · Frontend: offramp CETES → SPEI | [#225](https://github.com/ericmt-98/micopay-protocol/issues/225) abierto | **Drips** | Trabaja contra stubs del backend (ver abajo) |
 
-### Estrategia de mocks para Drips (A-4/A-5/A-6)
+### Estado real de A-1 (2026-06-30)
 
-Los contribuidores de frontend no necesitan la API key de Etherfuse. El equipo core ya agregó rutas stub en el backend (`apps/api/src/routes/kyc.ts` y `ramp.ts`, commit `24dd1d9`) que devuelven respuestas con la forma correcta de JSON sin llamar a Etherfuse. Cuando el equipo conecte la API real, el frontend no cambia nada — solo el backend.
+Ya se obtuvo la cuenta sandbox y el `ETHERFUSE_API_KEY` (self-service en `https://sandbox.etherfuse.com` → `Account → Manage Accounts → Sandbox API Keys`, sin proceso de aprobación). Implementado y verificado contra el sandbox real:
 
-**Stubs para A-4 (KYC hosted flow) — disponibles:**
-- `POST /defi/kyc/start` → `{ onboardingUrl: "https://...stub=true", expiresAt: "<now+15min>" }`
-- `GET /defi/kyc/status` → `{ status: "approved" }` (en sandbox siempre aprueba)
+- `apps/api/src/services/etherfuse.service.ts` → `etherfuseRampClient()` autenticado + `getRampAssets(wallet, currency)`.
+- `apps/api/src/routes/cetes.ts` → `GET /defi/ramp/assets?wallet=<G...>&currency=mxn` (503 si falta la key, 400 si falta `wallet`).
+- `apps/api/.env` / `.env.example` con `ETHERFUSE_API_KEY` y `ETHERFUSE_API_URL`.
+- `render.yaml` actualizado: `ETHERFUSE_API_URL` público y `ETHERFUSE_API_KEY` como secreto (`sync: false`) en el servicio `micopay-api`. **Falta cargar el valor real en el dashboard de Render** (variable nueva, no existía antes).
 
-> El stub de `/defi/kyc/start` devuelve una URL placeholder. El contribuidor puede construir la pantalla (botón → abre URL → polling) contra ella; la URL real de Etherfuse llega cuando A-2 conecte la API.
+**Correcciones al spec original tras probar contra el sandbox real** (la sección "Que construir" de A-1 más abajo describía la forma equivocada):
 
-**Stubs para A-5/A-6 — disponibles:**
-- `POST /defi/bank-account` → `{ bankAccountId, clabe }`
-- `POST /defi/ramp/quote` → `{ quoteId, exchangeRate, destinationAmount, expiresAt: "<now+2min>" }`
-- `POST /defi/ramp/order` → onramp: `{ orderId, depositClabe, depositAmount, depositBankName, depositAccountHolder }` · offramp (`useAnchor: true`): `{ orderId, withdrawAnchorAccount, withdrawMemo, withdrawMemoType: "hash" }`
-- `GET /defi/ramp/order/:id` → `{ status: "funded" }` los primeros 10s → `{ status: "completed" }`
-- `POST /defi/ramp/order/:id/regenerate_tx` → nueva cuenta + memo
+- El endpoint real es `GET /ramp/assets`, no acepta llamada sin querystring: requiere `blockchain` (fijo `"stellar"` para nosotros), `currency` (prioridad de orden, ej. `"mxn"`) y **`wallet`** (dirección Stellar — Etherfuse la usa para enriquecer la respuesta con balances). El plan original no mencionaba `wallet`.
+- La respuesta es `{ "assets": [...] }`, no un array plano.
+- El header es `Authorization: <API_KEY>` **sin** prefijo `Bearer`.
+- Issuer real de CETES en sandbox: `GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4` (el fallback hardcodeado en `cetes.ts` — `CETES7CKqqKQizuSN6iWQwmTeFRjbJR6Vw2XRKfEDR8f` — no es un G-address válido y debería revisarse aparte).
+
+### Estado real de A-2/A-3 (2026-06-30)
+
+**Hallazgo principal: la API real de Etherfuse no se parece al spec original de A-3 en varios puntos clave.** Todo lo de abajo se confirmó probando contra el sandbox real (`docs.etherfuse.com/api-reference/...` embebe el OpenAPI exacto en cada página — más confiable que la prosa).
+
+**No existe un endpoint para "solo registrar CLABE".** El plan original asumía `POST /defi/bank-account` con solo `{ clabe }`. En la realidad, en modo **hosted** (el que eligió MicoPay en A-2), la cuenta bancaria se vincula **dentro del mismo flujo hosted** junto con el KYC — el usuario captura su CLABE en la página de Etherfuse, no en nuestra app. Por eso **se eliminó la ruta `/defi/bank-account`** de `ramp.ts`. En su lugar:
+- `customerId` y `bankAccountId` son UUIDs que **nosotros generamos** (no Etherfuse) al llamar `POST /defi/kyc/start` por primera vez, y se persisten en `users.etherfuse_customer_id` / `users.etherfuse_bank_account_id` (migración `002_etherfuse_ramp.sql`). Son permanentes una vez usados — no se pueden regenerar para el mismo usuario.
+- Esos mismos IDs se reusan en quote/order — no hace falta pedirlos de nuevo.
+
+**`POST /ramp/onboarding-url` devuelve `presigned_url` en snake_case** (a diferencia de todos los demás campos de respuesta, que son camelCase — confirmado en la doc: "Field naming convention").
+
+**`POST /ramp/quote` cambia de forma respecto al plan:**
+- `quoteId` y `customerId` los generamos nosotros y van en el body (no se reciben de Etherfuse en la request).
+- `quoteAssets` es un objeto anidado `{ type: "onramp"|"offramp", sourceAsset, targetAsset }`, no `sourceAsset`/`targetAsset` sueltos.
+- **Sandbox limita los onramps a 500 MXN** (`SandboxAmountExceeded` si se excede) — útil para pruebas, no es un límite de producción.
+- Verificado con `curl` real: `POST /ramp/quote` con `sourceAmount: "500"` devolvió `destinationAmount`, `exchangeRate`, `feeBps`, `feeAmount`, `expiresAt` — coincide con lo implementado en `etherfuse.service.ts#createQuote`.
+
+**`POST /ramp/order` también genera su propio `orderId`/`quoteId` de respuesta** — el que mandamos en el request no es el que se usa después; siempre hay que leer el ID de la respuesta, no asumir el que generamos. La respuesta es `{ onramp: {...} }` o `{ offramp: {...} }` (objeto envolvente, no plano).
+
+**Webhooks: el esquema completo es distinto al que se había implementado.** Lo viejo (`x-webhook-signature` + `x-webhook-timestamp`, secreto único en `WEBHOOK_SECRET`) era inventado, no el real. El esquema real:
+- Te suscribís con `POST /ramp/webhook` (`{ id, eventType, url }`) y la respuesta trae un `secret` (base64) **que se entrega una sola vez** — hay que guardarlo, no se puede volver a consultar.
+- Cada `eventType` (`order_updated`, `kyc_updated`, `bank_account_updated`, etc.) es una suscripción separada con su propio secreto. Por eso ahora hay **dos rutas de webhook** (`/defi/ramp/webhook/order` y `/defi/ramp/webhook/kyc`), una por tipo de evento, en vez de una sola — así no hay que adivinar qué secreto usar para verificar.
+- La firma real es `X-Signature: sha256={hex}`, calculada sobre el JSON **canonicalizado** (RFC 8785 JCS — orden de claves determinista), no sobre `JSON.stringify` plano. Implementado con el paquete `canonicalize` en `webhook-auth.ts`.
+- Ya se registraron ambas suscripciones contra `https://micopay-api.onrender.com/defi/ramp/webhook/{order,kyc}` y los secretos están en `apps/api/.env` (`ETHERFUSE_WEBHOOK_SECRET_ORDER`/`_KYC`). **Hasta que esto se despliegue a Render, las entregas de Etherfuse van a fallar y reintentar 3 veces (con 5s de espera) — no hay impacto real, pero conviene desplegar pronto para no perder eventos.**
+
+**Sin probar end-to-end:** `POST /ramp/order` y el webhook de `order_updated` real requieren un customer con KYC `approved` y bank account `compliant: true`, lo cual exige completar el flujo hosted en un navegador (no se puede simular por `curl`). El código sigue el spec real al pie de la letra, pero falta una corrida manual completa (KYC en sandbox con datos falsos → quote → order → SPEI simulado) antes de darlo por 100% verificado.
+
+### Nota sobre la base de datos para probar A-2/A-3 localmente
+
+No usamos Postgres local — la base de datos vive en Render (servicio `micopay-db`, ver `render.yaml` y memoria del proyecto). Para correr `apps/api` localmente con DB real, copia la **External Database URL** desde el dashboard de Render a `DATABASE_URL` en `apps/api/.env` (la Internal URL solo funciona dentro de la red de Render). Sin esto, `npm run dev` falla en el arranque (`ECONNREFUSED` en `initAuthChallengesTable`) antes de levantar cualquier ruta.
+
+### Estado para Drips (A-4/A-5/A-6) — ya no hay stubs
+
+**Obsoleto:** la sección original decía que A-4/A-5/A-6 trabajarían contra stubs en memoria mientras el equipo core conectaba la API real. Esos stubs ya no existen — `kyc.ts` y `ramp.ts` llaman a Etherfuse real (sandbox) desde el 2026-06-30. Drips puede construir directo contra estas rutas; solo necesita un usuario de prueba autenticado (el `ETHERFUSE_API_KEY` nunca sale del backend).
+
+**Cambios de contrato que afectan a A-4/A-5/A-6 respecto al plan original:**
+- **`POST /defi/bank-account` ya no existe.** El plan original (A-5) asumía un modal para registrar la CLABE por separado. En la realidad, la CLABE se captura dentro del mismo flujo hosted de KYC (`KYCScreen`) — no hace falta ninguna pantalla ni llamada adicional para esto. Si A-5 ya tiene un modal de CLABE construido contra el stub viejo, hay que quitarlo.
+- `POST /defi/kyc/start` y `GET /defi/kyc/status` mantienen la misma forma de respuesta que el stub (`{ onboardingUrl, expiresAt }` y `{ status, rejectionReason }`), así que A-4 no debería necesitar cambios de UI.
+- `POST /defi/ramp/quote` y `POST /defi/ramp/order` también mantienen la forma de respuesta del stub original (`{ quoteId, exchangeRate, destinationAmount, expiresAt }` y `{ depositClabe, ... }` / `{ withdrawAnchorAccount, ... }`), así que A-5/A-6 tampoco deberían necesitar cambios — pero **ahora requieren KYC aprobado primero** (403 si el usuario no completó `kyc/start` + el flujo hosted).
+- Sandbox limita los onramps a 500 MXN — útil para que Drips no se sorprenda con un `400 SandboxAmountExceeded` al probar montos grandes.
 
 ## Resumen de flujos
 
@@ -100,7 +147,7 @@ ETHERFUSE_API_URL=https://api.sand.etherfuse.com   # sandbox
 
 En `apps/api/src/services/etherfuse.service.ts`, agregar una funcion `etherfuseRampClient()` que retorne un `fetch` preconfigurado con:
 ```
-Authorization: Bearer <ETHERFUSE_API_KEY>
+Authorization: <ETHERFUSE_API_KEY>   # sin prefijo "Bearer" — Etherfuse lo manda crudo
 Content-Type: application/json
 ```
 
@@ -139,6 +186,8 @@ Respuesta esperada (subset):
 ---
 
 ## A-2 · Backend: KYC via flujo hosted de Etherfuse
+
+> ⚠️ **Implementado el 2026-06-30 — ver "Estado real de A-2/A-3" arriba antes de leer esta sección.** La decisión de usar flujo hosted (abajo) sigue siendo correcta, pero varios detalles de "Que construir" (forma de la request/response, dónde vive `bankAccountId`) estaban mal respecto a la API real. Esta sección se deja como contexto histórico de la decisión, no como spec exacto.
 
 **Complejidad:** media | **Depende de:** A-1
 
@@ -210,6 +259,8 @@ El body de `onboarding-url` pide `bankAccountId`, pero la página hosted **tambi
 ---
 
 ## A-3 · Backend: CLABE registro + quote + order + webhook SPEI
+
+> ⚠️ **Implementado el 2026-06-30 — ver "Estado real de A-2/A-3" arriba antes de leer esta sección.** El registro de CLABE por separado (`POST /defi/bank-account`) **no existe en la API real** y se eliminó del código — la CLABE se captura dentro del flujo hosted de A-2. La forma de `quote`/`order` y el esquema de webhooks tampoco coinciden con lo que sigue; esta sección queda como contexto histórico.
 
 **Complejidad:** alta | **Depende de:** A-1
 

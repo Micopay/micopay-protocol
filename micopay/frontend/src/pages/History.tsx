@@ -68,7 +68,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
         <h1 className="flex-1 text-center font-headline font-bold text-lg mr-10">Historial de Transacciones</h1>
       </header>
 
-      <main className="flex-1 mt-20 px-6 pb-24">
+      <main className="flex-1 mt-[calc(5rem+env(safe-area-inset-top))] px-6 pb-24">
         {/* Status Filters */}
         <section className="flex gap-2 overflow-x-auto pb-4 no-scrollbar mb-4">
           {FILTERS.map((f) => (

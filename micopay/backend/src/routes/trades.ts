@@ -16,28 +16,41 @@ export async function tradeRoutes(app: FastifyInstance) {
 
   /**
    * POST /trades
-   * Buyer creates a new trade. Generates HTLC secret and returns secret_hash.
+   * Creates a trade between the caller and a counterparty. The caller is the
+   * buyer by default (matches "buy crypto with cash" / deposit flow, where the
+   * counterparty-merchant locks funds as seller). Pass `role: 'seller'` for
+   * the reverse direction ("convert crypto to cash" / cashout flow), where the
+   * caller is the one giving up crypto — the escrow contract only lets the
+   * seller side lock funds and reveal the HTLC secret, so the caller must be
+   * seller_id there, not buyer_id.
    */
   app.post('/trades', {
     preHandler: [tradeRateLimit],
     schema: {
       body: {
         type: 'object',
-        required: ['seller_id', 'amount_mxn'],
+        required: ['counterparty_id', 'amount_mxn'],
         properties: {
-          seller_id: { type: 'string', format: 'uuid' },
+          counterparty_id: { type: 'string', format: 'uuid' },
           amount_mxn: { type: 'integer', minimum: 100, maximum: 50000 },
+          role: { type: 'string', enum: ['buyer', 'seller'], default: 'buyer' },
         },
         additionalProperties: false,
       },
     },
   }, async (request, reply) => {
-    const { seller_id, amount_mxn } = request.body as { seller_id: string; amount_mxn: number };
-    const buyerId = request.user.id;
+    const { counterparty_id, amount_mxn, role = 'buyer' } = request.body as {
+      counterparty_id: string;
+      amount_mxn: number;
+      role?: 'buyer' | 'seller';
+    };
+    const callerId = request.user.id;
+    const sellerId = role === 'seller' ? callerId : counterparty_id;
+    const buyerId = role === 'seller' ? counterparty_id : callerId;
 
     const trade = await tradeService.createTrade({
       request,
-      sellerId: seller_id,
+      sellerId,
       buyerId,
       amountMxn: amount_mxn,
     });
@@ -80,20 +93,41 @@ export async function tradeRoutes(app: FastifyInstance) {
    */
   app.get('/trades/:id', async (request) => {
     const { id } = request.params as { id: string };
-    const { trade, merchant_unavailable, seller_username } =
+    const { trade, merchant_unavailable, seller_username, buyer_username } =
       await tradeService.getTradeDetailForParticipant(id, request.user.id);
 
     const { secret_enc, secret_nonce, ...safeTrade } = trade;
-    return { trade: safeTrade, merchant_unavailable, seller_username };
+    return { trade: safeTrade, merchant_unavailable, seller_username, buyer_username };
+  });
+
+  /**
+   * POST /trades/:id/lock/prepare
+   * Seller-only. Returns an unsigned lock() XDR for the seller to sign
+   * client-side with their own key (the contract requires seller.require_auth()).
+   */
+  app.post('/trades/:id/lock/prepare', async (request) => {
+    const { id } = request.params as { id: string };
+    return tradeService.prepareLockTrade(request, id, request.user.id);
   });
 
   /**
    * POST /trades/:id/lock
-   * Backend calls Soroban contract lock() and returns the tx hash.
+   * Seller-only. Submits the seller-signed lock() XDR and returns the tx hash.
    */
-  app.post('/trades/:id/lock', async (request) => {
+  app.post('/trades/:id/lock', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          signed_xdr: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request) => {
     const { id } = request.params as { id: string };
-    return tradeService.lockTrade(request, id, request.user.id);
+    const { signed_xdr } = (request.body as { signed_xdr?: string } | undefined) ?? {};
+    return tradeService.lockTrade(request, id, request.user.id, signed_xdr);
   });
 
   /**
@@ -122,12 +156,33 @@ export async function tradeRoutes(app: FastifyInstance) {
   });
 
   /**
-   * POST /trades/:id/complete
-   * Buyer confirms cash received. Backend calls release() on Soroban and returns the tx hash.
+   * POST /trades/:id/complete/prepare
+   * Buyer-only. Returns an unsigned release() XDR for the buyer to sign
+   * client-side with their own key (the contract requires buyer.require_auth()).
    */
-  app.post('/trades/:id/complete', async (request) => {
+  app.post('/trades/:id/complete/prepare', async (request) => {
     const { id } = request.params as { id: string };
-    return tradeService.completeTrade(request, id, request.user.id);
+    return tradeService.prepareReleaseTrade(request, id, request.user.id);
+  });
+
+  /**
+   * POST /trades/:id/complete
+   * Buyer confirms cash received. Submits the buyer-signed release() XDR and returns the tx hash.
+   */
+  app.post('/trades/:id/complete', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          signed_xdr: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request) => {
+    const { id } = request.params as { id: string };
+    const { signed_xdr } = (request.body as { signed_xdr?: string } | undefined) ?? {};
+    return tradeService.completeTrade(request, id, request.user.id, signed_xdr);
   });
 
   /**

@@ -1,7 +1,9 @@
 import axios from 'axios';
 import { extractApiErrorPayload, toApiError } from '../utils/apiError';
-import { signChallenge, getPublicKey } from '../lib/keystore';
+import { signChallenge, getPublicKey, signTransactionXdr } from '../lib/keystore';
 import { removeKey } from './secureStorage';
+import { PLATFORM_FEE_PERCENT } from '../constants/trade';
+
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -10,6 +12,33 @@ const http = axios.create({ baseURL: BASE_URL });
 function authHeaders(token: string) {
   return { headers: { Authorization: `Bearer ${token}` } };
 }
+
+// ─── DeFi: KYC (Etherfuse hosted flow) ─────────────────────────────────────
+
+export type KYCStatus = 'pending' | 'approved' | 'rejected';
+
+export interface KYCStatusResponse {
+  status: KYCStatus;
+  reason?: string | null;
+}
+
+/**
+ * Generates a short-lived (≈15 min) onboarding URL.
+ * URL must be generated at button touch (not earlier).
+ */
+export async function startKYC(token: string): Promise<{ onboardingUrl: string }>{
+  const res = await http.post('/defi/kyc/start', {}, authHeaders(token));
+  return res.data;
+}
+
+/**
+ * Poll KYC verification status.
+ */
+export async function getKYCStatus(token: string): Promise<KYCStatusResponse> {
+  const res = await http.get('/defi/kyc/status', authHeaders(token));
+  return res.data;
+}
+
 
 export interface UserData {
   id: string;
@@ -25,6 +54,12 @@ export interface CurrentUserProfile {
   deleted_at?: string | null;
   wallet_type?: string | null;
   created_at?: string;
+  /** Completed trades (reputation) — computed by GET /users/me */
+  trades_completed?: number;
+  /** Completion rate (%) over terminal trades, null if no history */
+  completion_rate?: number | null;
+  /** Reputation tier: Nuevo | Bronce | Plata | Oro */
+  reputation_tier?: string;
 }
 
 export interface TradeData {
@@ -33,6 +68,7 @@ export interface TradeData {
   secret_hash: string;
   amount_mxn: number;
   lock_tx_hash?: string | null;
+  release_tx_hash?: string | null;
 }
 
 export interface TradeDetailResponse {
@@ -48,6 +84,7 @@ export interface TradeDetailResponse {
   };
   merchant_unavailable: boolean;
   seller_username: string | null;
+  buyer_username: string | null;
 }
 
 export async function fetchTradeDetail(tradeId: string, buyerToken: string): Promise<TradeDetailResponse> {
@@ -96,36 +133,52 @@ function generateFallbackAddress(prefix: string): string {
 }
 
 export async function getAuthToken(username: string): Promise<string> {
+  const stellar_address = (await getPublicKey()) ?? generateFallbackAddress(username);
+
   // Step 1: request a one-time challenge from the server
-  const { challenge } = await fetch(`${BASE_URL}/auth/challenge`, {
+  const challengeRes = await fetch(`${BASE_URL}/auth/challenge`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username }),
-  }).then(r => r.json());
+    body: JSON.stringify({ stellar_address }),
+  });
+  const challengeData = await challengeRes.json();
+  const challenge: string | undefined = challengeData.challenge;
+  if (!challenge) throw new Error(`Auth challenge failed (${challengeRes.status}): ${challengeData.error ?? 'no challenge'}`);
 
   // Step 2: sign with the device keypair — private key never leaves the device
   const signature = await signChallenge(challenge);
 
   // Step 3: exchange challenge + signature for a JWT
-  const { token } = await fetch(`${BASE_URL}/auth/token`, {
+  const tokenRes = await fetch(`${BASE_URL}/auth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, challenge, signature }),
-  }).then(r => r.json());
+    body: JSON.stringify({ stellar_address, challenge, signature }),
+  });
+  const tokenData = await tokenRes.json();
+  const token: string | undefined = tokenData.token;
+  if (!token) throw new Error(tokenData.error ?? `Auth failed (${tokenRes.status})`);
 
   return token;
 }
 
+/**
+ * Creates a trade between the caller and a counterparty.
+ * `role` is the caller's role in the escrow: 'buyer' (default — the caller
+ * receives crypto, e.g. depositing cash for crypto) or 'seller' (the caller
+ * gives up crypto, e.g. cashing out — the escrow contract requires the
+ * seller to be the one who locks funds and reveals the HTLC secret).
+ */
 export async function createTrade(
-    sellerId: string,
+    counterpartyId: string,
     amountMxn: number,
-    buyerToken: string,
+    callerToken: string,
+    role: 'buyer' | 'seller' = 'buyer',
 ): Promise<TradeData> {
   try {
     const res = await http.post(
         '/trades',
-        { seller_id: sellerId, amount_mxn: amountMxn },
-        authHeaders(buyerToken),
+        { counterparty_id: counterpartyId, amount_mxn: amountMxn, role },
+        authHeaders(callerToken),
     );
     return res.data.trade;
   } catch (e: unknown) {
@@ -141,13 +194,26 @@ export async function getTrade(
   return res.data.trade;
 }
 
+/**
+ * Locks the trade on-chain. The seller's own device key signs the lock()
+ * call locally (the contract requires seller.require_auth()) — the backend
+ * only ever sees the already-signed transaction.
+ */
 export async function lockTrade(
     tradeId: string,
     sellerToken: string,
 ): Promise<{ lock_tx_hash: string }> {
+  const prepareRes = await http.post(
+      `/trades/${tradeId}/lock/prepare`,
+      {},
+      authHeaders(sellerToken),
+  );
+  const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
+  const signedXdr = 'mock' in prepared ? undefined : await signTransactionXdr(prepared.xdr, prepared.network_passphrase);
+
   const res = await http.post(
       `/trades/${tradeId}/lock`,
-      {},
+      signedXdr ? { signed_xdr: signedXdr } : {},
       authHeaders(sellerToken),
   );
   return { lock_tx_hash: res.data.lock_tx_hash };
@@ -180,11 +246,20 @@ export interface CompleteTradeResponse {
   release_tx_hash: string;
 }
 
+/**
+ * Releases the trade on-chain. The buyer's own device key signs the release()
+ * call locally (the contract requires buyer.require_auth()) — the backend
+ * only ever sees the already-signed transaction.
+ */
 export async function completeTrade(
     tradeId: string,
     buyerToken: string,
 ): Promise<CompleteTradeResponse> {
-  const res = await http.post(`/trades/${tradeId}/complete`, {}, authHeaders(buyerToken));
+  const prepareRes = await http.post(`/trades/${tradeId}/complete/prepare`, {}, authHeaders(buyerToken));
+  const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
+  const signedXdr = 'mock' in prepared ? undefined : await signTransactionXdr(prepared.xdr, prepared.network_passphrase);
+
+  const res = await http.post(`/trades/${tradeId}/complete`, signedXdr ? { signed_xdr: signedXdr } : {}, authHeaders(buyerToken));
   return res.data;
 }
 
@@ -401,6 +476,8 @@ export interface UserProfile {
   min_trade_mxn?: number;
   max_trade_mxn?: number;
   daily_cap_mxn?: number;
+  kyc_status?: string;
+  clabe?: string;
 }
 
 export async function getMyProfile(token: string): Promise<UserProfile> {
@@ -464,6 +541,37 @@ export interface AvailableMerchant {
   distance_km: number;
   /** Payout the buyer receives for the requested amount. */
   payout_mxn: number;
+  /** Reputation: fraction 0..1 of completed trades (optional) */
+  completion_rate?: number;
+  /** Total completed trades (optional) */
+  trades_completed?: number;
+  /** Reputation tier (optional) */
+  tier?: string;
+  /** Optional seller type flag coming from API (e.g. 'business' | 'individual') */
+  seller_type?: string;
+  /** Backwards-compatible boolean marker for business sellers (optional) */
+  is_business?: boolean;
+  /** Platform fee (%) for this merchant. Falls back to PLATFORM_FEE_PERCENT if absent. */
+  platform_fee_pct?: number;
+}
+
+/**
+ * Effective-fee guardrail. Validations V-1/V-3/V-7/V-8 found a universal ceiling:
+ * users abandon MicoPay when the *total* cost exceeds ~5%. The UI warns above this
+ * threshold. Kept here (not hardcoded in components) so it can be tuned centrally.
+ */
+export const MAX_EFFECTIVE_FEE_PERCENT = 5;
+
+/**
+ * Total effective cost the user pays = provider commission + platform fee.
+ * `platformPct` defaults to the shared `PLATFORM_FEE_PERCENT` constant because the
+ * `/merchants/available` response does not (yet) carry a per-merchant platform fee.
+ */
+export function effectiveFeePercent(
+  providerPct: number,
+  platformPct: number = PLATFORM_FEE_PERCENT,
+): number {
+  return providerPct + platformPct;
 }
 
 export interface MerchantsAvailableQuery {
@@ -529,12 +637,104 @@ export async function merchantConfirmScan(
   }
 }
 
+// ─── DeFi: SPEI Onramp / Offramp (Etherfuse) ─────────────────────────────
+
+export interface RampQuote {
+  quoteId: string;
+  type: 'onramp' | 'offramp';
+  exchangeRate: string;
+  sourceAmount: string;
+  destinationAmount: string;
+  expiresAt: string;
+}
+
+export interface RampOrder {
+  orderId: string;
+  depositClabe?: string;
+  depositAmount?: string;
+  depositBankName?: string;
+  depositAccountHolder?: string;
+  withdrawAnchorAccount?: string;
+  withdrawMemo?: string;
+  withdrawMemoType?: string;
+}
+
+export interface RampOrderStatus {
+  orderId: string;
+  status: 'pending' | 'funded' | 'completed' | 'failed';
+  type: 'onramp' | 'offramp';
+  stellarTxHash?: string;
+}
+
+export interface BankAccountResult {
+  bankAccountId: string;
+  clabe: string;
+}
+
+export async function getRampQuote(
+  type: 'onramp' | 'offramp',
+  sourceAmount: string,
+  token: string,
+): Promise<RampQuote> {
+  const res = await http.post(
+    '/defi/ramp/quote',
+    { type, sourceAsset: 'MXN', targetAsset: 'CETES', sourceAmount },
+    authHeaders(token),
+  );
+  return res.data as RampQuote;
+}
+
+/**
+ * Creates a ramp order (SPEI onramp deposit instructions, or offramp anchor
+ * account+memo). `bankAccountId` is resolved server-side from the caller's
+ * onboarded Etherfuse profile — the backend ignores it if sent, so it is not
+ * a parameter here. `useAnchor` (offramp only) requests anchor-rail withdraw
+ * instructions instead of a raw wallet payout.
+ */
+export async function createRampOrder(
+  quoteId: string,
+  token: string,
+  useAnchor = true,
+): Promise<RampOrder> {
+  const res = await http.post(
+    '/defi/ramp/order',
+    { quoteId, useAnchor },
+    authHeaders(token),
+  );
+  return res.data as RampOrder;
+}
+
+export async function getRampOrderStatus(
+  orderId: string,
+  token: string,
+): Promise<RampOrderStatus> {
+  const res = await http.get(`/defi/ramp/order/${orderId}`, authHeaders(token));
+  return res.data as RampOrderStatus;
+}
+
+export async function regenerateRampOrderTx(orderId: string, token: string): Promise<RampOrder> {
+  const res = await http.post(`/defi/ramp/order/${orderId}/regenerate_tx`, {}, authHeaders(token));
+  return res.data as RampOrder;
+}
+
+export async function registerBankAccount(
+  clabe: string,
+  token: string,
+): Promise<BankAccountResult> {
+  try {
+    const res = await http.post('/defi/bank-account', { clabe }, authHeaders(token));
+    return res.data as BankAccountResult;
+  } catch (e: unknown) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
 // Global 401 handler: clear the persisted session and bounce to login.
 http.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      removeKey('micopay_users');
+      removeKey('micopay_user');
       window.location.href = '/#/login';
     }
     return Promise.reject(error);

@@ -31,10 +31,12 @@
     "@types/node": "^20.14.0",
     "@types/pg": "^8.11.6",
     "bcryptjs": "^3.0.3",
+    "canonicalize": "^3.0.0",
     "fastify": "^4.28.1",
     "pg": "^8.13.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "viem": "^2.54.1"
   },
   "devDependencies": {
     "fast-check": "^4.8.0",

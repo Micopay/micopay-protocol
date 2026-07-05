@@ -29,7 +29,12 @@ import History from "./pages/History";
 import TradeDetail from "./pages/TradeDetail";
 import CETESScreen from "./pages/CETESScreen";
 import BlendScreen from "./pages/BlendScreen";
+import KYCScreen from "./pages/KYCScreen";
+
 import MerchantInbox from "./pages/MerchantInbox";
+import PayHub from "./pages/PayHub";
+import SendPayment from "./pages/SendPayment";
+import ReceivePayment from "./pages/ReceivePayment";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Profile from "./pages/Profile";
@@ -42,6 +47,8 @@ import DebugOverlay from "./components/DebugOverlay";
 
 import {
   registerUser,
+  getAuthToken,
+  getCurrentUser,
   createTrade,
   fetchTradeDetail,
   UserData,
@@ -53,6 +60,25 @@ import { mapApiError, type MappedApiError } from "./utils/apiError";
 import { IS_DEMO_MODE } from "./utils/demoMode";
 
 const USERS_STORAGE_KEY = "micopay_user";
+
+/**
+ * Re-authenticate using the device keypair when a stored session is orphaned
+ * (e.g. the backend DB was reset). The device key is the identity, so we can
+ * re-register (fresh DB) or re-auth (user still exists) without user friction.
+ */
+async function recoverSession(username: string): Promise<UserData> {
+  try {
+    return await registerUser(username);
+  } catch (e: any) {
+    if (e?.response?.status === 409) {
+      // User already exists — refresh the token via challenge/response.
+      const token = await getAuthToken(username);
+      const profile = await getCurrentUser(token);
+      return { ...(profile as any), token } as UserData;
+    }
+    throw e;
+  }
+}
 
 
 type Flow = "cashout" | "deposit" | null;
@@ -107,6 +133,7 @@ function HomeRoute() {
           token={buyerUser?.token ?? null}
           merchantToken={sellerUser?.token ?? null}
           onNavigateInbox={() => navigate('/inbox')}
+          username={buyerUser?.username ?? sellerUser?.username ?? null}
       />
   );
 }
@@ -156,6 +183,37 @@ function CashoutRoute() {
             setActiveAmount(amount);
             navigate('/map');
           }}
+      />
+  );
+}
+
+function PayHubRoute() {
+  const navigate = useNavigate();
+  return (
+      <PayHub
+          onSend={() => navigate('/pay/send')}
+          onReceive={() => navigate('/pay/receive')}
+      />
+  );
+}
+
+function SendPaymentRoute() {
+  const navigate = useNavigate();
+  return (
+      <SendPayment
+          onBack={() => navigate('/pay')}
+          onDone={() => navigate('/')}
+      />
+  );
+}
+
+function ReceivePaymentRoute() {
+  const navigate = useNavigate();
+  const { devicePublicKey } = useAppCtx();
+  return (
+      <ReceivePayment
+          address={devicePublicKey}
+          onBack={() => navigate('/pay')}
       />
   );
 }
@@ -274,14 +332,35 @@ function ConfirmRoute() {
   );
 }
 
+/** Whichever participant isn't this device — the real counterparty name to show in the UI. */
+function useCounterpartyName(activeTrade: TradeData | null, buyerUser: UserData | null) {
+  const [counterpartyName, setCounterpartyName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!activeTrade || !buyerUser?.token) return;
+    fetchTradeDetail(activeTrade.id, buyerUser.token)
+      .then(({ trade, seller_username, buyer_username }) => {
+        const isMeTheSeller = trade.seller_id === buyerUser.id;
+        setCounterpartyName(isMeTheSeller ? buyer_username : seller_username);
+      })
+      .catch(() => {});
+  }, [activeTrade, buyerUser?.token, buyerUser?.id]);
+
+  return counterpartyName;
+}
+
 function ChatRoute() {
   const navigate = useNavigate();
   const { lockTxHash, activeTrade, buyerUser } = useAppCtx();
+  const counterpartyName = useCounterpartyName(activeTrade, buyerUser);
   return (
       <ChatRoom
           tradeId={activeTrade?.id ?? ''}
           userId={buyerUser?.id ?? ''}
+          token={buyerUser?.token}
+          apiBaseUrl={import.meta.env.VITE_API_URL}
           lockTxHash={lockTxHash}
+          counterpartyName={counterpartyName}
           onBack={() => navigate('/map')}
           onViewQR={() => navigate('/qr-reveal')}
       />
@@ -291,11 +370,15 @@ function ChatRoute() {
 function ChatDepositRoute() {
   const navigate = useNavigate();
   const { lockTxHash, activeTrade, buyerUser } = useAppCtx();
+  const counterpartyName = useCounterpartyName(activeTrade, buyerUser);
   return (
       <DepositChat
           tradeId={activeTrade?.id ?? ''}
           userId={buyerUser?.id ?? ''}
+          token={buyerUser?.token}
+          apiBaseUrl={import.meta.env.VITE_API_URL}
           lockTxHash={lockTxHash}
+          counterpartyName={counterpartyName}
           onBack={() => navigate('/map-deposit')}
           onViewQR={() => navigate('/qr-deposit')}
       />
@@ -305,12 +388,16 @@ function ChatDepositRoute() {
 function QRRevealRoute() {
   const navigate = useNavigate();
   const { activeTrade, sellerUser, buyerUser, activeAmount, setReleaseTxHash } = useAppCtx();
+  const counterpartyName = useCounterpartyName(activeTrade, buyerUser);
+
   return (
       <QRReveal
           activeTrade={activeTrade}
           sellerToken={sellerUser?.token ?? null}
           buyerToken={buyerUser?.token ?? null}
           amount={activeAmount}
+          counterpartyName={counterpartyName}
+          ownName={buyerUser?.username ?? null}
           onBack={() => navigate('/chat')}
           onChat={() => navigate('/chat')}
           onSuccess={() => navigate('/success')}
@@ -412,7 +499,7 @@ function SuccessRoute() {
             seller_id: sellerUser?.id ?? '',
             buyer_id: buyerUser?.id ?? '',
           }}
-          agentName={flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe'}
+          agentName={sellerUsername ?? (flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe')}
           onHome={() => {
             resetTradeFlow();
             navigate('/');
@@ -439,7 +526,11 @@ function ExploreRoute() {
       <Explore
           onBack={() => navigate('/')}
           onNavigate={(page) => navigate(navMap[page] ?? '/')}
-          showDefi={!isDemoMode || !isMockStellar}
+          // CETES buy/sell and Blend supply/borrow don't move real user funds yet
+          // (platform-key-only simulation on mainnet, audit finding B2) — hidden
+          // until a real user-signed implementation lands. Opt in with
+          // VITE_ENABLE_DEFI_TRADING=true for internal/demo builds.
+          showDefi={import.meta.env.VITE_ENABLE_DEFI_TRADING === 'true'}
       />
   );
 }
@@ -455,6 +546,29 @@ function CetesRoute() {
       />
   );
 }
+
+function KYCRoute() {
+  const { buyerUser } = useAppCtx();
+  return (
+      <KYCScreen
+          token={buyerUser?.token ?? null}
+          onApproved={() => {
+            // Cache hit will redirect into CETES screen; this matches the acceptance criteria.
+            window.location.hash = '/#/cetes';
+          }}
+      />
+  );
+}
+
+function KYCApprovedNextRoute() {
+  const navigate = useNavigate();
+  // After approved, continue to CETES + deposit flow.
+  useEffect(() => {
+    navigate('/cetes');
+  }, [navigate]);
+  return null;
+}
+
 
 function BlendRoute() {
   const navigate = useNavigate();
@@ -475,6 +589,7 @@ function ProfileRoute() {
   return (
       <Profile
           token={buyerUser?.token ?? null}
+          username={buyerUser?.username ?? null}
           devicePublicKey={devicePublicKey}
           onBack={() => navigate('/')}
           onDeleted={() => {
@@ -529,9 +644,10 @@ function ProtectedRoute({ children }: { children: React.ReactElement }) {
 
 const ROUTE_TO_PAGE: Record<string, string> = {
   "/": "home",
-  "/cashout": "cashout",
+  "/pay": "pay",
   "/inbox": "inbox",
   "/explore": "explore",
+  "/cetes": "cetes",
   "/profile": "profile",
 };
 
@@ -545,7 +661,9 @@ const HIDE_BOTTOMNAV_ROUTES = new Set([
   "/qr-reveal",
   "/qr-deposit",
   "/success",
-  "/cetes",
+  "/cashout",
+  "/pay/send",
+  "/pay/receive",
   "/blend",
   "/privacy",
   "/terms",
@@ -564,9 +682,10 @@ function BottomNavAdapter() {
 
   const navMap: Record<string, string> = {
     home: "/",
-    cashout: "/cashout",
+    pay: "/pay",
     inbox: "/inbox",
     explore: "/explore",
+    cetes: "/cetes",
     profile: "/profile",
   };
 
@@ -592,6 +711,7 @@ function App() {
   const [tradeLoading, setTradeLoading] = useState(false);
   const [tradeError, setTradeError] = useState<MappedApiError | null>(null);
   const [pendingSellerId, setPendingSellerId] = useState<string | null>(null);
+  const [pendingRole, setPendingRole] = useState<'buyer' | 'seller'>('buyer');
   const [authReady, setAuthReady] = useState(false);
   const [devicePublicKey, setDevicePublicKey] = useState<string | null>(null);
 
@@ -688,10 +808,38 @@ function App() {
         setDevicePublicKey(pubKey);
 
         const stored = await readJSON<UserData>(USERS_STORAGE_KEY);
-        if (stored?.id) {
-          setBuyerUser(stored);
-          setSellerUser(stored);
-          return;
+        if (stored?.id && stored.token) {
+          // Validate the stored session; self-heal if the backend no longer
+          // knows this user (e.g. its DB was recreated → orphaned token → 401).
+          try {
+            const profile = await getCurrentUser(stored.token);
+            // Self-heal stale sessions cached with the wrong id (older builds
+            // stored the username as `id` instead of the real backend user id).
+            const fresh: UserData = { id: profile.id, username: profile.username, token: stored.token };
+            if (fresh.id !== stored.id) await writeJSON(USERS_STORAGE_KEY, fresh);
+            setBuyerUser(fresh);
+            setSellerUser(fresh);
+            return;
+          } catch (err: any) {
+            const status = err?.response?.status;
+            if (status !== 401 && status !== 403) {
+              // Transient/network error — keep the cached session optimistically.
+              setBuyerUser(stored);
+              setSellerUser(stored);
+              return;
+            }
+            try {
+              const recovered = await recoverSession(stored.username);
+              await writeJSON(USERS_STORAGE_KEY, recovered);
+              setBuyerUser(recovered);
+              setSellerUser(recovered);
+              return;
+            } catch (re) {
+              console.warn("Session recovery failed; clearing stale session", re);
+              await removeKey(USERS_STORAGE_KEY);
+              // fall through → empty session → ProtectedRoute redirects to login
+            }
+          }
         }
 
         // Demo builds auto-provision one throwaway user. In real mode we
@@ -738,13 +886,14 @@ function App() {
 
   const clearTradeError = () => setTradeError(null);
 
-  const runTradeFlow = async (sellerId: string): Promise<boolean> => {
+  const runTradeFlow = async (counterpartyId: string, role: 'buyer' | 'seller' = 'buyer'): Promise<boolean> => {
     if (!buyerUser) return false;
-    setPendingSellerId(sellerId);
+    setPendingSellerId(counterpartyId);
+    setPendingRole(role);
     setTradeLoading(true);
     setTradeError(null);
     try {
-      const trade = await createTrade(sellerId, activeAmount, buyerUser.token);
+      const trade = await createTrade(counterpartyId, activeAmount, buyerUser.token, role);
       setActiveTrade(trade);
       return true;
     } catch (e) {
@@ -769,7 +918,7 @@ function App() {
 
   const retryTradeFlow = async (): Promise<boolean> => {
     if (!pendingSellerId) return false;
-    return runTradeFlow(pendingSellerId);
+    return runTradeFlow(pendingSellerId, pendingRole);
   };
 
   const checkBackupGate = async (execute: () => Promise<boolean>): Promise<boolean> => {
@@ -783,9 +932,14 @@ function App() {
     });
   };
 
-  const handleOfferSelected = async (offerId: string) => checkBackupGate(() => runTradeFlow(offerId));
+  // Cashout ("convert crypto to cash"): the caller gives up crypto, so they
+  // must be the escrow seller — only sellers can lock funds and reveal the
+  // HTLC secret, which is what makes the merchant's cash handoff verifiable.
+  const handleOfferSelected = async (offerId: string) => checkBackupGate(() => runTradeFlow(offerId, 'seller'));
 
-  const handleDepositOfferSelected = async (offerId: string) => checkBackupGate(() => runTradeFlow(offerId));
+  // Deposit ("buy crypto with cash"): the caller receives crypto, so they
+  // stay the escrow buyer (the merchant locks funds as seller) — unchanged.
+  const handleDepositOfferSelected = async (offerId: string) => checkBackupGate(() => runTradeFlow(offerId, 'buyer'));
 
   useEffect(() => {
     if (showBackupPrompt) {
@@ -892,13 +1046,16 @@ function App() {
             <div className="flex flex-col min-h-screen bg-[#F4FAFF]">
               <Routes>
                 <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
-                <Route path="/register" element={<Register />} />
+                <Route path="/register" element={<Register onLoginSuccess={handleLoginSuccess} />} />
                 <Route path="/" element={<ProtectedRoute><HomeRoute /></ProtectedRoute>} />
                 <Route path="/history" element={<ProtectedRoute><HistoryRoute /></ProtectedRoute>} />
                 <Route path="/trade/:id" element={<ProtectedRoute><TradeDetailRoute /></ProtectedRoute>} />
                 <Route path="/merchant-settings" element={<ProtectedRoute><MerchantSettingsRoute /></ProtectedRoute>} />
                 <Route path="/inbox" element={<ProtectedRoute><InboxRoute /></ProtectedRoute>} />
                 <Route path="/cashout" element={<ProtectedRoute><CashoutRoute /></ProtectedRoute>} />
+                <Route path="/pay" element={<ProtectedRoute><PayHubRoute /></ProtectedRoute>} />
+                <Route path="/pay/send" element={<ProtectedRoute><SendPaymentRoute /></ProtectedRoute>} />
+                <Route path="/pay/receive" element={<ProtectedRoute><ReceivePaymentRoute /></ProtectedRoute>} />
                 <Route path="/deposit" element={<ProtectedRoute><DepositRoute /></ProtectedRoute>} />
                 <Route path="/map" element={<ProtectedRoute><MapRoute /></ProtectedRoute>} />
                 <Route path="/confirm" element={<ProtectedRoute><ConfirmRoute /></ProtectedRoute>} />
@@ -910,6 +1067,9 @@ function App() {
                 <Route path="/success" element={<ProtectedRoute><SuccessRoute /></ProtectedRoute>} />
                 <Route path="/explore" element={<ProtectedRoute><ExploreRoute /></ProtectedRoute>} />
                 <Route path="/cetes" element={<ProtectedRoute><CetesRoute /></ProtectedRoute>} />
+                <Route path="/kyc" element={<ProtectedRoute><KYCRoute /></ProtectedRoute>} />
+                <Route path="/kyc-approved" element={<ProtectedRoute><KYCApprovedNextRoute /></ProtectedRoute>} />
+
                 <Route path="/blend" element={<ProtectedRoute><BlendRoute /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><ProfileRoute /></ProtectedRoute>} />
                 <Route path="/privacy" element={<ProtectedRoute><PrivacyRoute /></ProtectedRoute>} />

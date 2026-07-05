@@ -129,6 +129,19 @@ export function validateConfig() {
 
   if (!config.secretEncryptionKey) {
     errors.push("SECRET_ENCRYPTION_KEY is missing.");
+  } else if (!/^[0-9a-fA-F]{64}$/.test(config.secretEncryptionKey)) {
+    // AES-256-GCM needs a 32-byte key — 64 hex chars. An invalid key here would
+    // otherwise crash at first encrypt/decrypt call instead of at boot.
+    errors.push("SECRET_ENCRYPTION_KEY must be 64 hex characters (32 bytes) for AES-256-GCM.");
+  }
+
+  if (config.isProduction) {
+    if (!process.env.JWT_SECRET || config.jwtSecret === 'dev_jwt_secret' || config.jwtSecret.length < 32) {
+      errors.push("JWT_SECRET is missing or too weak (min 32 chars) — required in production.");
+    }
+    if (config.mockStellar) {
+      errors.push("MOCK_STELLAR=true is not allowed in production (it disables on-chain verification and auth signature checks).");
+    }
   }
 
   if (!config.mockStellar) {

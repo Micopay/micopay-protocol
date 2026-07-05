@@ -1,4 +1,11 @@
 services:
+  # NOTE (2026-06-30): the live Render service backing https://micopay-api.onrender.com
+  # and the mobile app in production runs the `micopay-backend` block below (rootDir
+  # micopay/backend), confirmed by diffing live response bodies against both codebases.
+  # It is manually managed on Render, not synced from this file automatically — env var
+  # changes here must also be applied by hand in the Render dashboard. The `micopay-api`
+  # block (apps/api) is a separate product (agent x402 protocol API) that is not deployed.
+
   # ── MicoPay Protocol API (x402 + Soroban HTLC) ────────────────────────────
   - type: web
     name: micopay-api
@@ -25,12 +32,26 @@ services:
         value: GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
       - key: MOCK_STELLAR
         value: "false"
+      - key: ETHERFUSE_API_URL
+        value: https://api.sand.etherfuse.com   # production: https://api.etherfuse.com
+      - key: ENABLE_INVESTMENTS
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: micopay-db
+          property: connectionString
       # Set these as secret env vars in the Render dashboard:
       - key: PLATFORM_SECRET_KEY
         sync: false
       - key: DEMO_AGENT_SECRET_KEY
         sync: false
       - key: DEMO_AGENT_PUBLIC_KEY
+        sync: false
+      - key: ETHERFUSE_API_KEY
+        sync: false
+      - key: ETHERFUSE_WEBHOOK_SECRET_ORDER
+        sync: false
+      - key: ETHERFUSE_WEBHOOK_SECRET_KYC
         sync: false
 
   # ── MicoPay P2P Backend (mobile app backend) ───────────────────────────────
@@ -59,6 +80,8 @@ services:
         value: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
       - key: MXNE_ISSUER_ADDRESS
         value: GBZXN7PIRZGNMHGA7MUUUF4GWMTISGNQ5E72TFL6GDWPE6K4RCAVOALV
+      - key: ETHERFUSE_API_URL
+        value: https://api.sand.etherfuse.com   # production: https://api.etherfuse.com
       - key: DATABASE_URL
         fromDatabase:
           name: micopay-db
@@ -69,6 +92,12 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: SECRET_ENCRYPTION_KEY
+        sync: false
+      - key: ETHERFUSE_API_KEY
+        sync: false
+      - key: ETHERFUSE_WEBHOOK_SECRET_ORDER
+        sync: false
+      - key: ETHERFUSE_WEBHOOK_SECRET_KYC
         sync: false
 
 databases:

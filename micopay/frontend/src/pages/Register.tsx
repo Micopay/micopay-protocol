@@ -1,20 +1,25 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { registerUser } from '../services/api';
-import { generateAndStoreKeypair, getPublicKey, exportSecretKey } from '../lib/keystore';
-import { setBackupConfirmed } from '../services/secureStorage';
+import { registerUser, UserData } from '../services/api';
+import { generateAndStoreKeypair, getPublicKey, exportSecretKey, keypairExists } from '../lib/keystore';
+import { setBackupConfirmed, writeJSON } from '../services/secureStorage';
 
-export default function Register() {
+interface RegisterProps {
+  onLoginSuccess?: (user: UserData, seller: UserData | null) => void;
+}
+
+export default function Register({ onLoginSuccess }: RegisterProps) {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  
+
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [pubKey, setPubKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
   const [copiedPub, setCopiedPub] = useState(false);
   const [copiedSec, setCopiedSec] = useState(false);
+  const [loggedInUser, setLoggedInUser] = useState<UserData | null>(null);
 
   const handleRegister = async () => {
     if (!username.trim() || username.length < 3) {
@@ -28,22 +33,31 @@ export default function Register() {
     setError(null);
     setLoading(true);
     try {
-      // Generate keypair first — registerUser reads the public key from SecureStorage.
-      await generateAndStoreKeypair();
+      // Only generate a keypair if none exists — never overwrite an existing identity.
+      if (!await keypairExists()) {
+        await generateAndStoreKeypair();
+      }
       const pub = await getPublicKey();
       const sec = await exportSecretKey();
       if (!pub || !sec) throw new Error('No se pudo generar tu identidad Stellar');
 
-      await registerUser(username.trim());
-      
+      const userData = await registerUser(username.trim());
+
+      // Persist session immediately so the user is logged in after onboarding.
+      await writeJSON('micopay_user', userData);
+      setLoggedInUser(userData);
       setPubKey(pub);
       setSecretKey(sec);
       setShowOnboarding(true);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al registrarse';
-      setError(msg.includes('409') || msg.toLowerCase().includes('exists')
-        ? 'Ese nombre de usuario ya está en uso. Elige otro.'
-        : `No se pudo registrar: ${msg}`);
+      if (msg.includes('409') || msg.toLowerCase().includes('exists') || msg.toLowerCase().includes('already')) {
+        setError('Ese nombre de usuario ya está registrado. Elige otro o inicia sesión si es tu cuenta.');
+      } else if (msg.includes('Network') || msg.includes('fetch')) {
+        setError('Sin conexión al servidor. Intenta en unos segundos.');
+      } else {
+        setError(`Error: ${msg}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -63,7 +77,12 @@ export default function Register() {
 
   const finishOnboarding = async () => {
     await setBackupConfirmed();
-    navigate('/login', { replace: true });
+    if (loggedInUser && onLoginSuccess) {
+      onLoginSuccess(loggedInUser, null);
+      navigate('/', { replace: true });
+    } else {
+      navigate('/login', { replace: true });
+    }
   };
 
   if (showOnboarding) {

@@ -68,7 +68,7 @@ export function useMerchantsAvailable(options: Options): {
 
         const pos = await Geolocation.getCurrentPosition({
           enableHighAccuracy: false,
-          timeout: 8000,
+          timeout: 15000,
         });
         lat = pos.coords.latitude;
         lng = pos.coords.longitude;
@@ -81,7 +81,7 @@ export function useMerchantsAvailable(options: Options): {
             const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
               navigator.geolocation.getCurrentPosition(resolve, reject, {
                 enableHighAccuracy: false,
-                timeout: 8000,
+                timeout: 15000,
               });
             });
             lat = pos.coords.latitude;

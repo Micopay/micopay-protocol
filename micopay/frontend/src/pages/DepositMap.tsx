@@ -1,6 +1,11 @@
 import MapSim from '../components/MapSim';
 import { useMerchantsAvailable } from '../hooks/useMerchantsAvailable';
-import type { AvailableMerchant } from '../services/api';
+import {
+  effectiveFeePercent,
+  MAX_EFFECTIVE_FEE_PERCENT,
+  type AvailableMerchant,
+} from '../services/api';
+import { PLATFORM_FEE_PERCENT } from '../constants/trade';
 import ErrorBanner from '../components/ErrorBanner';
 import type { ApiErrorAction } from '../utils/apiError';
 
@@ -22,6 +27,49 @@ interface DepositMapProps {
   creationErrorAction?: ApiErrorAction;
   onDismissCreationError?: () => void;
   onRetryCreationError?: () => void;
+  /** Effective-fee threshold (%) above which a warning is shown. Defaults to the shared guardrail. */
+  maxEffectiveFeePercent?: number;
+}
+
+// ─── Effective cost (provider + platform) + over-threshold warning ────────────
+
+function EffectiveFeeNote({
+  commissionPct,
+  platformFeePct,
+  maxPct,
+}: {
+  commissionPct: number;
+  platformFeePct: number;
+  maxPct: number;
+}) {
+  const totalPct = effectiveFeePercent(commissionPct, platformFeePct);
+  const exceeds = totalPct > maxPct;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2 border-t border-outline-variant/10 pt-3">
+        <span className="text-xs text-on-surface-variant font-label uppercase">
+          Costo total efectivo
+        </span>
+        <span className={`text-sm font-bold tabular-nums ${exceeds ? 'text-error' : 'text-on-surface'}`}>
+          {totalPct.toFixed(1)}%
+        </span>
+      </div>
+      <p className="text-[11px] text-on-surface-variant">
+        Plataforma {platformFeePct}% + proveedor {commissionPct}%
+      </p>
+      {exceeds && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-lg border border-error/30 bg-error/5 px-3 py-2"
+        >
+          <span className="material-symbols-outlined text-error text-base leading-none">warning</span>
+          <p className="text-[12px] font-medium text-error leading-snug">
+            El costo total supera el {maxPct}%. Compara con otra oferta antes de continuar.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Loading skeleton ─────────────────────────────────────────────────────────
@@ -179,11 +227,20 @@ interface MerchantCardProps {
   loading: boolean;
   isBest: boolean;
   onSelectOffer: (id: string) => void;
+  maxEffectiveFeePercent: number;
 }
 
-function MerchantOfferCard({ merchant, amount, loading, isBest, onSelectOffer }: MerchantCardProps) {
+function MerchantOfferCard({
+  merchant,
+  amount,
+  loading,
+  isBest,
+  onSelectOffer,
+  maxEffectiveFeePercent,
+}: MerchantCardProps) {
   const commissionMxn = (amount - merchant.payout_mxn).toFixed(2);
   const distanceLabel = formatDistance(merchant.distance_km);
+  const platformFeePct = merchant.platform_fee_pct ?? PLATFORM_FEE_PERCENT;
 
   if (isBest) {
     return (
@@ -194,9 +251,9 @@ function MerchantOfferCard({ merchant, amount, loading, isBest, onSelectOffer }:
           </span>
         </div>
         <div className="bg-surface-container-lowest rounded-xl p-6 shadow-[0px_32px_32px_rgba(11,30,38,0.04)] ring-1 ring-outline-variant/10 flex flex-col gap-5 transition-transform hover:scale-[1.01] duration-300">
-          <div className="flex justify-between items-start">
-            <div className="flex gap-4">
-              <div className="w-12 h-12 bg-primary-fixed rounded-xl flex items-center justify-center text-primary">
+          <div className="flex justify-between items-start gap-3">
+            <div className="flex gap-4 min-w-0">
+              <div className="w-12 h-12 bg-primary-fixed rounded-xl flex items-center justify-center text-primary flex-shrink-0">
                 <span
                   className="material-symbols-outlined"
                   style={{ fontVariationSettings: '"FILL" 1' }}
@@ -204,14 +261,23 @@ function MerchantOfferCard({ merchant, amount, loading, isBest, onSelectOffer }:
                   storefront
                 </span>
               </div>
-              <div>
-                <div className="flex items-center gap-1">
-                  <h3 className="font-bold text-lg">{merchant.username}</h3>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1 min-w-0">
+                  <h3 className="font-bold text-lg truncate">{merchant.username}</h3>
                   <span
-                    className="material-symbols-outlined text-accent text-sm"
+                    className="material-symbols-outlined text-accent text-sm flex-shrink-0"
                     style={{ fontVariationSettings: '"FILL" 1' }}
                   >
                     verified
+                  </span>
+                </div>
+                <div className="mt-1 text-sm text-on-surface-variant flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span>{merchant.completion_rate ? `${Math.round(merchant.completion_rate)}% completitud` : 'Sin historial'}</span>
+                  <span>·</span>
+                  <span>{merchant.trades_completed ?? 0} ops</span>
+                  {merchant.tier && <span className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-surface-container-high text-primary">{merchant.tier}</span>}
+                  <span className={`px-2 py-0.5 text-[11px] font-bold rounded-md ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                    {((merchant.seller_type === 'business') || merchant.is_business) ? 'Negocio' : 'Individuo'}
                   </span>
                 </div>
                 <div className="flex items-center gap-1 text-on-surface-variant text-xs">
@@ -225,30 +291,36 @@ function MerchantOfferCard({ merchant, amount, loading, isBest, onSelectOffer }:
                 )}
               </div>
             </div>
-            <div className="text-right">
+            <div className="text-right flex-shrink-0">
               <span className="block text-xs text-on-surface-variant font-label uppercase">Comisión</span>
-              <span className="text-primary font-bold">${commissionMxn} MXN</span>
+              <span className="text-primary font-bold whitespace-nowrap">${commissionMxn} MXN</span>
             </div>
           </div>
 
           <div className="bg-surface-container-low rounded-lg p-4 flex justify-between items-center">
             <div className="space-y-1">
-              <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-tight">Envías</p>
+              <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-tight">Entregas en efectivo</p>
               <p className="font-bold text-on-surface">${amount} MXN</p>
             </div>
             <span className="material-symbols-outlined text-outline-variant">trending_flat</span>
             <div className="space-y-1 text-right">
-              <p className="text-[10px] text-accent uppercase font-bold tracking-tight">Recibes</p>
-              <p className="font-bold text-on-surface text-lg">${merchant.payout_mxn.toFixed(2)} MXN</p>
+              <p className="text-[10px] text-accent uppercase font-bold tracking-tight">Recibes en wallet</p>
+              <p className="font-bold text-on-surface text-lg">${merchant.payout_mxn.toFixed(2)} MXNe</p>
             </div>
           </div>
+
+          <EffectiveFeeNote
+            commissionPct={merchant.rate_percent}
+            platformFeePct={platformFeePct}
+            maxPct={maxEffectiveFeePercent}
+          />
 
           <button
             onClick={() => onSelectOffer(merchant.seller_id)}
             disabled={loading}
             className="w-full h-[46px] bg-gradient-to-r from-primary to-primary-container text-white font-semibold rounded-lg shadow-md active:scale-95 duration-200 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-wait"
           >
-            {loading ? 'Bloqueando fondos…' : 'Aceptar esta oferta'}
+            {loading ? 'Conectando con el agente…' : 'Elegir este agente'}
           </button>
         </div>
       </div>
@@ -257,28 +329,40 @@ function MerchantOfferCard({ merchant, amount, loading, isBest, onSelectOffer }:
 
   return (
     <div className="bg-surface-container rounded-xl p-6 ring-1 ring-outline-variant/5 flex flex-col gap-4">
-      <div className="flex justify-between items-start">
-        <div className="flex gap-4">
-          <div className="w-12 h-12 bg-surface-container-highest rounded-xl flex items-center justify-center text-outline">
+      <div className="flex justify-between items-start gap-3">
+        <div className="flex gap-4 min-w-0">
+          <div className="w-12 h-12 bg-surface-container-highest rounded-xl flex items-center justify-center text-outline flex-shrink-0">
             <span className="material-symbols-outlined">storefront</span>
           </div>
-          <div>
-            <h3 className="font-bold text-lg">{merchant.username}</h3>
+          <div className="min-w-0">
+            <h3 className="font-bold text-lg truncate">{merchant.username}</h3>
+            <div className="mt-1 text-sm text-on-surface-variant flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>{merchant.completion_rate ? `${Math.round(merchant.completion_rate)}%` : 'Sin historial'}</span>
+              <span>·</span>
+              <span>{merchant.trades_completed ?? 0} ops</span>
+              {merchant.tier && <span className="px-2 py-0.5 text-[10px] rounded-md bg-surface-container-high text-primary">{merchant.tier}</span>}
+              <span className={`px-2 py-0.5 text-[10px] rounded-md ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                {((merchant.seller_type === 'business') || merchant.is_business) ? 'Negocio' : 'Individuo'}
+              </span>
+            </div>
             <div className="flex items-center gap-1 text-on-surface-variant text-xs">
               <span className="material-symbols-outlined text-xs">near_me</span>
               <span>{distanceLabel}</span>
             </div>
           </div>
         </div>
-        <div className="text-right">
+        <div className="text-right flex-shrink-0">
           <span className="block text-xs text-on-surface-variant font-label uppercase">Recibes</span>
-          <span className="text-on-surface font-bold">${merchant.payout_mxn.toFixed(2)} MXN</span>
+          <span className="text-on-surface font-bold whitespace-nowrap">${merchant.payout_mxn.toFixed(2)} MXNe</span>
         </div>
       </div>
+      <EffectiveFeeNote
+        commissionPct={merchant.rate_percent}
+        platformFeePct={platformFeePct}
+        maxPct={maxEffectiveFeePercent}
+      />
       <div className="flex justify-between items-center border-t border-outline-variant/10 pt-4">
-        <p className="text-xs text-on-surface-variant">
-          Comisión {merchant.rate_percent}% · {distanceLabel}
-        </p>
+        <p className="text-xs text-on-surface-variant">{distanceLabel} de distancia</p>
         <button
           onClick={() => onSelectOffer(merchant.seller_id)}
           disabled={loading}
@@ -302,11 +386,12 @@ const DepositMap = ({
   creationErrorAction = 'retry',
   onDismissCreationError,
   onRetryCreationError,
+  maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
 }: DepositMapProps) => {
   const { state, refetch } = useMerchantsAvailable({
     amount_mxn: amount,
     flow: 'deposit',
-    radius_km: 5,
+    radius_km: 50,
   });
 
   if (state.status === 'loading' || state.status === 'idle') {
@@ -388,6 +473,7 @@ const DepositMap = ({
                 loading={loading}
                 isBest={idx === 0}
                 onSelectOffer={onSelectOffer}
+                maxEffectiveFeePercent={maxEffectiveFeePercent}
               />
             ))}
           </div>

@@ -145,7 +145,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
         </div>
       </header>
 
-      <main className="flex-1 mt-20 px-4 pt-4 space-y-5">
+      <main className="flex-1 mt-[calc(5rem+env(safe-area-inset-top))] px-4 pt-4 space-y-5">
         {/* Main tabs */}
         <div className="flex gap-2 bg-surface-container-low rounded-2xl p-1">
           <button

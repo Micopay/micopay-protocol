@@ -1,171 +1,183 @@
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { authMiddleware } from "../middleware/auth.middleware.js";
+import { verifyWebhookSignature } from "../lib/webhook-auth.js";
+import db from "../db/schema.js";
+import {
+  createQuote,
+  createOrder,
+  getOrder,
+  regenerateOrderTx,
+  getCetesIdentifier,
+} from "../services/etherfuse.service.js";
 
-// Stub routes for A-5 (onramp SPEI) and A-6 (offramp CETES→SPEI) — Drips
-// These return the correct response shape without calling Etherfuse.
-// Replace with real Etherfuse API calls once API key is available (A-3).
+interface RampUserRow {
+  stellar_address: string;
+  etherfuse_customer_id: string | null;
+  etherfuse_bank_account_id: string | null;
+}
 
-// In-memory order store: tracks creation time to simulate pending→completed progression.
-const orderStore = new Map<string, { createdAt: number; type: "onramp" | "offramp" }>();
-const ORDER_COMPLETE_AFTER_MS = 10_000; // 10s after creation → completed
-
-const STUB_EXCHANGE_RATE = 17.5; // MXN per CETES (stub)
+async function requireOnboardedUser(userId: string): Promise<RampUserRow | null> {
+  const user = await db.getOne<RampUserRow>(
+    "SELECT stellar_address, etherfuse_customer_id, etherfuse_bank_account_id FROM users WHERE id = $1",
+    [userId]
+  );
+  if (!user?.etherfuse_customer_id || !user?.etherfuse_bank_account_id) {
+    return null;
+  }
+  return user;
+}
 
 export async function rampRoutes(fastify: FastifyInstance): Promise<void> {
-  // Register user's CLABE with Etherfuse (stub)
-  fastify.post<{ Body: { clabe: string } }>(
-    "/defi/bank-account",
-    { preHandler: [authMiddleware] },
-    async (request, reply) => {
-      const { clabe } = request.body ?? {};
-      if (!clabe || clabe.length !== 18 || !/^\d{18}$/.test(clabe)) {
-        return reply.status(400).send({ error: "CLABE debe tener 18 digitos numericos" });
-      }
-      return reply.send({
-        bankAccountId: `stub-bank-${Date.now()}`,
-        clabe,
-        note: "stub — Etherfuse API not connected yet",
-      });
-    }
-  );
-
-  // Get quote: MXN→CETES (onramp) or CETES→MXN (offramp)
-  fastify.post<{
-    Body: {
-      type: "onramp" | "offramp";
-      sourceAsset: string;
-      targetAsset: string;
-      sourceAmount: string;
-      walletAddress?: string;
-    };
-  }>(
+  // Get quote: MXN->CETES (onramp) or CETES->MXN (offramp).
+  fastify.post<{ Body: { type: "onramp" | "offramp"; sourceAmount: string } }>(
     "/defi/ramp/quote",
     { preHandler: [authMiddleware] },
-    async (request, reply) => {
+    async (request: any, reply) => {
+      if (!process.env.ETHERFUSE_API_KEY) {
+        return reply.status(503).send({ error: "Etherfuse ramp not configured" });
+      }
+
       const { type, sourceAmount } = request.body ?? {};
       if (!type || !sourceAmount) {
         return reply.status(400).send({ error: "type y sourceAmount son requeridos" });
       }
-
       const amount = parseFloat(sourceAmount);
       if (isNaN(amount) || amount <= 0) {
         return reply.status(400).send({ error: "sourceAmount invalido" });
       }
 
-      const destinationAmount =
-        type === "onramp"
-          ? (amount / STUB_EXCHANGE_RATE).toFixed(7)   // MXN → CETES
-          : (amount * STUB_EXCHANGE_RATE).toFixed(2);  // CETES → MXN
+      const user = await requireOnboardedUser(request.user.id);
+      if (!user) {
+        return reply.status(403).send({ error: "KYC requerido antes de cotizar" });
+      }
 
-      const expiresAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+      try {
+        const cetesIdentifier = await getCetesIdentifier(user.stellar_address);
+        const quote = await createQuote({
+          quoteId: randomUUID(),
+          customerId: user.etherfuse_customer_id!,
+          sourceAmount,
+          walletAddress: user.stellar_address,
+          quoteAssets:
+            type === "onramp"
+              ? { type: "onramp", sourceAsset: "MXN", targetAsset: cetesIdentifier }
+              : { type: "offramp", sourceAsset: cetesIdentifier, targetAsset: "MXN" },
+        });
 
-      return reply.send({
-        quoteId: `stub-q-${Date.now()}`,
-        type,
-        exchangeRate: STUB_EXCHANGE_RATE.toString(),
-        sourceAmount,
-        destinationAmount,
-        expiresAt,
-        note: "stub — Etherfuse API not connected yet",
-      });
+        return reply.send({
+          quoteId: quote.quoteId,
+          type,
+          exchangeRate: quote.exchangeRate,
+          sourceAmount: quote.sourceAmount,
+          destinationAmount: quote.destinationAmount,
+          feeAmount: quote.feeAmount,
+          expiresAt: quote.expiresAt,
+        });
+      } catch (error) {
+        fastify.log.error(error, "Failed to create Etherfuse quote");
+        return reply.status(503).send({ error: "Etherfuse API unavailable" });
+      }
     }
   );
 
-  // Create order: returns CLABE deposit instructions (onramp) or anchor account+memo (offramp)
-  fastify.post<{
-    Body: {
-      quoteId: string;
-      bankAccountId: string;
-      cryptoWalletId?: string;
-      useAnchor?: boolean;
-    };
-  }>(
+  // Create order: returns CLABE deposit instructions (onramp) or anchor account+memo (offramp).
+  fastify.post<{ Body: { quoteId: string; useAnchor?: boolean } }>(
     "/defi/ramp/order",
     { preHandler: [authMiddleware] },
-    async (request, reply) => {
-      const { quoteId, bankAccountId, useAnchor } = request.body ?? {};
-      if (!quoteId || !bankAccountId) {
-        return reply.status(400).send({ error: "quoteId y bankAccountId son requeridos" });
+    async (request: any, reply) => {
+      if (!process.env.ETHERFUSE_API_KEY) {
+        return reply.status(503).send({ error: "Etherfuse ramp not configured" });
       }
 
-      const orderId = `stub-o-${Date.now()}`;
-      const isOfframp = useAnchor === true;
+      const { quoteId, useAnchor } = request.body ?? {};
+      if (!quoteId) {
+        return reply.status(400).send({ error: "quoteId es requerido" });
+      }
 
-      orderStore.set(orderId, {
-        createdAt: Date.now(),
-        type: isOfframp ? "offramp" : "onramp",
-      });
+      const user = await requireOnboardedUser(request.user.id);
+      if (!user) {
+        return reply.status(403).send({ error: "KYC requerido antes de ordenar" });
+      }
 
-      if (isOfframp) {
-        return reply.send({
-          orderId,
-          withdrawAnchorAccount: "GDKKW2WSMQWZ63PIZBKDDBAAOBG5FP3TUHRYQ4U5RBKTFNESL5K5BJJK",
-          withdrawMemo: "c3R1Ym1lbW8xMjM0NTY3ODkw", // base64: "stubmemo1234567890"
-          withdrawMemoType: "hash",
-          note: "stub — Etherfuse API not connected yet",
+      try {
+        const result = await createOrder({
+          orderId: randomUUID(),
+          quoteId,
+          bankAccountId: user.etherfuse_bank_account_id!,
+          publicKey: user.stellar_address,
+          useAnchor,
         });
-      }
 
-      return reply.send({
-        orderId,
-        depositClabe: "646180157000000004",
-        depositAmount: "1000.00",
-        depositBankName: "Etherfuse MX (stub)",
-        depositAccountHolder: "Etherfuse MX",
-        note: "stub — Etherfuse API not connected yet",
-      });
+        if ("offramp" in result) {
+          return reply.send(result.offramp);
+        }
+        return reply.send(result.onramp);
+      } catch (error) {
+        fastify.log.error(error, "Failed to create Etherfuse order");
+        return reply.status(503).send({ error: "Etherfuse API unavailable" });
+      }
     }
   );
 
-  // Poll order status: pending for 10s after creation, then completed
+  // Poll order status.
   fastify.get<{ Params: { orderId: string } }>(
     "/defi/ramp/order/:orderId",
     { preHandler: [authMiddleware] },
     async (request, reply) => {
       const { orderId } = request.params;
-      const order = orderStore.get(orderId);
-
-      if (!order) {
-        return reply.status(404).send({ error: "Orden no encontrada" });
+      try {
+        const order = await getOrder(orderId);
+        return reply.send({ orderId: order.orderId, status: order.status, type: order.orderType });
+      } catch (error) {
+        if (error instanceof Error && error.message === "ORDER_NOT_FOUND") {
+          return reply.status(404).send({ error: "Orden no encontrada" });
+        }
+        fastify.log.error(error, "Failed to fetch Etherfuse order");
+        return reply.status(503).send({ error: "Etherfuse API unavailable" });
       }
-
-      const elapsed = Date.now() - order.createdAt;
-      const status = elapsed >= ORDER_COMPLETE_AFTER_MS ? "completed" : "funded";
-
-      return reply.send({
-        orderId,
-        status,
-        type: order.type,
-        note: "stub — Etherfuse API not connected yet",
-      });
     }
   );
 
-  // Regenerate expired Stellar transaction (offramp anchor mode)
+  // Regenerate expired Stellar transaction (offramp anchor mode, or stale onramp claim TX).
   fastify.post<{ Params: { orderId: string } }>(
     "/defi/ramp/order/:orderId/regenerate_tx",
     { preHandler: [authMiddleware] },
     async (request, reply) => {
       const { orderId } = request.params;
-      if (!orderStore.has(orderId)) {
-        return reply.status(404).send({ error: "Orden no encontrada" });
+      try {
+        const { status, body } = await regenerateOrderTx(orderId);
+        return reply.status(status).send(body ?? {});
+      } catch (error) {
+        fastify.log.error(error, "Failed to regenerate Etherfuse order tx");
+        return reply.status(503).send({ error: "Etherfuse API unavailable" });
       }
-      return reply.send({
-        orderId,
-        withdrawAnchorAccount: "GDKKW2WSMQWZ63PIZBKDDBAAOBG5FP3TUHRYQ4U5RBKTFNESL5K5BJJK",
-        withdrawMemo: "c3R1Ym1lbW8xMjM0NTY3ODkw",
-        withdrawMemoType: "hash",
-        note: "stub — regenerated transaction",
-      });
     }
   );
 
-  // Public webhook endpoint (Etherfuse calls this when SPEI arrives)
-  fastify.post<{ Body: unknown }>(
-    "/defi/ramp/webhook",
-    async (_request, reply) => {
-      // Stub: accept and acknowledge without verification
-      return reply.status(200).send({ received: true });
+  // Webhook endpoints (Etherfuse calls these on order/KYC status changes).
+  // One URL per event type — see docs/SPEI_ANCHOR_PLAN.md for why (each
+  // POST /ramp/webhook subscription gets its own signing secret, and the
+  // X-Signature header doesn't tell you which one to verify against).
+  fastify.post<{ Body: unknown }>("/defi/ramp/webhook/order", async (request, reply) => {
+    const signature = request.headers["x-signature"] as string | undefined;
+    const secret = process.env.ETHERFUSE_WEBHOOK_SECRET_ORDER;
+    const { valid, error } = verifyWebhookSignature(request.body, signature, secret);
+    if (!valid) {
+      return reply.status(401).send({ error: `webhook signature verification failed: ${error}` });
     }
-  );
+    fastify.log.info(request.body, "Etherfuse order_updated webhook");
+    return reply.status(200).send({ received: true });
+  });
+
+  fastify.post<{ Body: unknown }>("/defi/ramp/webhook/kyc", async (request, reply) => {
+    const signature = request.headers["x-signature"] as string | undefined;
+    const secret = process.env.ETHERFUSE_WEBHOOK_SECRET_KYC;
+    const { valid, error } = verifyWebhookSignature(request.body, signature, secret);
+    if (!valid) {
+      return reply.status(401).send({ error: `webhook signature verification failed: ${error}` });
+    }
+    fastify.log.info(request.body, "Etherfuse kyc_updated webhook");
+    return reply.status(200).send({ received: true });
+  });
 }

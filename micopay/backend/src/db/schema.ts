@@ -251,32 +251,64 @@ let pgPool: InstanceType<typeof Pool> | null = null;
 let pgAvailable = false;
 
 async function initPg() {
-  try {
-    const p = new Pool({
-      connectionString: config.databaseUrl,
-      connectionTimeoutMillis: 2000,
-    });
-    await p.query("SELECT 1");
-    pgPool = p;
-    pgAvailable = true;
-    console.log("✅ PostgreSQL connected");
-  } catch (err) {
-    // B-3: never fall back to the ephemeral in-memory store in production
-    // unless explicitly opted in. A silent fallback would serve/lose real
-    // user data on a volatile store, so fail fast instead.
-    if (config.isProduction && !config.allowInMemoryDb) {
-      console.error(
-        "❌ PostgreSQL unavailable in production and ALLOW_IN_MEMORY_DB is not set — " +
-          "refusing to start on an ephemeral in-memory store. Exiting.",
-        err instanceof Error ? err.message : err,
+  // Render's managed Postgres (and most managed providers) can take several
+  // seconds for the first TLS+auth handshake after the service boots. A short
+  // 2s timeout spuriously fails that first connect and drops us to the
+  // in-memory store. Use a production-grade timeout and retry the initial
+  // connection a few times with backoff before giving up.
+  const CONNECT_TIMEOUT_MS = 15_000;
+  const MAX_ATTEMPTS = 5;
+
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let p: InstanceType<typeof Pool> | null = null;
+    try {
+      p = new Pool({
+        connectionString: config.databaseUrl,
+        connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+        // Keep idle TCP connections alive so a sleeping NAT/proxy doesn't drop them.
+        keepAlive: true,
+        max: 10,
+      });
+      await p.query("SELECT 1");
+
+      // Don't let an async pool error (idle disconnect, DB restart) crash the
+      // process — log it and let the next query re-establish a connection.
+      p.on("error", (err) => {
+        console.error("⚠️  PostgreSQL pool error (will reconnect on next query):", err.message);
+      });
+
+      pgPool = p;
+      pgAvailable = true;
+      console.log(`✅ PostgreSQL connected (attempt ${attempt}/${MAX_ATTEMPTS})`);
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (p) await p.end().catch(() => {});
+      console.warn(
+        `⏳ PostgreSQL connect attempt ${attempt}/${MAX_ATTEMPTS} failed: ${err instanceof Error ? err.message : err}`,
       );
-      process.exit(1);
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, attempt * 2000)); // 2s, 4s, 6s, 8s
+      }
     }
-    pgAvailable = false;
-    console.warn(
-      "⚠️  PostgreSQL unavailable — using in-memory store (data resets on restart)",
-    );
   }
+
+  // B-3: never fall back to the ephemeral in-memory store in production
+  // unless explicitly opted in. A silent fallback would serve/lose real
+  // user data on a volatile store, so fail fast instead.
+  if (config.isProduction && !config.allowInMemoryDb) {
+    console.error(
+      "❌ PostgreSQL unavailable in production after retries and ALLOW_IN_MEMORY_DB is not set — " +
+        "refusing to start on an ephemeral in-memory store. Exiting.",
+      lastErr instanceof Error ? lastErr.message : lastErr,
+    );
+    process.exit(1);
+  }
+  pgAvailable = false;
+  console.warn(
+    "⚠️  PostgreSQL unavailable — using in-memory store (data resets on restart)",
+  );
 }
 
 await initPg();

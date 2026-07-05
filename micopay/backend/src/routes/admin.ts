@@ -39,6 +39,21 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   /**
+   * GET /admin/users/by-username/:username
+   * Look up a user's id by username (e.g. to set seller_id/buyer_id when
+   * creating a trade on someone else's behalf in ops/demo tooling).
+   */
+  app.get("/admin/users/by-username/:username", async (request) => {
+    const { username } = request.params as { username: string };
+    const user = await db.getOne(
+      "SELECT id, username, stellar_address FROM users WHERE username = $1",
+      [username],
+    );
+    if (!user) throw new NotFoundError("USER_NOT_FOUND", "Usuario no encontrado", `User ${username}`);
+    return { user };
+  });
+
+  /**
    * DELETE /admin/users/:id/suspend
    * Reactivate a suspended user.
    */

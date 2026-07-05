@@ -29,6 +29,12 @@ export interface AvailableMerchant {
   distance_km: number;
   /** Payout the buyer receives for the requested amount */
   payout_mxn: number;
+  /** Completed trades as seller — reputation signal */
+  trades_completed: number;
+  /** Completion rate (%) over terminal trades, null if no history */
+  completion_rate: number | null;
+  /** Reputation tier derived from completed-trade volume */
+  tier: string;
 }
 
 export interface AvailableMerchantsQuery {
@@ -167,6 +173,8 @@ export async function getAvailableMerchants(
     longitude: string;
     address_text: string | null;
     distance_km: string;
+    trades_completed: string;
+    trades_terminal: string;
   }>(
     `SELECT
        u.id            AS seller_id,
@@ -178,7 +186,9 @@ export async function getAvailableMerchants(
        mc.latitude,
        mc.longitude,
        mc.address_text,
-       ${HAVERSINE_SQL} AS distance_km
+       ${HAVERSINE_SQL} AS distance_km,
+       COALESCE((SELECT COUNT(*) FROM trades t WHERE t.seller_id = u.id AND t.status = 'completed'), 0) AS trades_completed,
+       COALESCE((SELECT COUNT(*) FROM trades t WHERE t.seller_id = u.id AND t.status IN ('completed','cancelled','refunded')), 0) AS trades_terminal
      FROM merchant_configs mc
      JOIN users u ON u.id = mc.user_id
      WHERE u.merchant_available = true
@@ -198,6 +208,10 @@ export async function getAvailableMerchants(
     const payoutMxn = parseFloat(
       (amount_mxn * (1 - ratePercent / 100)).toFixed(2),
     );
+    const completed = parseInt(r.trades_completed as unknown as string, 10) || 0;
+    const terminal = parseInt(r.trades_terminal as unknown as string, 10) || 0;
+    const completionRate = terminal > 0 ? Math.round((completed / terminal) * 100) : null;
+    const tier = completed >= 50 ? 'Oro' : completed >= 10 ? 'Plata' : completed >= 1 ? 'Bronce' : 'Nuevo';
 
     return {
       seller_id: r.seller_id,
@@ -211,6 +225,9 @@ export async function getAvailableMerchants(
       address_text: r.address_text,
       distance_km: Math.round(distanceKm * 1000) / 1000,
       payout_mxn: payoutMxn,
+      trades_completed: completed,
+      completion_rate: completionRate,
+      tier,
     };
   });
 }

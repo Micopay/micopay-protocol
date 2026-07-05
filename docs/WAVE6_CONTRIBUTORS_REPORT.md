@@ -11,6 +11,22 @@
 
 ---
 
+## Executive summary
+
+| Metric | Result |
+|--------|--------|
+| **Validation topics answered** | **25 / 25** (V-1 → V-25) — full coverage of the Wave 6 research plan |
+| **Individual perspectives collected** | **31** (23 single-respondent interviews + 2 anonymized batches of 4 interviews each — V-7, V-10) |
+| **Unique community contributors** | **22**, sourced via Stellar Drips Wave 6 |
+| **SDF funding claims covered** | **7 / 7** — no open gaps |
+| **Geographic spread** | **7+ countries / 3 continents** — Nigeria, Mexico, Colombia, Argentina, Venezuela, Peru, India, plus Europe (sender-side) |
+
+**Read this as:** every open question in the funding narrative — demand, supply, competitive edge,
+Stellar usability, trust/PMF, retail spend, and dollar inflows — now has direct, first-person
+evidence from the target market, not assumptions.
+
+---
+
 ## Contributor overview
 
 | PR | GitHub user | Issue closed | Validation topic | Region | Status |
@@ -29,25 +45,38 @@
 | [#173](https://github.com/ericmt-98/micopay-protocol/pull/173) | [@Oluwasuyi-Timilehin](https://github.com/Oluwasuyi-Timilehin) | #165 | V-12 · Living unbanked — daily cash management | Mexico (CDMX) | ✅ Merged |
 | [#175](https://github.com/ericmt-98/micopay-protocol/pull/175) | [@Max-Owolabi](https://github.com/Max-Owolabi) | #167 | V-14 · Stablecoin / digital peso mental model | Nigeria (West Africa) | ✅ Integrated |
 | [#174](https://github.com/ericmt-98/micopay-protocol/pull/174) | [@Chigybillionz](https://github.com/Chigybillionz) | #164 | V-11 · Failed transaction / dispute handling | Nigeria (West Africa) | ✅ Integrated |
+| [#185](https://github.com/ericmt-98/micopay-protocol/pull/185) | [@abdullahilateefat03-boop](https://github.com/abdullahilateefat03-boop) | — | V-15 · First-time trust threshold | — | ✅ Merged |
+| [#274](https://github.com/ericmt-98/micopay-protocol/pull/274) | [@Emelie-Dev](https://github.com/Emelie-Dev) | #231 | V-16 · Spending digital dollars at a store | Mexico (central region) | ✅ Integrated |
+| [#285](https://github.com/ericmt-98/micopay-protocol/pull/285) | [@Danitello123](https://github.com/Danitello123) | #232 | V-17 · Accepting "dollars" / receiving pesos (merchant) | Mexico | ✅ Integrated |
+| [#253](https://github.com/ericmt-98/micopay-protocol/pull/253) | [@adepoju2006](https://github.com/adepoju2006) | #233 | V-18 · NFC / tap-to-pay familiarity & trust | Nigeria (West Africa) | ✅ Merged |
+| [#292](https://github.com/ericmt-98/micopay-protocol/pull/292) | [@Thoni76](https://github.com/Thoni76) | #234 | V-19 · Freelancer / remote worker paid abroad | LATAM | ✅ Integrated |
+| [#270](https://github.com/ericmt-98/micopay-protocol/pull/270) | [@Killerjunior](https://github.com/Killerjunior) | #235 | V-20 · Receiving pay in digital dollars (worker) | Mexico (central region) | ✅ Merged |
+| [#300](https://github.com/ericmt-98/micopay-protocol/pull/300) | [@manueldezman](https://github.com/manueldezman) | #236 | V-21 · Small employer paying in digital dollars | Nigeria | ✅ Integrated |
+| [#281](https://github.com/ericmt-98/micopay-protocol/pull/281) | [@Shalom-margort](https://github.com/Shalom-margort) | #237 | V-22 · Key recovery / self-custody trust | Latin America | ✅ Integrated |
+| [#286](https://github.com/ericmt-98/micopay-protocol/pull/286) | [@Danitello123](https://github.com/Danitello123) | #238 | V-23 · Peso vs dollar — what you prefer to hold | South America | ✅ Integrated |
+| [#309](https://github.com/ericmt-98/micopay-protocol/pull/309) | [@samueloyibodevv](https://github.com/samueloyibodevv) | #239 | V-24 · Corner shop as liquidity provider | West Africa | ✅ Integrated |
+| [#308](https://github.com/ericmt-98/micopay-protocol/pull/308) | [@samueloyibodevv](https://github.com/samueloyibodevv) | #240 | V-25 · Paying bills & services from a wallet | West Africa | ✅ Integrated |
 
-**Total responses: N=17** (V-1, V-2, V-3, V-4, V-5, V-11, V-12, V-13, V-14 first-person + 1 multi-respondent batch in V-10 + 3 first-person V-6/V-8/V-9 + 3 implicit in V-7 batch)
-**Regions represented:** Nigeria (×6), Mexico (×2), Colombia, Argentina, Venezuela, India, Europe
+**25 validation topics · 31 individual perspectives · 22 unique contributors** (V-7 and V-10 are anonymized batches of 4 interviews each; every other topic is one first-person respondent)
+**Regions represented:** Nigeria (×9), Mexico (×5), Colombia, Argentina, Venezuela, Peru, India, Europe, South America, Latin America (general)
 
 ---
 
 ## SDF claims coverage
 
-Each contribution advances one or more of the five claims in our funding narrative.
+Each contribution advances one or more of the seven claims in our funding narrative.
 
 | SDF Claim | Issues that back it | Responses in so far | Gap |
 |-----------|--------------------|--------------------|-----|
 | **1. Demand exists** (people need cash ↔ digital conversion) | V-1, V-2, V-6 | V-1 ✅ (larryjay007) · V-2 ✅ (Truphile) · V-6 ✅ (KaruG1999) | Fully covered (3 responses) |
 | **2. Supply exists** (providers would offer cash for a commission) | V-3 | V-3 ✅ (DevSolex) | Covered — Nigeria individual provider |
 | **3. MicoPay can win** (better than current options, at an acceptable fee) | V-7, V-8 | V-7 ✅ (barnabasolutayo-lgtm) · V-8 ✅ (rosemary21) | Both covered |
-| **4. Stellar is usable** (mainstream users can handle non-custodial wallets) | V-4, V-14 | V-4 ✅ (Shadow-MMN) · V-14 ✅ (Max-Owolabi) | Covered (2 responses) |
-| **5. Trust & PMF** (users feel safe, would return, would recommend) | V-5, V-9, V-10, V-11 | V-5 ✅ (Truphile) · V-9 ✅ (deep-bhikadiya) · V-10 ✅ (attyolu) · V-11 ✅ (Chigybillionz) | Fully covered (4 responses) |
+| **4. Stellar is usable** (mainstream users can handle non-custodial wallets) | V-4, V-14, V-22 | V-4 ✅ (Shadow-MMN) · V-14 ✅ (Max-Owolabi) · V-22 ✅ (Shalom-margort) | Covered (3 responses) |
+| **5. Trust & PMF** (users feel safe, would return, would recommend) | V-5, V-9, V-10, V-11, V-15 | V-5 ✅ (Truphile) · V-9 ✅ (deep-bhikadiya) · V-10 ✅ (attyolu) · V-11 ✅ (Chigybillionz) · V-15 ✅ (abdullahilateefat03-boop) | Fully covered (5 responses) |
+| **6. Retail spend & merchant supply** (the dollars get spent locally) | V-16, V-17, V-18 | V-16 ✅ (Emelie-Dev) · V-17 ✅ (Danitello123) · V-18 ✅ (adepoju2006) | Fully covered (3 responses) |
+| **7. Dollar inflows / payroll** (the dollars flow in via remote work & payroll) | V-19, V-20, V-21 | V-19 ✅ (Thoni76) · V-20 ✅ (Killerjunior) · V-21 ✅ (manueldezman) | Fully covered (3 responses) |
 
-> **All 5 SDF claims now have at least one response.** The supply-side gap (V-3) was closed by DevSolex. The only remaining open validation issue is **V-15** (first-time trust threshold); it strengthens the deck but is not blocking the core funding case.
+> **All 7 SDF claims now have coverage**, including the two added in Wave 6 Batch 2 (retail spend, dollar inflows). V-23 (peso vs dollar), V-24 (supply density) and V-25 (digital-economy access) add further product-level evidence beyond the core numbered claims. No open validation issues remain from Batch 1 or Batch 2.
 
 ---
 
@@ -326,6 +355,213 @@ Each contribution advances one or more of the five claims in our funding narrati
 
 ---
 
+### V-15 · First-time trust threshold
+**Contributor:** [@abdullahilateefat03-boop](https://github.com/abdullahilateefat03-boop) · **PR:** [#185](https://github.com/ericmt-98/micopay-protocol/pull/185) · **Merged:** 2026-06-28
+
+**Format:** First-person, single respondent.
+
+**Key findings:**
+
+- **What triggers a first try:** A faster, more convenient way to move money, reinforced by hearing about it from people already using it.
+- **Biggest hesitation-reducer:** A trusted personal recommendation outweighs advertising or promotional messaging.
+- **Minimum to attempt a P2P cash trade with a stranger:** Strong identity verification, visible ratings from prior transactions, and a clear dispute-resolution process.
+- **Instant walk-away trigger:** No user verification, or any pressure to complete the transaction outside the platform's official process.
+- **What earns a referral after a good first transaction:** A smooth, secure experience exactly matching what was promised — simple onboarding, reliable completion, confidence that problems get resolved.
+
+**SDF narrative contribution:** Closes the last open Batch 1 issue for Claim 5 (Trust / PMF). Confirms that MicoPay's core trust levers — identity verification, ratings, dispute resolution, and in-official-channel completion — are exactly the signals a first-time user needs before trying a P2P cash trade with a stranger.
+
+---
+
+### V-16 · Spending digital dollars at a store (consumer side)
+**Contributor:** [@Emelie-Dev](https://github.com/Emelie-Dev) · **PR:** [#274](https://github.com/ericmt-98/micopay-protocol/pull/274) · **Integrated:** 2026-06-29
+
+**Format:** First-person, single respondent.
+
+**Region:** Mexico (central region)
+
+**Key findings:**
+
+- **Current habit:** Cash for small neighborhood purchases; card or a local wallet app at more established shops or restaurants.
+- **Wanting to pay a merchant directly from a stablecoin balance:** Yes — mainly to hold digital dollars without a separate cash-out step first.
+- **What stops it today:** Almost no local merchant accepts crypto directly, and explaining wallets or confirmations at checkout feels stressful and slow for both sides.
+- **On-screen requirements to trust a "dollars → pesos" checkout:** Merchant name, exact peso amount received, exchange rate used, total fee, and an unambiguous success state with timestamp/receipt.
+- **What would drive adoption over the current method:** Fast checkout, no hidden fees, better reliability than card terminals — especially if it means carrying less cash while still working at ordinary local businesses.
+
+**SDF narrative contribution:** Opens Claim 6 (retail demand) with a concrete Mexico consumer use case: holding savings in digital dollars while spending seamlessly in pesos. The adoption bar is a checkout experience as fast and legible as cash or card, with blockchain complexity fully hidden.
+
+---
+
+### V-17 · Accepting "dollars" and receiving pesos (merchant side)
+**Contributor:** [@Danitello123](https://github.com/Danitello123) · **PR:** [#285](https://github.com/ericmt-98/micopay-protocol/pull/285) · **Integrated:** 2026-06-29
+
+**Format:** First-person, single respondent.
+
+**Region:** Mexico
+
+**Key findings:**
+
+- **Business type & current rails:** Small corner shop (abarrotes); accepts cash, cards, and occasional SPEI transfers because customers expect it.
+- **Biggest pain today:** 3–4% card-terminal fees on thin margins, next-day settlement delays, and the security/time cost of depositing physical cash at a bank.
+- **Would accept "dollars in, pesos out" same-day settlement:** Yes — main worry is exchange-rate quality and whether "same day" really means instant or hours.
+- **Default settlement preference:** A stable digital peso by default (safer than cash in the register, usable to pay suppliers), with the option of physical cash.
+- **Interest in also being a liquidity provider:** Yes — daily cash on hand makes "depositing" it via a paid liquidity role attractive; ~2–3% commission feels fair.
+
+**SDF narrative contribution:** Supplies the merchant side of Claim 6, and doubles as supply-side evidence for Claim 2 — an existing cash-heavy small business is willing to both accept dollar-denominated payments *and* provide cash liquidity, at a commission consistent with the 2–4% band from V-3/V-24.
+
+---
+
+### V-18 · NFC / contactless tap-to-pay familiarity & trust
+**Contributor:** [@adepoju2006](https://github.com/adepoju2006) · **PR:** [#253](https://github.com/ericmt-98/micopay-protocol/pull/253) · **Merged:** 2026-06-29
+
+**Format:** First-person, single respondent.
+
+**Region:** Nigeria (West Africa)
+
+**Key findings:**
+
+- **NFC usage today:** Rare, and almost always with a contactless card, not a phone — the dominant rails are chip-and-PIN, bank-app transfers, and USSD.
+- **Trust vs. PIN/QR/cash:** Lower than PIN or a confirmed bank transfer, because tap completes too passively with no deliberate "I approved this" moment. QR feels more natural locally since scan-to-transfer is already the everyday mental model.
+- **A failed/ambiguous tap:** Happened once — an unclear beep left no way to tell if it went through, with fear of a double-charge from tapping again.
+- **NFC vs. QR for a "dollars" wallet at a local shop:** Prefers QR — wants to see and confirm the merchant and amount on their own phone before approving a foreign-currency payment.
+- **The one signal that proves success:** An immediate, unmistakable success state on the *payer's own phone* (merchant name, amount, haptic buzz, updated balance) — not just a confirmation on the merchant's terminal.
+
+**SDF narrative contribution:** Closes Claim 6 with the payment-UX angle: in markets where QR/transfer is the established habit, a "dollars" wallet should default to QR over NFC, and every payment needs an unambiguous, on-device success state — directly informing the checkout UX spec.
+
+---
+
+### V-19 · Freelancer / remote worker paid by clients abroad
+**Contributor:** [@Thoni76](https://github.com/Thoni76) · **PR:** [#292](https://github.com/ericmt-98/micopay-protocol/pull/292) · **Integrated:** 2026-06-29
+
+**Format:** First-person, single respondent.
+
+**Region:** LATAM
+
+**Key findings:**
+
+- **Current payment method:** Mostly Wise into a local bank account, occasionally direct USDC for tech-savvy clients.
+- **Worst part:** Unpredictable intermediary bank fees, below-market exchange rates, and — for crypto — the stress and freeze risk of P2P off-ramps.
+- **Cost of current rails:** Roughly 5–8% lost to combined fees and spread, more on smaller payments.
+- **Would a "dollars in, cash out locally" flow solve this:** Yes — cost predictability and certainty of the final local value matter most.
+- **Trust-breaker:** An off-ramp run by unverified individuals instead of trusted local shops, or hidden cash-out fees.
+
+**SDF narrative contribution:** Opens Claim 7 (dollar inflows) from the freelancer side: confirms a 5–8% friction tax on cross-border payments today, and that the win condition is certainty of final local value plus a safe, verified cash-out path — not just faster rails.
+
+---
+
+### V-20 · Receiving part of your pay in digital dollars (worker side)
+**Contributor:** [@Killerjunior](https://github.com/Killerjunior) · **PR:** [#270](https://github.com/ericmt-98/micopay-protocol/pull/270) · **Merged:** 2026-06-29
+
+**Format:** First-person, single respondent.
+
+**Region:** Mexico (central region)
+
+**Key findings:**
+
+- **Current pay method:** Mostly SPEI bank transfer, sometimes mixed with cash for side work.
+- **Existing dollar/stablecoin habit:** Already keeps part of savings in digital dollars via a self-custodial wallet to hedge local purchasing power; the hard part is moving quickly between digital dollars and local cash.
+- **Interest in split payroll (part dollars, part pesos):** Yes, as an optional split — not mandatory.
+- **What must be true to trust it:** Reliable same-day cash-out nearby, direct spending without extra hops, transparent fees upfront, and a recovery path if the phone is lost.
+- **Dealbreakers:** Delayed access to funds, unclear/variable fees, no failed-transaction support, forced full-dollar payroll, or trusting an unverified counterparty without escrow.
+
+**SDF narrative contribution:** Supplies the worker-side demand signal for Claim 7 — payroll splitting is wanted as an opt-in, not a mandate, and is gated on the same trust primitives (same-day cash-out, transparent fees, escrow) validated elsewhere in the deck.
+
+---
+
+### V-21 · Small employer paying people in digital dollars
+**Contributor:** [@manueldezman](https://github.com/manueldezman) · **PR:** [#300](https://github.com/ericmt-98/micopay-protocol/pull/300) · **Integrated:** 2026-06-30
+
+**Format:** First-person, single respondent.
+
+**Region:** Nigeria
+
+**Key findings:**
+
+- **Current payout method:** A mix of fiat and stablecoins; cross-border payouts in stablecoins are already relatively easy.
+- **Real pain point:** Not the rails themselves — it's repeating the same manual payout process over and over.
+- **Would automated dispersal help:** Yes — saves time and removes the frustration of a repeated manual workflow.
+- **Top concern:** Privacy — not wanting to expose wallet balance in exchange for automation.
+- **Condition for trusting automation:** A roster/budget-limited key that can only pay a registered list of people within a period budget.
+
+**SDF narrative contribution:** Closes Claim 7 from the employer/supply side: cross-border stablecoin payout already works, so the product opportunity is automating the *manual repetition*, gated behind a privacy-preserving, roster/budget-scoped signing key — a concrete spec for a payroll-supply feature.
+
+---
+
+### V-22 · Key recovery — what makes self-custody trustworthy
+**Contributor:** [@Shalom-margort](https://github.com/Shalom-margort) · **PR:** [#281](https://github.com/ericmt-98/micopay-protocol/pull/281) · **Integrated:** 2026-06-29
+
+**Format:** First-person, single respondent.
+
+**Region:** Latin America
+
+**Key findings:**
+
+- **Experience managing a seed phrase:** Mildly stressful to genuinely anxiety-inducing; a single point of failure with no support line, which pushes people toward custodial exchanges or tiny self-custodied balances.
+- **Prior recovery experience:** Recovered a stolen-phone authenticator via written backup codes and a multi-day support ticket — reinforcing how fragile manual backup really is.
+- **Reaction to passkey/biometric recovery (Face ID/fingerprint → iCloud/Google):** Feels safer than a seed phrase — it maps to an already-trusted mental model (unlocking banking/email apps), removing the single point of failure.
+- **What would build trust before adding funds:** An early, plain-language explanation of what backs up the key and where; a dry-run recovery test; a persistent (non-nagging) "backup active" indicator.
+- **Would passkey recovery increase first-try likelihood:** Yes — the seed phrase is the single biggest onboarding drop-off point for non-technical users in the region.
+
+**SDF narrative contribution:** Directly validates Claim 4 (Stellar is usable): passkey/biometric recovery is preferred over seed phrases because it reuses an existing trust model. The three UX companions — early explanation, testable dry-run, persistent backup-status indicator — are concrete requirements for the recovery flow.
+
+---
+
+### V-23 · Peso vs dollar — what you prefer to hold
+**Contributor:** [@Danitello123](https://github.com/Danitello123) · **PR:** [#286](https://github.com/ericmt-98/micopay-protocol/pull/286) · **Integrated:** 2026-06-29
+
+**Format:** First-person, single respondent.
+
+**Region:** South America
+
+**Key findings:**
+
+- **Savings preference:** Strongly prefers holding dollars/USD-pegged stablecoins for savings, keeping only weekly spending money in local currency, because local currency loses value too fast.
+- **Behavior change from inflation:** After watching savings erode, shifted to converting salary into stablecoins or physical dollars immediately on receipt.
+- **Trust in an automatic "hold dollars, spend/cash-out in local currency" conversion:** Wants to see and control the rate — hidden spreads are the main fear, an invisible conversion is hard to trust.
+- **Preferred balance display:** Ability to switch, defaulting to dollars (true purchasing power) with a tap to local currency for specific purchases.
+- **What would break trust in a "digital dollar/peso":** Frequent app downtime during volatility or paused withdrawals; it feels as real as cash only when conversion and local cash-out are instant and frictionless.
+
+**SDF narrative contribution:** Reinforces the "digital dollar as inflation hedge" product thesis (V-6, V-14) from South America, and adds a concrete UX requirement: the exchange rate must be visible and user-controlled, never an invisible behind-the-scenes conversion.
+
+---
+
+### V-24 · Corner shop as a liquidity provider (supply bootstrap)
+**Contributor:** [@samueloyibodevv](https://github.com/samueloyibodevv) · **PR:** [#309](https://github.com/ericmt-98/micopay-protocol/pull/309) · **Integrated:** 2026-06-30
+
+**Format:** First-person, single respondent.
+
+**Region:** West Africa
+
+**Key findings:**
+
+- **Business profile:** A cash-heavy neighborhood convenience shop that already handles a large share of daily sales in physical cash and keeps a working float on hand.
+- **Attractiveness of becoming a paid liquidity provider:** Genuinely attractive if escrow is real and obvious — the shop already acts as an informal cash point for neighbors.
+- **Fair commission:** 2–4% per cash-out — below ~1.5% doesn't beat selling stock off the same float, above ~4% risks feeling exploitative to customers.
+- **Proof required before handing over cash:** A merchant-side (not just customer-side) in-app state showing the customer's funds are escrow-locked and earmarked, with a matchable reference code, and release-on-confirm.
+- **What drives sign-up before customer volume exists:** Foot traffic into the shop, being able to cash the merchant's *own* digital dollars through the same rails, and early-mover neighborhood reputation.
+
+**SDF narrative contribution:** Extends Claim 2 (supply density) beyond the individual-provider case (V-3) to established local businesses. Confirms the 2–4% commission band and adds the critical merchant-side product requirement: escrow proof must be visible on the *provider's* device, not just the customer's, with a release-on-confirm flow.
+
+---
+
+### V-25 · Paying bills & services from a digital wallet
+**Contributor:** [@samueloyibodevv](https://github.com/samueloyibodevv) · **PR:** [#308](https://github.com/ericmt-98/micopay-protocol/pull/308) · **Integrated:** 2026-06-30
+
+**Format:** First-person, single respondent.
+
+**Region:** West Africa
+
+**Key findings:**
+
+- **Digital-only expenses cash can't reach:** Airtime/data top-ups, prepaid electricity tokens, streaming/software subscriptions, occasional cloud hosting.
+- **Current workaround:** A chain of middlemen — a kiosk agent paying from their own digital balance, or a friend with a card — each hop adding a markup plus a hidden exchange spread on foreign-currency services.
+- **Cost of the workaround:** Roughly 5–10% versus sticker price, worse on small top-ups.
+- **Expected usage if a wallet covered this directly:** Several times a week — airtime/data are near-daily, bill pay is monthly but unavoidable.
+- **What drives retention vs. abandonment:** Bill pay builds the habit; saving in dollars drives retention; reliable cash-out is the trust precondition. The #1 abandonment trigger is money leaving the wallet with the paid service (meter token, airtime) never arriving and no visible refund/dispute path.
+
+**SDF narrative contribution:** Extends Claim 1/5 beyond cash-in as a gateway: the everyday digital payments cash can't reach are the recurring reason to keep a balance in the wallet at all. Names the critical failure mode to design against — "money left, service never arrived" — as a product requirement for the bill-pay feature.
+
+---
+
 ## Cross-cutting insights (for the SDF deck)
 
 ### 1. The fee ceiling is universal: 2–5%
@@ -353,6 +589,12 @@ Responses now span 6+ countries across 3 continents (LATAM, South Asia, Africa).
 
 ## What's still missing
 
+Nothing — every Wave 6 Batch 1 (V-1…V-14) and Batch 2 (V-16…V-25) issue, plus V-15, now has a
+merged or integrated first-person response. Batch 2 closed out three duplicate/stale PRs (#274,
+#303, #304, #306) whose content either overwrote an already-credited response or had drifted too
+far from `main` to merge cleanly — see each PR's closing comment for detail. No open validation
+issues remain as of this update.
+
 | Issue | Assignee | PR | Status |
 |-------|----------|----|-----------------------|
 | V-1 · Cash-out demand | [@larryjay007](https://github.com/larryjay007) | [#155](https://github.com/ericmt-98/micopay-protocol/pull/155) ✅ | Merged — Nigeria (South West) |
@@ -364,8 +606,19 @@ Responses now span 6+ countries across 3 continents (LATAM, South Asia, Africa).
 | V-12 · Living unbanked | [@Oluwasuyi-Timilehin](https://github.com/Oluwasuyi-Timilehin) | [#173](https://github.com/ericmt-98/micopay-protocol/pull/173) ✅ | Merged — Mexico (CDMX) |
 | V-13 · Remittance sender context | [@Jo-anny](https://github.com/Jo-anny) | [#171](https://github.com/ericmt-98/micopay-protocol/pull/171) ✅ | Integrated — Europe → LATAM |
 | V-14 · Stablecoin mental model | [@Max-Owolabi](https://github.com/Max-Owolabi) | [#175](https://github.com/ericmt-98/micopay-protocol/pull/175) ✅ | Integrated — Nigeria (West Africa) |
+| V-15 · First-time trust threshold | [@abdullahilateefat03-boop](https://github.com/abdullahilateefat03-boop) | [#185](https://github.com/ericmt-98/micopay-protocol/pull/185) ✅ | Merged |
+| V-16 · Retail spending (consumer) | [@Emelie-Dev](https://github.com/Emelie-Dev) | [#274](https://github.com/ericmt-98/micopay-protocol/pull/274) ✅ | Integrated — Mexico |
+| V-17 · Merchant side | [@Danitello123](https://github.com/Danitello123) | [#285](https://github.com/ericmt-98/micopay-protocol/pull/285) ✅ | Integrated — Mexico |
+| V-18 · NFC / tap-to-pay | [@adepoju2006](https://github.com/adepoju2006) | [#253](https://github.com/ericmt-98/micopay-protocol/pull/253) ✅ | Merged — Nigeria |
+| V-19 · Freelancer / remote worker | [@Thoni76](https://github.com/Thoni76) | [#292](https://github.com/ericmt-98/micopay-protocol/pull/292) ✅ | Integrated — LATAM |
+| V-20 · Worker payroll | [@Killerjunior](https://github.com/Killerjunior) | [#270](https://github.com/ericmt-98/micopay-protocol/pull/270) ✅ | Merged — Mexico |
+| V-21 · Employer digital-dollar payroll | [@manueldezman](https://github.com/manueldezman) | [#300](https://github.com/ericmt-98/micopay-protocol/pull/300) ✅ | Integrated — Nigeria |
+| V-22 · Key recovery | [@Shalom-margort](https://github.com/Shalom-margort) | [#281](https://github.com/ericmt-98/micopay-protocol/pull/281) ✅ | Integrated — Latin America |
+| V-23 · Peso vs dollar | [@Danitello123](https://github.com/Danitello123) | [#286](https://github.com/ericmt-98/micopay-protocol/pull/286) ✅ | Integrated — South America |
+| V-24 · Corner shop liquidity provider | [@samueloyibodevv](https://github.com/samueloyibodevv) | [#309](https://github.com/ericmt-98/micopay-protocol/pull/309) ✅ | Integrated — West Africa |
+| V-25 · Bills & services from a wallet | [@samueloyibodevv](https://github.com/samueloyibodevv) | [#308](https://github.com/ericmt-98/micopay-protocol/pull/308) ✅ | Integrated — West Africa |
 
-> All five SDF claims now have coverage. Only open issue: V-15 (first-time trust threshold).
+> All 7 SDF claims now have coverage, plus supporting product evidence from V-22/V-23/V-24/V-25.
 
 ---
 
@@ -374,9 +627,9 @@ Responses now span 6+ countries across 3 continents (LATAM, South Asia, Africa).
 - **First-person** entries reflect each contributor's own lived experience — not a survey of others.
 - **Convenience sample**, self-selected via Stellar Drips Wave 6. Directional and qualitative, not statistically representative.
 - **Privacy-first:** no names, no contact information, no transaction amounts, no wallet addresses.
-- Current sample size: **N=17 individual perspectives** across **7+ countries / 3 regions**.
+- Current sample size: **N=31 individual perspectives** (25 validation topics, 22 unique contributors) across **7+ countries / 3 continents**.
 - Report `N` plainly. Let the cross-regional consistency of the patterns speak for itself.
 
 ---
 
-*Last updated: 2026-06-27 · Maintainer: [@ericmt-98](https://github.com/ericmt-98)*
+*Last updated: 2026-06-30 · Maintainer: [@ericmt-98](https://github.com/ericmt-98)*

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Logo } from '../components/Logo';
 
 interface ExploreProps {
@@ -8,6 +9,7 @@ interface ExploreProps {
 }
 
 const Explore = ({ onBack, onNavigate, showDefi = true }: ExploreProps) => {
+    const { t } = useTranslation();
     return (
         <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col pb-32">
             {/* Header */}
@@ -22,18 +24,18 @@ const Explore = ({ onBack, onNavigate, showDefi = true }: ExploreProps) => {
                 </div>
             </header>
 
-            <main className="flex-1 mt-20 px-6">
+            <main className="flex-1 mt-[calc(5rem+env(safe-area-inset-top))] px-6">
                 <section className="mb-10 pt-4">
                     <h1 className="font-headline font-extrabold text-3xl text-on-surface leading-tight mb-2">
-                        Explorar
+                        {t('exploreScreen.title')}
                     </h1>
                     <p className="text-on-surface-variant font-medium opacity-70 italic">
-                        Descubre nuevas formas de usar tu dinero
+                        {t('exploreScreen.subtitle')}
                     </p>
                 </section>
 
                 <div className="space-y-6">
-                    {/* Etherfuse Cetes — feature-gated */}
+                    {/* CETES tokenizados — feature-gated */}
                     {showDefi && (
                         <article className="bg-gradient-to-br from-primary/10 to-primary/5 p-6 rounded-[32px] border border-primary/10 shadow-sm relative overflow-hidden group active:scale-[0.98] transition-all">
                             <div className="flex items-center gap-4 mb-4">
@@ -41,17 +43,17 @@ const Explore = ({ onBack, onNavigate, showDefi = true }: ExploreProps) => {
                                     <span className="material-symbols-outlined text-primary text-3xl">trending_up</span>
                                 </div>
                                 <div>
-                                    <h2 className="font-headline font-bold text-xl text-on-surface">Haz crecer tus ahorros</h2>
-                                    <p className="text-[10px] font-bold text-primary uppercase tracking-widest">Inversión segura con Etherfuse</p>
+                                    <h2 className="font-headline font-bold text-xl text-on-surface">{t('exploreScreen.investCetes')}</h2>
+                                    <p className="text-[10px] font-bold text-primary uppercase tracking-widest">{t('exploreScreen.cetesRateBadge', { rate: 5.6 })}</p>
                                 </div>
                             </div>
                             <p className="text-sm text-on-surface-variant leading-relaxed mb-6">
-                                Regístrate y empieza a ganar **11.45% anual** con Cetes tokenizados. Tu dinero trabaja por ti con el respaldo del Gobierno de México.
+                                {t('exploreScreen.cetesDesc')}
                             </p>
                             <button
                                 onClick={() => onNavigate?.('cetes')}
                                 className="w-full bg-primary text-white font-bold py-3 px-6 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-primary/20">
-                                Empezar a ahorrar
+                                {t('exploreScreen.viewCetes')}
                                 <span className="material-symbols-outlined text-sm">arrow_forward</span>
                             </button>
                         </article>
@@ -65,40 +67,18 @@ const Explore = ({ onBack, onNavigate, showDefi = true }: ExploreProps) => {
                                     <span className="material-symbols-outlined text-on-surface text-3xl">account_balance</span>
                                 </div>
                                 <div>
-                                    <h2 className="font-headline font-bold text-xl text-on-surface">Pide un préstamo hoy</h2>
-                                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Liquidez instantánea con Blend</p>
+                                    <h2 className="font-headline font-bold text-xl text-on-surface">{t('exploreScreen.requestLoan')}</h2>
+                                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{t('exploreScreen.blendSubtitle')}</p>
                                 </div>
                             </div>
                             <p className="text-sm text-on-surface-variant leading-relaxed mb-6">
-                                ¿Necesitas efectivo? Usa tus criptos como garantía y recibe un préstamo digital al instante sin papeleo.
+                                {t('exploreScreen.blendDesc')}
                             </p>
                             <button
                                 onClick={() => onNavigate?.('blend')}
                                 className="w-full border-2 border-primary text-primary font-bold py-3 px-6 rounded-2xl flex items-center justify-center gap-2">
-                                Ver cuánto puedo pedir
+                                {t('exploreScreen.viewHowMuch')}
                                 <span className="material-symbols-outlined text-sm">info</span>
-                            </button>
-                        </article>
-                    )}
-
-                    {/* Etherfuse Ramps */}
-                    {(true) && (
-                        <article className="bg-gradient-to-br from-primary/10 to-primary/5 p-6 rounded-[32px] border border-primary/10 shadow-sm relative overflow-hidden group active:scale-[0.98] transition-all">
-                            <div className="flex items-center gap-4 mb-4">
-                                <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-md">
-                                    <span className="material-symbols-outlined text-primary text-3xl">account_balance_wallet</span>
-                                </div>
-                                <div>
-                                    <h2 className="font-headline font-bold text-xl text-on-surface">Conecta tu Banco</h2>
-                                    <p className="text-[10px] font-bold text-primary uppercase tracking-widest">Entrada y salida de fondos con Etherfuse</p>
-                                </div>
-                            </div>
-                            <p className="text-sm text-on-surface-variant leading-relaxed mb-6">
-                                Pasa dinero de tu cuenta de banco a MicoPay (o al revés) de forma segura y en segundos. Sin complicaciones.
-                            </p>
-                            <button className="w-full bg-on-surface text-white font-bold py-3 px-6 rounded-2xl flex items-center justify-center gap-2">
-                                Mover dinero
-                                <span className="material-symbols-outlined text-sm">sync_alt</span>
                             </button>
                         </article>
                     )}
@@ -106,7 +86,7 @@ const Explore = ({ onBack, onNavigate, showDefi = true }: ExploreProps) => {
 
                 {/* Footer Section */}
                 <footer className="mt-12 text-center">
-                    <p className="text-xs text-outline font-medium">Impulsado por Stellar, Etherfuse y Blend</p>
+                    <p className="text-xs text-outline font-medium">{t('exploreScreen.poweredBy')}</p>
                 </footer>
             </main>
         </div>
