@@ -30,6 +30,17 @@ const PAYER_FROM = "0x00000000000000000000000000000000000bbb";
 const OTHER_PAYER_FROM = "0x00000000000000000000000000000000000ccc";
 const USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 
+// Unique per test-file run: if a real Postgres happens to be reachable (not
+// mocked here — this suite exercises requirePayment's in-memory OR real DB
+// fallback depending on what's actually running locally), hardcoded nonces
+// would collide with rows a previous run already inserted and left behind,
+// causing false "already used" failures. Mixing in a fresh random suffix
+// keeps each run's replay keys unique regardless of what's in the DB.
+const RUN_ID = Math.random().toString(16).slice(2).padEnd(8, "0").slice(0, 8);
+function uniqueNonce(seedByte: string): string {
+  return "0x" + seedByte.repeat(28) + RUN_ID; // 56 + 8 = 64 hex chars = 32 bytes
+}
+
 function b64(obj: unknown): string {
   return Buffer.from(JSON.stringify(obj)).toString("base64");
 }
@@ -56,7 +67,7 @@ function basePayload(overrides: {
         value: overrides.value ?? "1000", // 0.001 USDC @ 6 decimals
         validAfter: overrides.validAfter ?? String(now - 60),
         validBefore: overrides.validBefore ?? String(now + 300),
-        nonce: overrides.nonce ?? "0x" + "22".repeat(32),
+        nonce: overrides.nonce ?? uniqueNonce("22"),
       },
     },
   });
@@ -107,7 +118,7 @@ describe("Base payments (WP2)", () => {
     const res = await app.inject({
       method: "GET",
       url: "/test-base",
-      headers: { "x-payment": basePayload({ nonce: "0x" + "aa".repeat(32) }) },
+      headers: { "x-payment": basePayload({ nonce: uniqueNonce("aa") }) },
     });
     expect(res.statusCode).toBe(200);
   });
@@ -117,7 +128,7 @@ describe("Base payments (WP2)", () => {
     const res = await app.inject({
       method: "GET",
       url: "/test-base",
-      headers: { "x-payment": basePayload({ nonce: "0x" + "bb".repeat(32) }) },
+      headers: { "x-payment": basePayload({ nonce: uniqueNonce("bb") }) },
     });
     expect(res.statusCode).toBe(402);
   });
@@ -127,7 +138,7 @@ describe("Base payments (WP2)", () => {
     const res = await app.inject({
       method: "GET",
       url: "/test-base",
-      headers: { "x-payment": basePayload({ nonce: "0x" + "cc".repeat(32), value: "1" }) },
+      headers: { "x-payment": basePayload({ nonce: uniqueNonce("cc"), value: "1" }) },
     });
     expect(res.statusCode).toBe(402);
   });
@@ -140,7 +151,7 @@ describe("Base payments (WP2)", () => {
       url: "/test-base",
       headers: {
         "x-payment": basePayload({
-          nonce: "0x" + "dd".repeat(32),
+          nonce: uniqueNonce("dd"),
           validAfter: String(now - 600),
           validBefore: String(now - 60),
         }),
@@ -157,7 +168,7 @@ describe("Base payments (WP2)", () => {
       url: "/test-base",
       headers: {
         "x-payment": basePayload({
-          nonce: "0x" + "ee".repeat(32),
+          nonce: uniqueNonce("ee"),
           validAfter: String(now + 600),
           validBefore: String(now + 900),
         }),
@@ -173,7 +184,7 @@ describe("Base payments (WP2)", () => {
       url: "/test-base",
       headers: {
         "x-payment": basePayload({
-          nonce: "0x" + "ff".repeat(32),
+          nonce: uniqueNonce("ff"),
           to: "0x0000000000000000000000000000000000dead",
         }),
       },
@@ -182,7 +193,7 @@ describe("Base payments (WP2)", () => {
   });
 
   it("rejects a replayed nonce from the SAME payer — REV-2", async () => {
-    const nonce = "0x" + "12".repeat(32);
+    const nonce = uniqueNonce("12");
     mockVerifyTypedData.mockResolvedValue(true);
 
     const first = await app.inject({
@@ -201,7 +212,7 @@ describe("Base payments (WP2)", () => {
   });
 
   it("accepts the SAME nonce from a DIFFERENT payer — REV-2", async () => {
-    const nonce = "0x" + "34".repeat(32);
+    const nonce = uniqueNonce("34");
     mockVerifyTypedData.mockResolvedValue(true);
 
     const first = await app.inject({
@@ -220,7 +231,7 @@ describe("Base payments (WP2)", () => {
   });
 
   it("exactly one of two concurrent requests with the same payment succeeds — REV-3", async () => {
-    const nonce = "0x" + "56".repeat(32);
+    const nonce = uniqueNonce("56");
     mockVerifyTypedData.mockResolvedValue(true);
     const header = basePayload({ nonce, from: "0x00000000000000000000000000000000000ddd" });
 

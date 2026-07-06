@@ -40,6 +40,14 @@ vi.mock("../lib/zkVerify.js", () => ({
 const PLATFORM_BASE = "0x00000000000000000000000000000000000aaa";
 const AGENT_FROM = "0x00000000000000000000000000000000000bbb";
 
+// Unique per test-file run — see x402-base.test.ts for why (a real reachable
+// Postgres persists replay keys across runs; hardcoded nonces would collide
+// with a previous run's leftover rows).
+const RUN_ID = Math.random().toString(16).slice(2).padEnd(8, "0").slice(0, 8);
+function uniqueNonce(seedByte: string): string {
+  return "0x" + seedByte.repeat(28) + RUN_ID;
+}
+
 function b64(obj: unknown): string {
   return Buffer.from(JSON.stringify(obj)).toString("base64");
 }
@@ -94,7 +102,7 @@ describe("Credential purchase paid from Base (WP3)", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/v1/credentials/buy",
-      headers: { "x-payment": basePaymentHeader("0x" + "78".repeat(32)) },
+      headers: { "x-payment": basePaymentHeader(uniqueNonce("78")) },
       payload: {},
     });
 
@@ -118,7 +126,7 @@ describe("Credential purchase paid from Base (WP3)", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/v1/credentials/buy",
-      headers: { "x-payment": basePaymentHeader("0x" + "9a".repeat(32)) },
+      headers: { "x-payment": basePaymentHeader(uniqueNonce("9a")) },
       payload: {},
     });
 
