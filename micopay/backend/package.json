@@ -11,11 +11,11 @@
     "e2e": "node --import tsx ../scripts/e2e-test.ts",
     "test:rate-limit": "node --import tsx src/tests/rateLimit.test.ts",
     "test:abuse": "node --import tsx src/tests/abuse.service.test.ts",
-    "test:trade-auth": "ALLOW_IN_MEMORY_DB=true MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/tradeAuth.test.ts",
-    "test:refund": "ALLOW_IN_MEMORY_DB=true MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/refund.test.ts"
+    "test:security": "node --import tsx src/tests/security.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^8.5.0",
+    "@fastify/helmet": "^11.1.1",
     "@fastify/jwt": "^8.0.1",
     "@fastify/rate-limit": "^9.1.0",
     "@fastify/static": "^7.0.4",

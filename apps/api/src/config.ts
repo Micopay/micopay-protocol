@@ -44,6 +44,23 @@ if (process.env.NODE_ENV === "production" && process.env.DEMO_MODE === "true") {
   console.warn("[WARN] DEMO_MODE=true is ignored in production");
 }
 
+/**
+ * Parse CORS_ALLOWED_ORIGINS from environment variable.
+ * Format: comma-separated list of origins (e.g., "https://example.com,https://app.example.com")
+ * Defaults to localhost in development, empty array in production.
+ */
+function parseAllowedOrigins(originsEnv: string | undefined, nodeEnv: string | undefined): string[] {
+  if (!originsEnv) {
+    // Development: allow localhost
+    if (nodeEnv !== "production") {
+      return ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000", "http://127.0.0.1:5173"];
+    }
+    // Production: empty array means no CORS (must be explicitly configured)
+    return [];
+  }
+  return originsEnv.split(",").map((origin) => origin.trim()).filter((origin) => origin.length > 0);
+}
+
 export const config = {
   port: parseInt(process.env.PORT || "3000", 10),
   databaseUrl:
@@ -64,6 +81,10 @@ export const config = {
   // JWT
   jwtSecret: process.env.JWT_SECRET || "dev_jwt_secret",
   jwtExpiry: process.env.JWT_EXPIRY || "24h",
+
+  // CORS & Security
+  corsAllowedOrigins: parseAllowedOrigins(process.env.CORS_ALLOWED_ORIGINS, process.env.NODE_ENV),
+  nodeEnv: process.env.NODE_ENV || "development",
 
   // MVP flags
   mockStellar: process.env.MOCK_STELLAR === "true",
