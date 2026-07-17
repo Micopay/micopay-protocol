@@ -374,6 +374,29 @@
     "receiptLock": "Lock",
     "receiptRelease": "Release"
   },
+  "kyc": {
+    "verifyingIdentity": "Verifying identity…",
+    "verifyingDesc": "This may take a few seconds.",
+    "identityVerified": "Identity verified",
+    "identityVerifiedDesc": "Ready! We'll continue with the investment flow.",
+    "couldNotVerify": "Could not verify",
+    "couldNotVerifyDesc": "Check the reason and try again.",
+    "sessionNotAvailable": "Session not available",
+    "sessionNotAvailableDesc": "We couldn't verify your session. Please log in again and try again.",
+    "verifyIdentity": "Verify my identity",
+    "retryVerification": "Retry verification",
+    "sessionExpires": "Your verification session expires in ~15 minutes.",
+    "continue": "Continue",
+    "identityVerification": "Identity verification",
+    "oneStepWithEtherfuse": "One-step with Etherfuse",
+    "identityVerifiedWith": "Your identity will be verified with Etherfuse",
+    "oneTimeProcess": "This is a one-time process done on Etherfuse's hosted page. We do not collect or store sensitive data in this app.",
+    "reason": "Reason",
+    "couldNotQuery": "Could not query",
+    "sessionError": "Session not available. Log in again and try again.",
+    "openingEtherfuse": "Opening Etherfuse…",
+    "pollError": "Error checking verification status."
+  },
   "errors": {
     "network": {
       "offline": { "title": "No connection", "message": "We couldn't connect. Check your signal and try again.", "action": "Try again once you have signal." },

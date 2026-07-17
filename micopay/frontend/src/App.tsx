@@ -530,6 +530,9 @@ function ExploreRoute() {
           // (platform-key-only simulation on mainnet, audit finding B2) — hidden
           // until a real user-signed implementation lands. Opt in with
           // VITE_ENABLE_DEFI_TRADING=true for internal/demo builds.
+          // SPEI ramp (KYC + onramp + offramp) moves real funds (device keypair) —
+          // enabled independently via VITE_ENABLE_SPEI_RAMP=true.
+          showSpeiRamp={import.meta.env.VITE_ENABLE_SPEI_RAMP === 'true'}
           showDefi={import.meta.env.VITE_ENABLE_DEFI_TRADING === 'true'}
       />
   );

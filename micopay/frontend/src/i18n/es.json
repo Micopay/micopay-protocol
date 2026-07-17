@@ -374,6 +374,29 @@
     "receiptLock": "Bloqueo",
     "receiptRelease": "Liberación"
   },
+  "kyc": {
+    "verifyingIdentity": "Verificando identidad…",
+    "verifyingDesc": "Esto puede tardar unos segundos.",
+    "identityVerified": "Identidad verificada",
+    "identityVerifiedDesc": "¡Listo! Continuaremos con el flujo de inversión.",
+    "couldNotVerify": "No se pudo verificar",
+    "couldNotVerifyDesc": "Revisa el motivo y vuelve a intentar.",
+    "sessionNotAvailable": "Sesión no disponible",
+    "sessionNotAvailableDesc": "No pudimos verificar tu sesión. Vuelve a iniciar sesión e intenta de nuevo.",
+    "verifyIdentity": "Verify my identity",
+    "retryVerification": "Retry verification",
+    "sessionExpires": "Tu sesión de verificación expira en ~15 minutos.",
+    "continue": "Continuar",
+    "identityVerification": "Verificación de identidad",
+    "oneStepWithEtherfuse": "Paso único con Etherfuse",
+    "identityVerifiedWith": "Tu identidad será verificada con Etherfuse",
+    "oneTimeProcess": "Este proceso es una sola vez y se hace en la página hospedada de Etherfuse. No recopilamos ni almacenamos datos sensibles en esta app.",
+    "reason": "Motivo",
+    "couldNotQuery": "No se pudo consultar",
+    "sessionError": "Sesión no disponible. Vuelve a iniciar sesión e intenta de nuevo.",
+    "openingEtherfuse": "Abriendo Etherfuse…",
+    "pollError": "Error al consultar el estado de verificación."
+  },
   "errors": {
     "network": {
       "offline": { "title": "Sin conexión", "message": "No pudimos conectarnos. Revisa tu señal e intenta otra vez.", "action": "Vuelve a intentar cuando tengas señal." },

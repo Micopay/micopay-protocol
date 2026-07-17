@@ -717,6 +717,11 @@ export async function regenerateRampOrderTx(orderId: string, token: string): Pro
   return res.data as RampOrder;
 }
 
+/**
+ * @deprecated The backend POST /defi/bank-account route was removed on June 30.
+ * CLABE is now captured inside the hosted Etherfuse KYC flow. This function
+ * always returns a 404. Kept only to avoid breaking any remaining references.
+ */
 export async function registerBankAccount(
   clabe: string,
   token: string,
