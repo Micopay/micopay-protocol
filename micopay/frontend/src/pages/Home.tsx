@@ -3,13 +3,13 @@ import { Logo } from '../components/Logo';
 import ErrorBanner from '../components/ErrorBanner';
 import {
   getTradeHistory,
-  getAccountBalance,
   getMerchantTrades,
   getXlmMxnRate,
   TradeHistoryItem,
   getCurrentUser,
 } from '../services/api';
 import { mapApiError, type MappedApiError } from '../utils/apiError';
+import { useWalletBalance } from '../hooks/useWalletBalance';
 
 const EXPLORER = "https://stellar.expert/explorer/testnet/tx";
 
@@ -40,27 +40,33 @@ const Home = ({
   onNavigateInbox,
 }: HomeProps) => {
   const [trades, setTrades] = useState<TradeHistoryItem[]>([]);
-  const [xlmBalance, setXlmBalance] = useState<string | null>(null);
-  const [stellarAddress, setStellarAddress] = useState<string>("");
   const [pendingCount, setPendingCount] = useState(0);
   const [xlmMxnRate, setXlmMxnRate] = useState<number | null>(null);
   const [rateLoading, setRateLoading] = useState(true);
   const [rateError, setRateError] = useState(false);
-  const [balanceError, setBalanceError] = useState<MappedApiError | null>(null);
   const [historyError, setHistoryError] = useState<MappedApiError | null>(null);
   const [pendingError, setPendingError] = useState<MappedApiError | null>(null);
 
-  const loadBalance = useCallback(() => {
-    setBalanceError(null);
-    getAccountBalance()
-      .then(({ xlm, address }) => {
-        setXlmBalance(
-          parseFloat(xlm).toLocaleString("es-MX", { maximumFractionDigits: 2 }),
-        );
-        setStellarAddress(address);
-      })
-      .catch((e) => setBalanceError(mapApiError(e)));
-  }, []);
+  const {
+    balance: mxneBalance,
+    xlmBalance,
+    stellarAddress: rawStellarAddress,
+    loading: balanceLoading,
+    error: walletBalanceError,
+    refresh: loadBalance,
+  } = useWalletBalance();
+
+  const stellarAddress = rawStellarAddress || "";
+
+  const [showBalanceError, setShowBalanceError] = useState(false);
+
+  useEffect(() => {
+    if (walletBalanceError) {
+      setShowBalanceError(true);
+    } else {
+      setShowBalanceError(false);
+    }
+  }, [walletBalanceError]);
 
   const loadHistory = useCallback(() => {
     if (!token) return;
@@ -80,10 +86,6 @@ const Home = ({
       .then((items) => setPendingCount(items.length))
       .catch((e) => setPendingError(mapApiError(e)));
   }, [merchantToken]);
-
-  useEffect(() => {
-    loadBalance();
-  }, [loadBalance]);
 
   useEffect(() => {
     loadHistory();
@@ -217,12 +219,12 @@ const Home = ({
           </p>
         </section>
 
-        {balanceError ? (
+        {showBalanceError && walletBalanceError ? (
           <ErrorBanner
-            message={balanceError.message}
-            action={balanceError.action}
+            message={walletBalanceError.message || "Error al cargar el balance"}
+            action="retry"
             onRetry={loadBalance}
-            onDismiss={() => setBalanceError(null)}
+            onDismiss={() => setShowBalanceError(false)}
             supportState="HOME_BALANCE"
             className="mb-4"
           />
@@ -270,16 +272,16 @@ const Home = ({
           </div>
           <div className="relative z-10 mb-4">
             <h2 className="text-[36px] font-headline font-extrabold text-white tracking-tight">
-              ${mxnBalance} MXN
+              {balanceLoading ? "Cargando balance…" : walletBalanceError ? "--" : mxneBalance}
             </h2>
             <div className="flex items-center gap-2 mt-1">
               <span className="w-2.5 h-2.5 rounded-full bg-[#5DCAA5] animate-pulse shadow-[0_0_8px_#5DCAA5]"></span>
               <p className="text-[#5DCAA5] text-sm font-bold">
-                {balanceError
+                {walletBalanceError
                   ? 'No disponible'
-                  : xlmBalance
-                    ? `${xlmBalance} XLM · Testnet`
-                    : 'Cargando balance…'}
+                  : balanceLoading
+                    ? 'Cargando balance…'
+                    : 'Stellar Testnet'}
               </p>
             </div>
           </div>
@@ -313,21 +315,25 @@ const Home = ({
                 <p className="text-[11px] text-outline">${mxnBalance} MXN</p>
               </div>
             </div>
-            {/* MXNE placeholder */}
-            <div className="flex items-center gap-4 p-4 opacity-40">
+            {/* MXNE */}
+            <div className={`flex items-center gap-4 p-4 ${balanceLoading ? 'opacity-40' : ''}`}>
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                 <span className="text-primary font-black text-xs">MXNE</span>
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <p className="font-bold text-on-surface text-sm">
                   Peso Digital (MXNE)
                 </p>
-                <p className="text-[11px] text-outline">
-                  Mainnet · próximamente
+                <p className="text-[11px] text-outline truncate font-mono">
+                  {stellarAddress
+                    ? `${stellarAddress.substring(0, 8)}…${stellarAddress.slice(-6)}`
+                    : "—"}
                 </p>
               </div>
               <div className="text-right">
-                <p className="font-bold text-on-surface text-sm">— MXN</p>
+                <p className="font-bold text-on-surface text-sm">
+                  {balanceLoading ? "—" : walletBalanceError ? "--" : mxneBalance}
+                </p>
               </div>
             </div>
           </div>

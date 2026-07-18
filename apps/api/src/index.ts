@@ -5,6 +5,7 @@ import fastifyJwt from "@fastify/jwt";
 import { registerRateLimit } from "./plugins/rate-limit.js";
 import { healthRoutes } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
+import { userRoutes } from "./routes/users.js";
 import { cashRoutes } from "./routes/cash.js";
 import { reputationRoutes } from "./routes/reputation.js";
 import { fundRoutes } from "./routes/fund.js";
@@ -43,6 +44,7 @@ export async function createApp() {
 
   app.register(healthRoutes);
   app.register(authRoutes);
+  app.register(userRoutes);
   app.register(cashRoutes);
   app.register(reputationRoutes);
   app.register(fundRoutes);

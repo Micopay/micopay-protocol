@@ -69,6 +69,9 @@ export const config = {
   mockStellar: process.env.MOCK_STELLAR === "true",
   enableInvestments: process.env.ENABLE_INVESTMENTS === "true" || process.env.DEMO_MODE === "true",
 
+  // Webhook
+  webhookSecret: process.env.WEBHOOK_SECRET || "",
+
   // Demo mode — forced false in production (see deriveDemoMode)
   demoMode: deriveDemoMode(process.env.DEMO_MODE, process.env.NODE_ENV),
 } as const;
