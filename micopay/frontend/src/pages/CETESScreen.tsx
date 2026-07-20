@@ -24,6 +24,8 @@ interface CETESScreenProps {
   onBack: () => void;
   onBanco?: () => void;
   userToken?: string;
+  showDefi?: boolean;
+  showSpeiRamp?: boolean;
 }
 
 type Tab = 'buy' | 'sell';
@@ -32,11 +34,15 @@ type ReceiveMethod = 'wallet' | 'spei';
 type PayMethod = 'wallet' | 'spei';
 type DepositStep = 'quote' | 'instructions' | 'polling';
 
-const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
+const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp = false }: CETESScreenProps) => {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<Tab>('buy');
-  const [receiveMethod, setReceiveMethod] = useState<ReceiveMethod>('wallet');
-  const [payMethod, setPayMethod] = useState<PayMethod>('wallet');
+  // When SPEI ramp is enabled but DeFi trading is NOT, hide the simulated
+  // buy/sell trading UI and force the SPEI onramp/offramp path. This isolates
+  // real-funds SPEI flows from the platform-key-only DeFi simulation.
+  const speiOnlyMode = showSpeiRamp && !showDefi;
+  const [tab, setTab] = useState<Tab>(speiOnlyMode ? 'buy' : 'buy');
+  const [receiveMethod, setReceiveMethod] = useState<ReceiveMethod>(speiOnlyMode ? 'spei' : 'wallet');
+  const [payMethod, setPayMethod] = useState<PayMethod>(speiOnlyMode ? 'spei' : 'wallet');
   const [amount, setAmount] = useState('');
   const [sourceAsset, setSourceAsset] = useState<SourceAsset>('XLM');
   
@@ -320,6 +326,7 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
         </div>
 
         <div className="flex flex-col gap-2 bg-surface-container-low rounded-2xl p-1">
+          {showDefi && (
           <div className="flex gap-2">
             {(['buy', 'sell'] as Tab[]).map((tabOption) => (
               <button
@@ -333,6 +340,7 @@ const CETESScreen = ({ onBack, onBanco, userToken }: CETESScreenProps) => {
               </button>
             ))}
           </div>
+          )}
 
           {tab === 'buy' && canDepositSpei && (
             <div className="flex gap-2 mt-1 px-1 pb-1">

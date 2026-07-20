@@ -546,6 +546,8 @@ function CetesRoute() {
           onBack={() => navigate('/explore')}
           onBanco={() => navigate('/deposit')}
           userToken={buyerUser?.token}
+          showDefi={import.meta.env.VITE_ENABLE_DEFI_TRADING === 'true'}
+          showSpeiRamp={import.meta.env.VITE_ENABLE_SPEI_RAMP === 'true'}
       />
   );
 }
