@@ -342,7 +342,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
           </div>
           )}
 
-          {tab === 'buy' && canDepositSpei && (
+          {tab === 'buy' && canDepositSpei && showDefi && (
             <div className="flex gap-2 mt-1 px-1 pb-1">
               <button
                 onClick={() => { setPayMethod('wallet'); setQuote(null); setTxResult(null); setError(null); setAmount(''); setRampOrderId(null); setOrderState(''); setDepositOrder(null); setDepositStep('quote'); setStellarTxHash(null); }}
