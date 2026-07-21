@@ -326,7 +326,8 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
         </div>
 
         <div className="flex flex-col gap-2 bg-surface-container-low rounded-2xl p-1">
-          {showDefi && (
+          {/* Always visible: hiding this in SPEI-only mode would make the
+              'sell' tab (offramp) unreachable, not just the DeFi wallet path. */}
           <div className="flex gap-2">
             {(['buy', 'sell'] as Tab[]).map((tabOption) => (
               <button
@@ -340,7 +341,6 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
               </button>
             ))}
           </div>
-          )}
 
           {tab === 'buy' && canDepositSpei && showDefi && (
             <div className="flex gap-2 mt-1 px-1 pb-1">
@@ -365,14 +365,16 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
 
           {tab === 'sell' && (
             <div className="flex gap-2 mt-1 px-1 pb-1">
-              <button
-                onClick={() => { setReceiveMethod('wallet'); setQuote(null); setTxResult(null); setError(null); }}
-                className={`flex-1 py-1.5 rounded-lg font-bold text-xs transition-all ${
-                  receiveMethod === 'wallet' ? 'bg-white text-primary shadow-sm border border-outline-variant/10' : 'text-on-surface-variant'
-                }`}
-              >
-                {t('cetes.toWallet')}
-              </button>
+              {showDefi && (
+                <button
+                  onClick={() => { setReceiveMethod('wallet'); setQuote(null); setTxResult(null); setError(null); }}
+                  className={`flex-1 py-1.5 rounded-lg font-bold text-xs transition-all ${
+                    receiveMethod === 'wallet' ? 'bg-white text-primary shadow-sm border border-outline-variant/10' : 'text-on-surface-variant'
+                  }`}
+                >
+                  {t('cetes.toWallet')}
+                </button>
+              )}
               {canUseSpei && (
                 <button
                   onClick={() => { setReceiveMethod('spei'); setQuote(null); setTxResult(null); setError(null); setAmount(''); }}
