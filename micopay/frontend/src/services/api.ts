@@ -717,18 +717,6 @@ export async function regenerateRampOrderTx(orderId: string, token: string): Pro
   return res.data as RampOrder;
 }
 
-export async function registerBankAccount(
-  clabe: string,
-  token: string,
-): Promise<BankAccountResult> {
-  try {
-    const res = await http.post('/defi/bank-account', { clabe }, authHeaders(token));
-    return res.data as BankAccountResult;
-  } catch (e: unknown) {
-    throw toApiError(extractApiErrorPayload(e));
-  }
-}
-
 // Global 401 handler: clear the persisted session and bounce to login.
 http.interceptors.response.use(
   (response) => response,
