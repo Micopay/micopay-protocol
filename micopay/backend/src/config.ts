@@ -44,6 +44,50 @@ function parseAllowedOrigins(originsEnv: string | undefined, nodeEnv: string | u
   return originsEnv.split(',').map((origin) => origin.trim()).filter((origin) => origin.length > 0);
 }
 
+export type KycOperationType = 'p2p_transfer' | 'cash_in' | 'cash_out' | 'cetes_purchase';
+
+export interface KycThresholdTier {
+  /** Inclusive MXN ceiling for this tier; null = no ceiling (final/catch-all tier). */
+  maxAmountMxn: number | null;
+  requiredLevel: 0 | 1 | 2;
+}
+
+// Provisional defaults from the compliance plan's Option B tier table
+// (docs/KYC_COMPLIANCE_PLAN_2026-07.md) — pending legal counsel review under
+// the LFPIORPI reform. Override via KYC_OPERATION_THRESHOLDS_JSON without a
+// code change (#314's "keep thresholds config-driven" requirement).
+const DEFAULT_KYC_OPERATION_THRESHOLDS: Record<KycOperationType, KycThresholdTier[]> = {
+  p2p_transfer: [
+    { maxAmountMxn: 3000, requiredLevel: 0 },
+    { maxAmountMxn: null, requiredLevel: 1 },
+  ],
+  cash_in: [
+    { maxAmountMxn: 3000, requiredLevel: 0 },
+    { maxAmountMxn: null, requiredLevel: 1 },
+  ],
+  cash_out: [
+    { maxAmountMxn: 3000, requiredLevel: 0 },
+    { maxAmountMxn: null, requiredLevel: 1 },
+  ],
+  cetes_purchase: [
+    { maxAmountMxn: 3000, requiredLevel: 0 },
+    { maxAmountMxn: null, requiredLevel: 1 },
+  ],
+};
+
+function parseKycOperationThresholds(
+  json: string | undefined,
+): Record<KycOperationType, KycThresholdTier[]> {
+  if (!json) return DEFAULT_KYC_OPERATION_THRESHOLDS;
+  try {
+    const parsed = JSON.parse(json);
+    return { ...DEFAULT_KYC_OPERATION_THRESHOLDS, ...parsed };
+  } catch {
+    console.warn('[config] KYC_OPERATION_THRESHOLDS_JSON is not valid JSON — using defaults');
+    return DEFAULT_KYC_OPERATION_THRESHOLDS;
+  }
+}
+
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   databaseUrl: process.env.DATABASE_URL || 'postgresql://localhost:5432/micopay_dev',
@@ -114,6 +158,12 @@ export const config = {
   merchantCancelPauseThreshold: parseInt(process.env.MERCHANT_CANCEL_PAUSE_THRESHOLD || '5', 10),
   merchantDisputePauseThreshold: parseInt(process.env.MERCHANT_DISPUTE_PAUSE_THRESHOLD || '3', 10),
   adminApiKey: process.env.ADMIN_API_KEY || '',
+
+  // Tiered KYC gate (#314) — audit-only (never blocks) until this is
+  // explicitly enabled, since thresholds are pending legal counsel review.
+  kycGateEnabled: process.env.KYC_GATE_ENABLED === 'true',
+  kycLevelExpiryDays: parseInt(process.env.KYC_LEVEL_EXPIRY_DAYS || '365', 10),
+  kycOperationThresholds: parseKycOperationThresholds(process.env.KYC_OPERATION_THRESHOLDS_JSON),
 
   // CORS & Security
   corsAllowedOrigins: parseAllowedOrigins(process.env.CORS_ALLOWED_ORIGINS, process.env.NODE_ENV),

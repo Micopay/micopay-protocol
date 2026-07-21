@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { config } from "../config.js";
+import { config, type KycOperationType } from "../config.js";
 import { pauseUser, unpauseUser } from "../services/abuse.service.js";
+import { getKycAuditTrail, type GateDecision } from "../services/kyc-gate.service.js";
 import { AuthError, NotFoundError } from "../utils/errors.js";
 import db from "../db/schema.js";
 
@@ -65,5 +66,33 @@ export async function adminRoutes(app: FastifyInstance) {
 
     await unpauseUser(id, null);
     return { ok: true, user_id: id, status: "active" };
+  });
+
+  /**
+   * GET /admin/kyc/audit
+   * Query the #314 tiered-KYC-gate decision trail (append-only
+   * platform_risk_events, action='kyc_gate.decision').
+   */
+  app.get("/admin/kyc/audit", async (request) => {
+    const { user_id, operation_type, gate_decision, from, to, limit } =
+      (request.query as {
+        user_id?: string;
+        operation_type?: string;
+        gate_decision?: string;
+        from?: string;
+        to?: string;
+        limit?: string;
+      } | undefined) ?? {};
+
+    const events = await getKycAuditTrail({
+      userId: user_id,
+      operationType: operation_type as KycOperationType | undefined,
+      gateDecision: gate_decision as GateDecision | undefined,
+      fromDate: from,
+      toDate: to,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+
+    return { events };
   });
 }

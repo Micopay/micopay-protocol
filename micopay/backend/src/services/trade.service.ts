@@ -25,6 +25,7 @@ import {
   assertCanCancelTrade,
   recordTradeCancelled,
 } from './abuse.service.js';
+import { assertKycTierSufficient } from './kyc-gate.service.js';
 import { sendTradeNotificationToMerchant } from './push.service.js';
 
 const logger = pino({ name: 'trade.service' });
@@ -184,6 +185,10 @@ export async function createTrade(input: CreateTradeInput) {
   }
 
   await assertCanCreateTrade({ request, buyerId, sellerId, amountMxn });
+
+  // #314: tiered KYC gate. The buyer is the funds-moving party for a P2P
+  // transfer; audit-only until config.kycGateEnabled is turned on.
+  await assertKycTierSufficient({ userId: buyerId, operationType: 'p2p_transfer', amountMxn });
 
   const seller = await db.getOne<{ id: string; stellar_address: string }>(
     'SELECT id, stellar_address FROM users WHERE id = $1',
