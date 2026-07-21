@@ -6,9 +6,11 @@ interface ExploreProps {
     onNavigate?: (page: string) => void;
     /** When true, DeFi features are hidden (backend reported mock/demo mode). */
     showDefi?: boolean;
+    /** When true, SPEI ramp (KYC + onramp + offramp) is reachable independently. */
+    showSpeiRamp?: boolean;
 }
 
-const Explore = ({ onBack, onNavigate, showDefi = true }: ExploreProps) => {
+const Explore = ({ onBack, onNavigate, showDefi = true, showSpeiRamp = false }: ExploreProps) => {
     const { t } = useTranslation();
     return (
         <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col pb-32">
@@ -35,8 +37,8 @@ const Explore = ({ onBack, onNavigate, showDefi = true }: ExploreProps) => {
                 </section>
 
                 <div className="space-y-6">
-                    {/* CETES tokenizados — feature-gated */}
-                    {showDefi && (
+                    {/* CETES tokenizados — shown if either DeFi or SPEI ramp is enabled */}
+                    {(showDefi || showSpeiRamp) && (
                         <article className="bg-gradient-to-br from-primary/10 to-primary/5 p-6 rounded-[32px] border border-primary/10 shadow-sm relative overflow-hidden group active:scale-[0.98] transition-all">
                             <div className="flex items-center gap-4 mb-4">
                                 <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-md">
