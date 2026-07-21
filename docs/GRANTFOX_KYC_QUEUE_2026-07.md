@@ -39,10 +39,10 @@ The compliance plan's sequence is **A (today, testnet) → B (mainnet gate) → 
 
 | ID | Title | Status | Depends on | Parallel-safe with |
 |---|---|---|---|---|
-| 4a | Tiered KYC Gate Engine + Audit Trail | **Published** — [#314](https://github.com/Micopay/micopay-protocol/issues/314), assigned to `samueloyibodevv`, no PR yet | — | — |
-| 4b | KYC Provider Integration (Didit) | Draft, ready to publish once 4a merges | 4a | 4c, 5a |
-| 4c | Monthly Cumulative Volume Caps | Draft, ready to publish once 4a merges | 4a | 4b, 5a |
-| 5a | Compliance Reporting Engine (SAT/UIF) | Draft, ready to publish once 4a merges | 4a | 4b, 4c |
+| 4a | Tiered KYC Gate Engine + Audit Trail | **Merged** — [#314](https://github.com/Micopay/micopay-protocol/issues/314), closed via `6a2892f` (implemented internally to unblock the rest of the queue — no external PR was ever opened against the assignment) | — | — |
+| 4b | KYC Provider Integration (Didit) | **Published** — [#315](https://github.com/Micopay/micopay-protocol/issues/315) | 4a | 4c, 5a |
+| 4c | Monthly Cumulative Volume Caps | **Published** — [#316](https://github.com/Micopay/micopay-protocol/issues/316) | 4a | 4b, 5a |
+| 5a | Compliance Reporting Engine (SAT/UIF) | **Published** — [#317](https://github.com/Micopay/micopay-protocol/issues/317) | 4a | 4b, 4c |
 | 5b | Automated Screening & Monitoring (Art. 18 X) | Draft, blocked until 5a merges | 4a, 5a | — |
 
 ---
