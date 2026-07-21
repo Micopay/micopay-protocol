@@ -26,7 +26,7 @@ export interface KYCStatusResponse {
  * Generates a short-lived (≈15 min) onboarding URL.
  * URL must be generated at button touch (not earlier).
  */
-export async function startKYC(token: string): Promise<{ onboardingUrl: string }>{
+export async function startKYC(token: string): Promise<{ onboardingUrl: string }> {
   const res = await http.post('/defi/kyc/start', {}, authHeaders(token));
   return res.data;
 }
@@ -109,16 +109,23 @@ export async function cancelTradeRequest(tradeId: string, buyerToken: string): P
 }
 
 export async function patchMerchantAvailability(
-    token: string,
-    merchant_available: boolean,
+  token: string,
+  merchant_available: boolean,
 ): Promise<{ merchant_available: boolean }> {
   const res = await http.patch('/users/me', { merchant_available }, authHeaders(token));
   return res.data.user;
 }
 
-export async function registerUser(username: string): Promise<UserData> {
+export async function registerUser(
+  username: string,
+  phoneHash?: string,
+): Promise<UserData> {
   const stellar_address = (await getPublicKey()) ?? generateFallbackAddress(username);
-  const res = await http.post("/users/register", { username, stellar_address });
+  const body: Record<string, string> = { username, stellar_address };
+  if (phoneHash) {
+    body.phone_hash = phoneHash;
+  }
+  const res = await http.post("/users/register", body);
   return { ...res.data.user, token: res.data.token };
 }
 
@@ -169,16 +176,16 @@ export async function getAuthToken(username: string): Promise<string> {
  * seller to be the one who locks funds and reveals the HTLC secret).
  */
 export async function createTrade(
-    counterpartyId: string,
-    amountMxn: number,
-    callerToken: string,
-    role: 'buyer' | 'seller' = 'buyer',
+  counterpartyId: string,
+  amountMxn: number,
+  callerToken: string,
+  role: 'buyer' | 'seller' = 'buyer',
 ): Promise<TradeData> {
   try {
     const res = await http.post(
-        '/trades',
-        { counterparty_id: counterpartyId, amount_mxn: amountMxn, role },
-        authHeaders(callerToken),
+      '/trades',
+      { counterparty_id: counterpartyId, amount_mxn: amountMxn, role },
+      authHeaders(callerToken),
     );
     return res.data.trade;
   } catch (e: unknown) {
@@ -187,8 +194,8 @@ export async function createTrade(
 }
 
 export async function getTrade(
-    tradeId: string,
-    token: string,
+  tradeId: string,
+  token: string,
 ): Promise<TradeData> {
   const res = await http.get(`/trades/${tradeId}`, authHeaders(token));
   return res.data.trade;
@@ -200,43 +207,43 @@ export async function getTrade(
  * only ever sees the already-signed transaction.
  */
 export async function lockTrade(
-    tradeId: string,
-    sellerToken: string,
+  tradeId: string,
+  sellerToken: string,
 ): Promise<{ lock_tx_hash: string }> {
   const prepareRes = await http.post(
-      `/trades/${tradeId}/lock/prepare`,
-      {},
-      authHeaders(sellerToken),
+    `/trades/${tradeId}/lock/prepare`,
+    {},
+    authHeaders(sellerToken),
   );
   const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
   const signedXdr = 'mock' in prepared ? undefined : await signTransactionXdr(prepared.xdr, prepared.network_passphrase);
 
   const res = await http.post(
-      `/trades/${tradeId}/lock`,
-      signedXdr ? { signed_xdr: signedXdr } : {},
-      authHeaders(sellerToken),
+    `/trades/${tradeId}/lock`,
+    signedXdr ? { signed_xdr: signedXdr } : {},
+    authHeaders(sellerToken),
   );
   return { lock_tx_hash: res.data.lock_tx_hash };
 }
 
 export async function revealTrade(
-    tradeId: string,
-    sellerToken: string,
+  tradeId: string,
+  sellerToken: string,
 ): Promise<void> {
   await http.post(
-      `/trades/${tradeId}/reveal`,
-      undefined,
-      authHeaders(sellerToken),
+    `/trades/${tradeId}/reveal`,
+    undefined,
+    authHeaders(sellerToken),
   );
 }
 
 export async function getSecret(
-    tradeId: string,
-    sellerToken: string,
+  tradeId: string,
+  sellerToken: string,
 ): Promise<{ secret: string; qr_payload: string }> {
   const res = await http.get(
-      `/trades/${tradeId}/secret`,
-      authHeaders(sellerToken),
+    `/trades/${tradeId}/secret`,
+    authHeaders(sellerToken),
   );
   return res.data;
 }
@@ -252,8 +259,8 @@ export interface CompleteTradeResponse {
  * only ever sees the already-signed transaction.
  */
 export async function completeTrade(
-    tradeId: string,
-    buyerToken: string,
+  tradeId: string,
+  buyerToken: string,
 ): Promise<CompleteTradeResponse> {
   const prepareRes = await http.post(`/trades/${tradeId}/complete/prepare`, {}, authHeaders(buyerToken));
   const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
@@ -300,35 +307,35 @@ export interface MerchantTrade {
 }
 
 export async function getMerchantTrades(
-    token: string,
-    state: string = 'all',
+  token: string,
+  state: string = 'all',
 ): Promise<MerchantTrade[]> {
   const res = await http.get(`/merchants/me/trades?state=${state}`, authHeaders(token));
   return res.data.trades;
 }
 
 export async function getTradeHistory(
-    token: string,
+  token: string,
 ): Promise<TradeHistoryItem[]> {
   const res = await http.get("/trades/history", authHeaders(token));
   return res.data.trades;
 }
 
 export async function getCurrentUser(
-    token: string,
+  token: string,
 ): Promise<CurrentUserProfile> {
   const res = await http.get("/users/me", authHeaders(token));
   return res.data.user;
 }
 
 export async function deleteAccount(
-    token: string,
-    username: string,
+  token: string,
+  username: string,
 ): Promise<{ status: string }> {
   const res = await http.post(
-      "/users/me/delete",
-      { username },
-      authHeaders(token),
+    "/users/me/delete",
+    { username },
+    authHeaders(token),
   );
   return res.data;
 }
@@ -387,16 +394,16 @@ export async function getCETESRate(amount = "100"): Promise<CETESRate> {
 }
 
 export async function buyCETES(
-    amount: string,
-    sourceAsset: "XLM" | "USDC" | "MXNe",
+  amount: string,
+  sourceAsset: "XLM" | "USDC" | "MXNe",
 ): Promise<CETESTxResult> {
   const res = await http.post("/defi/cetes/buy", { amount, sourceAsset });
   return res.data;
 }
 
 export async function sellCETES(
-    amount: string,
-    destAsset: "XLM" | "USDC" | "MXNe",
+  amount: string,
+  destAsset: "XLM" | "USDC" | "MXNe",
 ): Promise<CETESTxResult> {
   const res = await http.post("/defi/cetes/sell", { amount, destAsset });
   return res.data;
@@ -440,9 +447,9 @@ export async function getBlendPools(): Promise<BlendPoolsResponse> {
 }
 
 export async function blendSupply(
-    amount: string,
-    asset: string,
-    collateral = false,
+  amount: string,
+  asset: string,
+  collateral = false,
 ): Promise<BlendTxResult> {
   const res = await http.post("/defi/blend/supply", {
     amount,
@@ -453,8 +460,8 @@ export async function blendSupply(
 }
 
 export async function blendBorrow(
-    amount: string,
-    asset: string,
+  amount: string,
+  asset: string,
 ): Promise<BlendTxResult> {
   const res = await http.post("/defi/blend/borrow", { amount, asset });
   return res.data;
