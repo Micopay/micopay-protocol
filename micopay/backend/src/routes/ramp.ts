@@ -11,6 +11,7 @@ import {
   regenerateOrderTx,
   getCetesIdentifier,
 } from '../services/etherfuse.service.js';
+import { assertKycTierSufficient } from '../services/kyc-gate.service.js';
 
 interface RampUserRow {
   stellar_address: string;
@@ -58,6 +59,15 @@ export async function rampRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const user = await requireOnboardedUser(request.user.id);
+
+      // #314: tiered KYC gate. Onramp amount is already MXN; offramp's
+      // sourceAmount is CETES units, so amountMxn is left undefined there
+      // (falls back to the operation's base tier requirement).
+      await assertKycTierSufficient({
+        userId: request.user.id,
+        operationType: type === 'onramp' ? 'cash_in' : 'cash_out',
+        amountMxn: type === 'onramp' ? amount : undefined,
+      });
 
       try {
         const cetesIdentifier = await getCetesIdentifier(user.stellar_address);
