@@ -25,6 +25,7 @@ import { registerRequestId, toSupportCode } from './middleware/requestId.middlew
 import { createProductionListener } from './services/event-listener.service.js';
 import type { EscrowEventListener } from './services/event-listener.service.js';
 import { sweepPendingRefunds } from './services/trade.service.js';
+import { startComplianceJob, stopComplianceJob } from './services/compliance.service.js';
 
 // Resolve the absolute path to the public/ directory next to src/
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -478,6 +479,7 @@ async function start() {
     
     await startEventListener();
     startRefundSweep();
+    startComplianceJob();
   } catch (err) {
     app.log.error(err);
     process.exit(1);
@@ -489,6 +491,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {
     eventListener?.stop();
     if (refundSweepInterval) clearInterval(refundSweepInterval);
+    stopComplianceJob();
     process.exit(0);
   });
 }

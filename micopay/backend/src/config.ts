@@ -165,6 +165,17 @@ export const config = {
   kycLevelExpiryDays: parseInt(process.env.KYC_LEVEL_EXPIRY_DAYS || '365', 10),
   kycOperationThresholds: parseKycOperationThresholds(process.env.KYC_OPERATION_THRESHOLDS_JSON),
 
+  // LFPIORPI aviso (reporting) thresholds, in UMA — consumed by the compliance
+  // reporting engine (#317). Kept here so the verified 2026-07-21 values aren't lost.
+  // UMA 2026 = $117.31 MXN/day.
+  //   - 210 UMA (~$24,635 MXN): aviso when a single operation reaches it.
+  //   - 4 UMA  (~$469 MXN): aviso when the commission WE charge reaches it —
+  //     ⚠️ this is on the protocol fee, not the trade amount; model it when
+  //     setting mainnet fee parameters. Source: portal SPPLD del SAT.
+  umaDailyMxn: parseFloat(process.env.UMA_DAILY_MXN || '117.31'),
+  kycAvisoThresholdUma: parseInt(process.env.KYC_AVISO_THRESHOLD_UMA || '210', 10),
+  kycCommissionAvisoThresholdUma: parseInt(process.env.KYC_COMMISSION_AVISO_THRESHOLD_UMA || '4', 10),
+
   // CORS & Security
   corsAllowedOrigins: parseAllowedOrigins(process.env.CORS_ALLOWED_ORIGINS, process.env.NODE_ENV),
   nodeEnv: process.env.NODE_ENV || 'development',
