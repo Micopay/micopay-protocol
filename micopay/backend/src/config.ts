@@ -105,6 +105,33 @@ function parseKycOperationThresholds(
   }
 }
 
+// #316: monthly cumulative volume ceilings per KYC level, MXN. Staying under
+// #314's per-operation threshold does not exempt a user from a monthly cap —
+// otherwise a user can move arbitrary volume by splitting it into many small
+// operations (pitufeo/structuring), staying under the per-operation limit
+// every time. null = no ceiling. Level 0 is 0 because #314's verified
+// first-peso rule already means no cash<->crypto operation may run at Level
+// 0 in the first place; kept explicit here rather than omitted so every
+// level has a defined ceiling. Level 1/2 figures are PROVISIONAL pending the
+// legal dictamen — same caveat as #314's DEFAULT_KYC_OPERATION_THRESHOLDS.
+// Override via KYC_MONTHLY_VOLUME_CEILINGS_MXN_JSON without a code change.
+const DEFAULT_KYC_MONTHLY_VOLUME_CEILINGS_MXN: Record<number, number | null> = {
+  0: 0,
+  1: 10000,
+  2: null,
+};
+
+function parseKycMonthlyVolumeCeilings(json: string | undefined): Record<number, number | null> {
+  if (!json) return DEFAULT_KYC_MONTHLY_VOLUME_CEILINGS_MXN;
+  try {
+    const parsed = JSON.parse(json);
+    return { ...DEFAULT_KYC_MONTHLY_VOLUME_CEILINGS_MXN, ...parsed };
+  } catch {
+    console.warn('[config] KYC_MONTHLY_VOLUME_CEILINGS_MXN_JSON is not valid JSON — using defaults');
+    return DEFAULT_KYC_MONTHLY_VOLUME_CEILINGS_MXN;
+  }
+}
+
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   databaseUrl: process.env.DATABASE_URL || 'postgresql://localhost:5432/micopay_dev',
@@ -184,6 +211,7 @@ export const config = {
   kycGateEnabled: process.env.KYC_GATE_ENABLED === 'true',
   kycLevelExpiryDays: parseInt(process.env.KYC_LEVEL_EXPIRY_DAYS || '365', 10),
   kycOperationThresholds: parseKycOperationThresholds(process.env.KYC_OPERATION_THRESHOLDS_JSON),
+  kycMonthlyVolumeCeilingsMxn: parseKycMonthlyVolumeCeilings(process.env.KYC_MONTHLY_VOLUME_CEILINGS_MXN_JSON),
 
   // LFPIORPI aviso (reporting) thresholds, in UMA — consumed by the compliance
   // reporting engine (#317, not yet built), NOT by the KYC gate above. Kept here

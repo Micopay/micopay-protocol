@@ -12,6 +12,7 @@
     "test:rate-limit": "node --import tsx src/tests/rateLimit.test.ts",
     "test:abuse": "node --import tsx src/tests/abuse.service.test.ts",
     "test:kyc-gate": "node --import tsx src/tests/kyc-gate.service.test.ts",
+    "test:kyc-monthly-volume": "node --import tsx src/tests/kyc-monthly-volume.test.ts",
     "test:security": "node --import tsx src/tests/security.test.ts"
   },
   "dependencies": {
