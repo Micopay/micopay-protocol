@@ -38,6 +38,7 @@ import ReceivePayment from "./pages/ReceivePayment";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Profile from "./pages/Profile";
+import { SignatureApproval } from "./pages/SignatureApproval";
 import ClaimQR from "./pages/ClaimQR";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -632,6 +633,26 @@ function TermsRoute() {
   return <Terms onBack={() => navigate("/profile")} />;
 }
 
+function SignatureApprovalRoute() {
+  const navigate = useNavigate();
+  const { id } = useParams<{ id?: string }>();
+  const location = useLocation();
+  const { buyerUser } = useAppCtx();
+  const searchParams = new URLSearchParams(location.search);
+  const requestId = id || searchParams.get('id') || undefined;
+
+  return (
+    <SignatureApproval
+      requestId={requestId}
+      token={buyerUser?.token}
+      onBack={() => navigate('/')}
+      onResolved={() => {
+        setTimeout(() => navigate('/'), 2000);
+      }}
+    />
+  );
+}
+
 // ── Route wrappers (auth) ───────────────────────────────────────────────────
 
 function ProtectedRoute({ children }: { children: React.ReactElement }) {
@@ -672,10 +693,11 @@ const HIDE_BOTTOMNAV_ROUTES = new Set([
   "/blend",
   "/privacy",
   "/terms",
+  "/sign-request",
 ]);
 
-// Claim screens also hide the bottom nav (standalone deep-link UI).
-const HIDE_BOTTOMNAV_PREFIX = ['/claim/'];
+// Claim and sign-request screens also hide the bottom nav (standalone deep-link UI).
+const HIDE_BOTTOMNAV_PREFIX = ['/claim/', '/sign-request/'];
 
 function BottomNavAdapter() {
   const navigate = useNavigate();
@@ -1079,6 +1101,8 @@ function App() {
                 <Route path="/profile" element={<ProtectedRoute><ProfileRoute /></ProtectedRoute>} />
                 <Route path="/privacy" element={<ProtectedRoute><PrivacyRoute /></ProtectedRoute>} />
                 <Route path="/terms" element={<ProtectedRoute><TermsRoute /></ProtectedRoute>} />
+                <Route path="/sign-request" element={<ProtectedRoute><SignatureApprovalRoute /></ProtectedRoute>} />
+                <Route path="/sign-request/:id" element={<ProtectedRoute><SignatureApprovalRoute /></ProtectedRoute>} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
               <BottomNavAdapter />

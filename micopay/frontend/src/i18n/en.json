@@ -436,5 +436,41 @@
     "generic": {
       "fallback": { "title": "Something went wrong", "message": "We couldn't finish this action. Try again.", "action": "If the problem continues, contact support." }
     }
+  },
+  "signatureApproval": {
+    "title": "Signature Approval",
+    "loading": "Loading signature request…",
+    "errorTitle": "Could not load request",
+    "notFound": "The signature request does not exist or has expired.",
+    "back": "Back",
+    "securityBoundaryBadge": "Security Boundary",
+    "externalRequestHeader": "External Signature Request",
+    "externalRequestDesc": "This request came from {{appName}}. It was not initiated inside MicoPay.",
+    "requestSourceLabel": "Requesting application",
+    "statusExpired": "Expired",
+    "transactionEffectTitle": "Transaction effect",
+    "youWillSend": "You will send",
+    "destinationLabel": "Destination",
+    "memoLabel": "Memo",
+    "localSigningAssurance": "Private keys never leave this device.",
+    "approveBtn": "Approve & Sign",
+    "rejectBtn": "Reject",
+    "dismissExpiredBtn": "Request Expired - Back",
+    "approvedSuccessTitle": "Transaction signed!",
+    "approvedSuccessDesc": "The signature has been returned to the requesting application.",
+    "rejectedSuccessTitle": "Request rejected",
+    "rejectedSuccessDesc": "You rejected the signature request.",
+    "warnings": {
+      "untrustedTitle": "Security Warning",
+      "failedToDecode": "Could not decode the transaction XDR content.",
+      "invalidXdr": "Invalid transaction XDR format.",
+      "unsupportedOperations": "This transaction contains complex or unsupported operations.",
+      "emptyOperations": "Transaction contains no operations."
+    },
+    "errors": {
+      "fetchFailed": "Error loading signature request.",
+      "approveFailed": "Could not approve the request.",
+      "rejectFailed": "Could not reject the request."
+    }
   }
 }
