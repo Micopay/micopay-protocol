@@ -14,7 +14,9 @@
     "test:kyc-gate": "node --import tsx src/tests/kyc-gate.service.test.ts",
     "test:compliance": "node --import tsx src/tests/compliance.test.ts",
     "test:kyc-didit": "node --import tsx src/tests/kyc-didit.test.ts",
-    "test:security": "node --import tsx src/tests/security.test.ts"
+    "test:security": "node --import tsx src/tests/security.test.ts",
+    "test:sign-requests": "node --import tsx src/tests/signRequests.test.ts",
+    "issue-device-key": "tsx src/scripts/issue-device-key.ts"
   },
   "dependencies": {
     "@fastify/cors": "^8.5.0",
