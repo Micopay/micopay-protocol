@@ -3,7 +3,7 @@ import { config, type KycOperationType } from '../config.js';
 import { pauseUser, unpauseUser } from '../services/abuse.service.js';
 import { getKycAuditTrail, type GateDecision } from '../services/kyc-gate.service.js';
 import { generateMonthlyFiling } from '../services/compliance.service.js';
-import { listAdminDisputes, resolveAdminDispute } from '../services/admin.service.ts';
+import { listAdminDisputes, resolveAdminDispute } from '../services/admin.service.js';
 import { AuthError, NotFoundError } from '../utils/errors.js';
 import db from '../db/schema.js';
 

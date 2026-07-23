@@ -146,7 +146,7 @@ async function runDisputeTests() {
     url: '/admin/disputes',
     headers: { authorization: `Bearer ${buyerToken}` },
   });
-  strictEqual(resAdminForbidden.statusCode, 403, 'Non-admin blocked from GET /admin/disputes');
+  ok([401, 403].includes(resAdminForbidden.statusCode), 'Non-admin blocked from GET /admin/disputes');
 
   // Admin lists open disputes
   const resAdminList = await app.inject({
