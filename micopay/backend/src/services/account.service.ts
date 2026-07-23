@@ -41,6 +41,15 @@ export async function deleteAccount(userId: string, confirmUsername: string) {
     );
   }
 
+  // Define anonymized representations for PII minimization
+  const idPrefix = userId.substring(0, 8);
+  const anonymizedUsername = `deleted_${idPrefix}`;
+  const anonymizedStellarAddress = user.stellar_address
+    ? `${user.stellar_address.substring(0, 4)}...${user.stellar_address.substring(52)}`
+    : null;
+  const anonymizedPhoneHash = user.phone_hash ? `anonymized_${idPrefix}` : null;
+
+  // 1. Anonymize primary user table and clear active flags
   await db.execute(
     `UPDATE users
      SET deleted_at = NOW(),
@@ -49,9 +58,56 @@ export async function deleteAccount(userId: string, confirmUsername: string) {
          deleted_phone_hash = $4,
          username = NULL,
          stellar_address = NULL,
-         phone_hash = NULL
+         phone_hash = NULL,
+         merchant_available = false
      WHERE id = $1`,
-    [userId, user.username, user.stellar_address, user.phone_hash],
+    [userId, anonymizedUsername, anonymizedStellarAddress, anonymizedPhoneHash],
+  );
+
+  // 2. wallets — Delete the user's wallet record for complete PII deletion
+  await db.execute(
+    "DELETE FROM wallets WHERE user_id = $1",
+    [userId],
+  );
+
+  // 3. user_devices — Delete the user's push tokens
+  await db.execute(
+    "DELETE FROM user_devices WHERE user_id = $1",
+    [userId],
+  );
+
+  // 4. chat_messages — Delete messages sent by this user to clear message sender PII
+  await db.execute(
+    "DELETE FROM chat_messages WHERE sender_id = $1",
+    [userId],
+  );
+
+  // 5. dispute_events — Anonymize dispute logs reported by user
+  await db.execute(
+    `UPDATE dispute_events
+     SET evidence_urls = NULL,
+         reason = 'Anonymized due to account deletion'
+     WHERE reported_by = $1`,
+    [userId],
+  );
+
+  // 6. secret_access_log — Anonymize IP address and User Agent
+  await db.execute(
+    `UPDATE secret_access_log
+     SET ip_address = '0.0.0.0',
+         user_agent = 'Anonymized'
+     WHERE user_id = $1`,
+    [userId],
+  );
+
+  // 7. account_funding_log — Anonymize funding logs
+  await db.execute(
+    `UPDATE account_funding_log
+     SET stellar_address = 'Anonymized',
+         phone_hash = NULL,
+         ip_address = NULL
+     WHERE user_id = $1`,
+    [userId],
   );
 
   await logAuditEvent({

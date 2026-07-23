@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Wave 6 plan (read first)
+    url: https://github.com/ericmt-98/micopay-protocol/blob/main/docs/AUDIT_APK_WAVE6.md
+    about: The Wave 6 source of truth — findings, issue queue, and acceptance criteria.
+  - name: Research issues overview
+    url: https://github.com/ericmt-98/micopay-protocol/blob/main/docs/WAVE6_RESEARCH_ISSUES.md
+    about: What the validation (research) issues are and how they feed the SDF case.

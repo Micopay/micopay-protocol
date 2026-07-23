@@ -63,3 +63,14 @@ export async function removeKey(key: string): Promise<void> {
   const store = await getStore();
   await store.remove(key);
 }
+
+const BACKUP_CONFIRMED_KEY = 'backup_confirmed';
+
+export async function setBackupConfirmed(): Promise<void> {
+  await writeJSON(BACKUP_CONFIRMED_KEY, true);
+}
+
+export async function isBackupConfirmed(): Promise<boolean> {
+  const confirmed = await readJSON<boolean>(BACKUP_CONFIRMED_KEY);
+  return !!confirmed;
+}

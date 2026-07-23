@@ -44,6 +44,23 @@ if (process.env.NODE_ENV === "production" && process.env.DEMO_MODE === "true") {
   console.warn("[WARN] DEMO_MODE=true is ignored in production");
 }
 
+/**
+ * Parse CORS_ALLOWED_ORIGINS from environment variable.
+ * Format: comma-separated list of origins (e.g., "https://example.com,https://app.example.com")
+ * Defaults to localhost in development, empty array in production.
+ */
+function parseAllowedOrigins(originsEnv: string | undefined, nodeEnv: string | undefined): string[] {
+  if (!originsEnv) {
+    // Development: allow localhost
+    if (nodeEnv !== "production") {
+      return ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000", "http://127.0.0.1:5173"];
+    }
+    // Production: empty array means no CORS (must be explicitly configured)
+    return [];
+  }
+  return originsEnv.split(",").map((origin) => origin.trim()).filter((origin) => origin.length > 0);
+}
+
 export const config = {
   port: parseInt(process.env.PORT || "3000", 10),
   databaseUrl:
@@ -65,8 +82,29 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || "dev_jwt_secret",
   jwtExpiry: process.env.JWT_EXPIRY || "24h",
 
+  // CORS & Security
+  corsAllowedOrigins: parseAllowedOrigins(process.env.CORS_ALLOWED_ORIGINS, process.env.NODE_ENV),
+  nodeEnv: process.env.NODE_ENV || "development",
+
   // MVP flags
   mockStellar: process.env.MOCK_STELLAR === "true",
+  enableInvestments: process.env.ENABLE_INVESTMENTS === "true" || process.env.DEMO_MODE === "true",
+
+  // Base (BASE_IMPLEMENTATION_PLAN_2026-07.md, WP1)
+  x402AcceptChains: (process.env.X402_ACCEPT_CHAINS || "stellar")
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean),
+  baseRpcUrl: process.env.BASE_RPC_URL || "https://sepolia.base.org",
+  baseChainId: parseInt(process.env.BASE_CHAIN_ID || "84532", 10),
+  baseUsdcAddress: process.env.BASE_USDC_ADDRESS || "",
+  // Treasury address only — deliberately no private key counterpart here,
+  // see .env.example. It receives transferWithAuthorization payments and
+  // never signs in the hot path.
+  platformBaseAddress: process.env.PLATFORM_BASE_ADDRESS || "",
+  x402FacilitatorUrl: process.env.X402_FACILITATOR_URL || "",
+  relayerEvmPrivateKey: process.env.RELAYER_EVM_PRIVATE_KEY || "",
+
 
   // Demo mode — forced false in production (see deriveDemoMode)
   demoMode: deriveDemoMode(process.env.DEMO_MODE, process.env.NODE_ENV),

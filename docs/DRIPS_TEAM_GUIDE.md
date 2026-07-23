@@ -332,6 +332,7 @@ Recommended labels:
 - `wave:good-first`
 - `wave:blocked`
 - `wave:needs-product`
+- `research` — market/user validation issues with no code and no PR; they close on a structured, privacy-first answer (see Wave 6 §7 in `AUDIT_APK_WAVE6.md`). Create this label deliberately before opening those issues.
 
 ## MicoPay-specific policy for Drips
 

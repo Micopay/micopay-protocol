@@ -4,6 +4,7 @@ members = [
     "atomic-swap",
     "micopay-escrow",
     "micopay-badges",
+    "zk-verifier",
 ]
 resolver = "2"
 

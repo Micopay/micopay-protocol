@@ -46,6 +46,17 @@ describe("x402 Middleware", () => {
   });
 
   describe("with mock payment", () => {
+    const originalMockMode = process.env.X402_MOCK_MODE;
+
+    beforeAll(() => {
+      process.env.X402_MOCK_MODE = "true";
+    });
+
+    afterAll(() => {
+      if (originalMockMode === undefined) delete process.env.X402_MOCK_MODE;
+      else process.env.X402_MOCK_MODE = originalMockMode;
+    });
+
     it("should accept mock payment header", async () => {
       const response = await app.inject({
         method: "GET",
@@ -56,6 +67,20 @@ describe("x402 Middleware", () => {
       });
 
       expect(response.statusCode).toBe(200);
+    });
+  });
+
+  describe("with mock payment but X402_MOCK_MODE unset (SEC-C2 regression)", () => {
+    it("should reject the mock payment header", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/test",
+        headers: {
+          "x-payment": "mock:GTEST123:0.001",
+        },
+      });
+
+      expect(response.statusCode).toBe(402);
     });
   });
 });

@@ -1,5 +1,28 @@
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import MapSim from '../components/MapSim';
-import { useGeolocation } from '../hooks/useGeolocation';
+import { useMerchantsAvailable } from '../hooks/useMerchantsAvailable';
+import {
+  effectiveFeePercent,
+  MAX_EFFECTIVE_FEE_PERCENT,
+  type AvailableMerchant,
+} from '../services/api';
+import { PLATFORM_FEE_PERCENT } from '../constants/trade';
+import ErrorBanner from '../components/ErrorBanner';
+import type { ApiErrorAction } from '../utils/apiError';
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+function formatDistance(km: number): string {
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${km.toFixed(1)} km`;
+}
+
+function walkMinutes(km: number): number {
+  return Math.max(1, Math.round((km / 5) * 60));
+}
+
+// ─── Offer shape used by the card renderer ───────────────────────────────────
 
 interface Offer {
   id: string;
@@ -8,66 +31,145 @@ interface Offer {
   distance: string;
   walkMinutes: number;
   receiveMxn: number;
+  /** Provider commission (%). */
   commissionPct: number;
+  /** Platform fee (%) — the other half of the effective cost. */
+  platformFeePct: number;
   badge?: string;
-  rating?: string;
-  verified?: boolean;
   isPrimary?: boolean;
+  completionRate?: number;
+  tradesCompleted?: number;
+  tier?: string;
+  isBusiness?: boolean;
+  online?: boolean;
 }
 
-// Hardcoded testnet offers — replace with API data when backend P2P matching is live
-const DEFAULT_OFFERS: Offer[] = [
-  {
-    id: 'offer_1',
-    name: 'Farmacia Guadalupe',
+function merchantToOffer(m: AvailableMerchant, index: number): Offer {
+  return {
+    id: m.seller_id,
+    name: m.username,
     icon: 'storefront',
-    distance: '180 m',
-    walkMinutes: 3,
-    receiveMxn: 495,
-    commissionPct: 1,
-    badge: 'Negocio verificado',
-    verified: true,
-    isPrimary: true,
-  },
-  {
-    id: 'offer_2',
-    name: 'Usuario @carlos_g',
-    icon: 'person',
-    distance: '320 m',
-    walkMinutes: 5,
-    receiveMxn: 490,
-    commissionPct: 2,
-    rating: '⭐ 4.9 · 87 intercambios',
-  },
-  {
-    id: 'offer_3',
-    name: 'Lavandería El Sol',
-    icon: 'laundry',
-    distance: '450 m',
-    walkMinutes: 7,
-    receiveMxn: 485,
-    commissionPct: 3,
-    badge: 'Verificado',
-  },
-];
+    distance: formatDistance(m.distance_km),
+    walkMinutes: walkMinutes(m.distance_km),
+    receiveMxn: m.payout_mxn,
+    commissionPct: m.rate_percent,
+    platformFeePct: m.platform_fee_pct ?? PLATFORM_FEE_PERCENT,
+    isPrimary: index === 0,
+    completionRate: m.completion_rate ?? 0,
+    tradesCompleted: m.trades_completed ?? 0,
+    tier: m.tier ?? undefined,
+    isBusiness: (m.seller_type === 'business') || (m.is_business === true) || false,
+    online: true,
+  };
+}
+
+export interface OfferConfirmData {
+  id: string;
+  name: string;
+  receiveMxn: number;
+  commissionPct: number;
+  nearbyCount: number;
+  online?: boolean;
+}
 
 interface ExploreMapProps {
   onBack: () => void;
   onSelectOffer: (offerId: string) => void;
+  onProceedToConfirm?: (offer: OfferConfirmData) => void;
   amount?: number;
   loading?: boolean;
-  /** Pass [] to show the empty state (e.g. when P2P matching returns no nearby providers) */
-  offers?: Offer[];
+  creationError?: string | null;
+  creationErrorAction?: ApiErrorAction;
+  onDismissCreationError?: () => void;
+  onRetryCreationError?: () => void;
+  /** Effective-fee threshold (%) above which a warning is shown. Defaults to the shared guardrail. */
+  maxEffectiveFeePercent?: number;
+}
+
+// ─── Effective cost (provider + platform) + over-threshold warning ────────────
+
+function EffectiveFeeNote({
+  commissionPct,
+  platformFeePct,
+  maxPct,
+}: {
+  commissionPct: number;
+  platformFeePct: number;
+  maxPct: number;
+}) {
+  const { t } = useTranslation();
+  const totalPct = effectiveFeePercent(commissionPct, platformFeePct);
+  const exceeds = totalPct > maxPct;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold text-outline uppercase tracking-wider">
+          {t('map.totalEffectiveCost')}
+        </span>
+        <span
+          className={`text-sm font-bold tabular-nums ${exceeds ? 'text-error' : 'text-on-surface'}`}
+        >
+          {totalPct.toFixed(1)}%
+        </span>
+      </div>
+      <p className="text-[11px] text-outline font-medium">
+        {t('map.feeBreakdown', { platformPct: platformFeePct, providerPct: commissionPct })}
+      </p>
+      {exceeds && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-error/30 bg-error/5 px-3 py-2"
+        >
+          <span className="material-symbols-outlined text-error text-base leading-none">warning</span>
+          <p className="text-[12px] font-medium text-error leading-snug">
+            {t('map.feeExceedsWarning', { maxPct })}
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 const ExploreMap = ({
   onBack,
   onSelectOffer,
+  onProceedToConfirm,
   amount = 500,
   loading = false,
-  offers = DEFAULT_OFFERS,
+  creationError,
+  creationErrorAction = 'retry',
+  onDismissCreationError,
+  onRetryCreationError,
+  maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
 }: ExploreMapProps) => {
-  const geo = useGeolocation();
+  const { t } = useTranslation();
+  const [selectedMerchantId, setSelectedMerchantId] = useState<string | null>(null);
+  const selectedOfferRef = useRef<HTMLElement | null>(null);
+  const { state, refetch } = useMerchantsAvailable({
+    amount_mxn: amount,
+    flow: 'cashout',
+    radius_km: 50,
+  });
+
+  useEffect(() => {
+    selectedOfferRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selectedMerchantId]);
+
+  if (state.status === 'loading' || state.status === 'idle') {
+    return <LoadingSkeleton onBack={onBack} />;
+  }
+
+  if (state.status === 'location_denied') {
+    return <LocationDenied onBack={onBack} />;
+  }
+
+  if (state.status === 'error') {
+    return <FetchError onBack={onBack} onRetry={refetch} />;
+  }
+
+  const merchants = state.status === 'success' ? state.merchants : [];
+  const offers: Offer[] = merchants.map((m, i) => merchantToOffer(m, i));
+
   return (
     <div className="bg-surface-container-lowest text-on-surface font-body min-h-screen pb-24">
       {/* Top Navigation */}
@@ -75,54 +177,48 @@ const ExploreMap = ({
         <button
           onClick={onBack}
           className="flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
+          aria-label="Volver"
         >
           <span className="material-symbols-outlined text-primary">arrow_back</span>
         </button>
-        <h1 className="ml-4 font-headline font-bold text-xl text-primary tracking-tight">Convertir a efectivo</h1>
+        <h1 className="ml-4 font-headline font-bold text-xl text-primary tracking-tight">
+          {t('map.title')}
+        </h1>
       </header>
 
-      <main className="pt-24 px-6 max-w-2xl mx-auto">
+      <main className="pt-[calc(6rem+env(safe-area-inset-top))] px-6 max-w-2xl mx-auto">
+        {creationError ? (
+          <ErrorBanner
+            message={creationError}
+            action={creationErrorAction}
+            onRetry={onRetryCreationError}
+            onDismiss={onDismissCreationError}
+            supportState="TRADE_CREATE"
+            className="mb-6"
+          />
+        ) : null}
+
         {/* Map Section */}
         <section className="mb-10">
-          <MapSim />
+          <MapSim
+            merchants={merchants}
+            selectedMerchantId={selectedMerchantId}
+            onSelectMerchant={setSelectedMerchantId}
+          />
         </section>
 
         {offers.length === 0 ? (
-          /* ── Empty state: no merchants match ── */
-          <div className="flex flex-col items-center text-center py-12 px-4 gap-4">
-            <div className="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center">
-              <span className="material-symbols-outlined text-outline text-3xl">location_off</span>
-            </div>
-            <h2 className="font-headline font-bold text-xl text-on-surface">
-              Sin proveedores cerca ahora
-            </h2>
-            <p className="text-sm text-outline leading-snug max-w-[280px]">
-              No hay nadie disponible en tu zona para ${amount} MXN en este momento. Prueba en unos minutos o ajusta el monto.
-            </p>
-            <button
-              onClick={onBack}
-              className="mt-2 h-[48px] px-8 border-2 border-primary text-primary font-bold rounded-xl active:scale-95 transition-all duration-200 flex items-center gap-2"
-            >
-              <span className="material-symbols-outlined text-sm">tune</span>
-              Cambiar monto
-            </button>
-          </div>
+          <EmptyState onBack={onBack} amount={amount} />
         ) : (
           <>
             {/* Results Header */}
             <div className="mb-6">
               <h2 className="font-headline font-bold text-2xl text-on-surface">
-                {offers.length} {offers.length === 1 ? 'oferta' : 'ofertas'} para ${amount} MXN
+                {offers.length} {offers.length === 1 ? t('map.offer') : t('map.offers')} {t('map.for', { amount })}
               </h2>
               <div className="flex items-center gap-1 mt-1">
                 <span className="material-symbols-outlined text-primary text-sm">location_on</span>
-                <p className="text-sm text-outline font-medium">
-                  {geo.loading
-                    ? 'Localizando...'
-                    : geo.lat && geo.lng
-                      ? `${geo.lat.toFixed(3)}, ${geo.lng.toFixed(3)}`
-                      : 'Zona Centro'}
-                </p>
+                <p className="text-sm text-outline font-medium">{t('map.nearYou')}</p>
               </div>
             </div>
 
@@ -130,16 +226,23 @@ const ExploreMap = ({
             <div className="space-y-4">
               {offers.map((offer, idx) => {
                 const isPrimary = offer.isPrimary ?? idx === 0;
+                const isSelected = selectedMerchantId === offer.id;
                 if (isPrimary) {
                   return (
                     <article
                       key={offer.id}
-                      className="relative bg-surface p-6 rounded-[24px] border border-primary-container/10 shadow-[0_4px_24px_rgba(0,133,96,0.06)] overflow-hidden"
+                      ref={isSelected ? selectedOfferRef : null}
+                      className={`relative bg-surface p-6 rounded-[24px] border shadow-[0_4px_24px_rgba(0,133,96,0.06)] overflow-hidden transition-all ${isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-primary-container/10'}`}
                     >
                       <div className="flex gap-2 mb-4">
                         <span className="px-3 py-1 bg-primary text-white text-[11px] font-bold rounded-full uppercase tracking-wider">
-                          Mejor oferta
+                          {t('map.bestOffer')}
                         </span>
+                        {isSelected && (
+                          <span className="px-3 py-1 bg-primary/10 text-primary text-[11px] font-bold rounded-full uppercase tracking-wider">
+                            {t('map.selectedOnMap')}
+                          </span>
+                        )}
                         {offer.badge && (
                           <span className="px-3 py-1 bg-surface-container-high text-primary text-[11px] font-bold rounded-full uppercase tracking-wider">
                             {offer.badge}
@@ -147,45 +250,76 @@ const ExploreMap = ({
                         )}
                       </div>
                       <div className="flex items-start justify-between mb-6">
-                        <div className="flex gap-4">
-                          <div className="w-14 h-14 bg-primary-container/10 rounded-2xl flex items-center justify-center">
+                        <div className="flex gap-4 min-w-0">
+                          <div className="w-14 h-14 bg-primary-container/10 rounded-2xl flex items-center justify-center flex-shrink-0">
                             <span className="material-symbols-outlined text-primary text-3xl">{offer.icon}</span>
                           </div>
-                          <div>
-                            <h3 className="font-headline font-bold text-lg text-on-surface">{offer.name}</h3>
+                          <div className="min-w-0">
+                            <h3 className="font-headline font-bold text-lg text-on-surface truncate">{offer.name}</h3>
                             <p className="text-sm text-outline font-medium flex items-center gap-1">
                               <span className="material-symbols-outlined text-sm">directions_walk</span>
                               {offer.distance} · {offer.walkMinutes} min
                             </p>
+                            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span className="text-[12px] text-on-surface-variant">{offer.completionRate ? t('map.completion', { pct: Math.round(offer.completionRate) }) : t('map.noHistory')}</span>
+                              <span className="text-[12px] text-on-surface-variant">·</span>
+                              <span className="text-[12px] text-on-surface-variant">{offer.tradesCompleted ?? 0} {t('map.ops')}</span>
+                              {offer.tier && (
+                                <span className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-surface-container-high text-primary">{offer.tier}</span>
+                              )}
+                              <span className={`px-2 py-0.5 text-[11px] font-bold rounded-md ${offer.isBusiness ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                                {offer.isBusiness ? t('map.business') : t('map.individual')}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center justify-between mb-6 p-4 bg-white/50 rounded-2xl">
                         <div>
-                          <p className="text-[11px] font-bold text-outline uppercase tracking-wider mb-1">Recibes</p>
+                          <p className="text-[11px] font-bold text-outline uppercase tracking-wider mb-1">{t('map.youReceive')}</p>
                           <p className="text-2xl font-headline font-extrabold text-[#5DCAA5]">
                             ${offer.receiveMxn.toFixed(2)} MXN
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-[11px] font-bold text-outline uppercase tracking-wider mb-1">Comisión</p>
+                          <p className="text-[11px] font-bold text-outline uppercase tracking-wider mb-1">{t('map.commission')}</p>
                           <p className="text-sm font-bold text-on-surface">
                             ${(amount - offer.receiveMxn).toFixed(2)} ({offer.commissionPct}%)
                           </p>
                         </div>
                       </div>
+                      <div className="mb-6 p-4 bg-white/50 rounded-2xl">
+                        <EffectiveFeeNote
+                          commissionPct={offer.commissionPct}
+                          platformFeePct={offer.platformFeePct}
+                          maxPct={maxEffectiveFeePercent}
+                        />
+                      </div>
                       <button
-                        onClick={() => onSelectOffer(offer.id)}
+                        onClick={() => {
+                          if (onProceedToConfirm) {
+                            onProceedToConfirm({
+                              id: offer.id,
+                              name: offer.name,
+                              receiveMxn: offer.receiveMxn,
+                              commissionPct: offer.commissionPct,
+                              nearbyCount: offers.length,
+                              online: (offer as any).online ?? true,
+                            });
+                          } else {
+                            onSelectOffer(offer.id);
+                          }
+                        }}
                         disabled={loading}
                         className="w-full h-[52px] bg-gradient-to-r from-primary to-primary-container text-white font-headline font-bold rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
                       >
                         {loading ? (
                           <>
                             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            Preparando escrow...
+                            {t('map.preparingEscrow')}
                           </>
                         ) : (
-                          'Ir con este agente'
+                          t('map.goWithAgent')
                         )}
                       </button>
                     </article>
@@ -195,35 +329,71 @@ const ExploreMap = ({
                 return (
                   <article
                     key={offer.id}
-                    className="bg-surface-container-low/30 p-5 rounded-[24px] border border-transparent hover:border-surface-container-high transition-all"
+                    ref={isSelected ? selectedOfferRef : null}
+                    className={`bg-surface-container-low/30 p-5 rounded-[24px] border transition-all ${isSelected ? 'border-primary ring-2 ring-primary/30 bg-primary/5' : 'border-transparent hover:border-surface-container-high'}`}
                   >
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center border border-surface-container-high">
+                    <div className="flex items-start justify-between gap-3 mb-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center border border-surface-container-high flex-shrink-0">
                           <span className="material-symbols-outlined text-outline">{offer.icon}</span>
                         </div>
-                        <div>
-                          <h3 className="font-headline font-bold text-on-surface">{offer.name}</h3>
-                          {(offer.rating ?? offer.badge) && (
+                        <div className="min-w-0">
+                          <h3 className="font-headline font-bold text-on-surface truncate">{offer.name}</h3>
+                            {offer.badge && (
                             <span className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
-                              {offer.rating ?? offer.badge}
+                              {offer.badge}
+                            </span>
+                          )}
+                            <div className="mt-1 text-sm text-on-surface-variant flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span>{offer.completionRate ? `${Math.round(offer.completionRate)}%` : t('map.noHistory')}</span>
+                              <span>·</span>
+                              <span>{offer.tradesCompleted ?? 0} {t('map.ops')}</span>
+                              {offer.tier && <span className="px-2 py-0.5 text-[10px] rounded-md bg-surface-container-high text-primary">{offer.tier}</span>}
+                              <span className={`px-2 py-0.5 text-[10px] rounded-md ${offer.isBusiness ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                                {offer.isBusiness ? t('map.business') : t('map.individual')}
+                              </span>
+                            </div>
+                          {isSelected && (
+                            <span className="inline-block mt-1 text-[11px] font-bold text-primary bg-white px-2 py-0.5 rounded-md">
+                              {t('map.selectedOnMap')}
                             </span>
                           )}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-[10px] font-bold text-outline uppercase tracking-wider">Oferta</p>
-                        <p className="text-lg font-headline font-bold text-on-surface">
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-[10px] font-bold text-outline uppercase tracking-wider">{t('map.offer')}</p>
+                        <p className="text-lg font-headline font-bold text-on-surface whitespace-nowrap">
                           ${offer.receiveMxn.toFixed(2)} MXN
                         </p>
                       </div>
                     </div>
+                    <div className="mb-4">
+                      <EffectiveFeeNote
+                        commissionPct={offer.commissionPct}
+                        platformFeePct={offer.platformFeePct}
+                        maxPct={maxEffectiveFeePercent}
+                      />
+                    </div>
                     <button
-                      onClick={() => onSelectOffer(offer.id)}
+                      onClick={() => {
+                        if (onProceedToConfirm) {
+                          onProceedToConfirm({
+                            id: offer.id,
+                            name: offer.name,
+                            receiveMxn: offer.receiveMxn,
+                            commissionPct: offer.commissionPct,
+                            nearbyCount: offers.length,
+                            online: (offer as any).online ?? true,
+
+                          });
+                        } else {
+                          onSelectOffer(offer.id);
+                        }
+                      }}
                       disabled={loading}
                       className="w-full py-3 border border-primary text-primary font-bold rounded-xl active:scale-95 transition-all disabled:opacity-70"
                     >
-                      Ver oferta
+                      {t('map.viewOffer')}
                     </button>
                   </article>
                 );
@@ -233,7 +403,7 @@ const ExploreMap = ({
             {/* Footer Note */}
             <footer className="mt-10 mb-8 p-6 text-center">
               <p className="text-[12px] leading-relaxed text-outline font-medium">
-                Tu saldo se bloquea en garantía hasta que confirmes la recepción del efectivo. Operación segura y protegida por MicoPay Smart Escrow.
+                {t('map.footerNote')}
               </p>
             </footer>
           </>
@@ -242,5 +412,116 @@ const ExploreMap = ({
     </div>
   );
 };
+
+// ─── State screens ───────────────────────────────────────────────────────────
+
+function StateHeader({ onBack }: { onBack: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <header className="fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-white/80 backdrop-blur-md shadow-sm">
+      <button
+        onClick={onBack}
+        className="flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
+        aria-label="Volver"
+      >
+        <span className="material-symbols-outlined text-primary">arrow_back</span>
+      </button>
+      <h1 className="ml-4 font-headline font-bold text-xl text-primary tracking-tight">
+        {t('map.title')}
+      </h1>
+    </header>
+  );
+}
+
+function StateShell({
+  onBack,
+  icon,
+  title,
+  children,
+  spin = false,
+}: {
+  onBack: () => void;
+  icon: string;
+  title: string;
+  children?: ReactNode;
+  spin?: boolean;
+}) {
+  return (
+    <div className="bg-surface-container-lowest text-on-surface font-body min-h-screen pb-24">
+      <StateHeader onBack={onBack} />
+      <main className="pt-[calc(6rem+env(safe-area-inset-top))] px-6 max-w-2xl mx-auto flex flex-col items-center text-center">
+        <div className="w-16 h-16 bg-primary-container/10 rounded-2xl flex items-center justify-center mt-16 mb-6">
+          <span className={`material-symbols-outlined text-primary text-4xl ${spin ? 'animate-spin' : ''}`}>
+            {icon}
+          </span>
+        </div>
+        <h2 className="font-headline font-bold text-xl text-on-surface mb-2">{title}</h2>
+        {children}
+      </main>
+    </div>
+  );
+}
+
+function LoadingSkeleton({ onBack }: { onBack: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <StateShell onBack={onBack} icon="progress_activity" title={t('map.searchingOffers')} spin>
+      <p className="text-sm text-outline font-medium max-w-xs">
+        {t('map.locatingAgents')}
+      </p>
+    </StateShell>
+  );
+}
+
+function LocationDenied({ onBack }: { onBack: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <StateShell onBack={onBack} icon="location_off" title={t('map.needLocation')}>
+      <p className="text-sm text-outline font-medium max-w-xs mb-6">
+        {t('map.enableLocation')}
+      </p>
+      <button
+        onClick={onBack}
+        className="px-6 py-3 border border-primary text-primary font-bold rounded-xl active:scale-95 transition-all"
+      >
+        {t('map.back')}
+      </button>
+    </StateShell>
+  );
+}
+
+function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <StateShell onBack={onBack} icon="cloud_off" title={t('map.couldNotLoad')}>
+      <p className="text-sm text-outline font-medium max-w-xs mb-6">
+        {t('map.checkConnection')}
+      </p>
+      <button
+        onClick={onRetry}
+        className="px-6 py-3 bg-primary text-white font-bold rounded-xl active:scale-95 transition-all"
+      >
+        {t('map.retry')}
+      </button>
+    </StateShell>
+  );
+}
+
+function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) {
+  const { t } = useTranslation();
+  return (
+    <StateShell onBack={onBack} icon="search_off" title={t('map.noAgentsAvailable')}>
+      <p className="text-sm text-outline font-medium max-w-xs mb-6">
+        {t('map.noAgentsDesc', { amount })}
+      </p>
+      <button
+        onClick={onBack}
+        className="px-6 py-3 border border-primary text-primary font-bold rounded-xl active:scale-95 transition-all"
+      >
+        {t('map.changeAmount')}
+      </button>
+    </StateShell>
+  );
+}
 
 export default ExploreMap;

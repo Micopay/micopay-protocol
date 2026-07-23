@@ -2,6 +2,8 @@
 
 MicoPay is participating in **[Stellar Drips Wave 4](https://www.drips.network/wave/stellar)**. Contributions are scoped to the retail mobile app — not the whole monorepo.
 
+> **Two campaigns run in parallel.** This guide covers Stellar Drips issues (`wave:*` + `Stellar Wave` labels). Issues labeled `grantfox:*` belong to the **GrantFox** campaign — same code standards, different assignment and reward flow: see [`docs/GRANTFOX_GUIDE.md`](./docs/GRANTFOX_GUIDE.md). Every issue belongs to exactly one campaign.
+
 > Before opening a PR, skim this file end to end. It is the contract we review PRs against.
 
 ---

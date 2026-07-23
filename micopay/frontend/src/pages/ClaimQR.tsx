@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import SupportLink from '../components/SupportLink';
+import { resolveErrorMessage } from '../constants/errorMap';
 
 const PROTOCOL_API = (import.meta as any).env?.VITE_PROTOCOL_API_URL ?? 'http://localhost:3000';
 
@@ -38,8 +39,8 @@ function useCountdown(expiresAt: string | null) {
 }
 
 const STATUS_LABEL: Record<string, { text: string; color: string; icon: string }> = {
-  pending:   { text: 'Esperando al comercio',  color: '#f59e0b', icon: '⏳' },
-  accepted:  { text: 'Comercio listo',          color: '#3b82f6', icon: '✅' },
+  pending:   { text: 'Esperando al comerciante',  color: '#f59e0b', icon: '⏳' },
+  accepted:  { text: 'Comerciante listo',          color: '#3b82f6', icon: '✅' },
   completed: { text: '¡Efectivo entregado!',    color: '#22c55e', icon: '🎉' },
   expired:   { text: 'Solicitud expirada',      color: '#ef4444', icon: '❌' },
 };
@@ -61,11 +62,11 @@ export default function ClaimQR({ requestId }: ClaimQRProps) {
     const poll = async () => {
       try {
         const res = await fetch(`${PROTOCOL_API}/api/v1/cash/request/${requestId}`);
-        if (!res.ok) { setError('Solicitud no encontrada'); return; }
+        if (!res.ok) { setError(resolveErrorMessage({ response: { status: res.status } }).message); return; }
         const json = await res.json();
         if (!cancelled) setData(json);
       } catch {
-        if (!cancelled) setError('No se pudo conectar al servidor');
+        if (!cancelled) setError(resolveErrorMessage({ message: 'backend_not_available' }).message);
       }
     };
 
@@ -121,7 +122,7 @@ export default function ClaimQR({ requestId }: ClaimQRProps) {
           <span style={{ fontSize: 22 }}>🍄</span>
           <span style={{ fontWeight: 700, fontSize: 17, color: '#1a1a2e' }}>MicoPay</span>
         </div>
-        <p style={{ fontSize: 12, color: '#888', margin: 0 }}>Muestra este QR al comercio para recibir tu efectivo</p>
+        <p style={{ fontSize: 12, color: '#888', margin: 0 }}>Muestra este QR al comerciante para recibir tu efectivo</p>
       </div>
 
       {/* Status pill */}

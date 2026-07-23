@@ -1,6 +1,9 @@
 import axios from 'axios';
-import { extractApiErrorPayload } from '../utils/apiError';
-import { signChallenge, getPublicKey } from '../lib/keystore';
+import { extractApiErrorPayload, toApiError } from '../utils/apiError';
+import { signChallenge, getPublicKey, signTransactionXdr } from '../lib/keystore';
+import { removeKey } from './secureStorage';
+import { PLATFORM_FEE_PERCENT } from '../constants/trade';
+
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -9,6 +12,41 @@ const http = axios.create({ baseURL: BASE_URL });
 function authHeaders(token: string) {
   return { headers: { Authorization: `Bearer ${token}` } };
 }
+
+// ─── DeFi: KYC (hosted flows — Etherfuse for CETES onboarding, Didit for #314's
+// tiered gate; both share the same POST start / GET status polling contract) ──
+
+export type KYCProvider = 'etherfuse' | 'didit';
+export type KYCStatus = 'pending' | 'approved' | 'rejected';
+
+export interface KYCStatusResponse {
+  status: KYCStatus;
+  reason?: string | null;
+}
+
+/**
+ * Generates a short-lived (≈15 min) onboarding URL.
+ * URL must be generated at button touch (not earlier).
+ */
+export async function startKYC(
+  token: string,
+  provider: KYCProvider = 'etherfuse',
+): Promise<{ onboardingUrl: string }> {
+  const res = await http.post('/defi/kyc/start', {}, { ...authHeaders(token), params: { provider } });
+  return res.data;
+}
+
+/**
+ * Poll KYC verification status.
+ */
+export async function getKYCStatus(
+  token: string,
+  provider: KYCProvider = 'etherfuse',
+): Promise<KYCStatusResponse> {
+  const res = await http.get('/defi/kyc/status', { ...authHeaders(token), params: { provider } });
+  return res.data;
+}
+
 
 export interface UserData {
   id: string;
@@ -24,6 +62,12 @@ export interface CurrentUserProfile {
   deleted_at?: string | null;
   wallet_type?: string | null;
   created_at?: string;
+  /** Completed trades (reputation) — computed by GET /users/me */
+  trades_completed?: number;
+  /** Completion rate (%) over terminal trades, null if no history */
+  completion_rate?: number | null;
+  /** Reputation tier: Nuevo | Bronce | Plata | Oro */
+  reputation_tier?: string;
 }
 
 export interface TradeData {
@@ -32,18 +76,23 @@ export interface TradeData {
   secret_hash: string;
   amount_mxn: number;
   lock_tx_hash?: string | null;
+  release_tx_hash?: string | null;
 }
 
 export interface TradeDetailResponse {
   trade: TradeData & {
     lock_tx_hash?: string | null;
+    release_tx_hash?: string | null;
+    platform_fee_mxn?: number;
     seller_id?: string;
     buyer_id?: string;
     created_at?: string;
+    completed_at?: string | null;
     expires_at?: string;
   };
   merchant_unavailable: boolean;
   seller_username: string | null;
+  buyer_username: string | null;
 }
 
 export async function fetchTradeDetail(tradeId: string, buyerToken: string): Promise<TradeDetailResponse> {
@@ -63,8 +112,7 @@ export async function cancelTradeRequest(tradeId: string, buyerToken: string): P
     const res = await http.post(`/trades/${tradeId}/cancel`, {}, authHeaders(buyerToken));
     return res.data as CancelTradeResponse;
   } catch (e: unknown) {
-    const { message } = extractApiErrorPayload(e);
-    throw new Error(message);
+    throw toApiError(extractApiErrorPayload(e));
   }
 }
 
@@ -93,41 +141,56 @@ function generateFallbackAddress(prefix: string): string {
 }
 
 export async function getAuthToken(username: string): Promise<string> {
+  const stellar_address = (await getPublicKey()) ?? generateFallbackAddress(username);
+
   // Step 1: request a one-time challenge from the server
-  const { challenge } = await fetch(`${BASE_URL}/auth/challenge`, {
+  const challengeRes = await fetch(`${BASE_URL}/auth/challenge`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username }),
-  }).then(r => r.json());
+    body: JSON.stringify({ stellar_address }),
+  });
+  const challengeData = await challengeRes.json();
+  const challenge: string | undefined = challengeData.challenge;
+  if (!challenge) throw new Error(`Auth challenge failed (${challengeRes.status}): ${challengeData.error ?? 'no challenge'}`);
 
   // Step 2: sign with the device keypair — private key never leaves the device
   const signature = await signChallenge(challenge);
 
   // Step 3: exchange challenge + signature for a JWT
-  const { token } = await fetch(`${BASE_URL}/auth/token`, {
+  const tokenRes = await fetch(`${BASE_URL}/auth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, challenge, signature }),
-  }).then(r => r.json());
+    body: JSON.stringify({ stellar_address, challenge, signature }),
+  });
+  const tokenData = await tokenRes.json();
+  const token: string | undefined = tokenData.token;
+  if (!token) throw new Error(tokenData.error ?? `Auth failed (${tokenRes.status})`);
 
   return token;
 }
 
+/**
+ * Creates a trade between the caller and a counterparty.
+ * `role` is the caller's role in the escrow: 'buyer' (default — the caller
+ * receives crypto, e.g. depositing cash for crypto) or 'seller' (the caller
+ * gives up crypto, e.g. cashing out — the escrow contract requires the
+ * seller to be the one who locks funds and reveals the HTLC secret).
+ */
 export async function createTrade(
-    sellerId: string,
+    counterpartyId: string,
     amountMxn: number,
-    buyerToken: string,
+    callerToken: string,
+    role: 'buyer' | 'seller' = 'buyer',
 ): Promise<TradeData> {
   try {
     const res = await http.post(
         '/trades',
-        { seller_id: sellerId, amount_mxn: amountMxn },
-        authHeaders(buyerToken),
+        { counterparty_id: counterpartyId, amount_mxn: amountMxn, role },
+        authHeaders(callerToken),
     );
     return res.data.trade;
   } catch (e: unknown) {
-    const { message } = extractApiErrorPayload(e);
-    throw new Error(message);
+    throw toApiError(extractApiErrorPayload(e));
   }
 }
 
@@ -139,13 +202,26 @@ export async function getTrade(
   return res.data.trade;
 }
 
+/**
+ * Locks the trade on-chain. The seller's own device key signs the lock()
+ * call locally (the contract requires seller.require_auth()) — the backend
+ * only ever sees the already-signed transaction.
+ */
 export async function lockTrade(
     tradeId: string,
     sellerToken: string,
 ): Promise<{ lock_tx_hash: string }> {
+  const prepareRes = await http.post(
+      `/trades/${tradeId}/lock/prepare`,
+      {},
+      authHeaders(sellerToken),
+  );
+  const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
+  const signedXdr = 'mock' in prepared ? undefined : await signTransactionXdr(prepared.xdr, prepared.network_passphrase);
+
   const res = await http.post(
       `/trades/${tradeId}/lock`,
-      {},
+      signedXdr ? { signed_xdr: signedXdr } : {},
       authHeaders(sellerToken),
   );
   return { lock_tx_hash: res.data.lock_tx_hash };
@@ -173,11 +249,41 @@ export async function getSecret(
   return res.data;
 }
 
+export interface CompleteTradeResponse {
+  status: string;
+  release_tx_hash: string;
+}
+
+/**
+ * Releases the trade on-chain. The buyer's own device key signs the release()
+ * call locally (the contract requires buyer.require_auth()) — the backend
+ * only ever sees the already-signed transaction.
+ */
 export async function completeTrade(
     tradeId: string,
     buyerToken: string,
-): Promise<void> {
-  await http.post(`/trades/${tradeId}/complete`, {}, authHeaders(buyerToken));
+): Promise<CompleteTradeResponse> {
+  const prepareRes = await http.post(`/trades/${tradeId}/complete/prepare`, {}, authHeaders(buyerToken));
+  const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
+  const signedXdr = 'mock' in prepared ? undefined : await signTransactionXdr(prepared.xdr, prepared.network_passphrase);
+
+  const res = await http.post(`/trades/${tradeId}/complete`, signedXdr ? { signed_xdr: signedXdr } : {}, authHeaders(buyerToken));
+  return res.data;
+}
+
+export interface RefundTradeResponse {
+  status: 'refunded';
+  refund_tx_hash: string;
+}
+
+export async function refundTradeRequest(tradeId: string, token: string): Promise<RefundTradeResponse> {
+  try {
+    const res = await http.post(`/trades/${tradeId}/refund`, {}, authHeaders(token));
+    return res.data as RefundTradeResponse;
+  } catch (e: unknown) {
+    const { message } = extractApiErrorPayload(e);
+    throw new Error(message);
+  }
 }
 
 export interface TradeHistoryItem {
@@ -270,6 +376,17 @@ export interface CETESTxResult {
   destReceived?: string;
   explorerUrl: string;
   note?: string;
+}
+
+export interface XlmMxnRate {
+  rate: number;
+  source: string;
+  fetchedAt: string;
+}
+
+export async function getXlmMxnRate(): Promise<XlmMxnRate> {
+  const res = await http.get('/rate/xlm-mxn');
+  return res.data;
 }
 
 export async function getCETESRate(amount = "100"): Promise<CETESRate> {
@@ -367,6 +484,8 @@ export interface UserProfile {
   min_trade_mxn?: number;
   max_trade_mxn?: number;
   daily_cap_mxn?: number;
+  kyc_status?: string;
+  clabe?: string;
 }
 
 export async function getMyProfile(token: string): Promise<UserProfile> {
@@ -383,3 +502,237 @@ export async function updateMerchantConfig(token: string, config: MerchantConfig
   const res = await http.put('/merchants/me/config', config, authHeaders(token));
   return res.data.config;
 }
+
+type QueueFn = (type: string, payload: unknown) => Promise<string>;
+
+export async function updateMerchantConfigWithOfflineSupport(
+  token: string,
+  config: MerchantConfig,
+  queueFn: QueueFn,
+): Promise<{ config: MerchantConfig; queued: boolean }> {
+  try {
+    const updated = await updateMerchantConfig(token, config);
+    return { config: updated, queued: false };
+  } catch {
+    await queueFn('config', { config });
+    return { config, queued: true };
+  }
+}
+
+export async function updateMerchantAvailabilityWithOfflineSupport(
+  token: string,
+  available: boolean,
+  queueFn: QueueFn,
+): Promise<{ queued: boolean }> {
+  try {
+    await patchMerchantAvailability(token, available);
+    return { queued: false };
+  } catch {
+    await queueFn('availability', { available });
+    return { queued: true };
+  }
+}
+
+// ─── Merchant discovery (#102) ────────────────────────────────────────────
+
+/** Mirrors backend `AvailableMerchant` from GET /merchants/available. */
+export interface AvailableMerchant {
+  seller_id: string;
+  username: string;
+  rate_percent: number;
+  min_trade_mxn: number;
+  max_trade_mxn: number;
+  daily_cap_mxn: number;
+  latitude: number;
+  longitude: number;
+  address_text: string | null;
+  distance_km: number;
+  /** Payout the buyer receives for the requested amount. */
+  payout_mxn: number;
+  /** Reputation: fraction 0..1 of completed trades (optional) */
+  completion_rate?: number;
+  /** Total completed trades (optional) */
+  trades_completed?: number;
+  /** Reputation tier (optional) */
+  tier?: string;
+  /** Optional seller type flag coming from API (e.g. 'business' | 'individual') */
+  seller_type?: string;
+  /** Backwards-compatible boolean marker for business sellers (optional) */
+  is_business?: boolean;
+  /** Platform fee (%) for this merchant. Falls back to PLATFORM_FEE_PERCENT if absent. */
+  platform_fee_pct?: number;
+}
+
+/**
+ * Effective-fee guardrail. Validations V-1/V-3/V-7/V-8 found a universal ceiling:
+ * users abandon MicoPay when the *total* cost exceeds ~5%. The UI warns above this
+ * threshold. Kept here (not hardcoded in components) so it can be tuned centrally.
+ */
+export const MAX_EFFECTIVE_FEE_PERCENT = 5;
+
+/**
+ * Total effective cost the user pays = provider commission + platform fee.
+ * `platformPct` defaults to the shared `PLATFORM_FEE_PERCENT` constant because the
+ * `/merchants/available` response does not (yet) carry a per-merchant platform fee.
+ */
+export function effectiveFeePercent(
+  providerPct: number,
+  platformPct: number = PLATFORM_FEE_PERCENT,
+): number {
+  return providerPct + platformPct;
+}
+
+export interface MerchantsAvailableQuery {
+  lat: number;
+  lng: number;
+  radius_km: number;
+  amount_mxn: number;
+  flow?: 'cashout' | 'deposit';
+}
+
+/**
+ * Public endpoint: find merchants near the caller that can handle the amount.
+ * No auth required.
+ */
+export async function getMerchantsAvailable(
+  query: MerchantsAvailableQuery,
+): Promise<AvailableMerchant[]> {
+  const params: Record<string, string | number> = {
+    lat: query.lat,
+    lng: query.lng,
+    radius_km: query.radius_km,
+    amount_mxn: query.amount_mxn,
+  };
+  if (query.flow) params.flow = query.flow;
+
+  const res = await http.get('/merchants/available', { params });
+  return res.data.merchants;
+}
+
+// ─── Merchant QR scan confirmation (issue #70) ────────────────────────────
+
+export interface MerchantConfirmResult {
+  trade_id: string;
+  status: string;
+  amount_mxn: number;
+  platform_fee_mxn: number;
+  buyer_handle: string;
+  expires_at: string;
+  expired: boolean;
+  created_at: string;
+  lock_tx_hash: string | null;
+  release_tx_hash: string | null;
+}
+
+/**
+ * Merchant scans a QR containing a trade_id and calls the backend to validate
+ * that the trade exists, the merchant is a participant, and the trade state is valid.
+ */
+export async function merchantConfirmScan(
+  tradeId: string,
+  token: string,
+): Promise<MerchantConfirmResult> {
+  try {
+    const res = await http.post(
+      `/trades/${tradeId}/merchant-confirm`,
+      {},
+      authHeaders(token),
+    );
+    return res.data as MerchantConfirmResult;
+  } catch (e: unknown) {
+    const { message } = extractApiErrorPayload(e);
+    throw new Error(message);
+  }
+}
+
+// ─── DeFi: SPEI Onramp / Offramp (Etherfuse) ─────────────────────────────
+
+export interface RampQuote {
+  quoteId: string;
+  type: 'onramp' | 'offramp';
+  exchangeRate: string;
+  sourceAmount: string;
+  destinationAmount: string;
+  expiresAt: string;
+}
+
+export interface RampOrder {
+  orderId: string;
+  depositClabe?: string;
+  depositAmount?: string;
+  depositBankName?: string;
+  depositAccountHolder?: string;
+  withdrawAnchorAccount?: string;
+  withdrawMemo?: string;
+  withdrawMemoType?: string;
+}
+
+export interface RampOrderStatus {
+  orderId: string;
+  status: 'pending' | 'funded' | 'completed' | 'failed';
+  type: 'onramp' | 'offramp';
+  stellarTxHash?: string;
+}
+
+export interface BankAccountResult {
+  bankAccountId: string;
+  clabe: string;
+}
+
+export async function getRampQuote(
+  type: 'onramp' | 'offramp',
+  sourceAmount: string,
+  token: string,
+): Promise<RampQuote> {
+  const res = await http.post(
+    '/defi/ramp/quote',
+    { type, sourceAsset: 'MXN', targetAsset: 'CETES', sourceAmount },
+    authHeaders(token),
+  );
+  return res.data as RampQuote;
+}
+
+/**
+ * Creates a ramp order (SPEI onramp deposit instructions, or offramp anchor
+ * account+memo). `bankAccountId` is resolved server-side from the caller's
+ * onboarded Etherfuse profile — the backend ignores it if sent, so it is not
+ * a parameter here. `useAnchor` (offramp only) requests anchor-rail withdraw
+ * instructions instead of a raw wallet payout.
+ */
+export async function createRampOrder(
+  quoteId: string,
+  token: string,
+  useAnchor = true,
+): Promise<RampOrder> {
+  const res = await http.post(
+    '/defi/ramp/order',
+    { quoteId, useAnchor },
+    authHeaders(token),
+  );
+  return res.data as RampOrder;
+}
+
+export async function getRampOrderStatus(
+  orderId: string,
+  token: string,
+): Promise<RampOrderStatus> {
+  const res = await http.get(`/defi/ramp/order/${orderId}`, authHeaders(token));
+  return res.data as RampOrderStatus;
+}
+
+export async function regenerateRampOrderTx(orderId: string, token: string): Promise<RampOrder> {
+  const res = await http.post(`/defi/ramp/order/${orderId}/regenerate_tx`, {}, authHeaders(token));
+  return res.data as RampOrder;
+}
+
+// Global 401 handler: clear the persisted session and bounce to login.
+http.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      removeKey('micopay_user');
+      window.location.href = '/#/login';
+    }
+    return Promise.reject(error);
+  }
+);

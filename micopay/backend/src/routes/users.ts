@@ -101,8 +101,36 @@ export async function userRoutes(app: FastifyInstance) {
         [userId],
       );
 
+      // Reputation stats derived from the trades table (buyer or seller side).
+      const stats = await db.getOne<{
+        trades_completed: string;
+        trades_total: string;
+      }>(
+        `SELECT
+           COUNT(*) FILTER (WHERE status = 'completed')                           AS trades_completed,
+           COUNT(*) FILTER (WHERE status IN ('completed', 'cancelled', 'refunded')) AS trades_total
+         FROM trades
+         WHERE buyer_id = $1 OR seller_id = $1`,
+        [userId],
+      ).catch(() => null);
+
+      const completed = stats ? parseInt(stats.trades_completed, 10) || 0 : 0;
+      const total = stats ? parseInt(stats.trades_total, 10) || 0 : 0;
+      const completionRate = total > 0 ? Math.round((completed / total) * 100) : null;
+
+      // Reputation tier from completed-trade volume.
+      const tier =
+        completed >= 50 ? 'Oro' : completed >= 10 ? 'Plata' : completed >= 1 ? 'Bronce' : 'Nuevo';
+
       request.log.info({ user_id: userId, category: 'auth' }, '[auth] Profile fetched');
-      return { user };
+      return {
+        user: {
+          ...user,
+          trades_completed: completed,
+          completion_rate: completionRate,
+          reputation_tier: tier,
+        },
+      };
     },
   );
 
@@ -128,6 +156,106 @@ export async function userRoutes(app: FastifyInstance) {
     async (request) => {
       const { username } = request.body as { username: string };
       return deleteAccount(request.user.id, username);
+    },
+  );
+
+  /**
+   * PATCH /users/me/push_token
+   * Register or update the authenticated merchant's FCM push token.
+   * Called after the Capacitor app receives a token from Firebase Cloud Messaging.
+   */
+  app.patch(
+    "/users/me/push_token",
+    {
+      preHandler: [authMiddleware],
+      schema: {
+        body: {
+          type: "object",
+          required: ["push_token"],
+          properties: {
+            push_token: { type: "string", minLength: 1, maxLength: 512 },
+          },
+          additionalProperties: false,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { push_token } = request.body as { push_token: string };
+      const userId = request.user.id;
+
+      if (!push_token || push_token.trim().length === 0) {
+        reply.status(400).send({
+          code: "INVALID_PUSH_TOKEN",
+          message: "Push token cannot be empty",
+        });
+        return;
+      }
+
+      try {
+        await db.execute(
+          `UPDATE users
+           SET push_token = $1, push_token_updated_at = NOW()
+           WHERE id = $2`,
+          [push_token, userId]
+        );
+
+        request.log.info(
+          { user_id: userId, category: "push" },
+          "[push] Push token registered"
+        );
+
+        reply.status(200);
+        return { success: true };
+      } catch (err) {
+        request.log.error(
+          { err, user_id: userId, category: "push" },
+          "[push] Failed to update push token"
+        );
+        reply.status(500).send({
+          code: "PUSH_TOKEN_UPDATE_FAILED",
+          message: "Failed to register push token",
+        });
+      }
+    }
+  );
+
+  /**
+   * PATCH /users/me/availability
+   * Sets whether the authenticated merchant is currently accepting new trades.
+   * `paused` is stored the same as `offline` (merchant_available=false) — the
+   * distinction is UI-only (temporary vs deliberate) for now.
+   */
+  app.patch(
+    "/users/me/availability",
+    {
+      preHandler: [authMiddleware],
+      schema: {
+        body: {
+          type: "object",
+          required: ["availability"],
+          properties: {
+            availability: { type: "string", enum: ["online", "offline", "paused"] },
+          },
+          additionalProperties: false,
+        },
+      },
+    },
+    async (request) => {
+      const { availability } = request.body as { availability: "online" | "offline" | "paused" };
+      const userId = request.user.id;
+      const merchant_available = availability === "online";
+
+      await db.execute(
+        `UPDATE users SET merchant_available = $1 WHERE id = $2`,
+        [merchant_available, userId],
+      );
+
+      request.log.info(
+        { user_id: userId, availability, category: "merchant" },
+        "[merchant] Availability updated",
+      );
+
+      return { merchant_available };
     },
   );
 }

@@ -19,7 +19,7 @@ const Terms = ({ onBack }: TermsProps) => {
         </div>
       </header>
 
-      <main className="flex-1 mt-20 px-4 pt-4 space-y-5 max-w-lg mx-auto w-full">
+      <main className="flex-1 mt-[calc(5rem+env(safe-area-inset-top))] px-4 pt-4 space-y-5 max-w-lg mx-auto w-full">
         <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-3">
           <span className="material-symbols-outlined text-amber-600 mt-0.5 text-lg">info</span>
           <p className="text-sm text-amber-800 font-medium">
@@ -51,15 +51,15 @@ const Terms = ({ onBack }: TermsProps) => {
             <li>Usar el servicio solo para transacciones legítimas</li>
             <li>Mantener seguras tus credenciales de acceso</li>
             <li>No usar la plataforma para lavado de dinero u otras actividades ilícitas</li>
-            <li>Verificar los datos del trade antes de confirmar</li>
+            <li>Verificar los datos de la operación antes de confirmar</li>
           </ul>
         </section>
 
         <section className="bg-white rounded-[24px] p-5 border border-[#D7E3EA]/60 shadow-sm space-y-4">
           <h2 className="font-bold text-base text-[#0B1E26]">4. Comisiones</h2>
           <p className="text-sm text-[#67808C] leading-relaxed">
-            Micopay cobra una comisión de plataforma visible antes de confirmar cada transacción.
-            Las tarifas de la red Stellar (fees) son mínimas y también corren por cuenta del usuario.
+            Micopay cobra una comisión de plataforma visible antes de confirmar cada operación.
+            Las comisiones de la red Stellar son mínimas y también corren por cuenta del usuario.
           </p>
         </section>
 

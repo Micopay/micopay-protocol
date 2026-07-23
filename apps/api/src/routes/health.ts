@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { checkHealth } from "../services/health.js";
+import { config } from "../config.js";
 
 export async function healthRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get<{ Querystring: { detailed?: string } }>(
@@ -17,7 +18,12 @@ export async function healthRoutes(fastify: FastifyInstance): Promise<void> {
 
       if (isDetailed) {
         const health = await checkHealth();
-        const statusCode = health.status === "healthy" ? 200 : health.status === "degraded" ? 200 : 503;
+        const statusCode =
+          health.status === "healthy"
+            ? 200
+            : health.status === "degraded"
+              ? 200
+              : 503;
         return reply.status(statusCode).send(health);
       }
 
@@ -29,8 +35,11 @@ export async function healthRoutes(fastify: FastifyInstance): Promise<void> {
         payment_method: "x402",
         network: process.env.STELLAR_NETWORK ?? "testnet",
         detailed: "/health?detailed=true",
+        features: {
+          investments: config.enableInvestments,
+        },
       });
-    }
+    },
   );
 
   fastify.get("/health/live", async () => ({

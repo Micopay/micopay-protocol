@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:allowBackup="false"
-        android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:supportsRtl="true"
-        android:theme="@style/AppTheme">
+    android:allowBackup="false"
+    android:dataExtractionRules="@xml/data_extraction_rules"
+    android:fullBackupContent="@xml/backup_rules"
+    android:networkSecurityConfig="@xml/network_security_config"
+    android:usesCleartextTraffic="false"
+    android:icon="@mipmap/ic_launcher"
+    android:label="@string/app_name"
+    android:roundIcon="@mipmap/ic_launcher_round"
+    android:supportsRtl="true"
+    android:theme="@style/AppTheme">
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"
@@ -18,6 +22,25 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!--
+                Android App Links — intercepts https://app.micopay.xyz/claim/* at the OS level.
+                android:autoVerify="true" triggers Digital Asset Links verification against
+                https://app.micopay.xyz/.well-known/assetlinks.json at install time.
+                Once verified, tapping a claim URL opens MicoPay directly without a browser
+                disambiguation dialog. launchMode="singleTask" (already set above) ensures
+                a backgrounded instance receives the URL via onNewIntent instead of spawning
+                a second activity.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="app.micopay.xyz"
+                    android:pathPrefix="/claim/" />
+            </intent-filter>
         </activity>
 
         <provider
@@ -27,6 +50,11 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Firebase Cloud Messaging configuration for push notifications -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="trade_alerts" />
     </application>
 
     <!-- Permissions -->
@@ -35,6 +63,8 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Required for Android 13+ to show push notification permission dialog -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.location" android:required="false" />

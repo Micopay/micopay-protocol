@@ -120,6 +120,37 @@ export class RateLimitError extends AppError {
   }
 }
 
+/** Account paused, suspended, or blocked by a risk rule (not a rate limit). */
+export class RiskBlockedError extends AppError {
+  constructor(
+    code: string,
+    userMessage: string,
+    devMessage: string,
+    httpStatus = 403,
+  ) {
+    super(code, userMessage, devMessage, httpStatus);
+    this.name = 'RiskBlockedError';
+  }
+}
+
+/** Operation blocked because the user's KYC tier is below the required level (#314). */
+export class KycTierInsufficientError extends AppError {
+  public readonly requiredLevel: number;
+  public readonly currentLevel: number;
+
+  constructor(requiredLevel: number, currentLevel: number, operationType: string) {
+    super(
+      'KYC_TIER_INSUFFICIENT',
+      `Esta operación requiere un nivel de verificación más alto (nivel ${requiredLevel}). Verifica tu identidad para continuar.`,
+      `User kyc_level=${currentLevel} below required=${requiredLevel} for operation ${operationType}`,
+      403,
+    );
+    this.name = 'KycTierInsufficientError';
+    this.requiredLevel = requiredLevel;
+    this.currentLevel = currentLevel;
+  }
+}
+
 /**
  * Thrown when a Stellar tx hash has already been processed.
  * HTTP 409 — the outcome of a replayed tx is deterministic, so this is

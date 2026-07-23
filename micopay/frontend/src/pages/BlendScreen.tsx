@@ -103,9 +103,14 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
       <div className="flex items-center gap-2">
         <span className="material-symbols-outlined text-[#1D9E75] text-xl">check_circle</span>
         <p className="font-bold text-[#1D9E75]">
-          {result.simulated ? '¡Demo exitoso!' : '¡Tx enviada!'}
+          {result.simulated ? '¡Prueba simulada!' : '¡Operación enviada!'}
         </p>
       </div>
+      {result.simulated && (
+        <p className="text-xs text-on-surface-variant">
+          Demostración — no se movieron fondos reales on-chain.
+        </p>
+      )}
       <p className="text-xs text-on-surface-variant font-mono">{shortHash(result.hash)}</p>
       <a
         href={result.explorerUrl}
@@ -113,7 +118,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
         rel="noopener noreferrer"
         className="flex items-center gap-1 text-xs text-primary font-bold"
       >
-        Ver en Stellar Explorer
+        Ver en el explorador Stellar
         <span className="material-symbols-outlined text-sm">open_in_new</span>
       </a>
     </div>
@@ -131,7 +136,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
         </button>
         <div>
           <h1 className="font-headline font-bold text-lg leading-tight">Blend Capital</h1>
-          <p className="text-[11px] text-on-surface-variant">Protocolo DeFi en Stellar</p>
+          <p className="text-[11px] text-on-surface-variant">Protocolo financiero en Stellar</p>
         </div>
         <div className="ml-auto bg-on-surface/5 border border-outline-variant/20 rounded-full px-3 py-1">
           <span className="text-on-surface font-bold text-xs">
@@ -140,7 +145,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
         </div>
       </header>
 
-      <main className="flex-1 mt-20 px-4 pt-4 space-y-5">
+      <main className="flex-1 mt-[calc(5rem+env(safe-area-inset-top))] px-4 pt-4 space-y-5">
         {/* Main tabs */}
         <div className="flex gap-2 bg-surface-container-low rounded-2xl p-1">
           <button
@@ -351,7 +356,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
                 ))}
               </div>
             ) : (
-              <p className="text-center text-on-surface-variant text-sm py-8">No hay pools disponibles</p>
+              <p className="text-center text-on-surface-variant text-sm py-8">No hay fondos disponibles</p>
             )}
 
             {/* Supply form */}
