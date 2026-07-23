@@ -372,8 +372,8 @@ export const SignatureApproval: React.FC<SignatureApprovalProps> = ({
               </button>
               <button
                 onClick={handleApprove}
-                disabled={actionLoading}
-                className="w-full py-3.5 bg-primary text-white rounded-xl font-semibold text-sm shadow-md hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center space-x-1"
+                disabled={actionLoading || decoded?.type === 'unknown' || decoded?.type === 'unsupported'}
+                className="w-full py-3.5 bg-primary text-white rounded-xl font-semibold text-sm shadow-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-1"
               >
                 {actionLoading ? (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />

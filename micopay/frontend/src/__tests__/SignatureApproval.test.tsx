@@ -54,6 +54,8 @@ describe('SignatureApproval Component', () => {
 
     expect(screen.getByText('signatureApproval.warnings.untrustedTitle')).toBeInTheDocument();
     expect(screen.getByText('signatureApproval.warnings.failedToDecode')).toBeInTheDocument();
+    const approveBtn = screen.getByText('signatureApproval.approveBtn').closest('button');
+    expect(approveBtn).toBeDisabled();
   });
 
   it('handles approve action and calls resolveSignatureRequest', async () => {
