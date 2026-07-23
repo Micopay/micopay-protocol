@@ -52,26 +52,43 @@ export interface KycThresholdTier {
   requiredLevel: 0 | 1 | 2;
 }
 
-// Provisional defaults from the compliance plan's Option B tier table
-// (docs/KYC_COMPLIANCE_PLAN_2026-07.md) — pending legal counsel review under
-// the LFPIORPI reform. Override via KYC_OPERATION_THRESHOLDS_JSON without a
-// code change (#314's "keep thresholds config-driven" requirement).
+// KYC tier thresholds per operation. Levels: 0 = account only, 1 = identified
+// (INE/passport + selfie liveness + CURP), 2 = verified (+ proof of address).
+//
+// ⚠️ CORRECTED 2026-07-21 against the official SAT/SPPLD source: for "activos
+// virtuales" (Art. 17 fracción XVI LFPIORPI) client identification is required
+// "siempre — desde el primer peso" (no threshold). So NO cash↔crypto operation
+// may run at Level 0. The earlier defaults wrongly allowed up to $3,000 MXN at
+// Level 0 — that was a placeholder written before the rule was verified. See
+// docs/CAMINO_A_MAINNET_CUMPLIMIENTO_2026-07.md and
+// docs/HALLAZGOS_VERIFICACION_REGULATORIA_2026-07.md.
+//
+// Level 1 up to ~$3,000 MXN/op and Level 2 above come from the compliance
+// plan's Option B tier table and remain PROVISIONAL pending the legal dictamen
+// (the exact tier amounts are the lawyer's call; the "no Level 0" floor is the
+// verified legal rule, not a proposal). Override via KYC_OPERATION_THRESHOLDS_JSON
+// without a code change (#314's "keep thresholds config-driven" requirement).
+//
+// NOTE: the 210 UMA (~$24,635) AVISO threshold and the 4 UMA (~$469) commission
+// AVISO threshold are REPORTING triggers, not identification tiers — they belong
+// to the reporting engine (#317), not to this gate. See kycAvisoThresholdUma /
+// kycCommissionAvisoThresholdUma below.
 const DEFAULT_KYC_OPERATION_THRESHOLDS: Record<KycOperationType, KycThresholdTier[]> = {
   p2p_transfer: [
-    { maxAmountMxn: 3000, requiredLevel: 0 },
-    { maxAmountMxn: null, requiredLevel: 1 },
+    { maxAmountMxn: 3000, requiredLevel: 1 },
+    { maxAmountMxn: null, requiredLevel: 2 },
   ],
   cash_in: [
-    { maxAmountMxn: 3000, requiredLevel: 0 },
-    { maxAmountMxn: null, requiredLevel: 1 },
+    { maxAmountMxn: 3000, requiredLevel: 1 },
+    { maxAmountMxn: null, requiredLevel: 2 },
   ],
   cash_out: [
-    { maxAmountMxn: 3000, requiredLevel: 0 },
-    { maxAmountMxn: null, requiredLevel: 1 },
+    { maxAmountMxn: 3000, requiredLevel: 1 },
+    { maxAmountMxn: null, requiredLevel: 2 },
   ],
   cetes_purchase: [
-    { maxAmountMxn: 3000, requiredLevel: 0 },
-    { maxAmountMxn: null, requiredLevel: 1 },
+    { maxAmountMxn: 3000, requiredLevel: 1 },
+    { maxAmountMxn: null, requiredLevel: 2 },
   ],
 };
 
@@ -160,14 +177,17 @@ export const config = {
   adminApiKey: process.env.ADMIN_API_KEY || '',
 
   // Tiered KYC gate (#314) — audit-only (never blocks) until this is
-  // explicitly enabled, since thresholds are pending legal counsel review.
+  // explicitly enabled. The "no Level 0 for cash↔crypto" floor is a verified
+  // legal rule (identification from the first peso); the exact per-tier amounts
+  // remain provisional pending the legal dictamen. See
+  // docs/CAMINO_A_MAINNET_CUMPLIMIENTO_2026-07.md.
   kycGateEnabled: process.env.KYC_GATE_ENABLED === 'true',
   kycLevelExpiryDays: parseInt(process.env.KYC_LEVEL_EXPIRY_DAYS || '365', 10),
   kycOperationThresholds: parseKycOperationThresholds(process.env.KYC_OPERATION_THRESHOLDS_JSON),
 
   // LFPIORPI aviso (reporting) thresholds, in UMA — consumed by the compliance
-  // reporting engine (#317). Kept here so the verified 2026-07-21 values aren't lost.
-  // UMA 2026 = $117.31 MXN/day.
+  // reporting engine (#317), NOT by the KYC gate above. Kept here so the
+  // verified 2026-07-21 values aren't lost. UMA 2026 = $117.31 MXN/day.
   //   - 210 UMA (~$24,635 MXN): aviso when a single operation reaches it.
   //   - 4 UMA  (~$469 MXN): aviso when the commission WE charge reaches it —
   //     ⚠️ this is on the protocol fee, not the trade amount; model it when
@@ -277,4 +297,3 @@ export function getCorsOptions() {
     maxAge: 86400, // 24 hours
   };
 }
-
