@@ -16,6 +16,8 @@ const mem: Record<string, any[]> = {
   platform_risk_events: [],
   trade_messages: [],
   trade_disputes: [],
+  compliance_alerts: [],
+  compliance_filings: [],
 };
 
 function memNow() {
@@ -209,6 +211,10 @@ function memQuery(sql: string, params: any[] = []): any[] {
     const tableMatch = s.match(/UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(.+)$/i);
     if (!tableMatch) return [];
     const tableName = tableMatch[1].toLowerCase();
+
+    if (["platform_risk_events", "compliance_alerts", "compliance_filings"].includes(tableName)) {
+      throw new Error("Updates and deletions are not allowed on this table (append-only compliance data).");
+    }
     const setStr = tableMatch[2];
     const whereStr = tableMatch[3];
 
@@ -231,6 +237,10 @@ function memQuery(sql: string, params: any[] = []): any[] {
     const tableMatch = s.match(/DELETE FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
     if (!tableMatch) return [];
     const tableName = tableMatch[1].toLowerCase();
+
+    if (["platform_risk_events", "compliance_alerts", "compliance_filings"].includes(tableName)) {
+      throw new Error("Updates and deletions are not allowed on this table (append-only compliance data).");
+    }
     const whereStr = tableMatch[2];
 
     if (!whereStr) {

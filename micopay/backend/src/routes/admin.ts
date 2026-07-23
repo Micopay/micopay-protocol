@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { config, type KycOperationType } from "../config.js";
 import { pauseUser, unpauseUser } from "../services/abuse.service.js";
 import { getKycAuditTrail, type GateDecision } from "../services/kyc-gate.service.js";
+import { generateMonthlyFiling } from "../services/compliance.service.js";
 import { AuthError, NotFoundError } from "../utils/errors.js";
 import db from "../db/schema.js";
 
@@ -94,5 +95,82 @@ export async function adminRoutes(app: FastifyInstance) {
     });
 
     return { events };
+  });
+
+  /**
+   * GET /admin/compliance/alerts
+   * Query the compliance alerts.
+   */
+  app.get("/admin/compliance/alerts", async (request) => {
+    const { user_id, reason, severity, limit } = (request.query as {
+      user_id?: string;
+      reason?: string;
+      severity?: string;
+      limit?: string;
+    } | undefined) ?? {};
+
+    const parsedLimit = limit ? parseInt(limit, 10) : 50;
+    const queryLimit = isNaN(parsedLimit) || parsedLimit <= 0 ? 50 : Math.min(parsedLimit, 500);
+
+    const alerts = await db.getMany(
+      `SELECT id, user_id, reason, severity, details, created_at, sla_deadline
+       FROM compliance_alerts
+       ORDER BY created_at DESC
+       LIMIT ${queryLimit}`
+    );
+
+    const filtered = alerts.filter((row) => {
+      if (user_id && row.user_id !== user_id) return false;
+      if (reason && row.reason !== reason) return false;
+      if (severity && row.severity !== severity) return false;
+      return true;
+    });
+
+    return { alerts: filtered };
+  });
+
+  /**
+   * GET /admin/compliance/filings
+   * Query the compliance filings.
+   */
+  app.get("/admin/compliance/filings", async (request) => {
+    const { is_zero_report, limit } = (request.query as {
+      is_zero_report?: string;
+      limit?: string;
+    } | undefined) ?? {};
+
+    const parsedLimit = limit ? parseInt(limit, 10) : 50;
+    const queryLimit = isNaN(parsedLimit) || parsedLimit <= 0 ? 50 : Math.min(parsedLimit, 500);
+
+    const filings = await db.getMany(
+      `SELECT id, period_start, period_end, filing_type, report_data, is_zero_report, created_at
+       FROM compliance_filings
+       ORDER BY period_start DESC
+       LIMIT ${queryLimit}`
+    );
+
+    const filtered = filings.filter((row) => {
+      if (is_zero_report !== undefined && String(row.is_zero_report) !== is_zero_report) return false;
+      return true;
+    });
+
+    return { filings: filtered };
+  });
+
+  /**
+   * POST /admin/compliance/filings/trigger
+   * Manually trigger compliance filing generation for a specific month.
+   */
+  app.post("/admin/compliance/filings/trigger", async (request) => {
+    const { year, month } = (request.body as { year?: number | string; month?: number | string } | undefined) ?? {};
+    const numericYear = year !== undefined ? Number(year) : NaN;
+    const numericMonth = month !== undefined ? Number(month) : NaN;
+
+    if (isNaN(numericYear) || isNaN(numericMonth) || numericMonth < 1 || numericMonth > 12) {
+      throw new Error("year and month (1-12) are required in body");
+    }
+
+    const filing = await generateMonthlyFiling(numericYear, numericMonth);
+    return { success: true, filing };
   });
 }

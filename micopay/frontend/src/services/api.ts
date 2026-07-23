@@ -13,8 +13,10 @@ function authHeaders(token: string) {
   return { headers: { Authorization: `Bearer ${token}` } };
 }
 
-// ─── DeFi: KYC (Etherfuse hosted flow) ─────────────────────────────────────
+// ─── DeFi: KYC (hosted flows — Etherfuse for CETES onboarding, Didit for #314's
+// tiered gate; both share the same POST start / GET status polling contract) ──
 
+export type KYCProvider = 'etherfuse' | 'didit';
 export type KYCStatus = 'pending' | 'approved' | 'rejected';
 
 export interface KYCStatusResponse {
@@ -28,14 +30,22 @@ export interface KYCStatusResponse {
  */
 export async function startKYC(token: string): Promise<{ onboardingUrl: string }> {
   const res = await http.post('/defi/kyc/start', {}, authHeaders(token));
+export async function startKYC(
+  token: string,
+  provider: KYCProvider = 'etherfuse',
+): Promise<{ onboardingUrl: string }> {
+  const res = await http.post('/defi/kyc/start', {}, { ...authHeaders(token), params: { provider } });
   return res.data;
 }
 
 /**
  * Poll KYC verification status.
  */
-export async function getKYCStatus(token: string): Promise<KYCStatusResponse> {
-  const res = await http.get('/defi/kyc/status', authHeaders(token));
+export async function getKYCStatus(
+  token: string,
+  provider: KYCProvider = 'etherfuse',
+): Promise<KYCStatusResponse> {
+  const res = await http.get('/defi/kyc/status', { ...authHeaders(token), params: { provider } });
   return res.data;
 }
 
