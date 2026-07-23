@@ -134,6 +134,14 @@ npm run build
 npm run dev  # Runs on http://localhost:3002
 ```
 
+For admin-facing reporting work, validate the new analytics endpoint with:
+
+```bash
+node --import tsx src/tests/admin-analytics.test.ts
+```
+
+This covers the backend overview response for trade volume, merchant activity, completion rate, and average time-to-completion.
+
 #### For Frontend (React + Vite)
 
 ```bash
