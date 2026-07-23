@@ -11,6 +11,7 @@ import {
 } from '../services/api';
 import { mapApiError, type MappedApiError } from '../utils/apiError';
 import { useWalletBalance } from '../hooks/useWalletBalance';
+import { getPendingSignatureRequests, SignatureRequest } from '../services/signRequestService';
 
 const EXPLORER = "https://stellar.expert/explorer/testnet/tx";
 
@@ -91,6 +92,15 @@ const Home = ({
       .then((items) => setPendingCount(items.length))
       .catch((e) => setPendingError(mapApiError(e)));
   }, [merchantToken]);
+
+  const [pendingSignRequests, setPendingSignRequests] = useState<SignatureRequest[]>([]);
+
+  useEffect(() => {
+    if (!token) return;
+    getPendingSignatureRequests(token)
+      .then((requests) => setPendingSignRequests(requests))
+      .catch(() => setPendingSignRequests([]));
+  }, [token]);
 
   useEffect(() => {
     loadHistory();
@@ -230,6 +240,31 @@ const Home = ({
             </div>
           </div>
         )}
+        {/* Pending Signature Requests Banner */}
+        {pendingSignRequests.length > 0 && (
+          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-700">
+                <span className="material-symbols-outlined text-xl">gavel</span>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-amber-900">
+                  {t('signatureApproval.externalRequestHeader')}
+                </p>
+                <p className="text-xs text-amber-700">
+                  {pendingSignRequests.length} {t('signatureApproval.requestSourceLabel').toLowerCase()}
+                </p>
+              </div>
+            </div>
+            <a
+              href={`/#/sign-request/${pendingSignRequests[0].id}`}
+              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors"
+            >
+              {t('signatureApproval.title')}
+            </a>
+          </div>
+        )}
+
         {/* Saludo */}
         <section className="mb-8">
           <h1 className="font-headline font-extrabold text-3xl text-on-surface leading-tight mb-1">
