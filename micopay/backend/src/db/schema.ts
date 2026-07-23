@@ -25,8 +25,11 @@ function resolveVal(token: string, params: any[]): any {
   if (pMatch) return params[parseInt(pMatch[1]) - 1];
   if (t.toUpperCase() === "NOW()") return memNow();
   if (t.toUpperCase() === "NULL") return null;
+  if (t.toLowerCase() === "true") return true;
+  if (t.toLowerCase() === "false") return false;
   const strMatch = t.match(/^'(.*)'$/s);
   if (strMatch) return strMatch[1];
+  if (!isNaN(Number(t))) return Number(t);
   return t;
 }
 

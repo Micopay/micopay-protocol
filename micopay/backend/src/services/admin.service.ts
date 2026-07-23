@@ -1,5 +1,7 @@
 import db from '../db/schema.js';
-import { getTradeAuditTrail as getTradeAuditTrailRows } from '../db/audit-log.model.js';
+import { getTradeAuditTrail as getTradeAuditTrailRows, insertTradeAuditEvent } from '../db/audit-log.model.js';
+import { logAuditEvent } from './audit.service.js';
+import { NotFoundError, ConflictError, ValidationError } from '../utils/errors.js';
 
 export interface AdminDisputeItem {
   id: string;
@@ -34,6 +36,15 @@ export interface AdminDisputeItem {
     evidence_urls: string[];
     audit_trail: any[];
   };
+}
+
+export interface ResolveDisputeInput {
+  disputeIdOrTradeId: string;
+  adminUserId: string;
+  resolution: string;
+  note?: string;
+  banTarget?: string;
+  outcome?: 'refund_buyer' | 'release_seller';
 }
 
 function parseEvidenceUrls(raw: any): string[] {
@@ -160,5 +171,133 @@ export async function listAdminDisputes(
     total,
     page,
     limit,
+  };
+}
+
+export async function resolveAdminDispute(input: ResolveDisputeInput) {
+  const { disputeIdOrTradeId, adminUserId, resolution, note = '', banTarget, outcome } = input;
+
+  let dispute = await db.getOne<any>(
+    'SELECT * FROM disputes WHERE id = $1 OR trade_id = $1 ORDER BY created_at DESC LIMIT 1',
+    [disputeIdOrTradeId],
+  );
+
+  if (!dispute) {
+    throw new NotFoundError('DISPUTE_NOT_FOUND', 'La disputa no fue encontrada', 'Dispute not found');
+  }
+
+  if (dispute.status === 'resolved') {
+    throw new ConflictError('DISPUTE_ALREADY_RESOLVED', 'La disputa ya ha sido resuelta', 'Dispute has already been resolved');
+  }
+
+  const trade = await db.getOne<any>('SELECT * FROM trades WHERE id = $1', [dispute.trade_id]);
+  if (!trade) {
+    throw new NotFoundError('TRADE_NOT_FOUND', 'El intercambio no fue encontrado', 'Trade not found');
+  }
+
+  let finalTradeStatus = 'refunded';
+  let resolutionType = resolution;
+  let bannedUserId: string | null = null;
+
+  if (resolution === 'refund_buyer' || resolution === 'buyer_wins') {
+    finalTradeStatus = 'refunded';
+    resolutionType = 'refund_buyer';
+  } else if (resolution === 'release_seller' || resolution === 'seller_wins') {
+    finalTradeStatus = 'completed';
+    resolutionType = 'release_seller';
+  } else if (['ban_party', 'ban_buyer', 'ban_seller'].includes(resolution)) {
+    let targetRole: 'buyer' | 'seller' = 'seller';
+
+    if (resolution === 'ban_seller' || banTarget === 'seller' || banTarget === trade.seller_id) {
+      targetRole = 'seller';
+      bannedUserId = trade.seller_id;
+    } else if (resolution === 'ban_buyer' || banTarget === 'buyer' || banTarget === trade.buyer_id) {
+      targetRole = 'buyer';
+      bannedUserId = trade.buyer_id;
+    } else {
+      // Default ban seller if reported by buyer, or ban buyer if reported by seller
+      bannedUserId = dispute.reported_by === trade.buyer_id ? trade.seller_id : trade.buyer_id;
+      targetRole = bannedUserId === trade.seller_id ? 'seller' : 'buyer';
+    }
+
+    // Ban user account
+    await db.execute('UPDATE users SET is_banned = true WHERE id = $1', [bannedUserId]);
+
+    // Trade outcome when banning
+    if (outcome === 'release_seller') {
+      finalTradeStatus = 'completed';
+    } else {
+      finalTradeStatus = 'refunded';
+    }
+    resolutionType = `ban_${targetRole}`;
+  } else {
+    throw new ValidationError(
+      'INVALID_RESOLUTION',
+      'Resolución no válida',
+      'Resolution must be refund_buyer, release_seller, or ban_party',
+    );
+  }
+
+  // Update dispute record
+  await db.execute(
+    `UPDATE disputes
+     SET status = 'resolved',
+         resolution = $1,
+         resolution_note = $2,
+         resolved_by = $3,
+         resolved_at = NOW()
+     WHERE id = $4`,
+    [resolutionType, note, adminUserId, dispute.id],
+  );
+
+  // Update trade record
+  await db.execute(
+    `UPDATE trades
+     SET status = $1,
+         secret_enc = NULL,
+         secret_nonce = NULL
+     WHERE id = $2`,
+    [finalTradeStatus, trade.id],
+  );
+
+  // Record trade transition audit event
+  await insertTradeAuditEvent({
+    tradeId: trade.id,
+    fromState: trade.status,
+    toState: finalTradeStatus,
+    actor: adminUserId,
+    metadata: {
+      resolution: resolutionType,
+      dispute_id: dispute.id,
+      resolution_note: note,
+      banned_user_id: bannedUserId,
+    },
+  });
+
+  // System audit log entry via audit.service.ts
+  await logAuditEvent({
+    action: 'DISPUTE_RESOLVED',
+    actorUserId: adminUserId,
+    entityType: 'dispute',
+    entityId: dispute.id,
+    details: {
+      trade_id: trade.id,
+      resolution: resolutionType,
+      final_trade_status: finalTradeStatus,
+      resolution_note: note,
+      banned_user_id: bannedUserId,
+    },
+  });
+
+  const updatedDispute = await db.getOne('SELECT * FROM disputes WHERE id = $1', [dispute.id]);
+  const updatedTrade = await db.getOne(
+    'SELECT id, seller_id, buyer_id, amount_mxn, amount_stroops, status, created_at FROM trades WHERE id = $1',
+    [trade.id],
+  );
+
+  return {
+    dispute: updatedDispute,
+    trade: updatedTrade,
+    banned_user_id: bannedUserId,
   };
 }
