@@ -186,8 +186,8 @@ export const config = {
   kycOperationThresholds: parseKycOperationThresholds(process.env.KYC_OPERATION_THRESHOLDS_JSON),
 
   // LFPIORPI aviso (reporting) thresholds, in UMA — consumed by the compliance
-  // reporting engine (#317, not yet built), NOT by the KYC gate above. Kept here
-  // so the verified 2026-07-21 values aren't lost. UMA 2026 = $117.31 MXN/day.
+  // reporting engine (#317), NOT by the KYC gate above. Kept here so the
+  // verified 2026-07-21 values aren't lost. UMA 2026 = $117.31 MXN/day.
   //   - 210 UMA (~$24,635 MXN): aviso when a single operation reaches it.
   //   - 4 UMA  (~$469 MXN): aviso when the commission WE charge reaches it —
   //     ⚠️ this is on the protocol fee, not the trade amount; model it when
@@ -297,4 +297,3 @@ export function getCorsOptions() {
     maxAge: 86400, // 24 hours
   };
 }
-
