@@ -4,8 +4,7 @@ import { createRateLimiter } from '../middleware/rateLimit.middleware.js';
 import { config } from '../config.js';
 import db from '../db/schema.js';
 import * as tradeService from '../services/trade.service.js';
-import { recordTradeDispute } from '../services/abuse.service.js';
-import { touchUserDevice, getClientContext } from '../services/abuse.service.js';
+import { recordTradeDispute, assertCanOpenDispute, touchUserDevice, getClientContext } from '../services/abuse.service.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 
 const messageRateLimit = createRateLimiter({
@@ -85,6 +84,17 @@ export async function tradeSafetyRoutes(app: FastifyInstance) {
   const handleDisputePost = async (request: any, reply: any) => {
     const { id } = request.params as { id: string };
     const { reason, evidence_urls } = request.body as { reason: string; evidence_urls?: string[] };
+
+    const trade = await tradeService.getTradeById(id, request.user.id);
+    if (!['locked', 'revealing', 'completed', 'pending'].includes(trade.status)) {
+      throw new ValidationError(
+        'DISPUTE_NOT_ALLOWED',
+        'Solo puedes abrir una disputa cuando la operación está en curso o completada.',
+        `Dispute not allowed in status ${trade.status}`,
+      );
+    }
+
+    await assertCanOpenDispute(request.user.id, id);
 
     const dispute = await recordTradeDispute({
       tradeId: id,

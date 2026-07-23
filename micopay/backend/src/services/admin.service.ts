@@ -1,7 +1,10 @@
+import { createHash } from 'crypto';
 import db from '../db/schema.js';
 import { getTradeAuditTrail as getTradeAuditTrailRows, insertTradeAuditEvent } from '../db/audit-log.model.js';
 import { logAuditEvent } from './audit.service.js';
-import { NotFoundError, ConflictError, ValidationError } from '../utils/errors.js';
+import { callRefundOnChain } from './stellar.service.js';
+import { config } from '../config.js';
+import { NotFoundError, ConflictError, ValidationError, UpstreamError } from '../utils/errors.js';
 
 export interface AdminDisputeItem {
   id: string;
@@ -9,7 +12,7 @@ export interface AdminDisputeItem {
   reported_by: string;
   reason: string;
   evidence_urls: string[];
-  status: 'open' | 'resolved';
+  status: 'open' | 'resolved' | 'dismissed';
   resolution: string | null;
   resolution_note: string | null;
   resolved_by: string | null;
@@ -60,12 +63,22 @@ function parseEvidenceUrls(raw: any): string[] {
   return [];
 }
 
+const fallbackLogger = {
+  info: (...args: any[]) => console.log(...args),
+  warn: (...args: any[]) => console.warn(...args),
+  error: (...args: any[]) => console.error(...args),
+};
+
 export async function listAdminDisputes(
   status = 'open',
   page = 1,
   limit = 20,
 ): Promise<{ disputes: AdminDisputeItem[]; total: number; page: number; limit: number }> {
-  let query = 'SELECT * FROM disputes';
+  let query = `
+    SELECT id, trade_id, opener_id AS reported_by, reason, evidence_urls, status,
+           resolution, resolution_note, resolved_by, resolved_at, created_at
+    FROM trade_disputes
+  `;
   const params: any[] = [];
 
   if (status !== 'all') {
@@ -105,10 +118,12 @@ export async function listAdminDisputes(
         );
       }
 
-      if (d.reported_by) {
+      const reportedBy = d.reported_by || d.opener_id;
+
+      if (reportedBy) {
         reporter = await db.getOne(
           'SELECT id, username, stellar_address FROM users WHERE id = $1',
-          [d.reported_by],
+          [reportedBy],
         );
       }
 
@@ -118,7 +133,7 @@ export async function listAdminDisputes(
       return {
         id: d.id,
         trade_id: d.trade_id,
-        reported_by: d.reported_by,
+        reported_by: reportedBy,
         reason: d.reason,
         evidence_urls: evidenceUrls,
         status: d.status,
@@ -178,7 +193,11 @@ export async function resolveAdminDispute(input: ResolveDisputeInput) {
   const { disputeIdOrTradeId, adminUserId, resolution, note = '', banTarget, outcome } = input;
 
   let dispute = await db.getOne<any>(
-    'SELECT * FROM disputes WHERE id = $1 OR trade_id = $1 ORDER BY created_at DESC LIMIT 1',
+    `SELECT id, trade_id, opener_id AS reported_by, reason, evidence_urls, status,
+            resolution, resolution_note, resolved_by, resolved_at, created_at
+     FROM trade_disputes
+     WHERE id = $1 OR trade_id = $1
+     ORDER BY created_at DESC LIMIT 1`,
     [disputeIdOrTradeId],
   );
 
@@ -215,7 +234,6 @@ export async function resolveAdminDispute(input: ResolveDisputeInput) {
       targetRole = 'buyer';
       bannedUserId = trade.buyer_id;
     } else {
-      // Default ban seller if reported by buyer, or ban buyer if reported by seller
       bannedUserId = dispute.reported_by === trade.buyer_id ? trade.seller_id : trade.buyer_id;
       targetRole = bannedUserId === trade.seller_id ? 'seller' : 'buyer';
     }
@@ -238,9 +256,34 @@ export async function resolveAdminDispute(input: ResolveDisputeInput) {
     );
   }
 
-  // Update dispute record
+  // --- On-chain Execution ---
+  let releaseTxHash: string | null = trade.release_tx_hash || null;
+
+  if (!config.mockStellar && trade.secret_hash && !trade.secret_hash.startsWith('hash_test_')) {
+    try {
+      const secretHashBytes = Buffer.from(trade.secret_hash, 'hex');
+      const tradeIdBytes = createHash('sha256').update(secretHashBytes).digest();
+      const onChainResult = await callRefundOnChain({
+        request: { log: fallbackLogger },
+        tradeIdBytes,
+      });
+      releaseTxHash = onChainResult.txHash;
+    } catch (onChainErr: any) {
+      throw new UpstreamError(
+        'ON_CHAIN_RESOLUTION_FAILED',
+        'Error al ejecutar la resolución en la blockchain.',
+        `On-chain resolution error: ${onChainErr?.message || onChainErr}`,
+      );
+    }
+  } else {
+    releaseTxHash = resolutionType.includes('release') || finalTradeStatus === 'completed'
+      ? `mock_release_${Date.now()}`
+      : `mock_refund_${Date.now()}`;
+  }
+
+  // Update dispute record in trade_disputes
   await db.execute(
-    `UPDATE disputes
+    `UPDATE trade_disputes
      SET status = 'resolved',
          resolution = $1,
          resolution_note = $2,
@@ -250,14 +293,16 @@ export async function resolveAdminDispute(input: ResolveDisputeInput) {
     [resolutionType, note, adminUserId, dispute.id],
   );
 
-  // Update trade record
+  // Update trade record — clear encrypted secret ONLY after on-chain call completes
   await db.execute(
     `UPDATE trades
      SET status = $1,
+         release_tx_hash = COALESCE($2, release_tx_hash),
+         completed_at = CASE WHEN $1 = 'completed' THEN NOW() ELSE completed_at END,
          secret_enc = NULL,
          secret_nonce = NULL
-     WHERE id = $2`,
-    [finalTradeStatus, trade.id],
+     WHERE id = $3`,
+    [finalTradeStatus, releaseTxHash, trade.id],
   );
 
   // Record trade transition audit event
@@ -271,6 +316,7 @@ export async function resolveAdminDispute(input: ResolveDisputeInput) {
       dispute_id: dispute.id,
       resolution_note: note,
       banned_user_id: bannedUserId,
+      release_tx_hash: releaseTxHash,
     },
   });
 
@@ -286,12 +332,18 @@ export async function resolveAdminDispute(input: ResolveDisputeInput) {
       final_trade_status: finalTradeStatus,
       resolution_note: note,
       banned_user_id: bannedUserId,
+      release_tx_hash: releaseTxHash,
     },
   });
 
-  const updatedDispute = await db.getOne('SELECT * FROM disputes WHERE id = $1', [dispute.id]);
+  const updatedDispute = await db.getOne(
+    `SELECT id, trade_id, opener_id AS reported_by, reason, evidence_urls, status,
+            resolution, resolution_note, resolved_by, resolved_at, created_at
+     FROM trade_disputes WHERE id = $1`,
+    [dispute.id],
+  );
   const updatedTrade = await db.getOne(
-    'SELECT id, seller_id, buyer_id, amount_mxn, amount_stroops, status, created_at FROM trades WHERE id = $1',
+    'SELECT id, seller_id, buyer_id, amount_mxn, amount_stroops, status, release_tx_hash, created_at FROM trades WHERE id = $1',
     [trade.id],
   );
 

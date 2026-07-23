@@ -35,7 +35,7 @@ export interface DisputeRecord {
   reported_by: string;
   reason: string;
   evidence_urls: string[] | string;
-  status: 'open' | 'resolved';
+  status: 'open' | 'resolved' | 'dismissed';
   resolution?: string | null;
   resolution_note?: string | null;
   resolved_by?: string | null;
@@ -387,6 +387,10 @@ export async function recordTradeDispute(input: RecordTradeDisputeInput): Promis
   const { tradeId, reportedBy, openerId, sellerId, disputeId, reason = 'Trade dispute opened', evidenceUrls = [] } = input;
   const actor = reportedBy || openerId;
 
+  if (!reason || reason.trim().length === 0) {
+    throw new ValidationError('INVALID_REASON', 'Se requiere una razón para la disputa', 'Dispute reason is required');
+  }
+
   const trade = await db.getOne<{ id: string; seller_id: string; buyer_id: string; status: string }>(
     'SELECT id, seller_id, buyer_id, status FROM trades WHERE id = $1',
     [tradeId],
@@ -404,9 +408,9 @@ export async function recordTradeDispute(input: RecordTradeDisputeInput): Promis
     throw new ConflictError(`No se puede disputar un intercambio en estado ${trade.status}`);
   }
 
-  // Check if an open dispute already exists
+  // Check if an open dispute already exists in trade_disputes
   const existingDispute = await db.getOne<DisputeRecord>(
-    "SELECT * FROM disputes WHERE trade_id = $1 AND status = 'open'",
+    "SELECT id, trade_id, opener_id AS reported_by, reason, evidence_urls, status, created_at FROM trade_disputes WHERE trade_id = $1 AND status = 'open'",
     [tradeId],
   );
 
@@ -415,16 +419,17 @@ export async function recordTradeDispute(input: RecordTradeDisputeInput): Promis
   }
 
   const evidenceJson = JSON.stringify(evidenceUrls);
+  const effectiveOpener = actor || trade.buyer_id;
 
   const dispute = await db.getOne<DisputeRecord>(
-    `INSERT INTO disputes (trade_id, reported_by, reason, evidence_urls, status)
+    `INSERT INTO trade_disputes (trade_id, opener_id, reason, evidence_urls, status)
      VALUES ($1, $2, $3, $4, 'open')
-     RETURNING *`,
-    [tradeId, actor || trade.buyer_id, reason, evidenceJson],
+     RETURNING id, trade_id, opener_id AS reported_by, reason, evidence_urls, status, created_at`,
+    [tradeId, effectiveOpener, reason, evidenceJson],
   );
 
   if (!dispute) {
-    throw new Error('Failed to create dispute record');
+    throw new Error('Failed to create dispute record in trade_disputes');
   }
 
   // Update trade status to 'disputed'
@@ -451,7 +456,7 @@ export async function recordTradeDispute(input: RecordTradeDisputeInput): Promis
   // Log audit event
   await logAuditEvent({
     action: 'trade.dispute_opened',
-    actorUserId: actor || trade.buyer_id,
+    actorUserId: effectiveOpener,
     entityType: 'trade_dispute',
     entityId: disputeId || dispute.id,
     details: { trade_id: tradeId, seller_id: sellerId || trade.seller_id, reason },
@@ -460,7 +465,7 @@ export async function recordTradeDispute(input: RecordTradeDisputeInput): Promis
   const effectiveSellerId = sellerId || trade.seller_id;
   const openDisputes = await db.getOne<{ count: string }>(
     `SELECT COUNT(*)::text AS count
-     FROM disputes d
+     FROM trade_disputes d
      JOIN trades t ON t.id = d.trade_id
      WHERE t.seller_id = $1 AND d.status = 'open'`,
     [effectiveSellerId],
@@ -471,15 +476,24 @@ export async function recordTradeDispute(input: RecordTradeDisputeInput): Promis
     await pauseUser(effectiveSellerId, 'auto_pause_excessive_disputes', null);
   }
 
-  return dispute;
+  return {
+    ...dispute,
+    reported_by: dispute.reported_by || (dispute as any).opener_id || effectiveOpener,
+  };
 }
 
 export async function getDisputeById(disputeId: string): Promise<DisputeRecord | null> {
-  return db.getOne<DisputeRecord>('SELECT * FROM disputes WHERE id = $1', [disputeId]);
+  return db.getOne<DisputeRecord>(
+    'SELECT id, trade_id, opener_id AS reported_by, reason, evidence_urls, status, resolution, resolution_note, resolved_by, resolved_at, created_at FROM trade_disputes WHERE id = $1',
+    [disputeId],
+  );
 }
 
 export async function getDisputeByTradeId(tradeId: string): Promise<DisputeRecord | null> {
-  return db.getOne<DisputeRecord>('SELECT * FROM disputes WHERE trade_id = $1 ORDER BY created_at DESC LIMIT 1', [tradeId]);
+  return db.getOne<DisputeRecord>(
+    'SELECT id, trade_id, opener_id AS reported_by, reason, evidence_urls, status, resolution, resolution_note, resolved_by, resolved_at, created_at FROM trade_disputes WHERE trade_id = $1 ORDER BY created_at DESC LIMIT 1',
+    [tradeId],
+  );
 }
 
 export async function pauseUser(
@@ -536,7 +550,7 @@ export async function assertCanOpenDispute(
   await assertUserCanAct(userId);
 
   const existing = await db.getOne<{ id: string }>(
-    `SELECT id FROM disputes WHERE trade_id = $1 AND status = 'open'`,
+    `SELECT id FROM trade_disputes WHERE trade_id = $1 AND status = 'open'`,
     [tradeId],
   );
   if (existing) {
