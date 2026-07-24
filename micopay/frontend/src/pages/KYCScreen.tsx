@@ -2,10 +2,20 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { App as CapApp } from '@capacitor/app';
 
-import { startKYC, getKYCStatus, type KYCStatus, type KYCStatusResponse } from '../services/api';
+import { startKYC, getKYCStatus, type KYCProvider, type KYCStatus, type KYCStatusResponse } from '../services/api';
 import { readJSON, writeJSON } from '../services/secureStorage';
 
-const SECURE_STORAGE_KEY = 'kyc_status';
+const PROVIDER_NAMES: Record<KYCProvider, string> = {
+  etherfuse: 'Etherfuse',
+  didit: 'Didit',
+};
+
+// Cache key is per-provider so a Didit verification (#314/#315's tiered gate)
+// and an Etherfuse verification (CETES-only) never clobber each other's
+// cached status for the same user.
+function secureStorageKey(provider: KYCProvider): string {
+  return `kyc_status_${provider}`;
+}
 
 function StatusLine({ status }: { status: KYCStatus }) {
   const { t } = useTranslation();
@@ -45,10 +55,13 @@ function StatusLine({ status }: { status: KYCStatus }) {
 type KYCScreenProps = {
   onApproved: () => void;
   token: string | null;
+  /** Defaults to 'etherfuse' so the existing CETES onboarding call site is unaffected. */
+  provider?: KYCProvider;
 };
 
-export default function KYCScreen({ onApproved, token }: KYCScreenProps) {
+export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }: KYCScreenProps) {
   const { t } = useTranslation();
+  const providerName = PROVIDER_NAMES[provider];
   const [status, setStatus] = useState<KYCStatus>('pending');
   const [reason, setReason] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -59,7 +72,7 @@ export default function KYCScreen({ onApproved, token }: KYCScreenProps) {
   const [statusPollingError, setStatusPollingError] = useState<string | null>(null);
 
   const loadCachedStatus = async () => {
-    const cached = await readJSON<{ status: KYCStatus; reason?: string | null }>(SECURE_STORAGE_KEY);
+    const cached = await readJSON<{ status: KYCStatus; reason?: string | null }>(secureStorageKey(provider));
     if (cached?.status === 'approved') {
       setStatus('approved');
       setReason(null);
@@ -82,7 +95,7 @@ export default function KYCScreen({ onApproved, token }: KYCScreenProps) {
     setLoading(true);
 
     try {
-      const { onboardingUrl } = await startKYC(token);
+      const { onboardingUrl } = await startKYC(token, provider);
 
       startedAtRef.current = Date.now();
       setStartingToken(onboardingUrl);
@@ -113,7 +126,7 @@ export default function KYCScreen({ onApproved, token }: KYCScreenProps) {
     setStatusPollingError(null);
 
     if (res.status === 'approved') {
-      await writeJSON(SECURE_STORAGE_KEY, { status: 'approved' });
+      await writeJSON(secureStorageKey(provider), { status: 'approved' });
       onApproved();
     }
   };
@@ -122,7 +135,7 @@ export default function KYCScreen({ onApproved, token }: KYCScreenProps) {
     if (!token) return null;
     setStatusPollingError(null);
     try {
-      const res = await getKYCStatus(token);
+      const res = await getKYCStatus(token, provider);
       await applyStatus(res);
       return res;
     } catch (e: any) {
@@ -192,7 +205,7 @@ export default function KYCScreen({ onApproved, token }: KYCScreenProps) {
           </button>
           <div>
             <h1 className="font-headline font-bold text-lg">{t('kyc.identityVerification')}</h1>
-            <p className="text-xs text-on-surface-variant">{t('kyc.oneStepWithEtherfuse')}</p>
+            <p className="text-xs text-on-surface-variant">{t('kyc.oneStepWithProvider', { provider: providerName })}</p>
           </div>
         </div>
       </header>
@@ -200,9 +213,9 @@ export default function KYCScreen({ onApproved, token }: KYCScreenProps) {
       <main className="flex-1 px-6 pb-8 pt-6">
         <section className="space-y-4">
           <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-[24px] p-5 border border-primary/10">
-            <h2 className="font-headline font-extrabold text-xl">{t('kyc.identityVerifiedWith')}</h2>
+            <h2 className="font-headline font-extrabold text-xl">{t('kyc.identityVerifiedWith', { provider: providerName })}</h2>
             <p className="text-sm text-on-surface-variant mt-2 leading-relaxed">
-              {t('kyc.oneTimeProcess')}
+              {t('kyc.oneTimeProcess', { provider: providerName })}
             </p>
           </div>
 
@@ -232,7 +245,7 @@ export default function KYCScreen({ onApproved, token }: KYCScreenProps) {
             {loading ? (
               <>
                 <span className="material-symbols-outlined animate-spin">progress_activity</span>
-                {t('kyc.openingEtherfuse')}
+                {t('kyc.openingProvider', { provider: providerName })}
               </>
             ) : (
               <>

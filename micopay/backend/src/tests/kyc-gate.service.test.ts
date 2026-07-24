@@ -29,11 +29,14 @@ async function seedUser(overrides: {
 // tier, tier expiry") ────────────────────────────────────────────────────
 
 function testGetRequiredKycLevel_defaults() {
-  strictEqual(getRequiredKycLevel("p2p_transfer", 1000), 0, "under the 3000 MXN default ceiling requires level 0");
-  strictEqual(getRequiredKycLevel("p2p_transfer", 3000), 0, "exactly at the ceiling still requires level 0 (inclusive)");
-  strictEqual(getRequiredKycLevel("p2p_transfer", 3001), 1, "over the ceiling requires level 1");
-  strictEqual(getRequiredKycLevel("p2p_transfer"), 0, "no amount falls back to the lowest configured tier");
-  console.log("getRequiredKycLevel: defaults OK");
+  // Verified LFPIORPI rule: identification required from the first peso, so no
+  // cash↔crypto amount (not even 1 peso) may run at Level 0.
+  strictEqual(getRequiredKycLevel("p2p_transfer", 1), 1, "even 1 peso requires Level 1 (identification from the first peso)");
+  strictEqual(getRequiredKycLevel("p2p_transfer", 1000), 1, "under the 3000 MXN ceiling requires Level 1");
+  strictEqual(getRequiredKycLevel("p2p_transfer", 3000), 1, "exactly at the ceiling still requires Level 1 (inclusive)");
+  strictEqual(getRequiredKycLevel("p2p_transfer", 3001), 2, "over the ceiling requires Level 2");
+  strictEqual(getRequiredKycLevel("p2p_transfer"), 1, "no amount falls back to the lowest configured tier (Level 1, never 0)");
+  console.log("getRequiredKycLevel: first-peso rule OK");
 }
 
 function testComputeGateDecision() {
@@ -79,11 +82,13 @@ async function testAssertKycTierSufficient_neverThrowsWhenGateDisabled() {
 }
 
 async function testAuditTrailWritesAndQueries() {
-  const userId = await seedUser({ kycLevel: 0, kycVerifiedAt: null });
+  // Level 1 user: small ops pass, only the >3000 MXN op (which needs Level 2)
+  // is blocked — gives a mix of pass/block to exercise the gate_decision filter.
+  const userId = await seedUser({ kycLevel: 1, kycVerifiedAt: new Date().toISOString() });
 
-  await assertKycTierSufficient({ userId, operationType: "p2p_transfer", amountMxn: 1000 });
-  await assertKycTierSufficient({ userId, operationType: "p2p_transfer", amountMxn: 50_000 });
-  await assertKycTierSufficient({ userId, operationType: "cash_in", amountMxn: 500 });
+  await assertKycTierSufficient({ userId, operationType: "p2p_transfer", amountMxn: 1000 });   // req 1 → pass
+  await assertKycTierSufficient({ userId, operationType: "p2p_transfer", amountMxn: 50_000 });  // req 2 → block
+  await assertKycTierSufficient({ userId, operationType: "cash_in", amountMxn: 500 });          // req 1 → pass
 
   const allEvents = await getKycAuditTrail({ userId });
   strictEqual(allEvents.length, 3, "all three gate decisions for this user should be recorded");
@@ -92,10 +97,10 @@ async function testAuditTrailWritesAndQueries() {
   strictEqual(p2pEvents.length, 2, "operation_type filter should only return p2p_transfer events");
 
   const blockedEvents = await getKycAuditTrail({ userId, gateDecision: "block" });
-  strictEqual(blockedEvents.length, 1, "gate_decision filter should isolate the one insufficient-tier decision (50,000 MXN)");
+  strictEqual(blockedEvents.length, 1, "gate_decision filter should isolate the one insufficient-tier decision (50,000 MXN needs Level 2)");
   strictEqual(blockedEvents[0].details.operation_type, "p2p_transfer");
-  strictEqual(blockedEvents[0].details.tier_at_time, 0);
-  strictEqual(blockedEvents[0].details.required_level, 1);
+  strictEqual(blockedEvents[0].details.tier_at_time, 1);
+  strictEqual(blockedEvents[0].details.required_level, 2);
 
   ok(allEvents[0].created_at >= allEvents[allEvents.length - 1].created_at, "results should be ordered most-recent-first");
   console.log("getKycAuditTrail: writes + filters OK");
