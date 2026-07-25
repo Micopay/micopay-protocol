@@ -220,8 +220,13 @@ export async function getAvailableMerchants(
       min_trade_mxn: r.min_trade_mxn,
       max_trade_mxn: r.max_trade_mxn,
       daily_cap_mxn: r.daily_cap_mxn,
-      latitude: parseFloat(r.latitude as unknown as string),
-      longitude: parseFloat(r.longitude as unknown as string),
+      // G1 privacy: coarsen public discovery coordinates to ~110m (3 decimals).
+      // Exact coordinates are only revealed to a counterparty inside an
+      // accepted trade, never at discovery time. distance_km above is
+      // already computed in SQL from the exact, unrounded columns, so it
+      // stays accurate — only these two output fields are rounded.
+      latitude: Math.round(parseFloat(r.latitude as unknown as string) * 1000) / 1000,
+      longitude: Math.round(parseFloat(r.longitude as unknown as string) * 1000) / 1000,
       address_text: r.address_text,
       distance_km: Math.round(distanceKm * 1000) / 1000,
       payout_mxn: payoutMxn,
