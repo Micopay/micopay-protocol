@@ -8,11 +8,41 @@ export interface RateLimitStore {
 export class InMemoryStore implements RateLimitStore {
   private hits = new Map<string, { count: number; expiresAt: number }>();
 
+  /** Maximum number of keys tracked at once. Oldest entry is evicted when the cap is hit. */
+  private readonly maxSize: number;
+
+  constructor(maxSize = 50_000) {
+    this.maxSize = maxSize;
+
+    /**
+     * Prune expired entries every 60 seconds so the map stays bounded in
+     * long-running processes even when a window has expired and the key was
+     * never accessed again (e.g., single-hit IPs that never come back).
+     */
+    const pruneInterval = setInterval(() => {
+      const now = Date.now();
+      for (const [key, record] of this.hits) {
+        if (record.expiresAt <= now) {
+          this.hits.delete(key);
+        }
+      }
+    }, 60_000);
+    // Allow the Node.js process to exit cleanly even if this interval is running.
+    pruneInterval.unref();
+  }
+
   async increment(key: string, windowMs: number): Promise<{ current: number; resetTime: number }> {
     const now = Date.now();
     const record = this.hits.get(key);
 
     if (!record || record.expiresAt <= now) {
+      // Enforce maximum store size: evict the oldest entry when the cap is reached.
+      if (this.hits.size >= this.maxSize) {
+        const oldestKey = this.hits.keys().next().value;
+        if (oldestKey !== undefined) {
+          this.hits.delete(oldestKey);
+        }
+      }
       const expiresAt = now + windowMs;
       this.hits.set(key, { count: 1, expiresAt });
       return { current: 1, resetTime: expiresAt };
