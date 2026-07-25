@@ -38,12 +38,11 @@ import ReceivePayment from "./pages/ReceivePayment";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Profile from "./pages/Profile";
-import ClaimQR from "./pages/ClaimQR";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import MerchantSettings from "./pages/MerchantSettings";
 import BottomNav from "./components/BottomNav";
-import DebugOverlay from "./components/DebugOverlay";
+import { ConnectionBanner } from "./components/ConnectionBanner";
 
 import {
   registerUser,
@@ -109,7 +108,6 @@ interface AppCtx {
   isMockStellar: boolean;
   backendConnected: boolean;
   backendHealth: any;
-  setDebugOpen: (b: boolean) => void;
 }
 
 export const AppContext = createContext<AppCtx | null>(null);
@@ -272,7 +270,6 @@ function MapRoute() {
                 amountMxn: activeAmount,
                 flow: 'cashout',
                 nearbyCount: offer.nearbyCount,
-                merchantOnline: offer.online,
               },
             });
           }}
@@ -303,7 +300,6 @@ function ConfirmRoute() {
     amountMxn: number;
     flow: 'cashout' | 'deposit';
     nearbyCount: number;
-    merchantOnline?: boolean;
   } | null;
 
   if (!state?.merchantId) {
@@ -319,7 +315,6 @@ function ConfirmRoute() {
       amountMxn={state.amountMxn}
       flow={state.flow ?? 'cashout'}
       nearbyCount={state.nearbyCount}
-      merchantOnline={state.merchantOnline ?? true}
       loading={tradeLoading}
       errorMessage={tradeError?.message ?? null}
       onBack={() => navigate(-1)}
@@ -674,16 +669,12 @@ const HIDE_BOTTOMNAV_ROUTES = new Set([
   "/terms",
 ]);
 
-// Claim screens also hide the bottom nav (standalone deep-link UI).
-const HIDE_BOTTOMNAV_PREFIX = ['/claim/'];
-
 function BottomNavAdapter() {
   const navigate = useNavigate();
   const location = useLocation();
   const { sellerUser } = useAppCtx();
 
   if (HIDE_BOTTOMNAV_ROUTES.has(location.pathname)) return null;
-  if (HIDE_BOTTOMNAV_PREFIX.some((p) => location.pathname.startsWith(p))) return null;
 
   const navMap: Record<string, string> = {
     home: "/",
@@ -701,6 +692,29 @@ function BottomNavAdapter() {
           isMerchant={!!sellerUser}
       />
   );
+}
+
+// ── Connection banner host ───────────────────────────────────────────────────
+// Tracks browser/WebView online-offline state directly (navigator.onLine +
+// the online/offline events) — deliberately independent of the merchant
+// offline-mutation queue (services/offlineQueue*.ts), which is a different,
+// narrower concern (queueing merchant config writes) than "is this device
+// connected to the internet at all".
+function ConnectionBannerHost() {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  return <ConnectionBanner isVisible={!isOnline} message="Sin conexión a internet" />;
 }
 
 // ── Root App ─────────────────────────────────────────────────────────────────
@@ -731,7 +745,6 @@ function App() {
   const [isDemoMode, setIsDemoMode] = useState(true);
   const [isMockStellar, setIsMockStellar] = useState(true);
   const [backendUrl, setBackendUrl] = useState("");
-  const [debugOpen, setDebugOpen] = useState(false);
   const envName = import.meta.env.MODE;
 
   useEffect(() => {
@@ -786,8 +799,12 @@ function App() {
         console.warn("Backend not reachable during startup:", err);
         setBackendConnected(false);
         
-        // In production, force-block if backend is down.
-        if (envName === 'production') {
+        // Force-block if backend is down in any strict (non-demo) build —
+        // `build:mainnet` sets MODE to 'mainnet', not 'production', so both
+        // must be checked or a mainnet APK silently falls back to local
+        // demo mocks when the backend is unreachable (see
+        // docs/AUDIT_MOBILE_MAINNET.md, "guard de arranque no cubre modo mainnet").
+        if (envName === 'production' || envName === 'mainnet') {
           setStartupError({
             title: "Servidor Inalcanzable",
             message: "No se pudo conectar al servidor de Micopay.",
@@ -1001,7 +1018,6 @@ function App() {
     isMockStellar,
     backendConnected,
     backendHealth,
-    setDebugOpen,
   };
 
   if (startupError) {
@@ -1049,6 +1065,7 @@ function App() {
         <AppContext.Provider value={ctx}>
           <HashRouter>
             <div className="flex flex-col min-h-screen bg-[#F4FAFF]">
+              <ConnectionBannerHost />
               <Routes>
                 <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
                 <Route path="/register" element={<Register onLoginSuccess={handleLoginSuccess} />} />

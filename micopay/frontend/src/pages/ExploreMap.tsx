@@ -41,7 +41,6 @@ interface Offer {
   tradesCompleted?: number;
   tier?: string;
   isBusiness?: boolean;
-  online?: boolean;
 }
 
 function merchantToOffer(m: AvailableMerchant, index: number): Offer {
@@ -59,7 +58,6 @@ function merchantToOffer(m: AvailableMerchant, index: number): Offer {
     tradesCompleted: m.trades_completed ?? 0,
     tier: m.tier ?? undefined,
     isBusiness: (m.seller_type === 'business') || (m.is_business === true) || false,
-    online: true,
   };
 }
 
@@ -69,7 +67,6 @@ export interface OfferConfirmData {
   receiveMxn: number;
   commissionPct: number;
   nearbyCount: number;
-  online?: boolean;
 }
 
 interface ExploreMapProps {
@@ -304,7 +301,6 @@ const ExploreMap = ({
                               receiveMxn: offer.receiveMxn,
                               commissionPct: offer.commissionPct,
                               nearbyCount: offers.length,
-                              online: (offer as any).online ?? true,
                             });
                           } else {
                             onSelectOffer(offer.id);
@@ -383,8 +379,6 @@ const ExploreMap = ({
                             receiveMxn: offer.receiveMxn,
                             commissionPct: offer.commissionPct,
                             nearbyCount: offers.length,
-                            online: (offer as any).online ?? true,
-
                           });
                         } else {
                           onSelectOffer(offer.id);
