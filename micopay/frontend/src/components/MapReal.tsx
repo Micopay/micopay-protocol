@@ -146,6 +146,7 @@ const MapReal = ({
         });
 
         mapRef.current = map;
+        map.on('error', (e) => console.error('[MapReal] tile/style error', e?.error?.message ?? e));
 
         return () => {
             markersRef.current.forEach((marker) => marker.remove());
@@ -259,7 +260,9 @@ const MapReal = ({
 
     return (
         <div className="relative w-full h-64 bg-surface-container-low rounded-[32px] overflow-hidden border border-outline-variant/30 shadow-inner group">
-            <div ref={containerRef} className="absolute inset-0" />
+            {/* w-full/h-full explícitos: maplibre-gl.css fuerza position:relative sobre
+                .maplibregl-map y anula el `absolute` de Tailwind, colapsando el alto a 0. */}
+            <div ref={containerRef} className="absolute inset-0 w-full h-full" />
 
             {merchants.length > 0 && (
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full border border-outline-variant/10 flex items-center gap-2 shadow-lg z-20 pointer-events-none">
