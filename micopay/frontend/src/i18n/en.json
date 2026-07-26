@@ -438,5 +438,24 @@
     "generic": {
       "fallback": { "title": "Something went wrong", "message": "We couldn't finish this action. Try again.", "action": "If the problem continues, contact support." }
     }
+  },
+  "merchantSettings": {
+    "location": {
+      "title": "My location",
+      "notSet": "You haven't set your location yet. Customers can't find you on the map.",
+      "useCurrent": "Use my current location",
+      "dragHint": "Drag the pin to adjust",
+      "addressLabel": "Address (optional)",
+      "addressPlaceholder": "E.g. Av. Insurgentes Sur 123, Col. Roma",
+      "save": "Save location",
+      "saving": "Saving…",
+      "change": "Change location",
+      "cancel": "Cancel",
+      "saveSuccess": "Location saved successfully.",
+      "saveError": "Couldn't save the location. Please try again.",
+      "gettingLocation": "Getting your location…",
+      "locationError": "Couldn't get your location. Check your GPS permissions.",
+      "noLocationWarning": "Without a location set you won't appear on the map. Go to Settings to set it."
+    }
   }
 }

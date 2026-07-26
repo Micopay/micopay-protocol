@@ -11,6 +11,12 @@ interface MapRealProps {
     onSelectMerchant?: (merchantId: string) => void;
     /** Real user position; if null, fit-bounds only over merchants (or default view if none). */
     userPosition?: { lat: number; lng: number } | null;
+    /** When true, renders a single draggable pin instead of merchant markers (location picker use case). */
+    pickerMode?: boolean;
+    /** Current picker pin position; if null while pickerMode is on, falls back to userPosition as the initial center. */
+    pickerPosition?: { lat: number; lng: number } | null;
+    /** Called with the new position when the picker pin is dragged. */
+    onPickerPositionChange?: (position: { lat: number; lng: number }) => void;
 }
 
 const mushroomImages = ['/mushroom_red.png', '/mushroom_green.png', '/mushroom_gold.png'];
@@ -57,6 +63,26 @@ function buildMerchantMarkerElement(
     return wrapper;
 }
 
+function buildPickerMarkerElement(): HTMLElement {
+    const container = document.createElement('div');
+    container.className = 'relative flex flex-col items-center';
+    container.style.width = '48px';
+    container.style.cursor = 'grab';
+
+    const glow = document.createElement('span');
+    glow.className = 'absolute -top-1 w-12 h-12 rounded-full bg-primary/30 blur-md animate-pulse';
+    container.appendChild(glow);
+
+    const pin = document.createElement('div');
+    pin.className = 'relative z-10 w-9 h-9 rounded-full bg-primary border-4 border-white shadow-[0_0_15px_rgba(0,105,76,0.5)] flex items-center justify-center';
+    const dot = document.createElement('span');
+    dot.className = 'w-2.5 h-2.5 rounded-full bg-white';
+    pin.appendChild(dot);
+    container.appendChild(pin);
+
+    return container;
+}
+
 function buildUserMarkerElement(): HTMLElement {
     const container = document.createElement('div');
     container.className = 'relative flex items-center justify-center';
@@ -86,12 +112,20 @@ const MapReal = ({
     selectedMerchantId,
     onSelectMerchant,
     userPosition = null,
+    pickerMode = false,
+    pickerPosition = null,
+    onPickerPositionChange,
 }: MapRealProps) => {
     const { t } = useTranslation();
     const containerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
     const markersRef = useRef<maplibregl.Marker[]>([]);
     const userMarkerRef = useRef<maplibregl.Marker | null>(null);
+    const pickerMarkerRef = useRef<maplibregl.Marker | null>(null);
+    // Keep the latest callback in a ref so the marker's dragend listener (bound once
+    // per marker instance) always calls the current handler without re-creating the marker.
+    const onPickerPositionChangeRef = useRef(onPickerPositionChange);
+    onPickerPositionChangeRef.current = onPickerPositionChange;
 
     const styleUrl = import.meta.env.VITE_MAP_STYLE_URL || DEMO_STYLE_URL;
     const usingFallbackStyle = !import.meta.env.VITE_MAP_STYLE_URL;
@@ -115,6 +149,8 @@ const MapReal = ({
             markersRef.current = [];
             userMarkerRef.current?.remove();
             userMarkerRef.current = null;
+            pickerMarkerRef.current?.remove();
+            pickerMarkerRef.current = null;
             map.remove();
             mapRef.current = null;
         };
@@ -122,8 +158,44 @@ const MapReal = ({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Update markers + camera whenever merchants/selection/user position change.
+    // Picker mode: single draggable pin, no merchant markers, no fitBounds-over-merchants logic.
     useEffect(() => {
+        if (!pickerMode) return;
+        const map = mapRef.current;
+        if (!map) return;
+
+        const applyPickerUpdate = () => {
+            const initialPosition = pickerPosition ?? userPosition;
+
+            if (!pickerMarkerRef.current) {
+                if (!initialPosition) return;
+                const element = buildPickerMarkerElement();
+                const marker = new maplibregl.Marker({ element, draggable: true })
+                    .setLngLat([initialPosition.lng, initialPosition.lat])
+                    .addTo(map);
+                marker.on('dragend', () => {
+                    const lngLat = marker.getLngLat();
+                    onPickerPositionChangeRef.current?.({ lat: lngLat.lat, lng: lngLat.lng });
+                });
+                pickerMarkerRef.current = marker;
+                map.setCenter([initialPosition.lng, initialPosition.lat]);
+                map.setZoom(16);
+            } else if (pickerPosition) {
+                pickerMarkerRef.current.setLngLat([pickerPosition.lng, pickerPosition.lat]);
+            }
+        };
+
+        if (map.isStyleLoaded()) {
+            applyPickerUpdate();
+        } else {
+            map.once('load', applyPickerUpdate);
+        }
+    }, [pickerMode, pickerPosition, userPosition]);
+
+    // Update markers + camera whenever merchants/selection/user position change.
+    // Skipped entirely in picker mode — the picker effect above owns the map in that case.
+    useEffect(() => {
+        if (pickerMode) return;
         const map = mapRef.current;
         if (!map) return;
 
@@ -180,7 +252,7 @@ const MapReal = ({
         } else {
             map.once('load', applyUpdate);
         }
-    }, [merchants, selectedMerchantId, userPosition, type, onSelectMerchant]);
+    }, [merchants, selectedMerchantId, userPosition, type, onSelectMerchant, pickerMode]);
 
     return (
         <div className="relative w-full h-64 bg-surface-container-low rounded-[32px] overflow-hidden border border-outline-variant/30 shadow-inner group">

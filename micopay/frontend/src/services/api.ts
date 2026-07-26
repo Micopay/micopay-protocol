@@ -124,6 +124,22 @@ export async function patchMerchantAvailability(
   return res.data.user;
 }
 
+/** Mirrors backend `MerchantLocation` after PATCH /merchants/me/location. */
+export interface MerchantLocation {
+  latitude: number;
+  longitude: number;
+  address_text: string | null;
+  updated_at: string;
+}
+
+export async function updateMerchantLocation(
+    input: { latitude: number; longitude: number; address_text?: string },
+    token: string,
+): Promise<MerchantLocation> {
+  const res = await http.patch('/merchants/me/location', input, authHeaders(token));
+  return res.data.location;
+}
+
 export async function registerUser(username: string): Promise<UserData> {
   const stellar_address = (await getPublicKey()) ?? generateFallbackAddress(username);
   const res = await http.post("/users/register", { username, stellar_address });
@@ -473,6 +489,9 @@ export interface MerchantConfig {
   min_trade_mxn: number;
   max_trade_mxn: number;
   daily_cap_mxn: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  address_text?: string | null;
 }
 
 export interface UserProfile {
