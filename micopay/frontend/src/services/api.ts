@@ -31,8 +31,9 @@ export interface KYCStatusResponse {
 export async function startKYC(
   token: string,
   provider: KYCProvider = 'etherfuse',
+  email?: string,
 ): Promise<{ onboardingUrl: string }> {
-  const res = await http.post('/defi/kyc/start', {}, { ...authHeaders(token), params: { provider } });
+  const res = await http.post('/defi/kyc/start', { email }, { ...authHeaders(token), params: { provider } });
   return res.data;
 }
 

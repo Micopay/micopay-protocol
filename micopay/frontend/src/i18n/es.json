@@ -397,7 +397,12 @@
     "couldNotQuery": "No se pudo consultar",
     "sessionError": "Sesión no disponible. Vuelve a iniciar sesión e intenta de nuevo.",
     "openingProvider": "Abriendo {{provider}}…",
-    "pollError": "Error al consultar el estado de verificación."
+    "pollError": "Error al consultar el estado de verificación.",
+    "emailRequiredTitle": "Necesitamos tu correo",
+    "emailRequiredDesc": "{{provider}} lo requiere para verificar tu identidad. Solo se usa una vez, para esto.",
+    "emailPlaceholder": "tu@correo.com",
+    "emailInvalid": "Ese correo no parece válido.",
+    "emailContinue": "Continuar"
   },
   "errors": {
     "network": {

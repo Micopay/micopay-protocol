@@ -397,7 +397,12 @@
     "couldNotQuery": "Could not query",
     "sessionError": "Session not available. Log in again and try again.",
     "openingProvider": "Opening {{provider}}…",
-    "pollError": "Error checking verification status."
+    "pollError": "Error checking verification status.",
+    "emailRequiredTitle": "We need your email",
+    "emailRequiredDesc": "{{provider}} requires it to verify your identity. Used only once, for this.",
+    "emailPlaceholder": "you@email.com",
+    "emailInvalid": "That email doesn't look valid.",
+    "emailContinue": "Continue"
   },
   "errors": {
     "network": {

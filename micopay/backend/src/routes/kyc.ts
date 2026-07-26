@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import db from '../db/schema.js';
-import { UpstreamError, NotFoundError } from '../utils/errors.js';
+import { UpstreamError, NotFoundError, BadRequestError } from '../utils/errors.js';
 import { createOnboardingUrl, getKycStatus } from '../services/etherfuse.service.js';
 import { createDiditSession, mapDiditStatus } from '../services/didit.service.js';
 import { verifyDiditWebhookSignature } from '../lib/webhook-auth.js';
@@ -17,9 +17,14 @@ interface UserRow {
   id: string;
   stellar_address: string;
   username: string | null;
+  email: string | null;
   etherfuse_customer_id: string | null;
   etherfuse_bank_account_id: string | null;
 }
+
+// RFC 5322 is a whole thing; this just catches obvious typos before we round-trip
+// to Etherfuse (which does its own real validation server-side).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface DiditSessionRow {
   session_id: string;
@@ -54,11 +59,36 @@ async function startEtherfuseKyc(request: any) {
 
   const userId = request.user.id;
   const user = await db.getOne<UserRow>(
-    'SELECT id, stellar_address, username, etherfuse_customer_id, etherfuse_bank_account_id FROM users WHERE id = $1',
+    'SELECT id, stellar_address, username, email, etherfuse_customer_id, etherfuse_bank_account_id FROM users WHERE id = $1',
     [userId],
   );
   if (!user) {
     throw new NotFoundError('User not found');
+  }
+
+  // Etherfuse's userInfo.email was optional until 2026-07-25, when it started
+  // rejecting onboarding-url requests without it. MicoPay's Stellar-keypair
+  // auth never collected an email from anyone, so the first time a user hits
+  // this route we need one — either already on file, or freshly submitted.
+  let email = user.email;
+  const submittedEmail = typeof request.body?.email === 'string' ? request.body.email.trim() : undefined;
+  if (!email && submittedEmail) {
+    if (!EMAIL_RE.test(submittedEmail)) {
+      throw new BadRequestError(
+        'INVALID_EMAIL',
+        'El correo no parece válido.',
+        `Rejected malformed email for user ${userId}`,
+      );
+    }
+    await db.execute('UPDATE users SET email = $1 WHERE id = $2', [submittedEmail, userId]);
+    email = submittedEmail;
+  }
+  if (!email) {
+    throw new BadRequestError(
+      'EMAIL_REQUIRED',
+      'Etherfuse necesita un correo para verificar tu identidad.',
+      `User ${userId} has no email on file and none was submitted`,
+    );
   }
 
   let { etherfuse_customer_id: customerId, etherfuse_bank_account_id: bankAccountId } = user;
@@ -76,7 +106,7 @@ async function startEtherfuseKyc(request: any) {
       customerId,
       bankAccountId,
       publicKey: user.stellar_address,
-      userInfo: { displayName: user.username ?? undefined },
+      userInfo: { email, displayName: user.username ?? undefined },
     });
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     return { onboardingUrl, expiresAt };
