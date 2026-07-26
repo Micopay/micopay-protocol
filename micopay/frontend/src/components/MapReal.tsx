@@ -21,7 +21,10 @@ interface MapRealProps {
 
 const mushroomImages = ['/mushroom_red.png', '/mushroom_green.png', '/mushroom_gold.png'];
 
-const DEMO_STYLE_URL = 'https://demotiles.maplibre.org/style.json';
+// OpenFreeMap: OSM completo a nivel calle, sin API key, uso en producción permitido.
+// demotiles.maplibre.org NO sirve como fallback: solo tiene fronteras de países,
+// a zoom de calle renderiza un fondo vacío (visto en Huatusco, 2026-07-25).
+const FALLBACK_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 
 function buildMerchantMarkerElement(
     merchant: AvailableMerchant,
@@ -127,8 +130,7 @@ const MapReal = ({
     const onPickerPositionChangeRef = useRef(onPickerPositionChange);
     onPickerPositionChangeRef.current = onPickerPositionChange;
 
-    const styleUrl = import.meta.env.VITE_MAP_STYLE_URL || DEMO_STYLE_URL;
-    const usingFallbackStyle = !import.meta.env.VITE_MAP_STYLE_URL;
+    const styleUrl = import.meta.env.VITE_MAP_STYLE_URL || FALLBACK_STYLE_URL;
 
     // Create the map once on mount.
     useEffect(() => {
@@ -139,7 +141,8 @@ const MapReal = ({
             style: styleUrl,
             center: [-99.1332, 19.4326], // Mexico City default, used only until fitBounds/setCenter runs below.
             zoom: 11,
-            attributionControl: false,
+            // OSM exige atribución visible; compact la deja como un botón ⓘ discreto.
+            attributionControl: { compact: true },
         });
 
         mapRef.current = map;
@@ -267,11 +270,6 @@ const MapReal = ({
                 </div>
             )}
 
-            {usingFallbackStyle && (
-                <div className="absolute bottom-4 right-4 bg-black/70 backdrop-blur-sm px-3 py-1.5 rounded-full flex items-center gap-2 z-20 pointer-events-none">
-                    <p className="text-[9px] font-bold text-white uppercase tracking-tighter">{t('map.devMapNotice')}</p>
-                </div>
-            )}
         </div>
     );
 };
