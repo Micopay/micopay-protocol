@@ -9,7 +9,7 @@ export type MerchantsState =
   | { status: 'location_denied'; error: string }
   | { status: 'error'; error: string }
   | { status: 'empty' }
-  | { status: 'success'; merchants: AvailableMerchant[] };
+  | { status: 'success'; merchants: AvailableMerchant[]; userPosition: { lat: number; lng: number } };
 
 interface Options {
   amount_mxn: number;
@@ -124,7 +124,11 @@ export function useMerchantsAvailable(options: Options): {
 
         if (cancelled) return;
 
-        setState(merchants.length === 0 ? { status: 'empty' } : { status: 'success', merchants });
+        setState(
+          merchants.length === 0
+            ? { status: 'empty' }
+            : { status: 'success', merchants, userPosition: { lat, lng } },
+        );
       } catch {
         if (!cancelled) {
           setState({

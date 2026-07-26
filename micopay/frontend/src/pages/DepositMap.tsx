@@ -1,4 +1,4 @@
-import MapSim from '../components/MapSim';
+import MapReal from '../components/MapReal';
 import { useMerchantsAvailable } from '../hooks/useMerchantsAvailable';
 import {
   effectiveFeePercent,
@@ -457,7 +457,11 @@ const DepositMap = ({
 
         {/* Map View Section */}
         <section>
-          <MapSim type="deposit" merchants={merchants} />
+          <MapReal
+            type="deposit"
+            merchants={merchants}
+            userPosition={state.status === 'success' ? state.userPosition : null}
+          />
         </section>
 
         {/* Offers List */}

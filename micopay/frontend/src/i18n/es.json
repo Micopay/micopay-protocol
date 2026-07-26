@@ -230,6 +230,8 @@
   },
   "map": {
     "title": "Convertir a efectivo",
+    "agentsNearby": "{{count}} agentes cerca",
+    "devMapNotice": "mapa de desarrollo",
     "offer": "oferta",
     "offers": "ofertas",
     "for": "para ${{amount}} MXN",

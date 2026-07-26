@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import MapSim from '../components/MapSim';
+import MapReal from '../components/MapReal';
 import { useMerchantsAvailable } from '../hooks/useMerchantsAvailable';
 import {
   effectiveFeePercent,
@@ -197,10 +197,11 @@ const ExploreMap = ({
 
         {/* Map Section */}
         <section className="mb-10">
-          <MapSim
+          <MapReal
             merchants={merchants}
             selectedMerchantId={selectedMerchantId}
             onSelectMerchant={setSelectedMerchantId}
+            userPosition={state.status === 'success' ? state.userPosition : null}
           />
         </section>
 

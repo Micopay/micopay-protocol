@@ -230,6 +230,8 @@
   },
   "map": {
     "title": "Convert to cash",
+    "agentsNearby": "{{count}} agents nearby",
+    "devMapNotice": "development map",
     "offer": "offer",
     "offers": "offers",
     "for": "for ${{amount}} MXN",

@@ -46,6 +46,12 @@ function getMerchantPins(merchants: AvailableMerchant[]): MerchantPin[] {
 
 const mushroomImages = ['/mushroom_red.png', '/mushroom_green.png', '/mushroom_gold.png'];
 
+/**
+ * @deprecated Superseded by `MapReal` (real MapLibre GL tiles + real GPS
+ * centering). Kept temporarily for reference; scheduled for removal in a
+ * later work package (WP5 of docs/PLAN_MAPA_REAL_2026-07.md). Do not add
+ * new usages.
+ */
 const MapSim = ({
     type = 'cashout',
     merchants = [],
