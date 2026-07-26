@@ -539,7 +539,11 @@ function CetesRoute() {
   return (
       <CETESScreen
           onBack={() => navigate('/explore')}
-          onBanco={() => navigate('/deposit')}
+          // "¿Sin cripto?" without approved KYC: KYC is the actual prerequisite
+          // for the Etherfuse SPEI ramp (see canDepositSpei in CETESScreen), not
+          // the P2P cash-agent flow at /deposit — that CTA used to send users
+          // there by mistake.
+          onBanco={() => navigate('/kyc')}
           userToken={buyerUser?.token}
           showDefi={import.meta.env.VITE_ENABLE_DEFI_TRADING === 'true'}
           showSpeiRamp={import.meta.env.VITE_ENABLE_SPEI_RAMP === 'true'}
