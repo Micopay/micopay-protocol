@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import TradeStateBadge, { getTradeStateDebugOverride, TradeState } from '../components/TradeStateBadge';
 
 export interface CashoutRequestProps {
@@ -7,6 +8,7 @@ export interface CashoutRequestProps {
 }
 
 const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
+  const { t } = useTranslation();
   const [amount, setAmount] = useState('500');
   const state: TradeState = getTradeStateDebugOverride('pending_cash');
 
@@ -23,7 +25,7 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
               <span aria-hidden="true" className="material-symbols-outlined font-bold">arrow_back</span>
             </button>
             <h1 className="font-headline font-bold text-xl tracking-tight text-primary">
-              Convertir a efectivo
+              {t('cashout.title')}
             </h1>
           </div>
           <div className="w-10"></div>
@@ -31,16 +33,16 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
         <div className="bg-outline-variant/30 h-[1px] w-full self-end"></div>
       </header>
 
-      <main className="pt-24 pb-32 px-6 flex flex-col min-h-screen max-w-md mx-auto">
+      <main className="pt-[calc(6rem+env(safe-area-inset-top))] pb-32 px-6 flex flex-col min-h-screen max-w-md mx-auto">
         <TradeStateBadge
           state={state}
           onRecover={() => onSearch(Number(amount) || 500)}
-          recoverLabel="Buscar una nueva oferta"
+          recoverLabel={t('cashout.recoverLabel')}
           className="mb-6"
         />
         <div className="mt-8 mb-4">
           <label htmlFor="cashout-amount" className="font-label text-xs font-bold tracking-[0.15em] text-on-surface-variant opacity-70">
-            ¿CUÁNTO QUIERES EN EFECTIVO?
+            {t('cashout.amountLabel')}
           </label>
         </div>
 
@@ -60,14 +62,6 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
               MXN
             </span>
           </div>
-          <div className="mt-8 flex items-center gap-2 bg-primary/10 px-4 py-2 rounded-full border border-primary/10">
-            <span aria-hidden="true" className="material-symbols-outlined text-primary text-sm font-bold" style={{ fontVariationSettings: '"FILL" 1' }}>
-              account_balance_wallet
-            </span>
-            <span className="text-label text-[13px] font-bold text-primary">
-              Disponible: $1,240.00 MXN
-            </span>
-          </div>
         </div>
 
         <div className="space-y-6">
@@ -75,20 +69,20 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
             <div className="flex gap-4">
               <span aria-hidden="true" className="material-symbols-outlined text-primary opacity-60">info</span>
               <p className="text-body text-[14px] leading-relaxed text-on-surface-variant font-medium">
-                Ingresa el monto que deseas recibir. Buscaremos a los comerciantes verificados más cercanos con liquidez inmediata.
+                {t('cashout.info')}
               </p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-surface-container-highest/30 p-4 rounded-2xl flex flex-col gap-2">
               <span aria-hidden="true" className="material-symbols-outlined text-primary">location_on</span>
-              <span className="text-xs font-bold text-on-surface-variant">UBICACIÓN</span>
-              <span className="text-sm font-semibold text-on-surface">Cerca de ti</span>
+              <span className="text-xs font-bold text-on-surface-variant">{t('cashout.location')}</span>
+              <span className="text-sm font-semibold text-on-surface">{t('cashout.locationValue')}</span>
             </div>
             <div className="bg-surface-container-highest/30 p-4 rounded-2xl flex flex-col gap-2">
               <span aria-hidden="true" className="material-symbols-outlined text-primary">speed</span>
-              <span className="text-xs font-bold text-on-surface-variant">TIEMPO</span>
-              <span className="text-sm font-semibold text-on-surface">&lt; 15 mins</span>
+              <span className="text-xs font-bold text-on-surface-variant">{t('cashout.time')}</span>
+              <span className="text-sm font-semibold text-on-surface">{t('cashout.timeValue')}</span>
             </div>
           </div>
         </div>
@@ -99,7 +93,7 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
             aria-label="Buscar ofertas de efectivo"
             className="w-full bg-gradient-to-r from-primary to-primary-container text-on-primary font-body font-semibold py-4 rounded-xl shadow-[0_12px_24px_rgba(0,105,76,0.2)] active:scale-95 duration-200 transition-all flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-primary"
           >
-            <span>Buscar opciones de efectivo</span>
+            <span>{t('cashout.search')}</span>
             <span aria-hidden="true" className="material-symbols-outlined text-lg">search</span>
           </button>
         </div>

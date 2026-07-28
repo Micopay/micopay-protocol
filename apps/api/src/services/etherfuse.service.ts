@@ -1,5 +1,56 @@
 const ETHERFUSE_API = process.env.ETHERFUSE_API_URL ?? "https://api.etherfuse.com";
 
+export interface EtherfuseRampAsset {
+  identifier: string; // "CODE:ISSUER" on Stellar
+  symbol: string;
+  name: string;
+  currency: string | null;
+  balance: string | null;
+  image: string | null;
+}
+
+// Authenticated client for the /ramp/* endpoints. Sandbox keys go in the
+// Authorization header with no "Bearer" prefix — unlike most REST APIs.
+function etherfuseRampClient(path: string, init: RequestInit = {}): Promise<Response> {
+  const apiKey = process.env.ETHERFUSE_API_KEY;
+  if (!apiKey) {
+    throw new Error("ETHERFUSE_API_KEY not configured");
+  }
+
+  return fetch(`${ETHERFUSE_API}${path}`, {
+    ...init,
+    headers: {
+      Authorization: apiKey,
+      "Content-Type": "application/json",
+      ...init.headers,
+    },
+  });
+}
+
+// GET /ramp/assets requires blockchain, currency (sort priority), and a
+// wallet address (Etherfuse uses it to enrich the response with balances).
+export async function getRampAssets(
+  wallet: string,
+  currency = "mxn"
+): Promise<EtherfuseRampAsset[]> {
+  const params = new URLSearchParams({ blockchain: "stellar", currency, wallet });
+  const response = await etherfuseRampClient(`/ramp/assets?${params}`);
+  if (!response.ok) {
+    throw new Error(`Etherfuse API error: ${response.status}`);
+  }
+  const data = (await response.json()) as { assets: EtherfuseRampAsset[] };
+  return data.assets;
+}
+
+export async function getCetesIdentifier(wallet: string): Promise<string> {
+  const assets = await getRampAssets(wallet, "mxn");
+  const cetes = assets.find((a) => a.symbol === "CETES");
+  if (!cetes) {
+    throw new Error("CETES asset not found in Etherfuse /ramp/assets response");
+  }
+  return cetes.identifier;
+}
+
 export interface EtherfuseBondCost {
   bond_cost_in_payment_token: string;
   bond_cost_in_usd: string;

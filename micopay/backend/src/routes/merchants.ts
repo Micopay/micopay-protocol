@@ -55,10 +55,10 @@ export async function merchantRoutes(app: FastifyInstance) {
   });
 
   // ── Authenticated routes ──────────────────────────────────────────────────
+  // Auth is applied per-route (NOT via a plugin-level addHook) so the public
+  // /merchants/available discovery endpoint above stays unauthenticated.
 
-  app.addHook('preHandler', authMiddleware);
-
-  app.get('/merchants/me/config', async (request) => {
+  app.get('/merchants/me/config', { preHandler: [authMiddleware] }, async (request) => {
     const config = await getOrCreateMerchantConfig(request.user.id);
     return {
       config,
@@ -69,6 +69,7 @@ export async function merchantRoutes(app: FastifyInstance) {
   });
 
   app.put('/merchants/me/config', {
+    preHandler: [authMiddleware],
     schema: {
       body: {
         type: 'object',
@@ -110,6 +111,7 @@ export async function merchantRoutes(app: FastifyInstance) {
    * Authenticated. Sets or updates the merchant's location.
    */
   app.patch('/merchants/me/location', {
+    preHandler: [authMiddleware],
     schema: {
       body: {
         type: 'object',
@@ -141,28 +143,5 @@ export async function merchantRoutes(app: FastifyInstance) {
     );
 
     return reply.send({ location: updated });
-  });
-
-  /**
-   * GET /merchants/me/trades
-   * Authenticated. Returns trades where the caller is the seller.
-   */
-  app.get('/merchants/me/trades', async (request) => {
-    const q = request.query as { state?: string };
-
-    const stateFilter = q.state && q.state !== 'all' ? q.state : null;
-
-    const trades = await db.getMany(
-      `SELECT t.id, u.username AS buyer_handle, t.amount_mxn, t.status, t.created_at
-       FROM trades t
-       JOIN users u ON u.id = t.buyer_id
-       WHERE t.seller_id = $1
-         AND ($2::text IS NULL OR t.status = $2)
-       ORDER BY t.created_at DESC
-       LIMIT 100`,
-      [request.user.id, stateFilter],
-    );
-
-    return { trades };
   });
 }

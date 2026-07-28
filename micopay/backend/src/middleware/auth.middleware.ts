@@ -1,6 +1,7 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import db from "../db/schema.js";
 import { toSupportCode } from "./requestId.middleware.js";
+import { isRevoked } from "../services/tokenRevocation.service.js";
 
 /**
  * JWT authentication middleware.
@@ -16,7 +17,18 @@ export async function authMiddleware(
   try {
     await request.jwtVerify();
 
-    const { id } = request.user as { id: string; stellar_address: string };
+    const { id, jti } = request.user as { id: string; stellar_address: string; jti?: string };
+
+    // Reject tokens that have been explicitly revoked (e.g. via logout)
+    if (jti && await isRevoked(jti)) {
+      return reply.status(401).send({
+        error: "Unauthorized",
+        message: "Token has been revoked",
+        request_id: requestId,
+        support_code: supportCode,
+      });
+    }
+
     const activeUser = await db.getOne<{ id: string; is_suspended: boolean | null }>(
       "SELECT id, is_suspended FROM users WHERE id = $1 AND deleted_at IS NULL",
       [id],
@@ -53,7 +65,7 @@ export async function authMiddleware(
  */
 declare module "@fastify/jwt" {
   interface FastifyJWT {
-    payload: { id: string; stellar_address: string };
-    user: { id: string; stellar_address: string };
+    payload: { id: string; stellar_address: string; jti?: string };
+    user: { id: string; stellar_address: string; jti?: string; exp?: number };
   }
 }

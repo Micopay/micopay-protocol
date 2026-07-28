@@ -3,12 +3,44 @@ import {
   getCETESRate,
   formatCETESRate,
   calculateCETESPreview,
+  getRampAssets,
   type EtherfuseBondCost,
 } from "../services/etherfuse.service.js";
 
 const ETHERFUSE_API = process.env.ETHERFUSE_API_URL ?? "https://api.etherfuse.com";
 
 export async function cetesRoutes(fastify: FastifyInstance): Promise<void> {
+  // Real Stellar asset identifiers (CODE:ISSUER) supported by the Etherfuse
+  // ramp — the CETES issuer differs between sandbox and production, so it
+  // must always be read from here instead of hardcoded.
+  fastify.get<{ Querystring: { wallet?: string; currency?: string } }>(
+    "/defi/ramp/assets",
+    async (request, reply) => {
+      if (!process.env.ETHERFUSE_API_KEY) {
+        return reply.status(503).send({
+          error: "Etherfuse ramp not configured",
+          message: "ETHERFUSE_API_KEY is not set",
+        });
+      }
+
+      const { wallet, currency } = request.query;
+      if (!wallet) {
+        return reply.status(400).send({ error: "wallet querystring is required" });
+      }
+
+      try {
+        const assets = await getRampAssets(wallet, currency);
+        return reply.send(assets);
+      } catch (error) {
+        fastify.log.error(error, "Failed to fetch Etherfuse ramp assets");
+        return reply.status(503).send({
+          error: "Etherfuse API unavailable",
+          message: "Unable to fetch ramp assets at this time",
+        });
+      }
+    }
+  );
+
   fastify.get<{ Querystring: { amount?: string } }>(
     "/defi/cetes/rate",
     async (request, reply) => {

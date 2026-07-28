@@ -1,9 +1,11 @@
 import type { FastifyInstance } from 'fastify';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import db from '../db/schema.js';
 import { config } from '../config.js';
 import { createRateLimiter } from '../middleware/rateLimit.middleware.js';
 import { AuthError, NotFoundError } from '../utils/errors.js';
+import { revokeToken } from '../services/tokenRevocation.service.js';
+import { authMiddleware } from '../middleware/auth.middleware.js';
 
 const authRateLimit = createRateLimiter({
   windowMs: config.authRateLimitWindowMs,
@@ -131,13 +133,32 @@ export async function authRoutes(app: FastifyInstance) {
       );
     }
 
-    // Issue JWT
+    // Issue JWT with a unique JTI so the token can be individually revoked on logout
+    const jti = randomUUID();
     const token = app.jwt.sign(
-      { id: user.id, stellar_address: user.stellar_address },
+      { id: user.id, stellar_address: user.stellar_address, jti },
       { expiresIn: config.jwtExpiry },
     );
 
     request.log.info({ stellar_address, user_id: user.id, category: 'auth' }, '[auth] Token issued');
     return { token, user };
+  });
+
+  /**
+   * POST /auth/logout
+   * Revoke the current JWT. Any subsequent request using the same token will be
+   * rejected by the auth middleware, even before the token naturally expires.
+   */
+  app.post('/auth/logout', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    const { jti, exp, id } = request.user as { id: string; jti?: string; exp?: number; stellar_address: string };
+
+    if (jti && exp) {
+      await revokeToken(jti, id, new Date(exp * 1000));
+    }
+
+    request.log.info({ user_id: id, jti, category: 'auth' }, '[auth] Token revoked on logout');
+    return reply.status(200).send({ message: 'Logged out successfully' });
   });
 }

@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { requirePayment } from "../middleware/x402.js";
 import { randomUUID, randomBytes, createHash } from "crypto";
 import * as StellarSdk from "@stellar/stellar-sdk";
@@ -327,9 +327,27 @@ export async function cashRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * GET /api/v1/cash/request/:id
-   * FREE — poll status of a cash request
+   * x402: $0.0001 USDC — poll status of a cash request
+   *
+   * Security (SEC-03): this endpoint exposes merchant name, MXN amount, HTLC tx
+   * hash and expiry. Request IDs (`mcr-{8 hex}`) are short and enumerable, so the
+   * endpoint must NOT be free/unauthenticated. We gate it behind the same x402
+   * micropayment used by GET /api/v1/swaps/:id/status, and apply a strict
+   * per-route rate limit as defense-in-depth against ID brute-forcing.
+   * See docs/security-reports/SEC-03-cash-request-sin-auth.md
    */
-  fastify.get("/api/v1/cash/request/:id", async (request, reply) => {
+  fastify.get(
+    "/api/v1/cash/request/:id",
+    {
+      preHandler: requirePayment({ amount: "0.0001", service: "cash_request_status" }),
+      config: {
+        rateLimit: {
+          max: 20,
+          timeWindow: "1 minute",
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
     const req = cashRequests.get(id);
     if (!req) return reply.status(404).send({ error: "Request not found" });

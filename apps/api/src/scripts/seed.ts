@@ -639,4 +639,13 @@ async function main() {
   }
 }
 
-main();
+// Only run the seeder when this file is executed directly (e.g. `tsx src/scripts/seed.ts`),
+// NOT when it is imported for its exports (e.g. demo.ts imports DEMO_USER). Importing a
+// module must not run a seeder or call process.exit.
+import { fileURLToPath } from "node:url";
+const isMain =
+  process.argv[1] !== undefined &&
+  fileURLToPath(import.meta.url) === process.argv[1];
+if (isMain) {
+  main();
+}

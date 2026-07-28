@@ -1,46 +1,30 @@
--- Micopay MVP — Schema simplificado
--- Solo las tablas necesarias para el flujo del trade
+-- Micopay MVP — Schema base
+-- Aplicado por el migration runner (src/db/migrate.ts) ANTES de las migraciones.
+-- Reparado 2026-06-28: la tabla `users` tenía columnas duplicadas (no parseaba) y `audit_log`
+-- estaba definido dos veces. Nullabilidad de users alineada con el borrado de cuenta
+-- (account.service.ts pone username/stellar_address/phone_hash en NULL al anonimizar).
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ================================================
 -- USERS
+-- (username/stellar_address/phone_hash son NULLABLE: se ponen en NULL al borrar la cuenta,
+--  preservando el valor anonimizado en las columnas deleted_*.)
 -- ================================================
 CREATE TABLE users (
-  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  stellar_address      VARCHAR(56) UNIQUE NOT NULL,
-  username             VARCHAR(30) UNIQUE NOT NULL,
-  phone_hash           VARCHAR(64) UNIQUE,
-  merchant_available   BOOLEAN NOT NULL DEFAULT true,
-  created_at           TIMESTAMPTZ DEFAULT NOW()
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  stellar_address VARCHAR(56) UNIQUE,
-  username        VARCHAR(30) UNIQUE,
-  phone_hash      VARCHAR(64) UNIQUE,
-  deleted_username        VARCHAR(30),
-  deleted_stellar_address VARCHAR(56),
-  deleted_phone_hash      VARCHAR(64),
-  deleted_at      TIMESTAMPTZ,
-  created_at      TIMESTAMPTZ DEFAULT NOW()
+  id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  stellar_address          VARCHAR(56) UNIQUE,
+  username                 VARCHAR(30) UNIQUE,
+  phone_hash               VARCHAR(64) UNIQUE,
+  merchant_available       BOOLEAN NOT NULL DEFAULT true,
+  deleted_at               TIMESTAMPTZ,
+  deleted_username         VARCHAR(30),
+  deleted_stellar_address  VARCHAR(56),
+  deleted_phone_hash       VARCHAR(64),
+  created_at               TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_users_stellar ON users (stellar_address);
-
--- ================================================
--- AUDIT LOG
--- ================================================
-CREATE TABLE audit_log (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  action          VARCHAR(64) NOT NULL,
-  actor_user_id   UUID REFERENCES users(id),
-  entity_type     VARCHAR(32) NOT NULL,
-  entity_id       UUID NOT NULL,
-  details         JSONB DEFAULT '{}'::jsonb,
-  created_at      TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_audit_log_entity ON audit_log (entity_type, entity_id);
-CREATE INDEX idx_audit_log_actor ON audit_log (actor_user_id, created_at);
 
 -- ================================================
 -- WALLETS
@@ -100,6 +84,8 @@ CREATE INDEX idx_trades_status ON trades (status, expires_at)
 
 -- ================================================
 -- TRADE AUDIT LOG
+-- (versión canónica usada por src/db/audit-log.model.ts; la columna request_id la agrega
+--  la migración 20260529120000_audit_log_request_id.up.sql)
 -- ================================================
 CREATE TABLE audit_log (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -130,11 +116,9 @@ CREATE INDEX idx_secret_access_trade ON secret_access_log (trade_id);
 
 -- ================================================
 -- PROCESSED TX (replay protection)
+-- Append-only: every confirmed Stellar tx hash acted on. The PRIMARY KEY makes
+-- INSERT … ON CONFLICT DO NOTHING atomic so duplicates are rejected under concurrency.
 -- ================================================
--- Every confirmed Stellar tx hash that has been acted on is recorded here.
--- The PRIMARY KEY constraint makes INSERT … ON CONFLICT DO NOTHING atomic
--- so duplicate submissions are rejected even under concurrent load.
--- Rows are never deleted — this is an append-only audit log.
 CREATE TABLE processed_tx (
   tx_hash       VARCHAR(64) PRIMARY KEY,
   source_route  VARCHAR(64) NOT NULL,
@@ -144,4 +128,3 @@ CREATE TABLE processed_tx (
 
 CREATE INDEX idx_processed_tx_user
   ON processed_tx (user_id, processed_at DESC);
-

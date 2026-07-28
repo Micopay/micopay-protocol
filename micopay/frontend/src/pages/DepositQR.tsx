@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { completeTrade, TradeData } from '../services/api';
 
 interface DepositQRProps {
@@ -10,19 +11,8 @@ interface DepositQRProps {
 }
 
 const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: DepositQRProps) => {
-    const [pin, setPin] = useState<string>('');
     const [isConfirming, setIsConfirming] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    const handlePinClick = (num: string) => {
-        if (pin.length < 4) {
-            const newPin = pin + num;
-            setPin(newPin);
-            if (newPin.length === 4) {
-                handleComplete();
-            }
-        }
-    };
 
     const handleComplete = async () => {
         if (!activeTrade || !buyerToken) return;
@@ -34,13 +24,8 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
         } catch (e) {
             console.error('Deposit completion failed', e);
             setIsConfirming(false);
-            setPin('');
             setError('No se pudo completar el depósito. Intenta de nuevo.');
         }
-    };
-
-    const handleBackspace = () => {
-        setPin(pin.slice(0, -1));
     };
 
     return (
@@ -59,12 +44,8 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
                         <span className="text-[10px] tracking-wide uppercase font-semibold text-primary">Agente Autorizado</span>
                     </div>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center overflow-hidden">
-                    <img
-                        alt="User Profile"
-                        className="w-full h-full object-cover"
-                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKtGmlK9lRTQqDgKWWxCpzzjhH6AVdcuHK_OmrECeSWTtfYZXttDqAXUbcUt3N7mNRgIrdDC-rzkm7QhL5aHJEIj66NQsWFL7blIxtsKfz7sW8xoE84bcZwZQKFjTbC0ctzIeMHkkVA4Poc4OAKPNmnJMNi0CmKIcJewWKQ04I4ZRF0NALv8PTBEcuApZVwafge5pjDjodq-9720hX1TTnUKImWXRphyYvkmvVuw_UtZQWopSZJmJAU7v5slxmO6QXYEgh_F5WKn2v"
-                    />
+                <div className="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center text-white">
+                    <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>person</span>
                 </div>
             </header>
 
@@ -75,19 +56,15 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
                     </div>
-                    <p className="font-headline font-bold text-primary tracking-tight">Esperando encuentro</p>
+                    <p className="font-headline font-bold text-primary tracking-tight">Ve al agente y entrégale el efectivo</p>
                 </div>
 
                 {/* Chat Preview */}
                 <section>
                     <div className="bg-surface-container-lowest border border-surface-container-low p-4 rounded-2xl shadow-sm">
                         <div className="flex gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-full bg-surface-container-high flex-shrink-0 flex items-center justify-center overflow-hidden">
-                                <img
-                                    alt="Store"
-                                    className="w-full h-full object-cover"
-                                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuCdc2bgOszS_GKqShcTimO9xO4li98JYZSAM4J3KUtr7ijh1lTKkR5cnkCMKc7uRs8byC-L448t0UzSmCUqUw6O0VLxfByjMAPP2kke6OMAIpP5OjjibElzXxTD2RDaQY4dGSpUFVW_QsKBoNFIEuFfUBwpm2E_UyBumuFY-bAqxUJm7qV0lrGnPncQVbTVDhHVdTiXjwIEifagwUVn0mdIlcEAaa_teXFSFlQ2m9v0sl035tRphrFRbUDk4K4xjlEBqPNHWTlVdmUs"
-                                />
+                            <div className="w-10 h-10 rounded-full bg-emerald-100 flex-shrink-0 flex items-center justify-center">
+                                <span className="material-symbols-outlined text-emerald-700 text-lg">storefront</span>
                             </div>
                             <div className="flex-1">
                                 <p className="text-sm font-medium text-on-surface-variant leading-snug">
@@ -114,10 +91,13 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
                 {/* QR Content Card */}
                 <div className="bg-surface-container-low rounded-[32px] p-8 flex flex-col items-center space-y-6 shadow-[0px_32px_32px_rgba(11,30,38,0.04)]">
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-outline-variant/20">
-                        <img
-                            alt="QR Code"
-                            className="w-48 h-48"
-                            src="https://lh3.googleusercontent.com/aida/ADBb0uiC4aumVX9b9_8EmaEY8cUXAiLnd8nTUFBI5mmLaPtMT3Clyhlnx0gH5SJ6Uj5VFZY0Sr8ws-esCWamCmWmfHoLXVuxzM4bhUTbxi-B54COrpyDslbaq5D1WXUJC-uBsG4aOoYcWhaIOQ_l6y11PbO3csV4TeweeHBGVvYt_RVlDPMWI7MEJQzUn67vmoW9Vs2vfWqZieZanDJZspbHwmIGca0ZjTvSQJXQF-e280fi32GIZ6Wwypi8ULwoObokwnr02p-rf_buYsI"
+                        <QRCodeSVG
+                            value={`micopay://confirm?trade_id=${activeTrade?.id ?? ''}`}
+                            size={192}
+                            bgColor="transparent"
+                            fgColor="#0B1E26"
+                            level="M"
+                            style={{ borderRadius: '12px' }}
                         />
                     </div>
                     <div className="text-center space-y-2">
@@ -140,56 +120,29 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
                     </div>
                 )}
 
-                {/* PIN Input Section */}
-                <div className="space-y-4 pt-4 text-center">
-                    <p className="font-semibold text-sm text-on-surface/60 uppercase tracking-widest mb-6">Confirma con tu PIN</p>
-                    <div className="flex justify-center gap-6 mb-10">
-                        {[0, 1, 2, 3].map((i) => (
-                            <div
-                                key={i}
-                                className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                                    pin.length > i ? 'bg-primary scale-125 shadow-[0_0_12px_rgba(0,105,76,0.3)]' : 'bg-outline-variant/30'
-                                }`}
-                            />
-                        ))}
-                    </div>
-
+                {/* Confirm Section */}
+                <div className="pt-4">
                     {!isConfirming ? (
-                        <div className="grid grid-cols-3 gap-y-4 gap-x-8 max-w-[280px] mx-auto pb-10">
-                            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
-                                <button
-                                    key={num}
-                                    onClick={() => handlePinClick(num)}
-                                    disabled={!activeTrade || !buyerToken}
-                                    className="h-16 w-16 flex items-center justify-center text-2xl font-bold text-on-surface hover:bg-surface-container-low rounded-full transition-all active:scale-90 disabled:opacity-40"
-                                >
-                                    {num}
-                                </button>
-                            ))}
-                            <div className="h-16 w-16"></div>
-                            <button
-                                onClick={() => handlePinClick('0')}
-                                disabled={!activeTrade || !buyerToken}
-                                className="h-16 w-16 flex items-center justify-center text-2xl font-bold text-on-surface hover:bg-surface-container-low rounded-full transition-all active:scale-90 disabled:opacity-40"
-                            >
-                                0
-                            </button>
-                            <button
-                                onClick={handleBackspace}
-                                className="h-16 w-16 flex items-center justify-center text-on-surface hover:bg-surface-container-low rounded-full transition-all active:scale-90"
-                            >
-                                <span className="material-symbols-outlined text-2xl">backspace</span>
-                            </button>
-                        </div>
+                        <button
+                            onClick={handleComplete}
+                            disabled={!activeTrade || !buyerToken}
+                            className="w-full h-[52px] bg-primary text-white font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-40"
+                        >
+                            <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>check_circle</span>
+                            Ya entregué el efectivo al agente
+                        </button>
                     ) : (
-                        <div className="mt-10 flex flex-col items-center gap-3 pb-20">
+                        <div className="flex flex-col items-center gap-3 py-6">
                             <div className="relative w-8 h-8">
                                 <div className="absolute inset-0 border-4 border-surface-container-high rounded-full"></div>
                                 <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
                             </div>
-                            <p className="text-sm font-medium text-outline">Completando depósito...</p>
+                            <p className="text-sm font-medium text-outline">Liberando tus activos digitales…</p>
                         </div>
                     )}
+                    <p className="text-[11px] text-outline text-center mt-4 leading-relaxed px-2">
+                        Solo confirma después de que el agente haya escaneado tu QR y hayas entregado el efectivo.
+                    </p>
                 </div>
             </main>
         </div>

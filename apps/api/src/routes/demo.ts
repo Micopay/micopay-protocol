@@ -1,4 +1,7 @@
 import type { FastifyInstance } from "fastify";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   Keypair,
   Asset,
@@ -267,6 +270,166 @@ export async function demoRoutes(
       fastify.log.error(err);
       return reply.status(500).send({
         error: "Demo failed",
+        detail: String(err),
+        steps_completed: steps,
+      });
+    }
+  });
+
+  /**
+   * POST /api/v1/demo/run-zk
+   *
+   * ZK credential demo — buy (public, x402) -> spend (anonymous, ZK proof) -> reuse rejected:
+   *   Step 1  credential_buy $0.01 USDC — buy an anonymous access credential (real Stellar payment)
+   *   Step 2  inference_spend           — spend a pre-generated, unspent credential's ZK proof
+   *                                       (WP-D1 fixture) -> Claude responds, nullifier burned on Soroban
+   *   Step 3  inference_reuse_rejected  — resubmit the SAME proof -> rejected (burn-once proven)
+   *
+   * Steps 2-3 deliberately spend the WP-D1 FIXTURE, not the credential bought in step 1 — ZK proof
+   * generation (nargo/bb) is a manual, multi-minute offline step that can't happen live during a
+   * recording. See docs/zk-agent-credentials/DEMO_RECORDING_PLAN_2026-07.md.
+   *
+   * Only runs the fixture through steps 2-3 ONCE successfully, ever — after that, step 2 itself
+   * starts returning 409 (its nullifier is now burned), which still demonstrates the point but
+   * isn't the intended "wow" order. Regenerate the fixture (WP-D1) for a fresh take.
+   */
+  fastify.post("/api/v1/demo/run-zk", async (_request, reply) => {
+    const secret = process.env.DEMO_AGENT_SECRET_KEY;
+    if (!secret) {
+      return reply.status(503).send({
+        error:
+          "Demo agent not configured. Run scripts/setup-demo-agent.mjs first.",
+      });
+    }
+
+    const fixturePath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "..",
+      "demo",
+      "zk_demo_proof.json",
+    );
+    let fixture: { circuit_id: string; proof: string; public_inputs: string[] };
+    try {
+      fixture = JSON.parse(readFileSync(fixturePath, "utf-8"));
+    } catch {
+      return reply.status(503).send({
+        error:
+          "ZK demo fixture missing — run WP-D1 (see DEMO_RECORDING_PLAN_2026-07.md) to generate apps/api/demo/zk_demo_proof.json.",
+      });
+    }
+
+    const agentKP = Keypair.fromSecret(secret);
+    const agentAddress = agentKP.publicKey();
+    const platformAddr = getPlatformAddress();
+    const horizon = new Horizon.Server(HORIZON_URL);
+    const port = process.env.PORT ?? "3000";
+    const baseUrl = `http://localhost:${port}`;
+
+    const account = await horizon.loadAccount(agentAddress);
+
+    function buildTx(amount: string, memo: string) {
+      const tx = new TransactionBuilder(account, {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+      })
+        .addOperation(
+          Operation.payment({ destination: platformAddr, asset: USDC, amount }),
+        )
+        .addMemo(Memo.text(memo.slice(0, 28)))
+        .setTimeout(180)
+        .build();
+      tx.sign(agentKP);
+      return tx;
+    }
+
+    const txBuy = buildTx("0.0100000", "micopay:credential_buy");
+    const steps: any[] = [];
+
+    try {
+      // ── Step 1: Buy — public x402 payment, real Stellar tx ──────────────────
+      const rBuy = await horizon.submitTransaction(txBuy);
+      const buyRes = await fetch(`${baseUrl}/api/v1/credentials/buy`, {
+        method: "POST",
+        headers: {
+          "x-payment": txBuy.toXDR(),
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      });
+      const buyBody = (await buyRes.json()) as any;
+      steps.push({
+        name: "credential_buy",
+        description:
+          "Agent buys an anonymous access credential. This payment is public — a payment has nothing to hide.",
+        price_usdc: "0.01",
+        tx_hash: rBuy.hash,
+        stellar_expert_url: `${EXPLORER}/${rBuy.hash}`,
+        result: buyBody,
+      });
+
+      // ── Step 2: Spend — anonymous ZK proof, real Soroban verify_unique call ─
+      const spendRes = await fetch(`${baseUrl}/api/v1/inference`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          circuit_id: fixture.circuit_id,
+          proof: fixture.proof,
+          public_inputs: fixture.public_inputs,
+          prompt: "In one sentence, what is MicoPay?",
+        }),
+      });
+      const spendBody = (await spendRes.json()) as any;
+      if (!spendRes.ok) {
+        throw new Error(
+          `Spend step failed (fixture may already be spent — regenerate WP-D1): ${spendRes.status} ${JSON.stringify(spendBody)}`,
+        );
+      }
+      steps.push({
+        name: "inference_spend",
+        description:
+          "Agent proves it holds a valid, unspent credential and spends it — without revealing which one, or who it is.",
+        price_usdc: "0",
+        soroban_tx_hash: spendBody.verify_tx_hash,
+        soroban_explorer_url: spendBody.verify_tx_hash
+          ? `${EXPLORER}/${spendBody.verify_tx_hash}`
+          : undefined,
+        result: spendBody,
+      });
+
+      // ── Step 3: Reuse — same proof again, MUST be rejected. This is the point. ─
+      const reuseRes = await fetch(`${baseUrl}/api/v1/inference`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          circuit_id: fixture.circuit_id,
+          proof: fixture.proof,
+          public_inputs: fixture.public_inputs,
+          prompt: "In one sentence, what is MicoPay?",
+        }),
+      });
+      const reuseBody = (await reuseRes.json()) as any;
+      steps.push({
+        name: "inference_reuse_rejected",
+        description:
+          "Same proof, resubmitted. Rejected on-chain — one credential, one use, no reuse.",
+        price_usdc: "0",
+        rejected_as_expected: reuseRes.status === 409,
+        result: reuseBody,
+      });
+
+      return reply.send({
+        agent_address: agentAddress,
+        platform_address: platformAddr,
+        total_paid_usdc: "0.01",
+        steps,
+        summary:
+          "Pay in public, spend in private — and nobody, not even MicoPay, can link the two.",
+      });
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.status(500).send({
+        error: "ZK demo failed",
         detail: String(err),
         steps_completed: steps,
       });

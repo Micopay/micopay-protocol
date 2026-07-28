@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext } from "react";
-import { generateAndStoreKeypair, keypairExists, getPublicKey } from './lib/keystore';
+import { generateAndStoreKeypair, keypairExists, getPublicKey, exportSecretKey } from './lib/keystore';
 import {
   HashRouter,
   Routes,
@@ -17,6 +17,7 @@ import Home from "./pages/Home";
 import CashoutRequest from "./pages/CashoutRequest";
 import DepositRequest from "./pages/DepositRequest";
 import ExploreMap from "./pages/ExploreMap";
+import TradeConfirmationPage from "./pages/TradeConfirmation";
 import DepositMap from "./pages/DepositMap";
 import ChatRoom from "./pages/ChatRoom";
 import DepositChat from "./pages/DepositChat";
@@ -28,7 +29,12 @@ import History from "./pages/History";
 import TradeDetail from "./pages/TradeDetail";
 import CETESScreen from "./pages/CETESScreen";
 import BlendScreen from "./pages/BlendScreen";
+import KYCScreen from "./pages/KYCScreen";
+
 import MerchantInbox from "./pages/MerchantInbox";
+import PayHub from "./pages/PayHub";
+import SendPayment from "./pages/SendPayment";
+import ReceivePayment from "./pages/ReceivePayment";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Profile from "./pages/Profile";
@@ -41,23 +47,37 @@ import DebugOverlay from "./components/DebugOverlay";
 
 import {
   registerUser,
+  getAuthToken,
+  getCurrentUser,
   createTrade,
-  lockTrade,
-  revealTrade,
   fetchTradeDetail,
   UserData,
   TradeData,
   TradeHistoryItem,
 } from "./services/api";
-import { readJSON, writeJSON, removeKey } from "./services/secureStorage";
+import { readJSON, writeJSON, removeKey, isBackupConfirmed, setBackupConfirmed } from "./services/secureStorage";
 import { mapApiError, type MappedApiError } from "./utils/apiError";
 import { IS_DEMO_MODE } from "./utils/demoMode";
 
-const USERS_STORAGE_KEY = "micopay_users";
+const USERS_STORAGE_KEY = "micopay_user";
 
-interface StoredUsers {
-  buyer: UserData;
-  seller: UserData;
+/**
+ * Re-authenticate using the device keypair when a stored session is orphaned
+ * (e.g. the backend DB was reset). The device key is the identity, so we can
+ * re-register (fresh DB) or re-auth (user still exists) without user friction.
+ */
+async function recoverSession(username: string): Promise<UserData> {
+  try {
+    return await registerUser(username);
+  } catch (e: any) {
+    if (e?.response?.status === 409) {
+      // User already exists — refresh the token via challenge/response.
+      const token = await getAuthToken(username);
+      const profile = await getCurrentUser(token);
+      return { ...(profile as any), token } as UserData;
+    }
+    throw e;
+  }
 }
 
 
@@ -79,7 +99,6 @@ interface AppCtx {
   setReleaseTxHash: (h: string | null) => void;
   handleOfferSelected: (offerId: string) => Promise<boolean>;
   handleDepositOfferSelected: (offerId: string) => Promise<boolean>;
-  tradeError: MappedApiError | null;
   clearTradeError: () => void;
   retryTradeFlow: () => Promise<boolean>;
   handleAccountDeleted: () => void;
@@ -114,6 +133,7 @@ function HomeRoute() {
           token={buyerUser?.token ?? null}
           merchantToken={sellerUser?.token ?? null}
           onNavigateInbox={() => navigate('/inbox')}
+          username={buyerUser?.username ?? sellerUser?.username ?? null}
       />
   );
 }
@@ -167,6 +187,37 @@ function CashoutRoute() {
   );
 }
 
+function PayHubRoute() {
+  const navigate = useNavigate();
+  return (
+      <PayHub
+          onSend={() => navigate('/pay/send')}
+          onReceive={() => navigate('/pay/receive')}
+      />
+  );
+}
+
+function SendPaymentRoute() {
+  const navigate = useNavigate();
+  return (
+      <SendPayment
+          onBack={() => navigate('/pay')}
+          onDone={() => navigate('/')}
+      />
+  );
+}
+
+function ReceivePaymentRoute() {
+  const navigate = useNavigate();
+  const { devicePublicKey } = useAppCtx();
+  return (
+      <ReceivePayment
+          address={devicePublicKey}
+          onBack={() => navigate('/pay')}
+      />
+  );
+}
+
 function DepositRoute() {
   const navigate = useNavigate();
   const { setActiveAmount } = useAppCtx();
@@ -211,6 +262,20 @@ function MapRoute() {
           amount={activeAmount}
           loading={tradeLoading}
           onBack={() => navigate('/cashout')}
+          onProceedToConfirm={(offer) => {
+            navigate('/confirm', {
+              state: {
+                merchantId: offer.id,
+                merchantName: offer.name,
+                receiveMxn: offer.receiveMxn,
+                commissionPct: offer.commissionPct,
+                amountMxn: activeAmount,
+                flow: 'cashout',
+                nearbyCount: offer.nearbyCount,
+                merchantOnline: offer.online,
+              },
+            });
+          }}
           onSelectOffer={async (offerId) => {
             const ok = await handleOfferSelected(offerId);
             if (ok) navigate('/chat');
@@ -226,14 +291,76 @@ function MapRoute() {
   );
 }
 
+function ConfirmRoute() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { handleOfferSelected, tradeLoading, tradeError, clearTradeError } = useAppCtx();
+  const state = location.state as {
+    merchantName: string;
+    merchantId: string;
+    receiveMxn: number;
+    commissionPct: number;
+    amountMxn: number;
+    flow: 'cashout' | 'deposit';
+    nearbyCount: number;
+    merchantOnline?: boolean;
+  } | null;
+
+  if (!state?.merchantId) {
+    return <Navigate to="/map" replace />;
+  }
+
+  return (
+    <TradeConfirmationPage
+      merchantName={state.merchantName}
+      merchantId={state.merchantId}
+      receiveMxn={state.receiveMxn}
+      commissionPct={state.commissionPct}
+      amountMxn={state.amountMxn}
+      flow={state.flow ?? 'cashout'}
+      nearbyCount={state.nearbyCount}
+      merchantOnline={state.merchantOnline ?? true}
+      loading={tradeLoading}
+      errorMessage={tradeError?.message ?? null}
+      onBack={() => navigate(-1)}
+      onConfirm={async () => {
+        const ok = await handleOfferSelected(state.merchantId);
+        if (ok) navigate('/chat');
+        return ok;
+      }}
+    />
+  );
+}
+
+/** Whichever participant isn't this device — the real counterparty name to show in the UI. */
+function useCounterpartyName(activeTrade: TradeData | null, buyerUser: UserData | null) {
+  const [counterpartyName, setCounterpartyName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!activeTrade || !buyerUser?.token) return;
+    fetchTradeDetail(activeTrade.id, buyerUser.token)
+      .then(({ trade, seller_username, buyer_username }) => {
+        const isMeTheSeller = trade.seller_id === buyerUser.id;
+        setCounterpartyName(isMeTheSeller ? buyer_username : seller_username);
+      })
+      .catch(() => {});
+  }, [activeTrade, buyerUser?.token, buyerUser?.id]);
+
+  return counterpartyName;
+}
+
 function ChatRoute() {
   const navigate = useNavigate();
   const { lockTxHash, activeTrade, buyerUser } = useAppCtx();
+  const counterpartyName = useCounterpartyName(activeTrade, buyerUser);
   return (
       <ChatRoom
           tradeId={activeTrade?.id ?? ''}
           userId={buyerUser?.id ?? ''}
+          token={buyerUser?.token}
+          apiBaseUrl={import.meta.env.VITE_API_URL}
           lockTxHash={lockTxHash}
+          counterpartyName={counterpartyName}
           onBack={() => navigate('/map')}
           onViewQR={() => navigate('/qr-reveal')}
       />
@@ -243,11 +370,15 @@ function ChatRoute() {
 function ChatDepositRoute() {
   const navigate = useNavigate();
   const { lockTxHash, activeTrade, buyerUser } = useAppCtx();
+  const counterpartyName = useCounterpartyName(activeTrade, buyerUser);
   return (
       <DepositChat
           tradeId={activeTrade?.id ?? ''}
           userId={buyerUser?.id ?? ''}
+          token={buyerUser?.token}
+          apiBaseUrl={import.meta.env.VITE_API_URL}
           lockTxHash={lockTxHash}
+          counterpartyName={counterpartyName}
           onBack={() => navigate('/map-deposit')}
           onViewQR={() => navigate('/qr-deposit')}
       />
@@ -257,12 +388,16 @@ function ChatDepositRoute() {
 function QRRevealRoute() {
   const navigate = useNavigate();
   const { activeTrade, sellerUser, buyerUser, activeAmount, setReleaseTxHash } = useAppCtx();
+  const counterpartyName = useCounterpartyName(activeTrade, buyerUser);
+
   return (
       <QRReveal
           activeTrade={activeTrade}
           sellerToken={sellerUser?.token ?? null}
           buyerToken={buyerUser?.token ?? null}
           amount={activeAmount}
+          counterpartyName={counterpartyName}
+          ownName={buyerUser?.username ?? null}
           onBack={() => navigate('/chat')}
           onChat={() => navigate('/chat')}
           onSuccess={() => navigate('/success')}
@@ -364,7 +499,7 @@ function SuccessRoute() {
             seller_id: sellerUser?.id ?? '',
             buyer_id: buyerUser?.id ?? '',
           }}
-          agentName={flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe'}
+          agentName={sellerUsername ?? (flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe')}
           onHome={() => {
             resetTradeFlow();
             navigate('/');
@@ -391,7 +526,14 @@ function ExploreRoute() {
       <Explore
           onBack={() => navigate('/')}
           onNavigate={(page) => navigate(navMap[page] ?? '/')}
-          showDefi={!isDemoMode || !isMockStellar}
+          // CETES buy/sell and Blend supply/borrow don't move real user funds yet
+          // (platform-key-only simulation on mainnet, audit finding B2) — hidden
+          // until a real user-signed implementation lands. Opt in with
+          // VITE_ENABLE_DEFI_TRADING=true for internal/demo builds.
+          // SPEI ramp (KYC + onramp + offramp) moves real funds (device keypair) —
+          // enabled independently via VITE_ENABLE_SPEI_RAMP=true.
+          showSpeiRamp={import.meta.env.VITE_ENABLE_SPEI_RAMP === 'true'}
+          showDefi={import.meta.env.VITE_ENABLE_DEFI_TRADING === 'true'}
       />
   );
 }
@@ -404,9 +546,34 @@ function CetesRoute() {
           onBack={() => navigate('/explore')}
           onBanco={() => navigate('/deposit')}
           userToken={buyerUser?.token}
+          showDefi={import.meta.env.VITE_ENABLE_DEFI_TRADING === 'true'}
+          showSpeiRamp={import.meta.env.VITE_ENABLE_SPEI_RAMP === 'true'}
       />
   );
 }
+
+function KYCRoute() {
+  const { buyerUser } = useAppCtx();
+  return (
+      <KYCScreen
+          token={buyerUser?.token ?? null}
+          onApproved={() => {
+            // Cache hit will redirect into CETES screen; this matches the acceptance criteria.
+            window.location.hash = '/#/cetes';
+          }}
+      />
+  );
+}
+
+function KYCApprovedNextRoute() {
+  const navigate = useNavigate();
+  // After approved, continue to CETES + deposit flow.
+  useEffect(() => {
+    navigate('/cetes');
+  }, [navigate]);
+  return null;
+}
+
 
 function BlendRoute() {
   const navigate = useNavigate();
@@ -427,6 +594,7 @@ function ProfileRoute() {
   return (
       <Profile
           token={buyerUser?.token ?? null}
+          username={buyerUser?.username ?? null}
           devicePublicKey={devicePublicKey}
           onBack={() => navigate('/')}
           onDeleted={() => {
@@ -481,9 +649,10 @@ function ProtectedRoute({ children }: { children: React.ReactElement }) {
 
 const ROUTE_TO_PAGE: Record<string, string> = {
   "/": "home",
-  "/cashout": "cashout",
+  "/pay": "pay",
   "/inbox": "inbox",
   "/explore": "explore",
+  "/cetes": "cetes",
   "/profile": "profile",
 };
 
@@ -491,12 +660,15 @@ const HIDE_BOTTOMNAV_ROUTES = new Set([
   "/login",
   "/register",
   "/merchant-settings",
+  "/confirm",
   "/chat",
   "/chat-deposit",
   "/qr-reveal",
   "/qr-deposit",
   "/success",
-  "/cetes",
+  "/cashout",
+  "/pay/send",
+  "/pay/receive",
   "/blend",
   "/privacy",
   "/terms",
@@ -515,9 +687,10 @@ function BottomNavAdapter() {
 
   const navMap: Record<string, string> = {
     home: "/",
-    cashout: "/cashout",
+    pay: "/pay",
     inbox: "/inbox",
     explore: "/explore",
+    cetes: "/cetes",
     profile: "/profile",
   };
 
@@ -542,8 +715,15 @@ function App() {
   const [activeAmount, setActiveAmount] = useState(500);
   const [tradeLoading, setTradeLoading] = useState(false);
   const [tradeError, setTradeError] = useState<MappedApiError | null>(null);
+  const [pendingSellerId, setPendingSellerId] = useState<string | null>(null);
+  const [pendingRole, setPendingRole] = useState<'buyer' | 'seller'>('buyer');
   const [authReady, setAuthReady] = useState(false);
   const [devicePublicKey, setDevicePublicKey] = useState<string | null>(null);
+
+  const [showBackupPrompt, setShowBackupPrompt] = useState(false);
+  const [pendingTradeContext, setPendingTradeContext] = useState<{ resolve: (val: boolean) => void, execute: () => Promise<boolean> } | null>(null);
+  const [backupSecret, setBackupSecret] = useState<string>('');
+  const [copiedBackup, setCopiedBackup] = useState(false);
 
   const [startupError, setStartupError] = useState<{ title: string; message: string; details?: string } | null>(null);
   const [backendConnected, setBackendConnected] = useState(false);
@@ -632,25 +812,49 @@ function App() {
         const pubKey = await getPublicKey();
         setDevicePublicKey(pubKey);
 
-        const stored = await readJSON<StoredUsers>(USERS_STORAGE_KEY);
-        if (stored?.buyer) {
-          setBuyerUser(stored.buyer);
-          setSellerUser(stored.seller ?? null);
-          return;
+        const stored = await readJSON<UserData>(USERS_STORAGE_KEY);
+        if (stored?.id && stored.token) {
+          // Validate the stored session; self-heal if the backend no longer
+          // knows this user (e.g. its DB was recreated → orphaned token → 401).
+          try {
+            const profile = await getCurrentUser(stored.token);
+            // Self-heal stale sessions cached with the wrong id (older builds
+            // stored the username as `id` instead of the real backend user id).
+            const fresh: UserData = { id: profile.id, username: profile.username, token: stored.token };
+            if (fresh.id !== stored.id) await writeJSON(USERS_STORAGE_KEY, fresh);
+            setBuyerUser(fresh);
+            setSellerUser(fresh);
+            return;
+          } catch (err: any) {
+            const status = err?.response?.status;
+            if (status !== 401 && status !== 403) {
+              // Transient/network error — keep the cached session optimistically.
+              setBuyerUser(stored);
+              setSellerUser(stored);
+              return;
+            }
+            try {
+              const recovered = await recoverSession(stored.username);
+              await writeJSON(USERS_STORAGE_KEY, recovered);
+              setBuyerUser(recovered);
+              setSellerUser(recovered);
+              return;
+            } catch (re) {
+              console.warn("Session recovery failed; clearing stale session", re);
+              await removeKey(USERS_STORAGE_KEY);
+              // fall through → empty session → ProtectedRoute redirects to login
+            }
+          }
         }
 
-        // Demo builds auto-provision throwaway buyer/seller users. In real
-        // mode we leave the session empty so ProtectedRoute sends the user
-        // to the login/register screens instead of faking an identity.
+        // Demo builds auto-provision one throwaway user. In real mode we
+        // leave the session empty so ProtectedRoute redirects to login/register.
         if (import.meta.env.VITE_DEMO_MODE === 'true') {
           const ts = Date.now() % 100000;
-          const [buyer, seller] = await Promise.all([
-            registerUser(`juan_${ts}`),
-            registerUser(`farmacia_${ts}`),
-          ]);
-          await writeJSON(USERS_STORAGE_KEY, { buyer, seller });
-          setBuyerUser(buyer);
-          setSellerUser(seller);
+          const user = await registerUser(`demo_${ts}`);
+          await writeJSON(USERS_STORAGE_KEY, user);
+          setBuyerUser(user);
+          setSellerUser(user);
         }
       } catch (e) {
         console.warn("Backend unavailable for registration, using local stub", e);
@@ -662,10 +866,10 @@ function App() {
     initUsers();
   }, []);
 
-  const handleLoginSuccess = (buyer: UserData, seller: UserData | null) => {
-    setBuyerUser(buyer);
-    setSellerUser(seller);
-    writeJSON(USERS_STORAGE_KEY, { buyer, seller });
+  const handleLoginSuccess = (user: UserData, _seller: UserData | null = null) => {
+    setBuyerUser(user);
+    setSellerUser(user);
+    writeJSON(USERS_STORAGE_KEY, user);
   };
 
   const handleAccountDeleted = () => {
@@ -687,20 +891,15 @@ function App() {
 
   const clearTradeError = () => setTradeError(null);
 
-  const runTradeFlow = async (): Promise<boolean> => {
-    if (!buyerUser || !sellerUser) return false;
+  const runTradeFlow = async (counterpartyId: string, role: 'buyer' | 'seller' = 'buyer'): Promise<boolean> => {
+    if (!buyerUser) return false;
+    setPendingSellerId(counterpartyId);
+    setPendingRole(role);
     setTradeLoading(true);
     setTradeError(null);
     try {
-      const trade = await createTrade(
-        sellerUser.id,
-        activeAmount,
-        buyerUser.token,
-      );
-      const { lock_tx_hash } = await lockTrade(trade.id, sellerUser.token);
-      await revealTrade(trade.id, sellerUser.token);
+      const trade = await createTrade(counterpartyId, activeAmount, buyerUser.token, role);
       setActiveTrade(trade);
-      setLockTxHash(lock_tx_hash);
       return true;
     } catch (e) {
       const mapped = mapApiError(e);
@@ -708,7 +907,7 @@ function App() {
       if (IS_DEMO_MODE) {
         setActiveTrade({
           id: `demo-${Date.now()}`,
-          status: 'revealed',
+          status: 'locked',
           secret_hash: 'demo',
           amount_mxn: activeAmount,
           lock_tx_hash: 'mock_lock_hash',
@@ -722,9 +921,59 @@ function App() {
     }
   };
 
-  const handleOfferSelected = async (_offerId: string) => runTradeFlow();
+  const retryTradeFlow = async (): Promise<boolean> => {
+    if (!pendingSellerId) return false;
+    return runTradeFlow(pendingSellerId, pendingRole);
+  };
 
-  const handleDepositOfferSelected = async (_offerId: string) => runTradeFlow();
+  const checkBackupGate = async (execute: () => Promise<boolean>): Promise<boolean> => {
+    const confirmed = await isBackupConfirmed();
+    if (confirmed) {
+      return execute();
+    }
+    return new Promise<boolean>((resolve) => {
+      setPendingTradeContext({ resolve, execute });
+      setShowBackupPrompt(true);
+    });
+  };
+
+  // Cashout ("convert crypto to cash"): the caller gives up crypto, so they
+  // must be the escrow seller — only sellers can lock funds and reveal the
+  // HTLC secret, which is what makes the merchant's cash handoff verifiable.
+  const handleOfferSelected = async (offerId: string) => checkBackupGate(() => runTradeFlow(offerId, 'seller'));
+
+  // Deposit ("buy crypto with cash"): the caller receives crypto, so they
+  // stay the escrow buyer (the merchant locks funds as seller) — unchanged.
+  const handleDepositOfferSelected = async (offerId: string) => checkBackupGate(() => runTradeFlow(offerId, 'buyer'));
+
+  useEffect(() => {
+    if (showBackupPrompt) {
+      exportSecretKey().then(setBackupSecret).catch(console.error);
+    }
+  }, [showBackupPrompt]);
+
+  const handleCopyBackup = async () => {
+    navigator.clipboard.writeText(backupSecret);
+    setCopiedBackup(true);
+    await setBackupConfirmed();
+    setTimeout(() => setCopiedBackup(false), 2000);
+  };
+
+  const handleConfirmBackup = () => {
+    setShowBackupPrompt(false);
+    if (pendingTradeContext) {
+      pendingTradeContext.execute().then(pendingTradeContext.resolve);
+      setPendingTradeContext(null);
+    }
+  };
+
+  const handleCancelBackup = () => {
+    setShowBackupPrompt(false);
+    if (pendingTradeContext) {
+      pendingTradeContext.resolve(false);
+      setPendingTradeContext(null);
+    }
+  };
 
   const ctx: AppCtx = {
     buyerUser,
@@ -743,7 +992,7 @@ function App() {
     handleOfferSelected,
     handleDepositOfferSelected,
     clearTradeError,
-    retryTradeFlow: runTradeFlow,
+    retryTradeFlow,
     handleAccountDeleted,
     resetTradeFlow,
     envName,
@@ -802,15 +1051,19 @@ function App() {
             <div className="flex flex-col min-h-screen bg-[#F4FAFF]">
               <Routes>
                 <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
-                <Route path="/register" element={<Register />} />
+                <Route path="/register" element={<Register onLoginSuccess={handleLoginSuccess} />} />
                 <Route path="/" element={<ProtectedRoute><HomeRoute /></ProtectedRoute>} />
                 <Route path="/history" element={<ProtectedRoute><HistoryRoute /></ProtectedRoute>} />
                 <Route path="/trade/:id" element={<ProtectedRoute><TradeDetailRoute /></ProtectedRoute>} />
                 <Route path="/merchant-settings" element={<ProtectedRoute><MerchantSettingsRoute /></ProtectedRoute>} />
                 <Route path="/inbox" element={<ProtectedRoute><InboxRoute /></ProtectedRoute>} />
                 <Route path="/cashout" element={<ProtectedRoute><CashoutRoute /></ProtectedRoute>} />
+                <Route path="/pay" element={<ProtectedRoute><PayHubRoute /></ProtectedRoute>} />
+                <Route path="/pay/send" element={<ProtectedRoute><SendPaymentRoute /></ProtectedRoute>} />
+                <Route path="/pay/receive" element={<ProtectedRoute><ReceivePaymentRoute /></ProtectedRoute>} />
                 <Route path="/deposit" element={<ProtectedRoute><DepositRoute /></ProtectedRoute>} />
                 <Route path="/map" element={<ProtectedRoute><MapRoute /></ProtectedRoute>} />
+                <Route path="/confirm" element={<ProtectedRoute><ConfirmRoute /></ProtectedRoute>} />
                 <Route path="/map-deposit" element={<ProtectedRoute><MapDepositRoute /></ProtectedRoute>} />
                 <Route path="/chat" element={<ProtectedRoute><ChatRoute /></ProtectedRoute>} />
                 <Route path="/chat-deposit" element={<ProtectedRoute><ChatDepositRoute /></ProtectedRoute>} />
@@ -819,6 +1072,9 @@ function App() {
                 <Route path="/success" element={<ProtectedRoute><SuccessRoute /></ProtectedRoute>} />
                 <Route path="/explore" element={<ProtectedRoute><ExploreRoute /></ProtectedRoute>} />
                 <Route path="/cetes" element={<ProtectedRoute><CetesRoute /></ProtectedRoute>} />
+                <Route path="/kyc" element={<ProtectedRoute><KYCRoute /></ProtectedRoute>} />
+                <Route path="/kyc-approved" element={<ProtectedRoute><KYCApprovedNextRoute /></ProtectedRoute>} />
+
                 <Route path="/blend" element={<ProtectedRoute><BlendRoute /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><ProfileRoute /></ProtectedRoute>} />
                 <Route path="/privacy" element={<ProtectedRoute><PrivacyRoute /></ProtectedRoute>} />
@@ -826,6 +1082,49 @@ function App() {
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
               <BottomNavAdapter />
+
+              {showBackupPrompt && (
+                <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-6 animate-fade-in">
+                  <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl relative overflow-hidden">
+                    <div className="text-center mb-6">
+                      <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500">
+                        <span className="material-symbols-outlined text-3xl">shield_lock</span>
+                      </div>
+                      <h2 className="text-xl font-extrabold text-[#0B1E26]">Respaldo Requerido</h2>
+                      <p className="text-sm text-[#67808C] mt-2">Antes de iniciar una operación con fondos, debes respaldar tu llave secreta. Sin ella, podrías perder tus fondos.</p>
+                    </div>
+
+                    <div className="bg-red-50 border border-red-100 rounded-2xl p-4 mb-6">
+                      <label className="block text-xs font-bold text-red-800 uppercase tracking-wider mb-2">
+                        Tu Llave Secreta
+                      </label>
+                      <button
+                        onClick={handleCopyBackup}
+                        className="w-full bg-red-100 hover:bg-red-200 text-red-800 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                      >
+                        <span className="material-symbols-outlined text-base">{copiedBackup ? 'check' : 'content_copy'}</span>
+                        {copiedBackup ? '¡Copiada!' : 'Copiar Llave Secreta'}
+                      </button>
+                      <p className="text-[10px] text-red-600 mt-3 text-center leading-relaxed font-medium">NUNCA la compartas. Quien la tenga controla tus fondos.</p>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleCancelBackup}
+                        className="flex-1 py-3 text-[#67808C] font-bold rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleConfirmBackup}
+                        className="flex-1 py-3 text-white font-bold rounded-xl bg-[#00694C] hover:bg-[#005740] transition-colors"
+                      >
+                        Continuar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </HashRouter>
         </AppContext.Provider>

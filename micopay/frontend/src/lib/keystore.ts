@@ -1,4 +1,4 @@
-import { Keypair } from '@stellar/stellar-sdk';
+import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
 import { readJSON, writeJSON, removeKey } from '../services/secureStorage';
 
 const KEYPAIR_KEY = 'stellar_keypair';
@@ -33,6 +33,21 @@ export async function signChallenge(challenge: string): Promise<string> {
     const kp = Keypair.fromSecret(stored.secretKey);
     const sig = kp.sign(Buffer.from(challenge, 'utf8'));
     return sig.toString('base64');
+}
+
+/**
+ * Sign a backend-prepared transaction XDR locally and return the signed XDR.
+ * Used for Soroban contract calls (e.g. escrow lock/release) where the
+ * contract's require_auth() must be satisfied by the device's own key —
+ * the secret key never leaves this module.
+ */
+export async function signTransactionXdr(xdr: string, networkPassphrase: string): Promise<string> {
+    const stored = await readJSON<StoredKeypair>(KEYPAIR_KEY);
+    if (!stored?.secretKey) throw new Error('No keypair — call generateAndStoreKeypair first');
+    const kp = Keypair.fromSecret(stored.secretKey);
+    const tx = TransactionBuilder.fromXDR(xdr, networkPassphrase);
+    tx.sign(kp);
+    return tx.toXDR();
 }
 
 export async function importKeypair(secretKey: string): Promise<string> {

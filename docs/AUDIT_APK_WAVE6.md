@@ -27,17 +27,18 @@ local no-custodial: crear keypair en la app o importar una clave secreta Stellar
 wallets externas móviles (LOBSTR, WalletConnect, etc.) quedan fuera del alcance inmediato; Freighter
 no debe asumirse como flujo principal para APK/iOS.
 
-**⚠️ Bloqueante #0 (verificado 2026-06-23):** aunque el frontend compila verde, el **backend
-`npm run build` falla** (errores TS en `index.ts`, `trade.service.ts`, `requestId.test.ts`, falta
-`firebase-admin`, props de config inexistentes). La app móvil habla con un backend que hoy **no es
-deployable**. Esto antecede a todos los P0 de frontend — ver B-1 en §6 y §8.
+**✅ Bloqueante #0 resuelto (2026-06-25):** `npm run build` en `micopay/backend` pasa limpio.
+CI gate en `.github/workflows/ci.yml` bloquea merges si backend o frontend rompen. El stack
+es ahora deployable. Los P0 de frontend son el siguiente foco.
 
 | Nivel | # | Tema |
 |------|---|------|
-| 🔴 B-1 | 1 | **Backend no compila** — bloqueante #0, precede a todo |
+| ~~🔴 B-1~~ | ~~1~~ | ~~**Backend no compila**~~ → ✅ **Resuelto 2026-06-25** |
+| ~~🟡 P2-1~~ | ~~1~~ | ~~**Sin CI gate**~~ → ✅ **Resuelto 2026-06-25** |
 | 🔴 P0 | 4 | Identidad doble, trade contra sí mismo, balance falso, fetch roto en APK |
 | 🟠 P1 | 4 | UI descarta datos reales (mapa, economía de oferta, nombres, tipo de cambio) |
-| 🟡 P2 | 3 | Sin CI gate, DeFi simulado, config de release |
+| 🟡 P2 | 1 | Config de release APK (P2-3) — DeFi simulado etiquetado ✅, CI ✅ |
+| ~~⚠️ B pendiente~~ | ~~3~~ | ~~B-3, B-4, B-7~~ → ✅ **Resueltos 2026-06-28** (hardening backend interno) |
 
 ---
 
@@ -107,17 +108,11 @@ deployable**. Esto antecede a todos los P0 de frontend — ver B-1 en §6 y §8.
   el usuario actual). El endpoint `/account/balance` deja de usar `platformSecretKey` para la
   Home o se reemplaza por un endpoint explícito de saldo de usuario.
 
-### P0-4 · Fetch con ruta relativa roto dentro del APK
-- **Archivo:** `micopay/frontend/src/pages/Home.tsx:61-69`
-- **Qué pasa:** usa `fetch('/api/merchants/me/trades?state=pending')` con **ruta relativa**.
-  El resto de la app usa el cliente axios `http` con `baseURL = VITE_API_URL` (`api.ts:5-7`).
-  En el WebView de Capacitor, `/api/...` resuelve contra el origen de la app (`https://localhost`
-  / esquema de la app), no contra el backend.
-- **Por qué importa:** el badge de "operaciones pendientes" del comerciante **no carga en el
-  dispositivo** (funciona solo en web por el proxy de dev).
-- **Criterio de aceptación:** la llamada usa el helper de API con `baseURL` (p. ej.
-  `getMerchantTrades(token, 'pending')` ya existe en `api.ts:226-232`). Cero rutas relativas
-  `/api/...` en el código de pantallas.
+### ~~P0-4 · Fetch con ruta relativa roto dentro del APK~~ ✅ Resuelto
+- **Resuelto por:** [@josealfredo79](https://github.com/josealfredo79) · **Issue:** #150 · **PR:** #154 · **Mergeado:** 2026-06-25
+- ~~`fetch('/api/merchants/me/trades?state=pending')` con ruta relativa roto en Capacitor~~
+- **Fix:** reemplazado con `getMerchantTrades(merchantToken, 'pending')` del cliente axios. Se creó
+  `Home.test.tsx` desde cero con 5 casos cubriendo args correctos, token nulo, badge, estado vacío y error.
 
 ---
 
@@ -133,44 +128,54 @@ deployable**. Esto antecede a todos los P0 de frontend — ver B-1 en §6 y §8.
   (`m.distance_km`, `m.payout_mxn`, `m.rate_percent`). `formatDistance`/`walkMinutes` (ya
   presentes en el archivo) se usan con la distancia real.
 
-### P1-2 · El mapa muestra pines inventados, no los comercios reales
-- **Archivo:** `micopay/frontend/src/components/MapSim.tsx:32-79`
-- **Qué pasa:** renderiza 3 pines fijos (Farmacia Guadalupe, @carlos_g, Centro Lavado) con
-  posiciones CSS hardcodeadas. No recibe ni grafica los comercios reales ni sus `lat/lng`.
-- **Criterio de aceptación:** el mapa grafica los comercios devueltos por `useMerchantsAvailable`
-  en su posición real (o, si se mantiene la simulación visual para el hackathon, etiquetarla
-  claramente como ilustrativa y no como ubicaciones reales).
+### ~~P1-2 · El mapa muestra pines inventados, no los comercios reales~~ ✅ Resuelto
+- **Resuelto por:** [@Gozirimdev](https://github.com/Gozirimdev) · **Issue:** #152 · **PR:** #156 · **Mergeado:** 2026-06-25
+- ~~3 pines fijos hardcodeados en `MapSim.tsx`~~
+- **Fix:** `getMerchantPins(merchants)` proyecta `lat/lng` reales de la API a posiciones CSS,
+  con clamp al rango 12–88% para mantenerlos dentro del viewport.
 
-### P1-3 · Nombres de agente hardcodeados en el recibo
-- **Archivo:** `micopay/frontend/src/App.tsx:345`
+### P1-3 · Nombres de agente hardcodeados en el recibo → 📎 plegado a #160
+- **Archivo:** `micopay/frontend/src/App.tsx:366`
 - **Qué pasa:** `agentName={flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe'}`.
-  El nombre real del comercio (disponible en `seller_username` vía `fetchTradeDetail`) no se usa.
+- **Estado (2026-06-27):** parcialmente preparado — el recibo ya hace `fetchTradeDetail` y guarda
+  `seller_username` en el estado `sellerUsername` (`App.tsx:302,316`), **pero esa variable nunca se
+  lee**: `agentName` sigue hardcodeado. Falta cablear `agentName={sellerUsername ?? fallback}`
+  (literal solo para `IS_DEMO_MODE`).
+- **Decisión:** como toca `App.tsx` (mismo archivo que el epic P0-1/P0-2), **se pliega a #160** en
+  vez de abrir issue aparte, para mantener `App.tsx` como un solo escritor y evitar conflictos.
 - **Criterio de aceptación:** el recibo muestra el `seller_username` real del trade.
 
-### P1-4 · Tipo de cambio XLM→MXN hardcodeado
-- **Archivo:** `micopay/frontend/src/pages/Home.tsx:71-76`
-- **Qué pasa:** `parseFloat(...) * 20` fijo ("demo rate"). No hay oráculo ni feed.
-- **Criterio de aceptación:** el tipo de cambio viene de una fuente del backend (endpoint de
-  rate / oráculo). Si no hay fuente aún, etiquetar el valor como aproximado/demo en la UI.
+### ~~P1-4 · Tipo de cambio XLM→MXN hardcodeado~~ ✅ Resuelto
+- **Resuelto por:** [@josealfredo79](https://github.com/josealfredo79) · **Issue:** #161 · **PR:** #162 · **Mergeado:** 2026-06-25
+- ~~`parseFloat(...) * 20` fijo ("demo rate")~~
+- **Fix:** nuevo `GET /rate/xlm-mxn` en `routes/rate.ts` llama a CoinGecko (free, sin API key,
+  timeout 5 s, 503 si upstream falla). Frontend usa `getXlmMxnRate()` con `useEffect` cancelable;
+  muestra `"—"` mientras carga y `~×20` con tilde si hay error.
+- ⚠️ **Follow-up pendiente (P2-4):** el endpoint no tiene caché — cada render de Home dispara
+  una llamada a CoinGecko. Ver §5 P2-4.
 
 ---
 
 ## 5. Hallazgos P2 — Endurecimiento de release
 
-### P2-1 · Sin gate de CI (riesgo de regresión)
-- **Hecho:** no existe `.github/workflows/`. La regresión previa (main sin compilar) ocurrió
-  justamente por mergear sin gate.
-- **Criterio de aceptación:** workflow que corra `tsc --noEmit` + `vite build` (y `vitest run`)
-  en cada PR a `main`, bloqueando merge si falla.
+### ~~P2-1 · Sin gate de CI (riesgo de regresión)~~ ✅ Resuelto
+- **Resuelto:** 2026-06-25 · `.github/workflows/ci.yml`
+- Corre `npm run build` en backend y `tsc + vite build` en frontend en cada PR a `main`.
+  `vitest` en modo informativo (`continue-on-error: true`) hasta que P0/P1 estabilicen los tests.
 
-### P2-2 · DeFi (CETES / Blend) totalmente simulado
-- **Archivos:** `api.ts:285-374` (`simulated: boolean`), pantallas `CETESScreen.tsx`,
-  `BlendScreen.tsx`. El backend responde `{ simulated: true }`; no se mueve dinero on-chain.
-- **Decisión requerida:** (a) cablear contra protocolos reales, o (b) etiquetar la UI
-  explícitamente como "simulado" para no inducir a error. Hoy hay un feature-gate parcial
-  (`showDefi={!isDemoMode || !isMockStellar}` en `App.tsx:368-374`).
-- **Criterio de aceptación:** ningún flujo presenta una transacción simulada como real sin
+### ~~P2-2 · DeFi (CETES / Blend) totalmente simulado~~ ✅ Resuelto (etiquetado)
+- **Resuelto:** 2026-06-27 · PR [#178](https://github.com/ericmt-98/micopay-protocol/pull/178) (Blend) — CETES ya etiquetaba.
+- **Decisión aplicada (D-3):** DeFi se mantiene simulado y se **etiqueta explícitamente** en la UI; no
+  se cablea contra protocolos reales en Wave 6.
+- **Fix:** `CETESScreen.tsx:216` muestra "¡Prueba simulada!"; `BlendScreen.tsx` pasó de "¡Prueba
+  exitosa!" (ambiguo) a "¡Prueba simulada!" + caption "Demostración — no se movieron fondos reales
+  on-chain.". Persiste el feature-gate `showDefi={!isDemoMode || !isMockStellar}`.
+- **Criterio de aceptación:** ✅ ningún flujo presenta una transacción simulada como real sin
   etiqueta visible.
+
+### ~~P2-4~~ · ~~`/rate/xlm-mxn` sin caché — riesgo de rate-limit CoinGecko~~ → ✅ **Resuelto 2026-06-26**
+- **Resuelto por:** [@josealfredo79](https://github.com/josealfredo79) · **PR:** [#172](https://github.com/ericmt-98/micopay-protocol/pull/172)
+- **Solución:** caché module-level con TTL de 60 s, fallback `stale: true` si CoinGecko falla con valor previo en caché, 503 solo si no hay caché. Tests en `rateCache.test.ts` (5 escenarios).
 
 ### P2-3 · Configuración de release incompleta
 - **Push notifications:** `build.gradle:67-74` aplica `google-services` solo si existe
@@ -203,24 +208,25 @@ lo demás.
 
 | ID | Título corto | Superficie | Track | Complejidad | `Stellar Wave` | Notas |
 |----|--------------|-----------|-------|-------------|:---:|-------|
-| B-1 | Backend `npm run build` debe pasar | `wave:backend` | `wave:trust` | high | ✅ | **Bloqueante #0. Verificado: falla hoy.** |
-| P2-1 | CI gate: tsc + vite build + backend build | `wave:backend`,`wave:frontend` | `wave:docs` | medium | ✅ | Debe incluir el build del backend, no solo frontend |
-| P0-1 | Una sola identidad por dispositivo | `wave:frontend` | `wave:trust` | high | ✅ | Unir con P0-2 (mismo rediseño) · `wave:needs-product` |
+| ~~B-1~~ | ~~Backend `npm run build` debe pasar~~ | — | — | — | — | ✅ **Resuelto 2026-06-25** — build pasa limpio |
+| ~~P2-1~~ | ~~CI gate: tsc + vite build + backend build~~ | — | — | — | — | ✅ **Resuelto 2026-06-25** — `.github/workflows/ci.yml` |
+| ~~B-2~~ | ~~Config prod fail-fast si faltan secretos~~ | — | — | — | — | ✅ **Resuelto 2026-06-25** — `validateConfig()` lanza y crashea |
+| ~~B-6~~ | ~~Migraciones reproducibles + fix `init.sql`~~ | — | — | — | — | ✅ **Resuelto 2026-06-25** — `init.sql` eliminado, schema en código |
+| P0-1 | Una sola identidad por dispositivo | `wave:frontend` | `wave:trust` | high | ✅ | Unir con P0-2 (mismo rediseño) |
 | P0-2 | Trade contra contraparte real | `wave:frontend`,`wave:backend` | `wave:retail` | high | ✅ | Depende de P0-1 |
-| P0-4 | Fix fetch relativo en APK | `wave:frontend` | `wave:merchant` | low | ✅ | `bug` · independiente, merge cuando sea |
-| P0-3 | Saldo real de la wallet del usuario | `wave:frontend`,`wave:backend` | `wave:retail` | medium | ✅ | Depende de P0-1 · `wave:needs-product` |
-| P1-1 | ExploreMap usa economía real | `wave:frontend` | `wave:retail` | medium | ✅ | Independiente |
-| P1-3 | Nombre real del agente en recibo | `wave:frontend` | `wave:retail` | low | ✅ | `ux` · depende de P0-2 (trade real) |
-| P1-2 | Mapa grafica comercios reales | `wave:frontend` | `wave:retail` | medium | ✅ | `ux` · independiente |
-| P1-4 | Tipo de cambio XLM→MXN real | `wave:frontend`,`wave:backend` | `wave:retail` | medium | ✅ | Necesita endpoint de rate |
-| B-2 | Config prod fail-fast si faltan secretos | `wave:backend` | `wave:trust` | medium | ✅ | Depende de B-1 |
-| B-3 | Desactivar fallback in-memory en prod | `wave:backend` | `wave:trust` | medium | ✅ | Depende de B-1 |
-| B-4 | No sembrar datos demo en prod | `wave:backend` | `wave:trust` | low | ✅ | Depende de B-1 |
-| B-6 | Migraciones reproducibles + fix `init.sql` (users duplicado, `audit_log` x2) | `wave:backend` | `wave:trust` | medium | ✅ | Depende de B-1 |
-| P0-5 | Onboarding mínimo: alias + respaldo de clave obligatorio (KYC Nivel 0) | `wave:frontend` | `wave:trust` | medium | ✅ | Sienta base para KYC por niveles (D-4) · `wave:needs-product` (pregunta 3) |
-| B-7 | Health/readiness real (DB + config) | `wave:backend` | `wave:trust` | medium | ✅ | Depende de B-1 |
-| P2-2 | Feature-gate o productizar DeFi | `wave:frontend`,`wave:backend` | `wave:retail` | medium | ✅ | `wave:needs-product` |
-| P2-3 | Config de release APK | `wave:frontend` | `wave:retail` | medium | ✅ | Push, firma, code-splitting |
+| ~~P0-4~~ | ~~Fix fetch relativo en APK~~ | — | — | — | — | ✅ **Resuelto** — issue #150 cerrado, PR #154 mergeado |
+| P0-3 | Saldo real de la wallet del usuario | `wave:frontend`,`wave:backend` | `wave:retail` | medium | ✅ | Depende de P0-1 |
+| P0-5 | Onboarding mínimo: alias + visibilidad de llave + respaldo escalonado | `wave:frontend` | `wave:trust` | medium | ✅ | 📝 **Borrador listo (§10)** · §9.3 decidido (escalonado) · 🔒 blocked-by #160 — publicar al mergear #160 |
+| ~~P1-2~~ | ~~Mapa grafica comercios reales~~ | — | — | — | — | ✅ **Resuelto** — PR #156 · @Gozirimdev |
+| P1-1 | ExploreMap usa economía real | `wave:frontend` | `wave:retail` | medium | ✅ | Issue #151 publicado, abierto sin asignar |
+| P1-3 | Nombre real del agente en recibo | `wave:frontend` | `wave:retail` | low | ✅ | 📎 **Plegado a #160** — `seller_username` ya se fetchea, falta cablear `agentName`; mismo `App.tsx` que P0-1/P0-2 |
+| ~~P1-4~~ | ~~Tipo de cambio XLM→MXN real~~ | — | — | — | — | ✅ **Resuelto** — PR #162 · @josealfredo79 · follow-up: P2-4 caché |
+| ~~P2-4~~ | ~~Caché en-memoria para `/rate/xlm-mxn`~~ | — | — | — | — | ✅ **Resuelto** — PR #172 · @josealfredo79 |
+| ~~B-3~~ | ~~Desactivar fallback in-memory en prod~~ | — | — | — | — | ✅ **Resuelto 2026-06-28** — `initPg()` hace `process.exit(1)` en prod si PG no conecta (salvo `ALLOW_IN_MEMORY_DB=true`) |
+| ~~B-4~~ | ~~No sembrar datos demo en prod~~ | — | — | — | — | ✅ **Resuelto 2026-06-28** — `seedData()` solo corre con `SEED_DEMO_DATA=true` |
+| ~~B-7~~ | ~~Health/readiness real (DB + config)~~ | — | — | — | — | ✅ **Resuelto 2026-06-28** — `/health` hace ping real `SELECT 1` (`pingDb()`); 503 en prod si DB caída |
+| ~~P2-2~~ | ~~Etiquetar DeFi como simulado~~ | — | — | — | — | ✅ **Resuelto** — etiquetado CETES + Blend (PR #178, D-3); issue #86 (wave anterior) |
+| ~~P2-3~~ | ~~Config de release APK~~ | — | — | — | — | Cerrado como issue #89 (wave anterior) |
 
 **Tratamiento especial:**
 - **B-5 (Dockerfile/guía de deploy)** → trabajo interno de maintainer/integrator. Roza Risk
@@ -247,37 +253,36 @@ lo demás.
 
 ### 6.3 Orden recomendado de publicar → asignar → mergear
 
-**Etapa 0 — Desbloqueo (interno, antes de abrir a contribuidores):**
-1. **B-1** backend build verde — sin esto nada se valida end-to-end.
-2. **P2-1** CI gate (frontend + backend) — protege todo merge posterior. Mergear apenas B-1 esté.
+**Etapa 0 — Desbloqueo (interno) ✅ COMPLETA:**
+1. ~~**B-1**~~ ✅ backend build verde.
+2. ~~**P2-1**~~ ✅ CI gate `.github/workflows/ci.yml`.
 
-**Etapa 1 — Núcleo "un usuario real, una transacción real" (P0):**
-3. **P0-1 + P0-2** (un solo PR/epic: identidad única + contraparte real). Decisiones D-1 y D-2 ya
-   cierran el alcance; resolver pregunta §9.3 (backup) antes de asignar P0-5.
-4. **P0-4** en paralelo (trivial, independiente).
-5. **P0-3** después de P0-1 (saldo por-usuario necesita identidad única).
-6. **P0-5** tras P0-1 (onboarding mínimo + respaldo de clave; KYC Nivel 0). Depende de §9.3.
+**Etapa 1 — Núcleo "un usuario real, una transacción real" (P0):** 🔄 En curso
+3. **P0-1 + P0-2** (issue #160, asignado en Drips) — en curso.
+4. ~~**P0-4**~~ ✅ PR #154 · @josealfredo79.
+5. **P0-3** — espera a que P0-1 aterrice.
+6. **P0-5** — 📝 borrador listo (§10); §9.3 decidido (escalonado); espera a que #160 mergee para publicar.
 
-**Etapa 2 — "la UI deja de mentir" (P1, paralelizable entre contribuidores):**
-7. **P1-1** y **P1-2** (independientes, frontend puro).
-8. **P1-3** (tras P0-2) y **P1-4** (tras endpoint de rate).
+**Etapa 2 — "la UI deja de mentir" (P1):** 🔄 Parcialmente completa
+7. ~~**P1-2**~~ ✅ PR #156 · @Gozirimdev. **P1-1** (issue #151, abierto sin asignar).
+8. ~~**P1-4**~~ ✅ PR #162 · @josealfredo79. **P1-3** espera P0-2. ~~**P2-4**~~ ✅ PR #172 · @josealfredo79.
 
-**Etapa 3 — Backend hardening (tras B-1, paralelizable):**
-9. **B-2, B-3, B-4, B-6, B-7**.
+**Etapa 3 — Backend hardening (interno):** ✅ COMPLETA
+9. ~~**B-3, B-4, B-7**~~ ✅ resueltos 2026-06-28. ~~B-2~~✅ ~~B-6~~✅
 
 **Etapa 4 — Decisiones de producto / release:**
-10. **P2-2** y **P2-3** (requieren decisión de producto primero).
+10. ~~**P2-2**~~ ✅ etiquetado simulado (PR #178). **P2-3** (config de release APK) sigue pendiente.
 
-**Etapa paralela — Research (V-1…V-10, en cualquier momento):**
-- Las 10 de validación corren **en paralelo a todo** y ya están publicadas (milestone #18). Cada
-  asignado entrega por **PR** (su sección en `VALIDATION_DRIPS.md`). El label `research` ya existe.
+**Etapa paralela — Research (V-1…V-15):** 🔄 14/15 completas
+- ~~V-1~~✅ ~~V-2~~✅ ~~V-3~~✅ ~~V-4~~✅ ~~V-5~~✅ ~~V-6~~✅ ~~V-7~~✅ ~~V-8~~✅ ~~V-9~~✅ ~~V-10~~✅
+- ~~V-11~~✅ ~~V-12~~✅ ~~V-13~~✅ ~~V-14~~✅ **V-15**🔴 (único pendiente; issues #164–#168 publicados 2026-06-25)
 
 ### 6.4 Política de asignación y merge (de `DRIPS_TEAM_GUIDE.md`)
 
 - **Owners internos por track antes de abrir:** retail (P0-1/2/3, P1-*), trust/backend (B-*),
   DX/docs (P2-1).
 - **SLA:** primera review < 24 h; respuesta a aplicación el mismo día.
-- **`wave:needs-product`** en P0-1, P0-3, P2-2: no asignar a contribuidor hasta cerrar §9.
+- **`wave:needs-product`** en P0-1, P0-3: no asignar a contribuidor hasta cerrar §9. (P2-2 ya resuelto.)
 - **Regla de merge:** B-1 y P2-1 NO se entregan a Drips — son Etapa 0 interna. Lo demás se mergea
   por etapas; dentro de una etapa, lo independiente puede ir en cualquier orden.
 - **`complexity: high`** (B-1, P0-1, P0-2): reservar para contribuidores con contexto o tomar
@@ -302,18 +307,23 @@ transacción. Las respuestas usan solo país/región general y relatos anonimiza
 
 ### Los 10 issues (publicados, milestone #18)
 
-| ID | Tema | Issue | Qué valida (SDF) |
-|----|------|-------|------------------|
-| V-1 | Cash-out | #131 | Demanda (digital → efectivo) |
-| V-2 | Cash-in / depósito | #132 | Demanda bidireccional |
-| V-3 | Proveedor de liquidez | #133 | Oferta |
-| V-4 | Onboarding no-custodial | #134 | Stellar self-custody usable |
-| V-5 | Confianza en el flujo | #135 | Confianza / PMF |
-| V-6 | Remesas | #138 | Demanda de remesas cross-border |
-| V-7 | Alternativas y switching | #139 | Diferenciación |
-| V-8 | Comisión justa | #140 | Economía unitaria (% sin montos) |
-| V-9 | Seguridad en persona | #141 | De-risk P2P |
-| V-10 | Recurrencia y descubrimiento | #142 | Retención / PMF |
+| ID | Tema | Issue | Qué valida (SDF) | Estado |
+|----|------|-------|------------------|--------|
+| V-1 | Cash-out | #131 | Demanda (digital → efectivo) | ✅ PR #155 · @larryjay007 |
+| V-2 | Cash-in / depósito | #132 | Demanda bidireccional | ✅ PR #159 · @Truphile |
+| V-3 | Proveedor de liquidez | #133 | Oferta | ✅ PR #169 · @DevSolex |
+| V-4 | Onboarding no-custodial | #134 | Stellar self-custody usable | ✅ PR #157 · @Shadow-MMN |
+| V-5 | Confianza en el flujo | #135 | Confianza / PMF | ✅ PR #158 · @Truphile |
+| V-6 | Remesas (receptor) | #138 | Demanda cross-border lado receptor | ✅ PR #146 · @KaruG1999 |
+| V-7 | Alternativas y switching | #139 | Diferenciación | ✅ PR #145 · @barnabasolutayo-lgtm |
+| V-8 | Comisión justa | #140 | Economía unitaria (% sin montos) | ✅ PR #148 · @rosemary21 |
+| V-9 | Seguridad en persona | #141 | De-risk P2P | ✅ PR #147 · @deep-bhikadiya |
+| V-10 | Recurrencia y descubrimiento | #142 | Retención / PMF | ✅ PR #143 · @attyolu |
+| V-11 | Transacción fallida / disputa | #164 | Confianza — recuperación tras fallo | ✅ Integrado PR #174 · @Chigybillionz |
+| V-12 | Vivir sin cuenta bancaria | #165 | Demanda — usuarios sin banco | ✅ PR #173 · @Oluwasuyi-Timilehin |
+| V-13 | Remesas (emisor) | #166 | Demanda + diferenciación lado emisor | ✅ Integrado PR #171 · @Jo-anny |
+| V-14 | Mental model peso digital / stablecoin | #167 | Capa stablecoin de Stellar | ✅ Integrado PR #175 · @Max-Owolabi |
+| V-15 | Umbral de primera vez | #168 | PMF — barrera de primera adopción | 🔴 Abierto — único pendiente |
 
 Las preguntas completas (en primera persona) viven en cada issue.
 
@@ -335,55 +345,22 @@ datos personales ni detalles que identifiquen a participantes.
 
 ## 8. Backend readiness para servidor
 
-El backend tiene buen esqueleto para operar en servidor (`PORT`, `DATABASE_URL`, `/health`, logs,
-CORS para Capacitor y `listen` en `0.0.0.0`), pero **todavía no está listo para hostear como
-servicio real**. La verificación `cd micopay/backend && npm run build` falla actualmente con errores
-de TypeScript, por lo que el primer objetivo es volverlo deployable antes de exponerlo.
+> **Actualización 2026-06-28:** B-1, B-2, B-6 y P2-1 resueltos; **B-3, B-4 y B-7 también resueltos
+> (hardening backend interno)**. Solo queda B-5 (Dockerfile/guía de deploy), que se trata
+> internamente. El backend interno ya no tiene pendientes de readiness.
 
-### Issues iniciales sugeridos
+### Estado de los issues internos (verificado 2026-06-28)
 
-1. **Backend deploy blocker: `npm run build` debe pasar**
-   - Evidencia: `tsc` falla por imports faltantes en `src/index.ts`, config de event listener no
-     declarada, `sendTradeNotificationToMerchant` sin import, referencias a `query` sin definición
-     y un test con comparación literal inválida.
-   - Aceptación: `npm run build` pasa en `micopay/backend` sin errores TypeScript.
-
-2. **Backend production config: fallar fuerte si faltan secretos reales**
-   - Problema: `JWT_SECRET` cae a `dev_jwt_secret`; producción no debe arrancar con secretos demo.
-   - Aceptación: con `NODE_ENV=production`, el backend falla si faltan `DATABASE_URL`, `JWT_SECRET`,
-     `SECRET_ENCRYPTION_KEY` y las variables Stellar requeridas para el modo elegido.
-
-3. **Backend persistence: desactivar fallback in-memory en producción**
-   - Problema: `src/db/schema.ts` puede caer a almacenamiento en memoria si PostgreSQL no está
-     disponible. Eso es útil en demo/dev, pero peligroso en servidor real.
-   - Aceptación: en producción, si PostgreSQL no conecta, el proceso falla y `/health` no reporta
-     servicio sano. El fallback in-memory queda limitado a development/test.
-
-4. **Backend seed data: no sembrar datos demo en producción**
-   - Problema: `seedData()` inserta usuarios/trades demo al arrancar si no hay trades.
-   - Aceptación: el seed solo corre con flag explícito (`SEED_DEMO_DATA=true`) y nunca por default
-     en producción.
-
-5. **Backend deploy artifact: Dockerfile o guía de despliegue reproducible**
-   - Problema: no hay Dockerfile/compose/Procfile ni README operativo de despliegue.
-   - Aceptación: existe una ruta documentada para levantar el backend con Node + Postgres, variables
-     requeridas, build, start, health check y estrategia de logs.
-
-6. **Backend database schema/migrations reproducibles**
-   - Problema: no hay flujo claro de migraciones para crear/actualizar tablas en un servidor nuevo.
-     Además, **`sql/init.sql` está malformado**: la tabla `users` tiene columnas duplicadas/mezcladas
-     (dos bloques de definición pegados, líneas ~14–25) y el archivo **define `audit_log` dos veces**
-     con esquemas distintos (líneas ~32 y ~104). Un servidor nuevo no puede provisionar schema con
-     este archivo tal cual.
-   - Aceptación: un servidor vacío puede provisionar schema de forma reproducible antes de arrancar
-     la app, sin depender de estado local o inserts manuales. `sql/init.sql` corregido: `users` con
-     una sola definición coherente y `audit_log` declarada una sola vez (separar el audit de trades
-     del audit general si se necesitan ambos).
-
-7. **Backend health/readiness real**
-   - Problema: `/health` existe, pero debe distinguir proceso vivo vs servicio listo.
-   - Aceptación: health/readiness valida conexión a DB, configuración crítica y estado del listener
-     si está habilitado, sin exponer secretos.
+| ID | Título | Estado | Evidencia |
+|----|--------|--------|-----------|
+| **B-1** | Backend `npm run build` debe pasar | ✅ **Resuelto** | `cd micopay/backend && npm run build` → exit 0 sin errores TypeScript |
+| **P2-1** | CI gate: tsc + vite build + backend build | ✅ **Resuelto** | `.github/workflows/ci.yml` bloquea merge si backend o frontend no buildean; tests en modo informativo mientras P0/P1 se estabilizan |
+| **B-2** | Config prod fail-fast si faltan secretos | ✅ **Resuelto** | `validateConfig()` en `src/config.ts:92` lanza error y `start()` crashea via `process.exit(1)` si faltan `DATABASE_URL`, `SECRET_ENCRYPTION_KEY` o variables Stellar en modo real |
+| **B-6** | Migraciones / `init.sql` duplicado | ✅ **Resuelto** | `sql/init.sql` eliminado; schema vive en `src/db/schema.ts`; la tabla duplicada y el `audit_log` doble ya no existen |
+| **B-5** | Dockerfile / guía de deploy | — | Trabajo interno de maintainer; no se publica como issue Drips |
+| **B-3** | Desactivar fallback in-memory en prod | ✅ **Resuelto** | `initPg()` (`src/db/schema.ts`): si PG no conecta y `config.isProduction`, hace `console.error` + `process.exit(1)`; el fallback in-memory solo se permite con `ALLOW_IN_MEMORY_DB=true` (opt-in explícito, ya no silencioso). Verificado: `NODE_ENV=production` sin DB → exit 1 |
+| **B-4** | No sembrar datos demo en producción | ✅ **Resuelto** | `start()` (`src/index.ts`) solo llama `seedData()` si `config.seedDemoData` (`SEED_DEMO_DATA === 'true'`); si no, loguea que se omite. DB de producción nueva ya no se siembra |
+| **B-7** | Health/readiness real | ✅ **Resuelto** | nuevo `pingDb()` hace `SELECT 1` real contra el pool; `/health` lo expone como `dbConnected` y responde **503** en producción si la DB está caída (readiness probe real), además de los checks de config previos |
 
 ---
 
@@ -423,9 +400,160 @@ de TypeScript, por lo que el primer objetivo es volverlo deployable antes de exp
    de la dirección Stellar del usuario autenticado?
 2. ¿El onboarding oficial debe ofrecer dos caminos desde el inicio ("crear wallet" e "importar
    clave Stellar") o dejamos importar clave solo desde Perfil por ahora?
-3. ¿Qué nivel de backup exigimos al crear wallet? Hoy se puede exportar la clave desde Perfil,
-   pero no hay paso obligatorio de respaldo durante alta.
+3. ~~¿Qué nivel de backup exigimos al crear wallet?~~ → **Decidido 2026-06-27: respaldo escalonado.**
+   Opcional para explorar la app; **obligatorio antes de la primera operación con fondos reales**
+   (alinea con D-4 / KYC por niveles). Criterio detallado en el borrador de P0-5 (§10).
 
+---
+
+## 10. Borrador de issue listo para publicar — P0-5 (onboarding + respaldo de clave)
+
+> **Estado:** redactado 2026-06-27, **sin publicar todavía**. Bloqueado por #160 (necesita el modelo
+> de una sola identidad por dispositivo para tener "una llave" coherente que mostrar/respaldar).
+> Publicar como issue de Drips **cuando #160 mergee**. Copiar el bloque de abajo a un issue nuevo.
+>
+> Decisión §9.3 incorporada: **respaldo escalonado** (opcional para explorar, obligatorio antes de
+> operar con fondos reales).
+
+---
+
+**Título:** `P0-5 · Onboarding mínimo: pantalla de wallet + visibilidad de llave + respaldo escalonado`
+
+**Labels:** `wave:frontend` · `wave:trust` · `complexity: medium` · `Stellar Wave` · `wave:needs-product`
+
+**Dependencias:** 🔒 **Bloqueado por #160** (una sola identidad por dispositivo). No empezar hasta que #160 mergee.
+
+### Contexto
+La auditoría UX de [@Shadow-MMN](https://github.com/Shadow-MMN) (validación **V-4**) encontró que la app
+hoy:
+- genera el keypair **en silencio**, sin pantalla de onboarding,
+- lo guarda en almacenamiento local **sin notificar** al usuario,
+- **no ofrece** ningún paso de respaldo de la llave secreta.
+
+Para un producto no-custodial esto es una brecha crítica del Argumento 4 (Stellar es usable): si el
+usuario pierde la llave, pierde los fondos para siempre, y hoy ni siquiera sabe que tiene una llave.
+
+### Qué construir
+1. **Pantalla de onboarding al primer inicio:** explicar en lenguaje simple que se creó una wallet
+   en el dispositivo (no-custodial) y qué significa.
+2. **Visibilidad de la llave pública:** mostrar la dirección Stellar (`G...`) del usuario, con opción
+   de copiar.
+3. **Respaldo de la llave secreta de un toque:** botón claro para copiar/exportar la llave secreta
+   (`S...`), con una nota de seguridad prominente (no compartirla, quien la tenga controla los fondos).
+4. **Política de respaldo escalonada (decisión §9.3):**
+   - El respaldo es **opcional** para empezar a explorar la app (no frustrar a quien solo prueba).
+   - Es **obligatorio** antes de la primera operación con fondos reales: si el usuario no ha
+     confirmado el respaldo, bloquear el inicio de un trade con un prompt de respaldo.
+5. **Alias:** conservar el alias actual (3–30 chars) que ya pide `Register.tsx`.
+
+### Criterio de aceptación
+- [ ] Al primer inicio el usuario ve una pantalla que le explica que tiene una wallet no-custodial.
+- [ ] El usuario puede ver y copiar su llave pública (`G...`).
+- [ ] El usuario puede respaldar su llave secreta de un toque, con advertencia de seguridad visible.
+- [ ] El usuario puede explorar la app sin respaldar, **pero** no puede iniciar una operación con
+      fondos reales sin antes confirmar el respaldo (prompt bloqueante una sola vez).
+- [ ] El estado "respaldo confirmado" persiste en el dispositivo.
+- [ ] La llave secreta nunca sale del dispositivo por HTTP (se mantiene el patrón actual de `keystore`).
+
+### Fuera de alcance
+- KYC real (Nivel 1 teléfono / Nivel 2 documento) — no se implementa en Wave 6 (ver D-4).
+- Importar llave existente desde el onboarding — sigue como pregunta abierta §9 (punto 2); por ahora
+  importar solo desde Perfil.
+
+### Notas
+- Privacy-first: no pedir nombre real, teléfono, documento ni datos financieros en el onboarding.
+- Depende del modelo de **una sola identidad por dispositivo** (#160): antes de eso el dispositivo
+  tiene dos keypairs y no hay "una" llave única que mostrar/respaldar.
+
+---
+
+## 11. Borradores de cambios derivados de la validación (T-1…T-5)
+
+> **Origen:** síntesis de las validaciones de mercado/producto V-1…V-14 (ver
+> [`WAVE6_CONTRIBUTORS_REPORT.md`](./WAVE6_CONTRIBUTORS_REPORT.md)). Cada cambio traduce una señal
+> repetida de los respondientes a un cambio concreto de la app.
+> **Estado:** redactados 2026-06-27, **sin publicar**. Casi todos tocan el flujo de trade /
+> descubrimiento, que se solapa con #160 (`App.tsx`) y P1-1 (#151) — publicar **por tandas tras**
+> aterrizar el núcleo P0/P1 para no chocar. Verificación de código ya hecha: el alcance de T-2 y T-3
+> está ajustado a lo que realmente falta.
+
+### T-1 · Confirmación post-selección con tasa bloqueada + estado en línea del agente
+**Labels:** `wave:frontend` · `wave:trust` · `complexity: medium` · `Stellar Wave`
+**Evidencia:** V-5 (tres señales no negociables), V-13 (certeza antes de comprometerse)
+**Dependencias:** P0-2/#160 (proveedor real) · P1-1/#151 (economía real) · P1-4 (tasa en vivo, hecho)
+
+- **Estado actual:** `TradeConfirmation` existe pero es **pre-mapa** — usa comerciante "de ejemplo"
+  y tasa "referencial", antes de elegir proveedor.
+- **Qué construir:** una confirmación **del proveedor ya seleccionado**, justo antes de comprometer
+  el efectivo, que muestre las 3 señales de V-5: (1) **fee total exacto**, (2) **tasa/monto MXN
+  bloqueado** (no "referencial"), (3) **estado en línea/activo** del agente. Y (V-13) un indicador de
+  **disponibilidad de proveedores cercanos** por si el elegido cae.
+- **Criterio de aceptación:**
+  - [ ] La pantalla refleja el `seller` real elegido (no "ejemplo").
+  - [ ] Muestra el MXN exacto a recibir con tasa bloqueada al momento de confirmar.
+  - [ ] Muestra el estado en línea del agente; si está offline, bloquea o advierte.
+  - [ ] El usuario ve cuántos proveedores cercanos hay como respaldo.
+
+### T-2 · Estado de falla explícito + ruta de disputa/soporte
+**Labels:** `wave:frontend` · `wave:trust` · `complexity: medium` · `Stellar Wave`
+**Evidencia:** V-2, V-5 (la red falla en el momento del efectivo), **V-11** (sin explicación tras la falla; soporte solo en sucursal)
+**Dependencias:** se apoya en `TradeStateBadge` y `SupportLink` ya existentes (parcialmente independiente)
+
+- **Estado actual:** `TradeStateBadge` ya cubre `locked/pending_cash/revealed/completed/cancelled/
+  expired/refunded` con copy de "qué pasó / qué sigue / tu dinero está seguro" + recuperación. Falta
+  lo que pide V-11: un **estado de falla con explicación clara** y una **ruta de disputa**.
+- **Qué construir:** (1) un estado `failed`/error con explicación en lenguaje simple de qué ocurrió
+  y qué pasa con los fondos; (2) un **botón de disputa/escalamiento** visible desde los estados
+  atascados (no solo "reintentar") que abra `SupportLink` / inicie una disputa sin requerir trámite
+  presencial.
+- **Criterio de aceptación:**
+  - [ ] Una operación que falla muestra causa + estado de los fondos, no un error genérico.
+  - [ ] Desde un estado atascado/fallido el usuario puede abrir una disputa o contactar soporte en
+        ≤1 toque.
+  - [ ] El mensaje siempre deja claro dónde está el dinero (en garantía / en devolución).
+
+### T-3 · Surfacear reputación en las tarjetas de descubrimiento
+**Labels:** `wave:frontend` · `wave:retail` · `complexity: low` · `Stellar Wave`
+**Evidencia:** V-7 (alternativas/confianza), V-9 (negocio conocido vs individuo), V-12 (calificaciones + escrow)
+**Dependencias:** solapa con P1-1/#151 (misma tarjeta de proveedor)
+
+- **Estado actual:** el badge "verificado" ya se muestra (DepositMap, ChatRoom, Home…) y hay rating
+  de estrellas en `SuccessScreen`. **Pero** `completion_rate`, `trades_completed` y `tier` —que el
+  backend ya guarda— **no se muestran en el descubrimiento**, que es donde el usuario decide.
+- **Qué construir:** mostrar en cada tarjeta de proveedor: **% de completitud**, **# de trades**,
+  **tier**, y una etiqueta de **tipo de negocio** (negocio conocido vs individuo, señal de V-9/V-12).
+- **Criterio de aceptación:**
+  - [ ] Cada tarjeta muestra completitud + trades + tier reales de la API (no constantes).
+  - [ ] Se distingue visualmente "negocio establecido" de "individuo".
+  - [ ] Coordinado con P1-1 (#151) para no duplicar el refactor de la tarjeta.
+
+### T-4 · Visibilidad del escrow para el proveedor antes de entregar efectivo
+**Labels:** `wave:frontend` · `wave:backend` · `wave:trust` · `complexity: medium` · `Stellar Wave`
+**Evidencia:** V-3 y V-8 (el disparador de confianza #1 del lado oferta), V-12 (escrow visible)
+**Dependencias:** 🔒 P0-2/#160 (contraparte/proveedor real)
+
+- **Estado actual:** no existe vista del lado proveedor que confirme el bloqueo del escrow.
+- **Qué construir:** una vista lado-proveedor que muestre, **antes de que entregue el efectivo**, que
+  el USDC del comprador está **bloqueado en garantía** (estado on-chain/HTLC), con monto y referencia
+  de la operación.
+- **Criterio de aceptación:**
+  - [ ] El proveedor ve "fondos bloqueados en garantía" con monto antes de marcar entrega.
+  - [ ] El indicador refleja el estado real del HTLC/escrow, no un mock.
+  - [ ] Si el escrow no está bloqueado, la UI no invita a entregar efectivo.
+
+### T-5 · Transparencia de fee efectivo + guardrail >5%
+**Labels:** `wave:frontend` · `wave:retail` · `complexity: low` · `Stellar Wave`
+**Evidencia:** V-1, V-3, V-7, V-8 (techo universal 2–5%; >5% pierde frente al canal tradicional)
+**Dependencias:** P1-1/#151 (comisión real del proveedor)
+
+- **Estado actual:** la UI solo muestra el **0.8% de plataforma**; no el spread/comisión del proveedor
+  ni un techo.
+- **Qué construir:** mostrar el **costo total efectivo** (plataforma + comisión del proveedor) de forma
+  prominente, y **advertir/limitar** cuando el total supere ~5%.
+- **Criterio de aceptación:**
+  - [ ] El usuario ve el % total efectivo, no solo el de plataforma.
+  - [ ] Si el total > ~5%, se muestra advertencia clara (o se filtra/ordena por costo).
+  - [ ] El umbral es configurable (no hardcodeado en el componente).
 
 
 

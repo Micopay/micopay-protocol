@@ -34,6 +34,13 @@ const VK_PATHS: Record<string, string> = {
     REPO_ROOT,
     "circuits/reputation_v1/target/vk/vk"
   ),
+  // Was missing here even though it's the circuit the live demo pipeline
+  // actually spends (credentials.ts buy -> inference.ts spend) — a redeploy
+  // via `register` alone would silently omit it.
+  access_credential_v1: path.join(
+    REPO_ROOT,
+    "circuits/access_credential_v1/target/vk/vk"
+  ),
 };
 
 const DEMO_ROOT =

@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { config } from '../config.js';
 import { UpstreamError, ValidationError } from '../utils/errors.js';
+import { getRampAssets } from '../services/etherfuse.service.js';
+import { authMiddleware } from '../middleware/auth.middleware.js';
 
-const CETES_APY = 11.45;
+const CETES_APY = 5.6;
 const HORIZON_TESTNET = 'https://horizon-testnet.stellar.org';
 const HORIZON_MAINNET = 'https://horizon.stellar.org';
 
@@ -10,6 +12,39 @@ export async function defiRoutes(app: FastifyInstance) {
   const horizonBase = config.stellarNetwork === 'TESTNET' ? HORIZON_TESTNET : HORIZON_MAINNET;
 
   // ─── CETES ───────────────────────────────────────────────────────────────
+
+  /**
+   * GET /defi/ramp/assets
+   * Real Stellar asset identifiers (CODE:ISSUER) supported by the Etherfuse
+   * ramp — the CETES issuer differs between sandbox and production, so it
+   * must always be read from here instead of hardcoded.
+   */
+  app.get('/defi/ramp/assets', async (request, reply) => {
+    if (!process.env.ETHERFUSE_API_KEY) {
+      throw new UpstreamError(
+        'ETHERFUSE_NOT_CONFIGURED',
+        'El servicio de rampa SPEI no está disponible por el momento.',
+        'ETHERFUSE_API_KEY not configured',
+        503,
+      );
+    }
+
+    const { wallet, currency } = request.query as { wallet?: string; currency?: string };
+    if (!wallet) {
+      throw new ValidationError('wallet querystring es requerido');
+    }
+
+    try {
+      const assets = await getRampAssets(wallet, currency);
+      return assets;
+    } catch (err: any) {
+      throw new UpstreamError(
+        'ETHERFUSE_ASSETS_FAILED',
+        'No se pudieron obtener los activos disponibles.',
+        err.message || 'Failed to fetch Etherfuse ramp assets',
+      );
+    }
+  });
 
   /**
    * GET /defi/cetes/rate
@@ -70,6 +105,7 @@ export async function defiRoutes(app: FastifyInstance) {
    * On MAINNET with real key: builds + submits pathPaymentStrictReceive tx.
    */
   app.post('/defi/cetes/buy', {
+    preHandler: [authMiddleware],
     schema: {
       body: {
         type: 'object',
@@ -157,6 +193,7 @@ export async function defiRoutes(app: FastifyInstance) {
    * Body: { amount: string, destAsset: "XLM"|"USDC"|"MXNe" }
    */
   app.post('/defi/cetes/sell', {
+    preHandler: [authMiddleware],
     schema: {
       body: {
         type: 'object',
@@ -224,6 +261,7 @@ export async function defiRoutes(app: FastifyInstance) {
    * Supply tokens to Blend pool (platform keypair). Demo: simulated on testnet.
    */
   app.post('/defi/blend/supply', {
+    preHandler: [authMiddleware],
     schema: {
       body: {
         type: 'object',
@@ -262,6 +300,7 @@ export async function defiRoutes(app: FastifyInstance) {
    * Borrow against collateral. Demo: simulated on testnet.
    */
   app.post('/defi/blend/borrow', {
+    preHandler: [authMiddleware],
     schema: {
       body: {
         type: 'object',

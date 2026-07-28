@@ -1,0 +1,161 @@
+import db from '../db/schema.js';
+import { config, type KycOperationType } from '../config.js';
+import { logAuditEvent } from './audit.service.js';
+import { KycTierInsufficientError } from '../utils/errors.js';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export type GateDecision = 'pass' | 'block';
+
+interface UserKycRow {
+  kyc_level: number | null;
+  kyc_level_verified_at: string | null;
+}
+
+/**
+ * Effective KYC level right now: the stored tier, downgraded to 0 if the
+ * verification is older than config.kycLevelExpiryDays. Expiry keeps a
+ * one-time verification from being treated as permanent (#314's "tier
+ * expiry and renewal logic").
+ */
+export async function getEffectiveKycLevel(userId: string): Promise<number> {
+  const user = await db.getOne<UserKycRow>(
+    `SELECT kyc_level, kyc_level_verified_at FROM users WHERE id = $1`,
+    [userId],
+  );
+  if (!user || !user.kyc_level) return 0;
+  if (!user.kyc_level_verified_at) return 0;
+
+  const verifiedAtMs = new Date(user.kyc_level_verified_at).getTime();
+  const expiresAtMs = verifiedAtMs + config.kycLevelExpiryDays * DAY_MS;
+  if (Date.now() >= expiresAtMs) return 0;
+
+  return user.kyc_level;
+}
+
+/**
+ * Required tier for an operation of the given amount, per config (see the
+ * default table in config.ts). `amountMxn` omitted (e.g. an offramp quoted
+ * in a non-MXN source asset before conversion) falls back to the lowest
+ * configured tier for that operation, rather than guessing.
+ */
+export function getRequiredKycLevel(operationType: KycOperationType, amountMxn?: number): number {
+  const tiers = config.kycOperationThresholds[operationType];
+  if (!tiers || tiers.length === 0) return 0;
+  if (amountMxn == null) return tiers[0].requiredLevel;
+
+  for (const tier of tiers) {
+    if (tier.maxAmountMxn === null || amountMxn <= tier.maxAmountMxn) {
+      return tier.requiredLevel;
+    }
+  }
+  return tiers[tiers.length - 1].requiredLevel;
+}
+
+/** Pure pass/block decision — independent of whether enforcement is turned on. */
+export function computeGateDecision(currentLevel: number, requiredLevel: number): GateDecision {
+  return currentLevel >= requiredLevel ? 'pass' : 'block';
+}
+
+export interface AssertKycTierInput {
+  userId: string;
+  operationType: KycOperationType;
+  amountMxn?: number;
+}
+
+/**
+ * Gate for #314: computes the tier decision for an operation, always logs it
+ * to the platform audit trail (pass or block, decoupled from enforcement),
+ * and throws only when the decision is 'block' AND config.kycGateEnabled is
+ * true. Enforcement defaults to off — thresholds are pending legal counsel
+ * review (LFPIORPI reform) — see docs/GRANTFOX_KYC_QUEUE_2026-07.md.
+ */
+export async function assertKycTierSufficient(input: AssertKycTierInput): Promise<void> {
+  const { userId, operationType, amountMxn } = input;
+
+  const currentLevel = await getEffectiveKycLevel(userId);
+  const requiredLevel = getRequiredKycLevel(operationType, amountMxn);
+  const decision = computeGateDecision(currentLevel, requiredLevel);
+
+  await logAuditEvent({
+    action: 'kyc_gate.decision',
+    actorUserId: userId,
+    entityType: 'kyc_gate',
+    entityId: operationType,
+    details: {
+      operation_type: operationType,
+      amount_mxn: amountMxn ?? null,
+      tier_at_time: currentLevel,
+      required_level: requiredLevel,
+      gate_decision: decision,
+      enforcement_enabled: config.kycGateEnabled,
+    },
+  });
+
+  if (decision === 'block' && config.kycGateEnabled) {
+    throw new KycTierInsufficientError(requiredLevel, currentLevel, operationType);
+  }
+}
+
+export interface KycAuditFilters {
+  userId?: string;
+  operationType?: KycOperationType;
+  gateDecision?: GateDecision;
+  fromDate?: string;
+  toDate?: string;
+  limit?: number;
+}
+
+export interface KycAuditEvent {
+  id: string;
+  action: string;
+  actor_user_id: string | null;
+  entity_type: string;
+  entity_id: string;
+  details: Record<string, unknown>;
+  created_at: string;
+}
+
+const AUDIT_FETCH_CAP = 500;
+
+/**
+ * Admin query over the kyc_gate.decision audit trail. Only action (and,
+ * when given, actor_user_id) are filtered in SQL — everything else is
+ * filtered in JS so this behaves identically against real Postgres and the
+ * in-memory test fallback (which doesn't parse JSONB operators or `>=`).
+ */
+export async function getKycAuditTrail(filters: KycAuditFilters = {}): Promise<KycAuditEvent[]> {
+  const { userId, operationType, gateDecision, fromDate, toDate, limit = 50 } = filters;
+
+  const rows = userId
+    ? await db.getMany<KycAuditEvent>(
+        `SELECT id, action, actor_user_id, entity_type, entity_id, details, created_at
+         FROM platform_risk_events
+         WHERE action = $1 AND actor_user_id = $2
+         ORDER BY created_at DESC
+         LIMIT ${AUDIT_FETCH_CAP}`,
+        ['kyc_gate.decision', userId],
+      )
+    : await db.getMany<KycAuditEvent>(
+        `SELECT id, action, actor_user_id, entity_type, entity_id, details, created_at
+         FROM platform_risk_events
+         WHERE action = $1
+         ORDER BY created_at DESC
+         LIMIT ${AUDIT_FETCH_CAP}`,
+        ['kyc_gate.decision'],
+      );
+
+  const fromMs = fromDate ? new Date(fromDate).getTime() : null;
+  const toMs = toDate ? new Date(toDate).getTime() : null;
+
+  const filtered = rows.filter((row) => {
+    if (operationType && row.details?.operation_type !== operationType) return false;
+    if (gateDecision && row.details?.gate_decision !== gateDecision) return false;
+    const createdMs = new Date(row.created_at).getTime();
+    if (fromMs !== null && createdMs < fromMs) return false;
+    if (toMs !== null && createdMs > toMs) return false;
+    return true;
+  });
+
+  return filtered.slice(0, limit);
+}

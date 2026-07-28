@@ -1,4 +1,12 @@
 # ZK-as-a-Service (ZKaaS) on Micopay
+
+> ⚠️ **Documento histórico (framing previo: "reputación pública vs privada").**
+> La iniciativa se reencuadró a **credenciales de acceso anónimas para que agentes
+> consuman recursos**. La fuente de verdad actual vive en
+> [`docs/zk-agent-credentials/`](../zk-agent-credentials/README.md) — empieza por el
+> [índice](../zk-agent-credentials/README.md), el [one-pager](../zk-agent-credentials/HACKATHON.md)
+> y la [auditoría](../zk-agent-credentials/AUDIT.md).
+
 **Private, pay-per-use zero-knowledge verification on Stellar — demonstrated with anonymous reputation for humans and AI agents.**
 
 > **Pitch in one line:** ZKaaS is a Soroban-powered verification service where anyone — especially AI agents — pays cents via x402 to verify ZK proofs. Its flagship circuit lets a user prove *"my reputation tier is ≥ GOLD"* without revealing who they are, their address, or their history.

@@ -1,9 +1,10 @@
+import { buildTxUrl } from '../utils/stellarExplorer';
+
 /**
  * Terminal screen after a successful POST /trades/:id/cancel (issue #20).
  *
  * Separates "cancelled with refund in flight" vs "cancelled before any lock" so trust cues stay honest.
  */
-const STELLAR_EXPLORER = 'https://stellar.expert/explorer/testnet/tx';
 const SUPPORT_HREF = 'mailto:soporte@micopay.app';
 
 export interface TradeCancelledProps {
@@ -53,7 +54,7 @@ export default function TradeCancelled({
               </p>
               {lockTxHash ? (
                 <a
-                  href={`${STELLAR_EXPLORER}/${lockTxHash}`}
+                  href={buildTxUrl(lockTxHash)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline break-all"

@@ -156,8 +156,12 @@ CREATE TABLE IF NOT EXISTS agent_history (
 );
 
 -- X402 Payments table
+-- tx_hash is VARCHAR(120), not (64): a Base replay key is
+-- "base:<0x-address>:<bytes32-nonce>" (~114 chars), wider than a bare
+-- Stellar tx hash (64 hex chars). See db/x402.ts's initX402Tables() for the
+-- ALTER TABLE that widens this on already-deployed databases.
 CREATE TABLE IF NOT EXISTS x402_payments (
-  tx_hash         VARCHAR(64) PRIMARY KEY,
+  tx_hash         VARCHAR(120) PRIMARY KEY,
   payer_address   VARCHAR(56) NOT NULL,
   amount_usdc     VARCHAR(32) NOT NULL,
   service         VARCHAR(64) NOT NULL,

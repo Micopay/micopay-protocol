@@ -19,7 +19,7 @@ const Terms = ({ onBack }: TermsProps) => {
         </div>
       </header>
 
-      <main className="flex-1 mt-20 px-4 pt-4 space-y-5 max-w-lg mx-auto w-full">
+      <main className="flex-1 mt-[calc(5rem+env(safe-area-inset-top))] px-4 pt-4 space-y-5 max-w-lg mx-auto w-full">
         <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-start gap-3">
           <span className="material-symbols-outlined text-amber-600 mt-0.5 text-lg">info</span>
           <p className="text-sm text-amber-800 font-medium">
