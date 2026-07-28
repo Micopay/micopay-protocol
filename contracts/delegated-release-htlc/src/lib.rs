@@ -7,9 +7,7 @@ use errors::EscrowError;
 use htlc_core::{TTL_EXTEND, TTL_MIN};
 use types::{DataKey, TradeEscrow, TradeStatus};
 
-use soroban_sdk::{
-    contract, contractimpl, symbol_short, token, Address, Bytes, BytesN, Env, log,
-};
+use soroban_sdk::{contract, contractimpl, log, symbol_short, token, Address, Bytes, BytesN, Env};
 
 fn compute_trade_id(
     env: &Env,
@@ -21,9 +19,9 @@ fn compute_trade_id(
     env.crypto().sha256(&seed).into()
 }
 
-/// DelegatedReleaseHTLC — Delegated-release HTLC variant implementing HashedTimeLock.
+/// DelegatedReleaseHTLC — Delegated-release HTLC variant following the HashedTimeLock pattern.
 ///
-/// Extends the base HTLC with:
+/// Extends the base HTLC pattern with:
 /// - initiator (locks funds) / beneficiary (receives funds)
 /// - Platform fee collection
 /// - permissionless release (no require_auth) for third-party escrow
@@ -73,7 +71,11 @@ impl DelegatedReleaseHTLC {
 
         let trade_id = compute_trade_id(&env, &initiator, &beneficiary, &secret_hash);
 
-        if env.storage().persistent().has(&DataKey::Trade(trade_id.clone())) {
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::Trade(trade_id.clone()))
+        {
             return Err(EscrowError::TradeAlreadyExists);
         }
 
@@ -81,7 +83,14 @@ impl DelegatedReleaseHTLC {
         let token_client = token::Client::new(&env, &token_id);
         token_client.transfer(&initiator, &env.current_contract_address(), &total);
 
-        let timeout_ledger = env.ledger().sequence() + (timeout_minutes * 12);
+        let timeout_ledgers = timeout_minutes
+            .checked_mul(12)
+            .ok_or(EscrowError::InvalidTimeout)?;
+        let timeout_ledger = env
+            .ledger()
+            .sequence()
+            .checked_add(timeout_ledgers)
+            .ok_or(EscrowError::InvalidTimeout)?;
 
         let trade = TradeEscrow {
             initiator: initiator.clone(),
@@ -105,19 +114,26 @@ impl DelegatedReleaseHTLC {
 
         env.events().publish(
             (symbol_short!("locked"),),
-            (trade_id.clone(), initiator, beneficiary, amount, timeout_ledger),
+            (
+                trade_id.clone(),
+                initiator,
+                beneficiary,
+                amount,
+                timeout_ledger,
+            ),
         );
 
-        log!(&env, "Trade locked: amount={}, timeout_ledger={}", amount, timeout_ledger);
+        log!(
+            &env,
+            "Trade locked: amount={}, timeout_ledger={}",
+            amount,
+            timeout_ledger
+        );
 
         Ok(trade_id)
     }
 
-    pub fn release(
-        env: Env,
-        trade_id: BytesN<32>,
-        secret: Bytes,
-    ) -> Result<(), EscrowError> {
+    pub fn release(env: Env, trade_id: BytesN<32>, secret: Bytes) -> Result<(), EscrowError> {
         let mut trade: TradeEscrow = env
             .storage()
             .persistent()
@@ -130,7 +146,7 @@ impl DelegatedReleaseHTLC {
 
         // NO require_auth() HERE
         // Permissionless release for third-party escrow.
-        
+
         let computed_hash: BytesN<32> = env.crypto().sha256(&secret).into();
         if computed_hash != trade.secret_hash {
             return Err(EscrowError::InvalidSecret);
@@ -149,7 +165,11 @@ impl DelegatedReleaseHTLC {
             .ok_or(EscrowError::NotInitialized)?;
 
         let token_client = token::Client::new(&env, &token_id);
-        token_client.transfer(&env.current_contract_address(), &trade.beneficiary, &trade.amount);
+        token_client.transfer(
+            &env.current_contract_address(),
+            &trade.beneficiary,
+            &trade.amount,
+        );
 
         if trade.platform_fee > 0 {
             token_client.transfer(
@@ -229,11 +249,9 @@ impl DelegatedReleaseHTLC {
             .get(&DataKey::Trade(trade_id.clone()))
             .ok_or(EscrowError::TradeNotFound)?;
         env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
-        env.storage().persistent().extend_ttl(
-            &DataKey::Trade(trade_id),
-            TTL_MIN,
-            TTL_EXTEND,
-        );
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Trade(trade_id), TTL_MIN, TTL_EXTEND);
         Ok(trade)
     }
 }

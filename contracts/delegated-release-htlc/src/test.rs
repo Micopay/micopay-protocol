@@ -40,7 +40,16 @@ impl TestEnv {
         let htlc = DelegatedReleaseHTLCClient::new(&env, &contract_id);
         htlc.initialize(&admin, &token_id, &platform_wallet);
 
-        TestEnv { env, contract_id, admin, initiator, beneficiary, platform_wallet, token_id, third_party }
+        TestEnv {
+            env,
+            contract_id,
+            admin,
+            initiator,
+            beneficiary,
+            platform_wallet,
+            token_id,
+            third_party,
+        }
     }
 
     fn htlc(&self) -> DelegatedReleaseHTLCClient<'_> {
@@ -60,8 +69,12 @@ impl TestEnv {
     fn lock_default(&self) -> (BytesN<32>, Bytes) {
         let (secret, hash) = self.make_secret();
         let trade_id = self.htlc().lock(
-            &self.initiator, &self.beneficiary,
-            &1_000_000_000, &8_000_000, &hash, &30u32,
+            &self.initiator,
+            &self.beneficiary,
+            &1_000_000_000,
+            &8_000_000,
+            &hash,
+            &30u32,
         );
         (trade_id, secret)
     }
@@ -82,7 +95,9 @@ impl TestEnv {
 #[test]
 fn test_double_initialize_fails() {
     let t = TestEnv::new();
-    let result = t.htlc().try_initialize(&t.admin, &t.token_id, &t.platform_wallet);
+    let result = t
+        .htlc()
+        .try_initialize(&t.admin, &t.token_id, &t.platform_wallet);
     assert!(result.is_err(), "Second initialize must fail");
 }
 
@@ -96,9 +111,13 @@ fn test_lock_transfers_total_to_contract() {
     let balance_before = t.token().balance(&t.initiator);
 
     let (_, hash) = t.make_secret();
-    t.htlc().lock(&t.initiator, &t.beneficiary, &amount, &fee, &hash, &30u32);
+    t.htlc()
+        .lock(&t.initiator, &t.beneficiary, &amount, &fee, &hash, &30u32);
 
-    assert_eq!(t.token().balance(&t.initiator), balance_before - amount - fee);
+    assert_eq!(
+        t.token().balance(&t.initiator),
+        balance_before - amount - fee
+    );
     assert_eq!(t.token().balance(&t.contract_id), amount + fee);
 }
 
@@ -110,19 +129,30 @@ fn test_release_submitted_by_third_party_pays_beneficiary() {
     let fee: i128 = 12_000_000;
     let (secret, hash) = t.make_secret();
 
-    let trade_id = t.htlc().lock(&t.initiator, &t.beneficiary, &amount, &fee, &hash, &30u32);
+    let trade_id = t
+        .htlc()
+        .lock(&t.initiator, &t.beneficiary, &amount, &fee, &hash, &30u32);
 
-    // Call release using third_party. In testutils we simulate the caller, 
+    // Call release using third_party. In testutils we simulate the caller,
     // but without require_auth, anyone can successfully invoke it.
     // The funds must go to the beneficiary.
     // (Here we just call the client method. Since there is no require_auth on the beneficiary,
     // this succeeds even if invoked by another party).
+    t.env.set_auths(&[]);
     t.htlc().release(&trade_id, &secret);
 
-    assert_eq!(t.token().balance(&t.beneficiary), amount, "beneficiary gets amount");
-    assert_eq!(t.token().balance(&t.platform_wallet), fee, "platform gets fee");
+    assert_eq!(
+        t.token().balance(&t.beneficiary),
+        amount,
+        "beneficiary gets amount"
+    );
+    assert_eq!(
+        t.token().balance(&t.platform_wallet),
+        fee,
+        "platform gets fee"
+    );
     assert_eq!(t.token().balance(&t.contract_id), 0, "contract emptied");
-    
+
     // Ensure the third party didn't get any funds
     assert_eq!(t.token().balance(&t.third_party), 0);
 }
@@ -145,14 +175,25 @@ fn test_refund_returns_full_amount_to_initiator() {
     let secret = Bytes::from_slice(&t.env, b"refund_secret_32_bytes_long_pad!!");
     let hash: BytesN<32> = t.env.crypto().sha256(&secret).into();
 
-    let trade_id = t.htlc().lock(&t.initiator, &t.beneficiary, &amount, &fee, &hash, &1u32);
+    let trade_id = t
+        .htlc()
+        .lock(&t.initiator, &t.beneficiary, &amount, &fee, &hash, &1u32);
     t.advance_past_timeout(1);
-    
+
     // Refund can be called by anyone
+    t.env.set_auths(&[]);
     t.htlc().refund(&trade_id);
 
-    assert_eq!(t.token().balance(&t.initiator), initiator_start, "initiator fully refunded");
-    assert_eq!(t.token().balance(&t.platform_wallet), 0, "platform gets nothing on refund");
+    assert_eq!(
+        t.token().balance(&t.initiator),
+        initiator_start,
+        "initiator fully refunded"
+    );
+    assert_eq!(
+        t.token().balance(&t.platform_wallet),
+        0,
+        "platform gets nothing on refund"
+    );
     assert_eq!(t.htlc().get_trade(&trade_id).status, TradeStatus::Refunded);
 }
 
@@ -162,7 +203,9 @@ fn test_zero_fee_works() {
     let amount: i128 = 500_000_000;
     let (secret, hash) = t.make_secret();
 
-    let trade_id = t.htlc().lock(&t.initiator, &t.beneficiary, &amount, &0, &hash, &30u32);
+    let trade_id = t
+        .htlc()
+        .lock(&t.initiator, &t.beneficiary, &amount, &0, &hash, &30u32);
     t.htlc().release(&trade_id, &secret);
 
     assert_eq!(t.token().balance(&t.beneficiary), amount);
@@ -176,7 +219,9 @@ fn test_get_trade_reflects_correct_amounts() {
     let fee: i128 = 16_000_000;
     let (_, hash) = t.make_secret();
 
-    let trade_id = t.htlc().lock(&t.initiator, &t.beneficiary, &amount, &fee, &hash, &60u32);
+    let trade_id = t
+        .htlc()
+        .lock(&t.initiator, &t.beneficiary, &amount, &fee, &hash, &60u32);
     let trade = t.htlc().get_trade(&trade_id);
 
     assert_eq!(trade.amount, amount);
@@ -239,7 +284,8 @@ fn test_refund_after_release_rejected() {
 fn test_zero_amount_rejected() {
     let t = TestEnv::new();
     let (_, hash) = t.make_secret();
-    t.htlc().lock(&t.initiator, &t.beneficiary, &0, &0, &hash, &30u32);
+    t.htlc()
+        .lock(&t.initiator, &t.beneficiary, &0, &0, &hash, &30u32);
 }
 
 #[test]
@@ -247,7 +293,8 @@ fn test_zero_amount_rejected() {
 fn test_negative_amount_rejected() {
     let t = TestEnv::new();
     let (_, hash) = t.make_secret();
-    t.htlc().lock(&t.initiator, &t.beneficiary, &-100, &0, &hash, &30u32);
+    t.htlc()
+        .lock(&t.initiator, &t.beneficiary, &-100, &0, &hash, &30u32);
 }
 
 #[test]
@@ -256,11 +303,25 @@ fn test_duplicate_lock_same_secret_rejected() {
     let t = TestEnv::new();
     let (_, hash) = t.make_secret();
 
-    t.htlc().lock(&t.initiator, &t.beneficiary, &500_000_000, &0, &hash, &30u32);
+    t.htlc().lock(
+        &t.initiator,
+        &t.beneficiary,
+        &500_000_000,
+        &0,
+        &hash,
+        &30u32,
+    );
 
     use soroban_sdk::token::StellarAssetClient;
     StellarAssetClient::new(&t.env, &t.token_id).mint(&t.initiator, &500_000_000);
-    t.htlc().lock(&t.initiator, &t.beneficiary, &500_000_000, &0, &hash, &30u32);
+    t.htlc().lock(
+        &t.initiator,
+        &t.beneficiary,
+        &500_000_000,
+        &0,
+        &hash,
+        &30u32,
+    );
 }
 
 // ─── Accounting invariant ────────────────────────────────────────────────────
@@ -274,7 +335,9 @@ fn test_accounting_invariant_on_release() {
 
     let total_supply = t.token().balance(&t.initiator);
 
-    let trade_id = t.htlc().lock(&t.initiator, &t.beneficiary, &amount, &fee, &hash, &30u32);
+    let trade_id = t
+        .htlc()
+        .lock(&t.initiator, &t.beneficiary, &amount, &fee, &hash, &30u32);
     t.htlc().release(&trade_id, &secret);
 
     let initiator_final = t.token().balance(&t.initiator);
@@ -301,7 +364,9 @@ fn test_accounting_invariant_on_refund() {
 
     let total_supply = t.token().balance(&t.initiator);
 
-    let trade_id = t.htlc().lock(&t.initiator, &t.beneficiary, &amount, &fee, &hash, &1u32);
+    let trade_id = t
+        .htlc()
+        .lock(&t.initiator, &t.beneficiary, &amount, &fee, &hash, &1u32);
     t.advance_past_timeout(1);
     t.htlc().refund(&trade_id);
 

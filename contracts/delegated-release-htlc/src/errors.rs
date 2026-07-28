@@ -14,4 +14,5 @@ pub enum EscrowError {
     Unauthorized = 8,
     InsufficientAmount = 9,
     TradeAlreadyExists = 10,
+    InvalidTimeout = 11,
 }
