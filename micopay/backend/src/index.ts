@@ -16,6 +16,7 @@ import { tradeSafetyRoutes } from './routes/trade-safety.js';
 import { rateRoutes } from './routes/rate.js';
 import { kycRoutes } from './routes/kyc.js';
 import { rampRoutes } from './routes/ramp.js';
+import { signRequestsRoutes } from './routes/sign-requests.js';
 import { AppError } from './utils/errors.js';
 import { Keypair } from '@stellar/stellar-sdk';
 import fastifyStatic from '@fastify/static';
@@ -232,6 +233,7 @@ app.register(adminRoutes, { prefix: '' });
 app.register(rateRoutes, { prefix: '' });
 app.register(kycRoutes, { prefix: '' });
 app.register(rampRoutes, { prefix: '' });
+app.register(signRequestsRoutes, { prefix: '' });
 
 // --- Start server ---
 
