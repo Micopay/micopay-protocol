@@ -124,9 +124,13 @@ export async function patchMerchantAvailability(
   return res.data.user;
 }
 
-export async function registerUser(username: string): Promise<UserData> {
+export async function registerUser(username: string, phoneHash?: string): Promise<UserData> {
   const stellar_address = (await getPublicKey()) ?? generateFallbackAddress(username);
-  const res = await http.post("/users/register", { username, stellar_address });
+  const body: Record<string, string> = { username, stellar_address };
+  if (phoneHash) {
+    body.phone_hash = phoneHash;
+  }
+  const res = await http.post("/users/register", body);
   return { ...res.data.user, token: res.data.token };
 }
 
