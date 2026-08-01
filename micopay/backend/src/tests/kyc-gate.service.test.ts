@@ -84,19 +84,27 @@ async function testAssertKycTierSufficient_neverThrowsWhenGateDisabled() {
 async function testAuditTrailWritesAndQueries() {
   // Level 1 user: small ops pass, only the >3000 MXN op (which needs Level 2)
   // is blocked — gives a mix of pass/block to exercise the gate_decision filter.
+  //
+  // #316 note: each assertKycTierSufficient call below also runs its own
+  // monthly-volume decision (since amountMxn is set) and logs it as a
+  // *separate* audit event with the same action — see
+  // kyc-monthly-volume.test.ts for that behavior. This test is specifically
+  // about the tier decision, so every query here passes checkType: "tier" to
+  // isolate it, exactly as it did before #316 existed (when "tier" was the
+  // only check type there was).
   const userId = await seedUser({ kycLevel: 1, kycVerifiedAt: new Date().toISOString() });
 
   await assertKycTierSufficient({ userId, operationType: "p2p_transfer", amountMxn: 1000 });   // req 1 → pass
   await assertKycTierSufficient({ userId, operationType: "p2p_transfer", amountMxn: 50_000 });  // req 2 → block
   await assertKycTierSufficient({ userId, operationType: "cash_in", amountMxn: 500 });          // req 1 → pass
 
-  const allEvents = await getKycAuditTrail({ userId });
-  strictEqual(allEvents.length, 3, "all three gate decisions for this user should be recorded");
+  const allEvents = await getKycAuditTrail({ userId, checkType: "tier" });
+  strictEqual(allEvents.length, 3, "all three tier gate decisions for this user should be recorded");
 
-  const p2pEvents = await getKycAuditTrail({ userId, operationType: "p2p_transfer" });
+  const p2pEvents = await getKycAuditTrail({ userId, checkType: "tier", operationType: "p2p_transfer" });
   strictEqual(p2pEvents.length, 2, "operation_type filter should only return p2p_transfer events");
 
-  const blockedEvents = await getKycAuditTrail({ userId, gateDecision: "block" });
+  const blockedEvents = await getKycAuditTrail({ userId, checkType: "tier", gateDecision: "block" });
   strictEqual(blockedEvents.length, 1, "gate_decision filter should isolate the one insufficient-tier decision (50,000 MXN needs Level 2)");
   strictEqual(blockedEvents[0].details.operation_type, "p2p_transfer");
   strictEqual(blockedEvents[0].details.tier_at_time, 1);

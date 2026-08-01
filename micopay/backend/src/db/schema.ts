@@ -19,6 +19,8 @@ const mem: Record<string, any[]> = {
   trade_disputes: [],
   compliance_alerts: [],
   compliance_filings: [],
+  device_keys: [],
+  sign_requests: [],
 };
 
 function memNow() {

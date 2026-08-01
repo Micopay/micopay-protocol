@@ -436,5 +436,41 @@
     "generic": {
       "fallback": { "title": "Algo salió mal", "message": "No pudimos terminar esta acción. Intenta de nuevo.", "action": "Si el problema sigue, contacta soporte." }
     }
+  },
+  "signatureApproval": {
+    "title": "Aprobación de Firma",
+    "loading": "Cargando solicitud de firma…",
+    "errorTitle": "No se pudo cargar la solicitud",
+    "notFound": "La solicitud de firma no existe o expiró.",
+    "back": "Volver",
+    "securityBoundaryBadge": "Límite de Seguridad",
+    "externalRequestHeader": "Solicitud Externa de Firma",
+    "externalRequestDesc": "Esta solicitud proviene de {{appName}}. No fue iniciada dentro de MicoPay.",
+    "requestSourceLabel": "Aplicación solicitante",
+    "statusExpired": "Expirado",
+    "transactionEffectTitle": "Efecto de la transacción",
+    "youWillSend": "Vas a enviar",
+    "destinationLabel": "Destino",
+    "memoLabel": "Nota",
+    "localSigningAssurance": "Las claves privadas nunca salen de este dispositivo.",
+    "approveBtn": "Aprobar y Firmar",
+    "rejectBtn": "Rechazar",
+    "dismissExpiredBtn": "Solicitud Expirada - Volver",
+    "approvedSuccessTitle": "¡Transacción firmada!",
+    "approvedSuccessDesc": "La firma ha sido enviada a la aplicación solicitante.",
+    "rejectedSuccessTitle": "Solicitud rechazada",
+    "rejectedSuccessDesc": "Has rechazado la solicitud de firma.",
+    "warnings": {
+      "untrustedTitle": "Advertencia de Seguridad",
+      "failedToDecode": "No se pudo decodificar el contenido XDR de la transacción.",
+      "invalidXdr": "Formato de transacción XDR no válido.",
+      "unsupportedOperations": "Esta transacción contiene operaciones complejas o no soportadas.",
+      "emptyOperations": "La transacción no contiene ninguna operación."
+    },
+    "errors": {
+      "fetchFailed": "Error al consultar la solicitud de firma.",
+      "approveFailed": "No se pudo aprobar la solicitud.",
+      "rejectFailed": "No se pudo rechazar la solicitud."
+    }
   }
 }
