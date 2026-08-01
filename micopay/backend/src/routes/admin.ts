@@ -20,6 +20,22 @@ function assertAdmin(request: FastifyRequest) {
   }
 }
 
+function parseRangeDate(value: string | undefined, fallback: Date): Date {
+  if (!value) return fallback;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("from/to must be valid ISO date strings");
+  }
+  return parsed;
+}
+
+function isWithinRange(value: string | null | undefined, start: Date, end: Date): boolean {
+  if (!value) return false;
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return false;
+  return timestamp >= start.getTime() && timestamp <= end.getTime();
+}
+
 export async function adminRoutes(app: FastifyInstance) {
   app.addHook("preHandler", async (request) => {
     assertAdmin(request);
@@ -67,6 +83,134 @@ export async function adminRoutes(app: FastifyInstance) {
 
     await unpauseUser(id, null);
     return { ok: true, user_id: id, status: "active" };
+  });
+
+  /**
+   * GET /admin/analytics/overview
+   * Aggregate key platform health metrics for a date range.
+   */
+  app.get("/admin/analytics/overview", async (request) => {
+    const { from, to, active_merchant_window_days } = (request.query as {
+      from?: string;
+      to?: string;
+      active_merchant_window_days?: string;
+    } | undefined) ?? {};
+
+    const endDate = parseRangeDate(to, new Date());
+    const startDate = parseRangeDate(from, new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000));
+    if (startDate.getTime() > endDate.getTime()) {
+      throw new Error("from must be before or equal to to");
+    }
+
+    const parsedActiveWindowDays = active_merchant_window_days
+      ? parseInt(active_merchant_window_days, 10)
+      : 30;
+    const activeWindowDays = Number.isNaN(parsedActiveWindowDays) || parsedActiveWindowDays <= 0
+      ? 30
+      : parsedActiveWindowDays;
+    const activeWindowStart = new Date(endDate.getTime() - activeWindowDays * 24 * 60 * 60 * 1000);
+
+    const [trades, users] = await Promise.all([
+      db.getMany<{
+        id: string;
+        seller_id: string;
+        buyer_id: string;
+        amount_mxn: number | string;
+        status: string;
+        created_at: string | null;
+        completed_at: string | null;
+      }>(
+        `SELECT id, seller_id, buyer_id, amount_mxn, status, created_at, completed_at FROM trades`
+      ),
+      db.getMany<{
+        id: string;
+        created_at: string | null;
+        merchant_available: boolean | null;
+      }>(
+        `SELECT id, created_at, merchant_available FROM users`
+      ),
+    ]);
+
+    const matchingTrades = trades.filter((trade) => isWithinRange(trade.created_at, startDate, endDate));
+
+    const statusBreakdown = {
+      completed: { count: 0, volume_mxn: 0 },
+      cancelled: { count: 0, volume_mxn: 0 },
+      disputed: { count: 0, volume_mxn: 0 },
+    };
+
+    const completionDurationsSeconds: number[] = [];
+
+    for (const trade of matchingTrades) {
+      const normalizedStatus = (trade.status || "").toLowerCase();
+      const amountMxn = Number(trade.amount_mxn || 0);
+
+      if (normalizedStatus === "completed") {
+        statusBreakdown.completed.count += 1;
+        statusBreakdown.completed.volume_mxn += amountMxn;
+      } else if (normalizedStatus === "cancelled") {
+        statusBreakdown.cancelled.count += 1;
+        statusBreakdown.cancelled.volume_mxn += amountMxn;
+      } else if (normalizedStatus === "disputed") {
+        statusBreakdown.disputed.count += 1;
+        statusBreakdown.disputed.volume_mxn += amountMxn;
+      }
+
+      if (normalizedStatus === "completed" && trade.completed_at && trade.created_at) {
+        const createdAt = new Date(trade.created_at);
+        const completedAt = new Date(trade.completed_at);
+        if (!Number.isNaN(createdAt.getTime()) && !Number.isNaN(completedAt.getTime())) {
+          completionDurationsSeconds.push((completedAt.getTime() - createdAt.getTime()) / 1000);
+        }
+      }
+    }
+
+    const totalTradeCount = matchingTrades.length;
+    const totalTradeVolumeMxn = matchingTrades.reduce((sum, trade) => sum + Number(trade.amount_mxn || 0), 0);
+    const completionRate = totalTradeCount > 0 ? statusBreakdown.completed.count / totalTradeCount : 0;
+    const averageTimeToCompletionSeconds = completionDurationsSeconds.length > 0
+      ? completionDurationsSeconds.reduce((sum, value) => sum + value, 0) / completionDurationsSeconds.length
+      : 0;
+
+    const activeMerchantIds = new Set(
+      trades
+        .filter((trade) => trade.seller_id && isWithinRange(trade.created_at, activeWindowStart, endDate))
+        .map((trade) => trade.seller_id)
+        .filter(Boolean),
+    );
+
+    const newMerchantsInRange = users.filter((user) => {
+      if (user.merchant_available !== true) return false;
+      return isWithinRange(user.created_at, startDate, endDate);
+    }).length;
+
+    return {
+      summary: {
+        range: {
+          from: startDate.toISOString(),
+          to: endDate.toISOString(),
+        },
+        total_trade_count: totalTradeCount,
+        total_trade_volume_mxn: Number(totalTradeVolumeMxn.toFixed(2)),
+        completed: {
+          count: statusBreakdown.completed.count,
+          volume_mxn: Number(statusBreakdown.completed.volume_mxn.toFixed(2)),
+        },
+        cancelled: {
+          count: statusBreakdown.cancelled.count,
+          volume_mxn: Number(statusBreakdown.cancelled.volume_mxn.toFixed(2)),
+        },
+        disputed: {
+          count: statusBreakdown.disputed.count,
+          volume_mxn: Number(statusBreakdown.disputed.volume_mxn.toFixed(2)),
+        },
+        active_merchants: activeMerchantIds.size,
+        new_merchants_in_range: newMerchantsInRange,
+        completion_rate: Number(completionRate.toFixed(4)),
+        average_time_to_completion_seconds: Number(averageTimeToCompletionSeconds.toFixed(2)),
+        active_merchant_window_days: activeWindowDays,
+      },
+    };
   });
 
   /**
