@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import DeleteAccountModal from "../components/DeleteAccountModal";
-import { exportSecretKey, importKeypair } from '../lib/keystore';
+import ExportSecretKeyModal from "../components/ExportSecretKeyModal";
+import { importKeypair } from '../lib/keystore';
 import {
   deleteAccount,
   getCurrentUser,
@@ -47,6 +48,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [importInput, setImportInput] = useState('');
   const [activeToken, setActiveToken] = useState<string | null>(token);
 
@@ -150,14 +152,8 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
     if (devicePublicKey) navigator.clipboard.writeText(devicePublicKey);
   };
 
-  const handleExport = async () => {
-    const confirmed = window.confirm(
-        'Tu clave secreta da control total de tu cuenta. Nunca la compartas. Cópiala en un lugar seguro sin conexión.'
-    );
-    if (!confirmed) return;
-    const secret = await exportSecretKey();
-    await navigator.clipboard.writeText(secret);
-    alert('Clave secreta copiada. Limpia tu portapapeles después de guardarla.');
+  const handleExport = () => {
+    setShowExportModal(true);
   };
 
   const handleImport = async () => {
@@ -479,6 +475,10 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                 </div>
               </div>
             </div>
+        )}
+
+        {showExportModal && (
+          <ExportSecretKeyModal onClose={() => setShowExportModal(false)} />
         )}
 
         {success && (
