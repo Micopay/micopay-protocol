@@ -2,14 +2,45 @@ import { createHash } from "crypto";
 import type { FastifyRequest } from "fastify";
 import db from "../db/schema.js";
 import { config } from "../config.js";
-import { RiskBlockedError, ForbiddenError } from "../utils/errors.js";
+import { insertTradeAuditEvent } from "../db/audit-log.model.js";
 import { logAuditEvent } from "./audit.service.js";
+import {
+  NotFoundError,
+  ForbiddenError,
+  ConflictError,
+  ValidationError,
+  RiskBlockedError,
+} from "../utils/errors.js";
 
 const UTC_DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface ClientContext {
   ip: string;
   deviceIdHash: string | null;
+}
+
+export interface RecordTradeDisputeInput {
+  tradeId: string;
+  reportedBy?: string;
+  openerId?: string;
+  sellerId?: string;
+  disputeId?: string;
+  reason?: string;
+  evidenceUrls?: string[];
+}
+
+export interface DisputeRecord {
+  id: string;
+  trade_id: string;
+  reported_by: string;
+  reason: string;
+  evidence_urls: string[] | string;
+  status: 'open' | 'resolved' | 'dismissed';
+  resolution?: string | null;
+  resolution_note?: string | null;
+  resolved_by?: string | null;
+  resolved_at?: string | null;
+  created_at: string;
 }
 
 export function getClientContext(request: FastifyRequest): ClientContext {
@@ -75,9 +106,10 @@ export async function touchUserDevice(
 export async function assertUserCanAct(userId: string): Promise<void> {
   const user = await db.getOne<{
     is_suspended: boolean | null;
+    is_banned?: boolean | null;
     availability: string | null;
   }>(
-    `SELECT is_suspended, availability FROM users WHERE id = $1 AND deleted_at IS NULL`,
+    `SELECT is_suspended, is_banned, availability FROM users WHERE id = $1 AND deleted_at IS NULL`,
     [userId],
   );
 
@@ -89,11 +121,11 @@ export async function assertUserCanAct(userId: string): Promise<void> {
     );
   }
 
-  if (user.is_suspended) {
+  if (user.is_suspended || user.is_banned) {
     throw new RiskBlockedError(
       "ACCOUNT_SUSPENDED",
-      "Tu cuenta está suspendida. Contacta a soporte si crees que es un error.",
-      `User ${userId} is suspended`,
+      "Tu cuenta está suspendida o bloqueada. Contacta a soporte si crees que es un error.",
+      `User ${userId} is suspended or banned`,
     );
   }
 }
@@ -351,36 +383,117 @@ export async function maybeAutoPauseMerchant(merchantId: string): Promise<void> 
   await pauseUser(merchantId, "auto_pause_excessive_cancellations", null);
 }
 
-export async function recordTradeDispute(input: {
-  tradeId: string;
-  sellerId: string;
-  openerId: string;
-  disputeId: string;
-}): Promise<void> {
+export async function recordTradeDispute(input: RecordTradeDisputeInput): Promise<DisputeRecord> {
+  const { tradeId, reportedBy, openerId, sellerId, disputeId, reason = 'Trade dispute opened', evidenceUrls = [] } = input;
+  const actor = reportedBy || openerId;
+
+  if (!reason || reason.trim().length === 0) {
+    throw new ValidationError('INVALID_REASON', 'Se requiere una razón para la disputa', 'Dispute reason is required');
+  }
+
+  const trade = await db.getOne<{ id: string; seller_id: string; buyer_id: string; status: string }>(
+    'SELECT id, seller_id, buyer_id, status FROM trades WHERE id = $1',
+    [tradeId],
+  );
+
+  if (!trade) {
+    throw new NotFoundError('TRADE_NOT_FOUND', 'El intercambio no existe', 'Trade not found');
+  }
+
+  if (actor && trade.seller_id !== actor && trade.buyer_id !== actor) {
+    throw new ForbiddenError('Solo los participantes del intercambio pueden abrir una disputa');
+  }
+
+  if (['completed', 'cancelled', 'refunded'].includes(trade.status)) {
+    throw new ConflictError(`No se puede disputar un intercambio en estado ${trade.status}`);
+  }
+
+  // Check if an open dispute already exists in trade_disputes
+  const existingDispute = await db.getOne<DisputeRecord>(
+    "SELECT id, trade_id, opener_id AS reported_by, reason, evidence_urls, status, created_at FROM trade_disputes WHERE trade_id = $1 AND status = 'open'",
+    [tradeId],
+  );
+
+  if (existingDispute) {
+    return existingDispute;
+  }
+
+  const evidenceJson = JSON.stringify(evidenceUrls);
+  const effectiveOpener = actor || trade.buyer_id;
+
+  const dispute = await db.getOne<DisputeRecord>(
+    `INSERT INTO trade_disputes (trade_id, opener_id, reason, evidence_urls, status)
+     VALUES ($1, $2, $3, $4, 'open')
+     RETURNING id, trade_id, opener_id AS reported_by, reason, evidence_urls, status, created_at`,
+    [tradeId, effectiveOpener, reason, evidenceJson],
+  );
+
+  if (!dispute) {
+    throw new Error('Failed to create dispute record in trade_disputes');
+  }
+
+  // Update trade status to 'disputed'
+  await db.execute(
+    "UPDATE trades SET status = 'disputed' WHERE id = $1",
+    [tradeId],
+  );
+
+  // Log state transition
+  if (actor) {
+    await insertTradeAuditEvent({
+      tradeId,
+      fromState: trade.status,
+      toState: 'disputed',
+      actor,
+      metadata: {
+        dispute_id: dispute.id,
+        reason,
+        evidence_urls: evidenceUrls,
+      },
+    });
+  }
+
+  // Log audit event
   await logAuditEvent({
-    action: "trade.dispute_opened",
-    actorUserId: input.openerId,
-    entityType: "trade_dispute",
-    entityId: input.disputeId,
-    details: { trade_id: input.tradeId, seller_id: input.sellerId },
+    action: 'trade.dispute_opened',
+    actorUserId: effectiveOpener,
+    entityType: 'trade_dispute',
+    entityId: disputeId || dispute.id,
+    details: { trade_id: tradeId, seller_id: sellerId || trade.seller_id, reason },
   });
 
+  const effectiveSellerId = sellerId || trade.seller_id;
   const openDisputes = await db.getOne<{ count: string }>(
     `SELECT COUNT(*)::text AS count
      FROM trade_disputes d
      JOIN trades t ON t.id = d.trade_id
      WHERE t.seller_id = $1 AND d.status = 'open'`,
-    [input.sellerId],
+    [effectiveSellerId],
   );
 
-  const count = parseInt(openDisputes?.count ?? "0", 10);
+  const count = parseInt(openDisputes?.count ?? '0', 10);
   if (count >= config.merchantDisputePauseThreshold) {
-    await pauseUser(
-      input.sellerId,
-      "auto_pause_excessive_disputes",
-      null,
-    );
+    await pauseUser(effectiveSellerId, 'auto_pause_excessive_disputes', null);
   }
+
+  return {
+    ...dispute,
+    reported_by: dispute.reported_by || (dispute as any).opener_id || effectiveOpener,
+  };
+}
+
+export async function getDisputeById(disputeId: string): Promise<DisputeRecord | null> {
+  return db.getOne<DisputeRecord>(
+    'SELECT id, trade_id, opener_id AS reported_by, reason, evidence_urls, status, resolution, resolution_note, resolved_by, resolved_at, created_at FROM trade_disputes WHERE id = $1',
+    [disputeId],
+  );
+}
+
+export async function getDisputeByTradeId(tradeId: string): Promise<DisputeRecord | null> {
+  return db.getOne<DisputeRecord>(
+    'SELECT id, trade_id, opener_id AS reported_by, reason, evidence_urls, status, resolution, resolution_note, resolved_by, resolved_at, created_at FROM trade_disputes WHERE trade_id = $1 ORDER BY created_at DESC LIMIT 1',
+    [tradeId],
+  );
 }
 
 export async function pauseUser(
