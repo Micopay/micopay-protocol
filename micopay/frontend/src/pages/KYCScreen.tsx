@@ -4,6 +4,9 @@ import { App as CapApp } from '@capacitor/app';
 
 import { startKYC, getKYCStatus, type KYCProvider, type KYCStatus, type KYCStatusResponse } from '../services/api';
 import { readJSON, writeJSON } from '../services/secureStorage';
+import { extractApiErrorPayload } from '../utils/apiError';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const PROVIDER_NAMES: Record<KYCProvider, string> = {
   etherfuse: 'Etherfuse',
@@ -71,6 +74,13 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
 
   const [statusPollingError, setStatusPollingError] = useState<string | null>(null);
 
+  // Etherfuse's onboarding call now requires an email MicoPay's Stellar-keypair
+  // auth never collects; POST /defi/kyc/start responds EMAIL_REQUIRED the first
+  // time, and we prompt for it inline instead of failing silently.
+  const [needsEmail, setNeedsEmail] = useState(false);
+  const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState<string | null>(null);
+
   const loadCachedStatus = async () => {
     const cached = await readJSON<{ status: KYCStatus; reason?: string | null }>(secureStorageKey(provider));
     if (cached?.status === 'approved') {
@@ -85,7 +95,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleOpenHostedFlow = async () => {
+  const handleOpenHostedFlow = async (emailOverride?: string) => {
     if (!token) {
       setStatusPollingError(t('kyc.sessionError'));
       return;
@@ -95,7 +105,8 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
     setLoading(true);
 
     try {
-      const { onboardingUrl } = await startKYC(token, provider);
+      const { onboardingUrl } = await startKYC(token, provider, emailOverride);
+      setNeedsEmail(false);
 
       startedAtRef.current = Date.now();
       setStartingToken(onboardingUrl);
@@ -115,9 +126,28 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
         // Fallback for web builds / when plugin is not present.
         window.open(onboardingUrl, '_blank', 'noopener,noreferrer');
       }
+    } catch (err) {
+      // Previously uncaught: a failed startKYC() (e.g. Etherfuse rejecting the
+      // request) silently opened nothing and left no trace for the user.
+      const payload = extractApiErrorPayload(err);
+      if (payload.error === 'EMAIL_REQUIRED') {
+        setNeedsEmail(true);
+      } else {
+        setStatusPollingError(payload.message);
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmitEmail = () => {
+    const trimmed = email.trim();
+    if (!EMAIL_RE.test(trimmed)) {
+      setEmailError(t('kyc.emailInvalid'));
+      return;
+    }
+    setEmailError(null);
+    void handleOpenHostedFlow(trimmed);
   };
 
   const applyStatus = async (res: KYCStatusResponse) => {
@@ -237,27 +267,64 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
         </section>
 
         <div className="mt-6 space-y-4">
-          <button
-            onClick={handleOpenHostedFlow}
-            disabled={loading}
-            className="w-full bg-primary text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
-          >
-            {loading ? (
-              <>
-                <span className="material-symbols-outlined animate-spin">progress_activity</span>
-                {t('kyc.openingProvider', { provider: providerName })}
-              </>
-            ) : (
-              <>
-                <span className="material-symbols-outlined">verified_user</span>
-                {t('kyc.verifyIdentity')}
-              </>
-            )}
-          </button>
+          {needsEmail ? (
+            <div className="bg-white border border-outline-variant/20 rounded-[24px] p-5 space-y-3">
+              <div>
+                <p className="font-bold text-on-surface text-sm">{t('kyc.emailRequiredTitle')}</p>
+                <p className="text-xs text-on-surface-variant mt-1">{t('kyc.emailRequiredDesc', { provider: providerName })}</p>
+              </div>
+              <input
+                type="email"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setEmailError(null); }}
+                placeholder={t('kyc.emailPlaceholder')}
+                className="w-full rounded-xl border border-outline-variant/30 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+              {emailError && <p className="text-xs text-error">{emailError}</p>}
+              <button
+                onClick={handleSubmitEmail}
+                disabled={loading || !email.trim()}
+                className="w-full bg-primary text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+              >
+                {loading ? (
+                  <>
+                    <span className="material-symbols-outlined animate-spin">progress_activity</span>
+                    {t('kyc.openingProvider', { provider: providerName })}
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined">verified_user</span>
+                    {t('kyc.emailContinue')}
+                  </>
+                )}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => void handleOpenHostedFlow()}
+              disabled={loading}
+              className="w-full bg-primary text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+            >
+              {loading ? (
+                <>
+                  <span className="material-symbols-outlined animate-spin">progress_activity</span>
+                  {t('kyc.openingProvider', { provider: providerName })}
+                </>
+              ) : (
+                <>
+                  <span className="material-symbols-outlined">verified_user</span>
+                  {t('kyc.verifyIdentity')}
+                </>
+              )}
+            </button>
+          )}
 
           {status === 'rejected' && (
             <button
-              onClick={handleOpenHostedFlow}
+              onClick={() => void handleOpenHostedFlow()}
               disabled={loading}
               className="w-full bg-white border border-error/30 text-error font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
             >

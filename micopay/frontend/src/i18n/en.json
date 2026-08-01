@@ -230,6 +230,8 @@
   },
   "map": {
     "title": "Convert to cash",
+    "agentsNearby": "{{count}} agents nearby",
+    "devMapNotice": "development map",
     "offer": "offer",
     "offers": "offers",
     "for": "for ${{amount}} MXN",
@@ -395,7 +397,12 @@
     "couldNotQuery": "Could not query",
     "sessionError": "Session not available. Log in again and try again.",
     "openingProvider": "Opening {{provider}}…",
-    "pollError": "Error checking verification status."
+    "pollError": "Error checking verification status.",
+    "emailRequiredTitle": "We need your email",
+    "emailRequiredDesc": "{{provider}} requires it to verify your identity. Used only once, for this.",
+    "emailPlaceholder": "you@email.com",
+    "emailInvalid": "That email doesn't look valid.",
+    "emailContinue": "Continue"
   },
   "errors": {
     "network": {
@@ -435,6 +442,25 @@
     },
     "generic": {
       "fallback": { "title": "Something went wrong", "message": "We couldn't finish this action. Try again.", "action": "If the problem continues, contact support." }
+    }
+  },
+  "merchantSettings": {
+    "location": {
+      "title": "My location",
+      "notSet": "You haven't set your location yet. Customers can't find you on the map.",
+      "useCurrent": "Use my current location",
+      "dragHint": "Drag the pin to adjust",
+      "addressLabel": "Address (optional)",
+      "addressPlaceholder": "E.g. Av. Insurgentes Sur 123, Col. Roma",
+      "save": "Save location",
+      "saving": "Saving…",
+      "change": "Change location",
+      "cancel": "Cancel",
+      "saveSuccess": "Location saved successfully.",
+      "saveError": "Couldn't save the location. Please try again.",
+      "gettingLocation": "Getting your location…",
+      "locationError": "Couldn't get your location. Check your GPS permissions.",
+      "noLocationWarning": "Without a location set you won't appear on the map. Go to Settings to set it."
     }
   }
 }

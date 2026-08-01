@@ -32,7 +32,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, '..', 'public');
 
 const app = Fastify({
-  trustProxy: true,
+  trustProxy: 1,
   logger: process.env.NODE_ENV === 'development' ? {
     level: 'info',
     transport: {

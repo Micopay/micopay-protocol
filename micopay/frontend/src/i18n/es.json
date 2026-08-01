@@ -230,6 +230,8 @@
   },
   "map": {
     "title": "Convertir a efectivo",
+    "agentsNearby": "{{count}} agentes cerca",
+    "devMapNotice": "mapa de desarrollo",
     "offer": "oferta",
     "offers": "ofertas",
     "for": "para ${{amount}} MXN",
@@ -395,7 +397,12 @@
     "couldNotQuery": "No se pudo consultar",
     "sessionError": "Sesión no disponible. Vuelve a iniciar sesión e intenta de nuevo.",
     "openingProvider": "Abriendo {{provider}}…",
-    "pollError": "Error al consultar el estado de verificación."
+    "pollError": "Error al consultar el estado de verificación.",
+    "emailRequiredTitle": "Necesitamos tu correo",
+    "emailRequiredDesc": "{{provider}} lo requiere para verificar tu identidad. Solo se usa una vez, para esto.",
+    "emailPlaceholder": "tu@correo.com",
+    "emailInvalid": "Ese correo no parece válido.",
+    "emailContinue": "Continuar"
   },
   "errors": {
     "network": {
@@ -435,6 +442,25 @@
     },
     "generic": {
       "fallback": { "title": "Algo salió mal", "message": "No pudimos terminar esta acción. Intenta de nuevo.", "action": "Si el problema sigue, contacta soporte." }
+    }
+  },
+  "merchantSettings": {
+    "location": {
+      "title": "Mi ubicación",
+      "notSet": "Aún no has fijado tu ubicación. Los clientes no pueden encontrarte en el mapa.",
+      "useCurrent": "Usar mi ubicación actual",
+      "dragHint": "Arrastra el pin para ajustar",
+      "addressLabel": "Dirección (opcional)",
+      "addressPlaceholder": "Ej. Av. Insurgentes Sur 123, Col. Roma",
+      "save": "Guardar ubicación",
+      "saving": "Guardando…",
+      "change": "Cambiar ubicación",
+      "cancel": "Cancelar",
+      "saveSuccess": "Ubicación guardada exitosamente.",
+      "saveError": "No se pudo guardar la ubicación. Intenta de nuevo.",
+      "gettingLocation": "Obteniendo tu ubicación…",
+      "locationError": "No se pudo obtener tu ubicación. Verifica los permisos de GPS.",
+      "noLocationWarning": "Sin ubicación fijada no apareces en el mapa. Ve a Ajustes para fijarla."
     }
   }
 }
