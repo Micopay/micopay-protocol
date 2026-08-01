@@ -15,6 +15,24 @@ const authRateLimit = createRateLimiter({
 // In-memory challenge store (for MVP; use Redis in production)
 const challenges = new Map<string, { challenge: string; expiresAt: number }>();
 
+/** Maximum number of pending challenges kept in memory at once. */
+const CHALLENGES_MAX_SIZE = 10_000;
+
+/**
+ * Prune expired challenges every 60 seconds so the map stays bounded in
+ * long-running processes or under an IP-rotation attack.
+ */
+const _challengePruneInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [address, entry] of challenges) {
+    if (entry.expiresAt <= now) {
+      challenges.delete(address);
+    }
+  }
+}, 60_000);
+// Allow the Node.js process to exit cleanly even if this interval is running.
+_challengePruneInterval.unref();
+
 export async function authRoutes(app: FastifyInstance) {
   /**
    * POST /auth/challenge
@@ -37,6 +55,14 @@ export async function authRoutes(app: FastifyInstance) {
 
     const challenge = `micopay-auth-${randomBytes(16).toString('hex')}-${Date.now()}`;
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+
+    // Enforce maximum store size: evict the oldest entry when the cap is reached.
+    if (challenges.size >= CHALLENGES_MAX_SIZE) {
+      const oldestKey = challenges.keys().next().value;
+      if (oldestKey !== undefined) {
+        challenges.delete(oldestKey);
+      }
+    }
 
     challenges.set(stellar_address, { challenge, expiresAt });
 
