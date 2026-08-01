@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { registerUser, UserData } from '../services/api';
 import { generateAndStoreKeypair, getPublicKey, exportSecretKey, keypairExists } from '../lib/keystore';
 import { setBackupConfirmed, writeJSON } from '../services/secureStorage';
+import { hashPhone } from '../lib/phoneHash';
 
 interface RegisterProps {
   onLoginSuccess?: (user: UserData, seller: UserData | null) => void;
@@ -11,6 +12,7 @@ interface RegisterProps {
 export default function Register({ onLoginSuccess }: RegisterProps) {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
+  const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -41,7 +43,14 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
       const sec = await exportSecretKey();
       if (!pub || !sec) throw new Error('No se pudo generar tu identidad Stellar');
 
-      const userData = await registerUser(username.trim());
+      // Hash the phone number client-side (if provided) so the raw
+      // number is NEVER sent to the backend. The hash enables the
+      // assertNotRelatedAccounts abuse check without exposing PII.
+      const phoneHash: string | undefined = phone.trim()
+        ? await hashPhone(phone.trim())
+        : undefined;
+
+      const userData = await registerUser(username.trim(), phoneHash);
 
       // Persist session immediately so the user is logged in after onboarding.
       await writeJSON('micopay_user', userData);
@@ -167,6 +176,27 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
             maxLength={30}
           />
           <p className="text-[11px] text-[#67808C] mt-1 ml-1">Solo letras, números y guiones bajos</p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-[#67808C] uppercase tracking-wider mb-1">
+            Teléfono <span className="text-[#67808C] font-normal normal-case">(opcional)</span>
+          </label>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleRegister()}
+            placeholder="+52 55 1234 5678"
+            className="w-full px-4 py-3 rounded-2xl border border-[#D7E3EA] text-[#0B1E26] text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            autoCapitalize="none"
+            autoCorrect="off"
+            maxLength={20}
+          />
+          <p className="text-[11px] text-[#67808C] mt-1 ml-1">
+            Opcional. Se hashea localmente (SHA-256) — el número nunca se envía al servidor.
+            Ayuda a prevenir el abuso de cuentas relacionadas.
+          </p>
         </div>
 
         <div className="bg-[#E8F5EE] rounded-2xl p-4 flex items-start gap-3">
