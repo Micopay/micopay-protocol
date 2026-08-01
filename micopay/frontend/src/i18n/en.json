@@ -388,13 +388,13 @@
     "sessionExpires": "Your verification session expires in ~15 minutes.",
     "continue": "Continue",
     "identityVerification": "Identity verification",
-    "oneStepWithEtherfuse": "One-step with Etherfuse",
-    "identityVerifiedWith": "Your identity will be verified with Etherfuse",
-    "oneTimeProcess": "This is a one-time process done on Etherfuse's hosted page. We do not collect or store sensitive data in this app.",
+    "oneStepWithProvider": "One-step with {{provider}}",
+    "identityVerifiedWith": "Your identity will be verified with {{provider}}",
+    "oneTimeProcess": "This is a one-time process done on {{provider}}'s hosted page. We do not collect or store sensitive data in this app.",
     "reason": "Reason",
     "couldNotQuery": "Could not query",
     "sessionError": "Session not available. Log in again and try again.",
-    "openingEtherfuse": "Opening Etherfuse…",
+    "openingProvider": "Opening {{provider}}…",
     "pollError": "Error checking verification status."
   },
   "errors": {
