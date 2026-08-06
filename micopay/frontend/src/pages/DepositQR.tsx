@@ -75,12 +75,12 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
                         <div className="flex gap-3">
                             <button
                                 onClick={onChat}
-                                className="flex-1 py-2 px-4 rounded-sm border border-primary text-primary font-bold text-xs hover:bg-primary/5 transition-colors flex items-center justify-center gap-2"
+                                className="flex-1 min-h-12 px-4 rounded-sm border-2 border-tinta bg-papel text-tinta font-bold font-bold text-xs hover:bg-primary/5 transition-colors flex items-center justify-center gap-2"
                             >
                                 <span className="material-symbols-outlined text-sm">chat</span>
                                 Abrir chat
                             </button>
-                            <button className="flex-1 py-2 px-4 rounded-sm border border-primary text-primary font-bold text-xs hover:bg-primary/5 transition-colors flex items-center justify-center gap-2">
+                            <button className="flex-1 min-h-12 px-4 rounded-sm border-2 border-tinta bg-papel text-tinta font-bold font-bold text-xs hover:bg-primary/5 transition-colors flex items-center justify-center gap-2">
                                 <span className="material-symbols-outlined text-sm">location_on</span>
                                 Compartir ubicación
                             </button>
@@ -95,9 +95,8 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
                             value={`micopay://confirm?trade_id=${activeTrade?.id ?? ''}`}
                             size={192}
                             bgColor="transparent"
-                            fgColor="#0B1E26"
+                            fgColor="#16130f"
                             level="M"
-                            style={{ borderRadius: '12px' }}
                         />
                     </div>
                     <div className="text-center space-y-2">

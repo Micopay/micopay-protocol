@@ -39,7 +39,7 @@ const ReceivePayment = ({ address, onBack }: ReceivePaymentProps) => {
 
         {address ? (
           <div className="bg-papel p-6 rounded-sm border-2 border-tinta flex flex-col items-center">
-            <QRCodeSVG value={address} size={216} bgColor="transparent" fgColor="#0B1E26" level="M" />
+            <QRCodeSVG value={address} size={216} bgColor="transparent" fgColor="#16130f" level="M" />
           </div>
         ) : (
           <div className="bg-surface-container-low p-8 rounded-sm text-center text-sm text-gris">

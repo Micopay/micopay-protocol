@@ -151,7 +151,7 @@ const DepositChat = ({
                                 <p className="text-xs text-red-600">{error.message}</p>
                                 <button
                                     onClick={retryLoad}
-                                    className="text-xs font-semibold text-red-700 hover:underline"
+                                    className="inline-flex min-h-12 items-center text-xs font-bold text-rojo underline"
                                 >
                                     {t('chatRoom.retry')}
                                 </button>
@@ -240,7 +240,7 @@ const DepositChat = ({
                         <button 
                             onClick={handleSendMessage}
                             disabled={isSending || !inputValue.trim()}
-                            className="w-10 h-10 rounded-sm bg-surface-container-low flex items-center justify-center text-primary hover:bg-primary hover:text-papel transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="min-h-12 min-w-12 rounded-sm bg-fondo border-2 border-tinta flex items-center justify-center text-primary hover:bg-primary hover:text-papel transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isSending ? (
                                 <div className="animate-spin rounded-full h-4 w-4 border-b border-current"></div>

@@ -130,7 +130,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
                         </div>
                     </div>
                 </div>
-                <button aria-label="Más opciones" className="w-10 h-10 rounded-sm bg-surface-container-low flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary">
+                <button aria-label="Más opciones" className="min-h-12 min-w-12 rounded-sm bg-fondo border-2 border-tinta flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary">
                     <span aria-hidden="true" className="material-symbols-outlined text-verde">more_vert</span>
                 </button>
             </header>
@@ -167,12 +167,12 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
                             <button
                                 onClick={onChat}
                                 aria-label="Abrir chat con el agente"
-                                className="flex-1 py-2 px-4 rounded-sm border border-primary text-primary font-bold text-sm hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                                className="flex-1 min-h-12 px-4 rounded-sm border-2 border-tinta bg-papel text-tinta font-bold font-bold text-sm hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
                             >
                                 <span aria-hidden="true" className="material-symbols-outlined text-sm">chat</span>
                                 {t('qrReveal.openChat')}
                             </button>
-                            <button aria-label="Ver ubicación del agente" className="flex-1 py-2 px-4 rounded-sm border border-primary text-primary font-bold text-sm hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary">
+                            <button aria-label="Ver ubicación del agente" className="flex-1 min-h-12 px-4 rounded-sm border-2 border-tinta bg-papel text-tinta font-bold font-bold text-sm hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary">
                                 <span aria-hidden="true" className="material-symbols-outlined text-sm">location_on</span>
                                 {t('qrReveal.location')}
                             </button>
@@ -202,14 +202,13 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
                             supportState="QR_REVEAL_SECRET"
                         />
                     ) : showQr ? (
-                        <div className="bg-surface-container-low p-8 rounded-sm inline-block mx-auto mb-6 border-2 border-tinta ">
+                        <div className="bg-papel p-8 rounded-sm inline-block mx-auto mb-6 border-2 border-tinta ">
                             <QRCodeSVG
                                 value={qrPayload}
                                 size={224}
                                 bgColor="transparent"
-                                fgColor="#1A1C1E"
+                                fgColor="#16130f"
                                 level="M"
-                                style={{ borderRadius: '12px' }}
                             />
                             <div className="mt-6">
                                 <h3 className="font-headline font-extrabold text-xl text-on-surface">{ownName ?? '—'}</h3>

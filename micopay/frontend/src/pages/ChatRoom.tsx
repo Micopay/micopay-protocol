@@ -114,7 +114,7 @@ const ChatRoom = ({
                         </div>
                     </div>
                 </div>
-                <button className="p-2 hover:bg-surface-container-low transition-colors rounded-full text-primary">
+                <button className="min-h-12 min-w-12 flex items-center justify-center transition-colors rounded-full text-primary">
                     <span className="material-symbols-outlined">more_vert</span>
                 </button>
             </header>
@@ -193,7 +193,7 @@ const ChatRoom = ({
                             <p className="text-xs text-red-600">{error.message}</p>
                             <button
                                 onClick={retryLoad}
-                                className="text-xs font-semibold text-red-700 hover:underline"
+                                className="inline-flex min-h-12 items-center text-xs font-bold text-rojo underline"
                             >
                                 {t('chatRoom.retry')}
                             </button>
@@ -300,7 +300,7 @@ const ChatRoom = ({
                                 rows={1}
                                 disabled={isSending}
                             />
-                            <button className="absolute right-2 p-2 text-primary">
+                            <button className="absolute right-2 min-h-12 min-w-12 flex items-center justify-center text-verde">
                                 <span className="material-symbols-outlined">mood</span>
                             </button>
                         </div>
