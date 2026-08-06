@@ -44,7 +44,7 @@ export function toApiError(payload: ApiErrorPayload): ApiError {
 export function extractApiErrorPayload(err: unknown): ApiErrorPayload {
   if (axios.isAxiosError(err)) {
     const data = err.response?.data as
-      | { message?: string; error?: string; request_id?: string; support_code?: string }
+      | { message?: string; error?: string; code?: string; request_id?: string; support_code?: string }
       | undefined;
     const resolved = resolveErrorMessage({
       response: {
@@ -57,7 +57,10 @@ export function extractApiErrorPayload(err: unknown): ApiErrorPayload {
       typeof data?.message === 'string' && data.message.length > 0
         ? resolved.message
         : resolved.message;
-    const error = typeof data?.error === 'string' ? data.error : undefined;
+    // Backend's global error handler sends `code` (see index.ts setErrorHandler),
+    // not `error` — `error` is kept as a fallback for any endpoint that still
+    // uses the older shape.
+    const error = typeof data?.code === 'string' ? data.code : typeof data?.error === 'string' ? data.error : undefined;
     const request_id = typeof data?.request_id === 'string' ? data.request_id : undefined;
     const support_code = typeof data?.support_code === 'string' ? data.support_code : undefined;
 

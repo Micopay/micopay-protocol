@@ -13,7 +13,6 @@ export interface TradeConfirmationPageProps {
   amountMxn: number;
   flow: 'cashout' | 'deposit';
   nearbyCount: number;
-  merchantOnline?: boolean;
   onBack: () => void;
   onConfirm: () => Promise<boolean>;
   loading?: boolean;
@@ -29,7 +28,6 @@ export default function TradeConfirmationPage({
   amountMxn,
   flow,
   nearbyCount,
-  merchantOnline = true,
   onBack,
   onConfirm,
   loading = false,
@@ -53,12 +51,12 @@ export default function TradeConfirmationPage({
         <button
           type="button"
           onClick={onBack}
-          className="min-h-12 min-w-12 p-2 rounded-sm hover:bg-surface-container-low text-primary transition-colors"
+          className="min-h-12 min-w-12 p-2 rounded-sm hover:bg-surface-container-low text-verde transition-colors"
           aria-label="Volver al mapa"
         >
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
-        <h1 className="font-headline font-bold text-lg text-primary truncate">{title}</h1>
+        <h1 className="font-headline font-bold text-lg text-verde truncate">{title}</h1>
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-6 space-y-5">
@@ -88,7 +86,7 @@ export default function TradeConfirmationPage({
 
             <div className="flex justify-between gap-4 border-t border-linea pt-3">
               <dt className="text-on-surface-variant">{t('confirm.youReceive')}</dt>
-              <dd className="font-bold text-lg text-primary">
+              <dd className="font-bold text-lg text-verde">
                 ${receiveMxn.toFixed(2)} MXN
               </dd>
             </div>
@@ -118,14 +116,6 @@ export default function TradeConfirmationPage({
               </dd>
             </div>
 
-            <div className="flex justify-between gap-4 border-t border-linea pt-3">
-              <dt className="text-on-surface-variant">{t('confirm.agentStatus')}</dt>
-              <dd className={`flex items-center gap-1.5 font-medium ${merchantOnline ? 'text-green-700' : 'text-red-600'}`}>
-                <span className={`w-2 h-2 rounded-full inline-block ${merchantOnline ? 'bg-green-500' : 'bg-red-500'}`} />
-                {merchantOnline ? t('confirm.online') : t('confirm.offline')}
-              </dd>
-            </div>
-
             <div className="flex justify-between gap-4">
               <dt className="text-on-surface-variant">{t('confirm.nearbyProviders')}</dt>
               <dd className="font-medium">
@@ -151,7 +141,7 @@ export default function TradeConfirmationPage({
           type="button"
           disabled={loading}
           onClick={async () => { await onConfirm(); }}
-          className="w-full rounded-sm bg-primary py-3.5 text-sm font-semibold text-on-primary hover:opacity-95 disabled:opacity-50 transition-opacity"
+          className="w-full rounded-sm bg-verde py-3.5 text-sm font-semibold text-on-primary hover:opacity-95 disabled:opacity-50 transition-opacity"
         >
           {loading ? t('confirm.creating') : t('confirm.confirmBtn')}
         </button>

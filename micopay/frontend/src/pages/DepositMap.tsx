@@ -1,4 +1,4 @@
-import MapSim from '../components/MapSim';
+import MapReal from '../components/MapReal';
 import { useMerchantsAvailable } from '../hooks/useMerchantsAvailable';
 import {
   effectiveFeePercent,
@@ -148,7 +148,7 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
         </p>
         <button
           onClick={onBack}
-          className="mt-2 px-6 py-3 border-2 border-primary text-primary font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
+          className="mt-2 px-6 py-3 border-2 border-primary text-verde font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
         >
           Volver
         </button>
@@ -180,7 +180,7 @@ function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => vo
         <div className="flex gap-3 mt-2">
           <button
             onClick={onRetry}
-            className="px-6 py-3 bg-primary text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
+            className="px-6 py-3 bg-verde text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
           >
             Reintentar
           </button>
@@ -210,7 +210,7 @@ function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) 
       </p>
       <button
         onClick={onBack}
-        className="mt-2 h-[48px] px-8 border-2 border-primary text-primary font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all duration-200 flex items-center gap-2"
+        className="mt-2 h-[48px] px-8 border-2 border-primary text-verde font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all duration-200 flex items-center gap-2"
       >
         <span className="material-symbols-outlined text-sm">tune</span>
         Cambiar monto
@@ -253,7 +253,7 @@ function MerchantOfferCard({
         <div className="bg-papel rounded-sm border-2 border-tinta shadow-solida p-5 flex flex-col gap-5">
           <div className="flex justify-between items-start gap-3">
             <div className="flex gap-4 min-w-0">
-              <div className="w-12 h-12 bg-primary-fixed rounded-sm flex items-center justify-center text-primary flex-shrink-0">
+              <div className="w-12 h-12 bg-verde-fixed rounded-sm flex items-center justify-center text-verde flex-shrink-0">
                 <span
                   className="material-symbols-outlined"
                   style={{ fontVariationSettings: '"FILL" 1' }}
@@ -293,7 +293,7 @@ function MerchantOfferCard({
             </div>
             <div className="text-right flex-shrink-0">
               <span className="block text-xs text-on-surface-variant font-label uppercase">Comisión</span>
-              <span className="num text-primary font-bold whitespace-nowrap">${commissionMxn} MXN</span>
+              <span className="num text-verde font-bold whitespace-nowrap">${commissionMxn} MXN</span>
             </div>
           </div>
 
@@ -340,7 +340,7 @@ function MerchantOfferCard({
               <span>{merchant.completion_rate ? `${Math.round(merchant.completion_rate)}%` : 'Sin historial'}</span>
               <span>·</span>
               <span>{merchant.trades_completed ?? 0} ops</span>
-              {merchant.tier && <span className="px-2 py-0.5 text-[10px] rounded-sm bg-surface-container-high text-primary">{merchant.tier}</span>}
+              {merchant.tier && <span className="px-2 py-0.5 text-[10px] rounded-sm bg-surface-container-high text-verde">{merchant.tier}</span>}
               <span className={`px-2 py-0.5 text-[10px] rounded-sm ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-tinta text-papel' : 'bg-papel text-tinta'}`}>
                 {((merchant.seller_type === 'business') || merchant.is_business) ? 'Negocio' : 'Individuo'}
               </span>
@@ -366,7 +366,7 @@ function MerchantOfferCard({
         <button
           onClick={() => onSelectOffer(merchant.seller_id)}
           disabled={loading}
-          className="text-primary font-bold text-sm px-4 py-2 hover:bg-primary/5 rounded-sm transition-colors disabled:opacity-50"
+          className="text-verde font-bold text-sm px-4 py-2 hover:bg-primary/5 rounded-sm transition-colors disabled:opacity-50"
         >
           Ver detalles
         </button>
@@ -457,7 +457,11 @@ const DepositMap = ({
 
         {/* Map View Section */}
         <section>
-          <MapSim type="deposit" merchants={merchants} />
+          <MapReal
+            type="deposit"
+            merchants={merchants}
+            userPosition={state.status === 'success' ? state.userPosition : null}
+          />
         </section>
 
         {/* Offers List */}

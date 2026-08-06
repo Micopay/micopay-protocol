@@ -5,6 +5,7 @@
  */
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { updateMerchantAvailabilityWithOfflineSupport } from '../services/api';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
 
@@ -13,6 +14,13 @@ interface MerchantAvailabilityToggleProps {
   initialAvailable: boolean;
   onAvailabilityChange?: (available: boolean) => void;
   disabled?: boolean;
+  /**
+   * Whether the merchant already has a location set (from `getMerchantConfig().latitude`).
+   * Optional and soft: when omitted, the no-location warning is simply skipped — this
+   * component does not fetch merchant config itself. Does NOT block activation either way
+   * (decision: minimal friction, see docs/PLAN_MAPA_REAL_2026-07.md WP2).
+   */
+  hasLocation?: boolean;
 }
 
 export default function MerchantAvailabilityToggle({
@@ -20,7 +28,9 @@ export default function MerchantAvailabilityToggle({
   initialAvailable,
   onAvailabilityChange,
   disabled = false,
+  hasLocation,
 }: MerchantAvailabilityToggleProps) {
+  const { t } = useTranslation();
   const [available, setAvailable] = useState(initialAvailable);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +92,12 @@ export default function MerchantAvailabilityToggle({
       {error && (
         <p className="text-sm text-red-600">
           ⚠️ {error}
+        </p>
+      )}
+
+      {available && hasLocation === false && (
+        <p className="text-xs text-amber-600">
+          ⚠️ {t('merchantSettings.location.noLocationWarning')}
         </p>
       )}
 

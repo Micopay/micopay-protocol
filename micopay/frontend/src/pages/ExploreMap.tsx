@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import MapSim from '../components/MapSim';
+import MapReal from '../components/MapReal';
 import { useMerchantsAvailable } from '../hooks/useMerchantsAvailable';
 import {
   effectiveFeePercent,
@@ -41,7 +41,6 @@ interface Offer {
   tradesCompleted?: number;
   tier?: string;
   isBusiness?: boolean;
-  online?: boolean;
 }
 
 function merchantToOffer(m: AvailableMerchant, index: number): Offer {
@@ -59,7 +58,6 @@ function merchantToOffer(m: AvailableMerchant, index: number): Offer {
     tradesCompleted: m.trades_completed ?? 0,
     tier: m.tier ?? undefined,
     isBusiness: (m.seller_type === 'business') || (m.is_business === true) || false,
-    online: true,
   };
 }
 
@@ -69,7 +67,6 @@ export interface OfferConfirmData {
   receiveMxn: number;
   commissionPct: number;
   nearbyCount: number;
-  online?: boolean;
 }
 
 interface ExploreMapProps {
@@ -181,7 +178,7 @@ const ExploreMap = ({
         >
           <span className="material-symbols-outlined text-verde">arrow_back</span>
         </button>
-        <h1 className="ml-4 font-headline font-bold text-xl text-primary tracking-tight">
+        <h1 className="ml-4 font-headline font-bold text-xl text-verde tracking-tight">
           {t('map.title')}
         </h1>
       </header>
@@ -200,10 +197,11 @@ const ExploreMap = ({
 
         {/* Map Section */}
         <section className="mb-10">
-          <MapSim
+          <MapReal
             merchants={merchants}
             selectedMerchantId={selectedMerchantId}
             onSelectMerchant={setSelectedMerchantId}
+            userPosition={state.status === 'success' ? state.userPosition : null}
           />
         </section>
 
@@ -217,7 +215,7 @@ const ExploreMap = ({
                 {offers.length} {offers.length === 1 ? t('map.offer') : t('map.offers')} {t('map.for', { amount })}
               </h2>
               <div className="flex items-center gap-1 mt-1">
-                <span className="material-symbols-outlined text-primary text-sm">location_on</span>
+                <span className="material-symbols-outlined text-verde text-sm">location_on</span>
                 <p className="text-sm text-gris font-medium">{t('map.nearYou')}</p>
               </div>
             </div>
@@ -235,24 +233,24 @@ const ExploreMap = ({
                       className={`relative bg-surface p-6 rounded-sm border overflow-hidden transition-all ${isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-primary-container/10'}`}
                     >
                       <div className="flex gap-2 mb-4">
-                        <span className="px-3 py-1 bg-primary text-papel text-[11px] font-bold rounded-full uppercase tracking-wider">
+                        <span className="px-3 py-1 bg-verde text-papel text-[11px] font-bold rounded-full uppercase tracking-wider">
                           {t('map.bestOffer')}
                         </span>
                         {isSelected && (
-                          <span className="px-3 py-1 bg-primary/10 text-primary text-[11px] font-bold rounded-full uppercase tracking-wider">
+                          <span className="px-3 py-1 bg-primary/10 text-verde text-[11px] font-bold rounded-full uppercase tracking-wider">
                             {t('map.selectedOnMap')}
                           </span>
                         )}
                         {offer.badge && (
-                          <span className="px-3 py-1 bg-surface-container-high text-primary text-[11px] font-bold rounded-full uppercase tracking-wider">
+                          <span className="px-3 py-1 bg-surface-container-high text-verde text-[11px] font-bold rounded-full uppercase tracking-wider">
                             {offer.badge}
                           </span>
                         )}
                       </div>
                       <div className="flex items-start justify-between mb-6">
                         <div className="flex gap-4 min-w-0">
-                          <div className="w-14 h-14 bg-primary-container/10 rounded-sm flex items-center justify-center flex-shrink-0">
-                            <span className="material-symbols-outlined text-primary text-3xl">{offer.icon}</span>
+                          <div className="w-14 h-14 bg-verde-container/10 rounded-sm flex items-center justify-center flex-shrink-0">
+                            <span className="material-symbols-outlined text-verde text-3xl">{offer.icon}</span>
                           </div>
                           <div className="min-w-0">
                             <h3 className="font-headline font-bold text-lg text-on-surface truncate">{offer.name}</h3>
@@ -304,7 +302,6 @@ const ExploreMap = ({
                               receiveMxn: offer.receiveMxn,
                               commissionPct: offer.commissionPct,
                               nearbyCount: offers.length,
-                              online: (offer as any).online ?? true,
                             });
                           } else {
                             onSelectOffer(offer.id);
@@ -340,7 +337,7 @@ const ExploreMap = ({
                         <div className="min-w-0">
                           <h3 className="font-headline font-bold text-on-surface truncate">{offer.name}</h3>
                             {offer.badge && (
-                            <span className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-sm">
+                            <span className="text-[11px] font-bold text-verde bg-primary/10 px-2 py-0.5 rounded-sm">
                               {offer.badge}
                             </span>
                           )}
@@ -348,13 +345,13 @@ const ExploreMap = ({
                               <span>{offer.completionRate ? `${Math.round(offer.completionRate)}%` : t('map.noHistory')}</span>
                               <span>·</span>
                               <span>{offer.tradesCompleted ?? 0} {t('map.ops')}</span>
-                              {offer.tier && <span className="px-2 py-0.5 text-[10px] rounded-sm bg-surface-container-high text-primary">{offer.tier}</span>}
+                              {offer.tier && <span className="px-2 py-0.5 text-[10px] rounded-sm bg-surface-container-high text-verde">{offer.tier}</span>}
                               <span className={`px-2 py-0.5 text-[10px] rounded-sm ${offer.isBusiness ? 'bg-tinta text-papel' : 'bg-papel text-tinta'}`}>
                                 {offer.isBusiness ? t('map.business') : t('map.individual')}
                               </span>
                             </div>
                           {isSelected && (
-                            <span className="inline-block mt-1 text-[11px] font-bold text-primary bg-papel px-2 py-0.5 rounded-sm">
+                            <span className="inline-block mt-1 text-[11px] font-bold text-verde bg-papel px-2 py-0.5 rounded-sm">
                               {t('map.selectedOnMap')}
                             </span>
                           )}
@@ -383,15 +380,13 @@ const ExploreMap = ({
                             receiveMxn: offer.receiveMxn,
                             commissionPct: offer.commissionPct,
                             nearbyCount: offers.length,
-                            online: (offer as any).online ?? true,
-
                           });
                         } else {
                           onSelectOffer(offer.id);
                         }
                       }}
                       disabled={loading}
-                      className="w-full py-3 border border-primary text-primary font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-70"
+                      className="w-full py-3 border border-primary text-verde font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-70"
                     >
                       {t('map.viewOffer')}
                     </button>
@@ -426,7 +421,7 @@ function StateHeader({ onBack }: { onBack: () => void }) {
       >
         <span className="material-symbols-outlined text-verde">arrow_back</span>
       </button>
-      <h1 className="ml-4 font-headline font-bold text-xl text-primary tracking-tight">
+      <h1 className="ml-4 font-headline font-bold text-xl text-verde tracking-tight">
         {t('map.title')}
       </h1>
     </header>
@@ -450,8 +445,8 @@ function StateShell({
     <div className="bg-surface-container-lowest text-on-surface font-body min-h-screen pb-24">
       <StateHeader onBack={onBack} />
       <main className="pt-[calc(6rem+env(safe-area-inset-top))] px-6 max-w-2xl mx-auto flex flex-col items-center text-center">
-        <div className="w-16 h-16 bg-primary-container/10 rounded-sm flex items-center justify-center mt-16 mb-6">
-          <span className={`material-symbols-outlined text-primary text-4xl ${spin ? 'animate-spin' : ''}`}>
+        <div className="w-16 h-16 bg-verde-container/10 rounded-sm flex items-center justify-center mt-16 mb-6">
+          <span className={`material-symbols-outlined text-verde text-4xl ${spin ? 'animate-spin' : ''}`}>
             {icon}
           </span>
         </div>
@@ -482,7 +477,7 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
       </p>
       <button
         onClick={onBack}
-        className="px-6 py-3 border border-primary text-primary font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
+        className="px-6 py-3 border border-primary text-verde font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
       >
         {t('map.back')}
       </button>
@@ -499,7 +494,7 @@ function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => vo
       </p>
       <button
         onClick={onRetry}
-        className="px-6 py-3 bg-primary text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
+        className="px-6 py-3 bg-verde text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
       >
         {t('map.retry')}
       </button>
@@ -516,7 +511,7 @@ function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) 
       </p>
       <button
         onClick={onBack}
-        className="px-6 py-3 border border-primary text-primary font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
+        className="px-6 py-3 border border-primary text-verde font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
       >
         {t('map.changeAmount')}
       </button>

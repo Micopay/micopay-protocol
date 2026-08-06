@@ -293,7 +293,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
           <p className="text-[11px] text-on-surface-variant">{t('cetes.subtitle')}</p>
         </div>
         <div className="ml-auto bg-primary/10 border border-primary/20 rounded-full px-3 py-1">
-          <span className="num text-primary font-bold text-sm">{t('cetes.annual', { rate: rate?.apy ?? 5.6 })}</span>
+          <span className="num text-verde font-bold text-sm">{t('cetes.annual', { rate: rate?.apy ?? 5.6 })}</span>
         </div>
       </header>
 
@@ -316,7 +316,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-papel rounded-sm p-3 text-center">
-              <p className="num text-2xl font-extrabold text-primary">{rate?.apy ?? 5.6}%</p>
+              <p className="num text-2xl font-extrabold text-verde">{rate?.apy ?? 5.6}%</p>
               <p className="text-xs text-on-surface-variant mt-1">{t('cetes.annualYield')}</p>
             </div>
             <div className="bg-papel rounded-sm p-3 text-center">
@@ -337,7 +337,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                 key={tabOption}
                 onClick={() => { setTab(tabOption); setTxResult(null); setError(null); setQuote(null); setRampOrderId(null); setOrderState(''); setDepositOrder(null); setDepositStep('quote'); setStellarTxHash(null); }}
                 className={`flex-1 min-h-12 py-2.5 rounded-sm font-bold text-sm transition-all ${
-                  tab === tabOption ? 'bg-papel text-primary ' : 'text-on-surface-variant'
+                  tab === tabOption ? 'bg-papel text-verde ' : 'text-on-surface-variant'
                 }`}
               >
                 {tabOption === 'buy' ? t('cetes.buy') : t('cetes.sell')}
@@ -350,7 +350,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
               <button
                 onClick={() => { setPayMethod('wallet'); setQuote(null); setTxResult(null); setError(null); setAmount(''); setRampOrderId(null); setOrderState(''); setDepositOrder(null); setDepositStep('quote'); setStellarTxHash(null); }}
                 className={`flex-1 py-1.5 rounded-sm font-bold text-xs transition-all ${
-                  payMethod === 'wallet' ? 'bg-papel text-primary border-2 border-tinta' : 'text-on-surface-variant'
+                  payMethod === 'wallet' ? 'bg-papel text-verde border-2 border-tinta' : 'text-on-surface-variant'
                 }`}
               >
                 {t('cetes.payWithWallet')}
@@ -358,7 +358,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
               <button
                 onClick={() => { setPayMethod('spei'); setQuote(null); setTxResult(null); setError(null); setAmount(''); setRampOrderId(null); setOrderState(''); setDepositOrder(null); setDepositStep('quote'); setStellarTxHash(null); }}
                 className={`flex-1 py-1.5 rounded-sm font-bold text-xs transition-all ${
-                  payMethod === 'spei' ? 'bg-papel text-primary border-2 border-tinta' : 'text-on-surface-variant'
+                  payMethod === 'spei' ? 'bg-papel text-verde border-2 border-tinta' : 'text-on-surface-variant'
                 }`}
               >
                 {t('cetes.payWithSpei')}
@@ -372,7 +372,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                 <button
                   onClick={() => { setReceiveMethod('wallet'); setQuote(null); setTxResult(null); setError(null); }}
                   className={`flex-1 py-1.5 rounded-sm font-bold text-xs transition-all ${
-                    receiveMethod === 'wallet' ? 'bg-papel text-primary border-2 border-tinta' : 'text-on-surface-variant'
+                    receiveMethod === 'wallet' ? 'bg-papel text-verde border-2 border-tinta' : 'text-on-surface-variant'
                   }`}
                 >
                   {t('cetes.toWallet')}
@@ -382,7 +382,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                 <button
                   onClick={() => { setReceiveMethod('spei'); setQuote(null); setTxResult(null); setError(null); setAmount(''); }}
                   className={`flex-1 py-1.5 rounded-sm font-bold text-xs transition-all ${
-                    receiveMethod === 'spei' ? 'bg-papel text-primary border-2 border-tinta' : 'text-on-surface-variant'
+                    receiveMethod === 'spei' ? 'bg-papel text-verde border-2 border-tinta' : 'text-on-surface-variant'
                   }`}
                 >
                   {t('cetes.toSpei')}
@@ -400,7 +400,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                 <>
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 bg-primary/10 rounded-sm flex items-center justify-center flex-shrink-0">
-                      <span className="material-symbols-outlined text-primary text-base">account_balance</span>
+                      <span className="material-symbols-outlined text-verde text-base">account_balance</span>
                     </div>
                     <div>
                       <p className="font-bold text-on-surface text-sm">{t('cetes.depositTitle')}</p>
@@ -456,7 +456,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                     <button
                       onClick={handleGetDepositQuote}
                       disabled={txLoading || !amount || parseFloat(amount) <= 0}
-                      className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
+                      className="w-full bg-verde text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
                     >
                       {txLoading ? (
                         <><span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>{t('cetes.quoting')}</>
@@ -468,7 +468,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                     <button
                       onClick={handleCreateDepositOrder}
                       disabled={txLoading}
-                      className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
+                      className="w-full bg-verde text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
                     >
                       {txLoading ? (
                         <><span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>{t('cetes.creatingOrder')}</>
@@ -503,7 +503,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                       {depositOrder.depositClabe && (
                         <button
                           onClick={() => handleCopyClabe(depositOrder.depositClabe!)}
-                          className="flex-shrink-0 flex items-center gap-1 bg-primary/10 text-primary font-bold text-xs min-h-12 px-3 rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
+                          className="flex-shrink-0 flex items-center gap-1 bg-primary/10 text-verde font-bold text-xs min-h-12 px-3 rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
                         >
                           <span className="material-symbols-outlined text-sm">{copied ? 'check' : 'content_copy'}</span>
                           {copied ? t('cetes.copiedLabel') : t('cetes.copy')}
@@ -544,7 +544,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
 
                   <button
                     onClick={handleConfirmTransferred}
-                    className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 transition-all active:translate-x-[2px] active:translate-y-[2px]"
+                    className="w-full bg-verde text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 transition-all active:translate-x-[2px] active:translate-y-[2px]"
                   >
                     {t('cetes.alreadyTransferred')}
                     <span className="material-symbols-outlined text-lg">schedule</span>
@@ -569,7 +569,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                             href={buildTxUrl(stellarTxHash)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-xs text-primary font-bold"
+                            className="flex items-center gap-1 text-xs text-verde font-bold"
                           >
                             <span className="font-mono">{shortHash(stellarTxHash)}</span>
                             <span className="material-symbols-outlined text-sm">open_in_new</span>
@@ -578,7 +578,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                       </div>
                       <button
                         onClick={handleResetDeposit}
-                        className="w-full border border-primary text-primary font-bold py-3 rounded-sm transition-all active:translate-x-[2px] active:translate-y-[2px]"
+                        className="w-full border border-primary text-verde font-bold py-3 rounded-sm transition-all active:translate-x-[2px] active:translate-y-[2px]"
                       >
                         {t('cetes.makeAnotherDeposit')}
                       </button>
@@ -646,7 +646,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
               {quote && (
                 <div className="bg-primary/5 rounded-sm px-4 py-3 flex flex-col items-center">
                   <span className="text-sm text-on-surface-variant">{t('cetes.willReceiveSpei')}</span>
-                  <span className="num text-2xl font-extrabold text-primary">${parseFloat(quote.destinationAmount).toFixed(2)} MXN</span>
+                  <span className="num text-2xl font-extrabold text-verde">${parseFloat(quote.destinationAmount).toFixed(2)} MXN</span>
                   {!rampOrderId && (
                     <span className="text-xs text-error mt-2 font-bold">
                       {t('cetes.quoteExpires')} {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
@@ -665,7 +665,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                   {orderState === 'refunded' && <p className="font-bold text-error">{t('cetes.rejectedRefunded')}</p>}
 
                   {txResult && (
-                    <a href={txResult.explorerUrl} target="_blank" rel="noopener noreferrer" className="flex justify-center items-center gap-1 text-xs text-primary font-bold">
+                    <a href={txResult.explorerUrl} target="_blank" rel="noopener noreferrer" className="flex justify-center items-center gap-1 text-xs text-verde font-bold">
                       {t('cetes.viewOnchain')} <span className="material-symbols-outlined text-sm">open_in_new</span>
                     </a>
                   )}
@@ -682,7 +682,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                 <button
                   onClick={handleGetQuote}
                   disabled={txLoading || !amount || parseFloat(amount) <= 0}
-                  className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
+                  className="w-full bg-verde text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
                 >
                   {txLoading ? t('cetes.quoting') : t('cetes.quoteWithdrawal')}
                 </button>
@@ -690,7 +690,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                 <button
                   onClick={handleConfirmSPEI}
                   disabled={txLoading}
-                  className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
+                  className="w-full bg-verde text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
                 >
                   {txLoading ? (
                     <>
@@ -714,7 +714,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                       onClick={() => setSourceAsset(a)}
                       className={`flex-1 min-h-12 py-2 rounded-sm font-bold text-sm border transition-all ${
                         sourceAsset === a
-                          ? 'bg-primary text-papel border-primary'
+                          ? 'bg-verde text-papel border-primary'
                           : 'bg-papel text-on-surface-variant border-linea'
                       }`}
                     >
@@ -775,7 +775,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                     href={txResult.explorerUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-xs text-primary font-bold"
+                    className="flex items-center gap-1 text-xs text-verde font-bold"
                   >
                     {t('cetes.viewOnStellarExplorer')}
                     <span className="material-symbols-outlined text-sm">open_in_new</span>
@@ -786,7 +786,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
               <button
                 onClick={handleTx}
                 disabled={txLoading || !amount || parseFloat(amount) <= 0}
-                className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
+                className="w-full bg-verde text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
               >
                 {txLoading ? (
                   <>
@@ -809,19 +809,33 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
           )}
         </div>
 
-        <button
-          onClick={onBanco}
-          className="w-full bg-papel border-2 border-tinta rounded-sm p-5 flex items-center gap-4 active:translate-x-[2px] active:translate-y-[2px] transition-all text-left"
-        >
-          <div className="w-10 h-10 bg-primary/10 rounded-sm flex items-center justify-center flex-shrink-0">
-            <span className="material-symbols-outlined text-verde">account_balance_wallet</span>
-          </div>
-          <div className="flex-1">
-            <p className="font-bold text-on-surface text-sm">{t('cetes.noCrypto')}</p>
-            <p className="text-xs text-on-surface-variant">{t('cetes.connectBank')}</p>
-          </div>
-          <span className="material-symbols-outlined text-on-surface-variant">chevron_right</span>
-        </button>
+        {/* "¿Sin cripto?" — entry point to the real Etherfuse SPEI ramp built into
+            this screen (payMethod === 'spei' above), not the P2P cash-agent
+            network. If KYC is already approved, reveal that tab in place; if
+            not, KYC is the actual prerequisite for connecting a bank via SPEI,
+            so send the user there instead of the unrelated /deposit flow. */}
+        {!(tab === 'buy' && payMethod === 'spei') && (
+          <button
+            onClick={() => {
+              if (canDepositSpei) {
+                setTab('buy');
+                setPayMethod('spei');
+              } else {
+                onBanco?.();
+              }
+            }}
+            className="w-full bg-papel border-2 border-tinta rounded-sm p-5 flex items-center gap-4 active:translate-x-[2px] active:translate-y-[2px] transition-all text-left"
+          >
+            <div className="w-10 h-10 bg-primary/10 rounded-sm flex items-center justify-center flex-shrink-0">
+              <span className="material-symbols-outlined text-verde">account_balance_wallet</span>
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-on-surface text-sm">{t('cetes.noCrypto')}</p>
+              <p className="text-xs text-on-surface-variant">{t('cetes.connectBank')}</p>
+            </div>
+            <span className="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+          </button>
+        )}
 
         <p className="text-center text-xs text-gris pb-4">
           {t('cetes.footer', { network: rate?.network ?? 'TESTNET' })}
