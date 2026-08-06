@@ -96,7 +96,7 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
                         <span className="text-on-surface-variant font-medium text-sm">
                             {type === 'cashout' ? t('success.mxnSent') : t('success.cashDelivered')}
                         </span>
-                        <span className="font-bold text-on-surface">${amount}</span>
+                        <span className="num font-bold text-on-surface">${amount}</span>
                     </div>
                     <div className="flex justify-between items-center">
                         <span className="text-on-surface-variant font-medium text-sm">

@@ -94,7 +94,7 @@ function LoadingSkeleton({ onBack, amount }: { onBack: () => void; amount: numbe
             Solicitud de depósito
           </span>
           <div className="flex items-baseline gap-2">
-            <h2 className="text-4xl font-headline font-extrabold text-on-surface tracking-tight">${amount}</h2>
+            <h2 className="num text-4xl font-headline font-extrabold text-on-surface tracking-tight">${amount}</h2>
             <span className="text-xl font-headline font-bold text-on-surface-variant">MXN</span>
           </div>
           <p className="text-on-surface-variant text-sm font-body">Localizando agentes cerca de ti...</p>
@@ -293,19 +293,19 @@ function MerchantOfferCard({
             </div>
             <div className="text-right flex-shrink-0">
               <span className="block text-xs text-on-surface-variant font-label uppercase">Comisión</span>
-              <span className="text-primary font-bold whitespace-nowrap">${commissionMxn} MXN</span>
+              <span className="num text-primary font-bold whitespace-nowrap">${commissionMxn} MXN</span>
             </div>
           </div>
 
           <div className="bg-surface-container-low rounded-sm p-4 flex justify-between items-center">
             <div className="space-y-1">
               <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-tight">Entregas en efectivo</p>
-              <p className="font-bold text-on-surface">${amount} MXN</p>
+              <p className="num font-bold text-on-surface">${amount} MXN</p>
             </div>
             <span className="material-symbols-outlined text-gris">trending_flat</span>
             <div className="space-y-1 text-right">
               <p className="text-[10px] text-accent uppercase font-bold tracking-tight">Recibes en wallet</p>
-              <p className="font-bold text-on-surface text-lg">${merchant.payout_mxn.toFixed(2)} MXNe</p>
+              <p className="num font-bold text-on-surface text-lg">${merchant.payout_mxn.toFixed(2)} MXNe</p>
             </div>
           </div>
 
@@ -353,7 +353,7 @@ function MerchantOfferCard({
         </div>
         <div className="text-right flex-shrink-0">
           <span className="block text-xs text-on-surface-variant font-label uppercase">Recibes</span>
-          <span className="text-on-surface font-bold whitespace-nowrap">${merchant.payout_mxn.toFixed(2)} MXNe</span>
+          <span className="num text-on-surface font-bold whitespace-nowrap">${merchant.payout_mxn.toFixed(2)} MXNe</span>
         </div>
       </div>
       <EffectiveFeeNote

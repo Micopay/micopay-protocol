@@ -490,11 +490,11 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
                     {t(`home.status.${trade.status}`, { defaultValue: trade.status })}
                   </span>
                 </div>
-                <p className="font-bold text-lg">${trade.amount_mxn} MXN</p>
+                <p className="num font-bold text-lg">${trade.amount_mxn} MXN</p>
                 {trade.status === 'locked' && (
                   <div className="mt-2 flex items-center gap-1.5 text-sm text-emerald-600">
                     <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: '"FILL" 1' }}>lock</span>
-                    <span className="font-medium">{t('inbox.locked', { amount: trade.amount_mxn.toLocaleString('es-MX') })}</span>
+                    <span className="num font-medium">{t('inbox.locked', { amount: trade.amount_mxn.toLocaleString('es-MX') })}</span>
                   </div>
                 )}
                 {trade.status === 'pending' && (

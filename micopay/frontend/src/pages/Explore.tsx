@@ -46,7 +46,7 @@ const Explore = ({ onBack, onNavigate, showDefi = true, showSpeiRamp = false }: 
                                 </div>
                                 <div>
                                     <h2 className="font-headline font-bold text-xl text-on-surface">{t('exploreScreen.investCetes')}</h2>
-                                    <p className="text-[10px] font-bold text-primary uppercase tracking-widest">{t('exploreScreen.cetesRateBadge', { rate: 5.6 })}</p>
+                                    <p className="num text-[10px] font-bold text-primary uppercase tracking-widest">{t('exploreScreen.cetesRateBadge', { rate: 5.6 })}</p>
                                 </div>
                             </div>
                             <p className="text-sm text-on-surface-variant leading-relaxed mb-6">

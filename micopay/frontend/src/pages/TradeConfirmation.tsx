@@ -94,8 +94,8 @@ export default function TradeConfirmationPage({
             </div>
 
             <div className="flex justify-between gap-4">
-              <dt className="text-on-surface-variant">{t('confirm.totalFee')}</dt>
-              <dd className="font-semibold tabular-nums">${totalFee.toFixed(2)} MXN</dd>
+              <dt className="num text-on-surface-variant">{t('confirm.totalFee')}</dt>
+              <dd className="num font-semibold tabular-nums">${totalFee.toFixed(2)} MXN</dd>
             </div>
 
             <div className="text-xs text-on-surface-variant pl-2 border-l-2 border-linea ml-1 space-y-1">
@@ -110,7 +110,7 @@ export default function TradeConfirmationPage({
             </div>
 
             <div className="flex justify-between gap-4 border-t border-linea pt-3">
-              <dt className="text-on-surface-variant">{t('confirm.totalEffectiveCost')}</dt>
+              <dt className="num text-on-surface-variant">{t('confirm.totalEffectiveCost')}</dt>
               <dd
                 className={`font-bold tabular-nums ${exceedsThreshold ? 'text-error' : 'text-on-surface'}`}
               >

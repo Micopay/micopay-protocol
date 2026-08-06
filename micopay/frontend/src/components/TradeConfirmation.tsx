@@ -77,11 +77,11 @@ export default function TradeConfirmation({
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between gap-4">
               <dt className="text-on-surface-variant">Monto de la operación (MXN)</dt>
-              <dd className="font-semibold tabular-nums">${amountMxn.toLocaleString('es-MX')} MXN</dd>
+              <dd className="num font-semibold tabular-nums">${amountMxn.toLocaleString('es-MX')} MXN</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-on-surface-variant">Comisión plataforma ({PLATFORM_FEE_PERCENT}%)</dt>
-              <dd className="font-semibold tabular-nums text-primary">${platformFeeMxn.toLocaleString('es-MX')} MXN</dd>
+              <dd className="num font-semibold tabular-nums text-primary">${platformFeeMxn.toLocaleString('es-MX')} MXN</dd>
             </div>
             <div className="flex justify-between gap-4 border-t border-linea pt-3">
               <dt className="text-on-surface-variant">Comerciante / agente (ejemplo)</dt>
@@ -89,7 +89,7 @@ export default function TradeConfirmation({
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-on-surface-variant">Tipo de cambio (referencial)</dt>
-              <dd className="text-right text-on-surface/80">{exchangeRateLabel}</dd>
+              <dd className="num text-right text-on-surface/80">{exchangeRateLabel}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-on-surface-variant">Tiempo máximo de la operación</dt>

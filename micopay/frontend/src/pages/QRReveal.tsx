@@ -213,7 +213,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
                             />
                             <div className="mt-6">
                                 <h3 className="font-headline font-extrabold text-xl text-on-surface">{ownName ?? '—'}</h3>
-                                <p className="mt-2 font-headline font-black text-2xl text-on-surface">${amount} MXN</p>
+                                <p className="num mt-2 font-headline font-black text-2xl text-on-surface">${amount} MXN</p>
                                 {secretLoaded && (
                                     <p className="text-[10px] text-primary mt-1 font-mono opacity-70">
                                         {t('qrReveal.htlcTestnet')}

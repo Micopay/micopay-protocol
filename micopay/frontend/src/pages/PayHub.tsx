@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useWalletBalance } from '../hooks/useWalletBalance';
 import { ASSETS } from '../constants/assets';
 import BetaBanner from '../components/BetaBanner';
+import { Label } from '../components/ui';
 
 interface PayHubProps {
   onSend: () => void;
@@ -50,7 +51,7 @@ const PayHub = ({ onSend, onReceive }: PayHubProps) => {
 
         {/* Balances */}
         <section>
-          <h2 className="text-[11px] font-bold text-gris uppercase tracking-[0.15em] mb-3">{t('pay.yourAssets')}</h2>
+          <h2 className="mb-3"><Label>{t('pay.yourAssets')}</Label></h2>
           <div className="bg-papel rounded-sm border-2 border-tinta divide-y divide-linea">
             {ASSETS.map((a) => {
               const bal = tokens.find((t) => t.code.toLowerCase() === a.code.toLowerCase())?.balance ?? 0;

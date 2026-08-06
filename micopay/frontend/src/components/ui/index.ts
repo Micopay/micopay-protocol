@@ -11,10 +11,10 @@
    - Verde y naranja son direccionales: cada uno tiene versión para fondo
      claro y para fondo oscuro, y no son intercambiables.
 
-   Pendientes por fase, para no crear componentes sin uso:
-     AmountField -> con F3 (pantallas de dinero)
+   Pendiente por fase, para no crear componentes sin uso:
      Sheet       -> con F5 (diálogos del flujo crítico) */
 
+export { default as AmountField } from './AmountField';
 export { default as Badge } from './Badge';
 export { default as Button } from './Button';
 export { default as Card } from './Card';

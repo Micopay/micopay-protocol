@@ -165,7 +165,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
 
             {/* Amount */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-gris mb-2">{t('send.amount')}</label>
+              <label className="num block text-[11px] font-bold uppercase tracking-[0.15em] text-gris mb-2">{t('send.amount')}</label>
               <div className="relative">
                 <input
                   value={amount}
@@ -184,7 +184,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
                   MÁX
                 </button>
               </div>
-              {overBalance && <p className="text-[11px] text-error mt-1">{t('send.insufficientBalance')}</p>}
+              {overBalance && <p className="num text-[11px] text-error mt-1">{t('send.insufficientBalance')}</p>}
             </div>
 
             {/* Memo */}

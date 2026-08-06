@@ -162,11 +162,11 @@ function PendingView({
       <div className="bg-surface-container-low rounded-sm p-4 w-full mb-6">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm text-on-surface-variant">Monto</span>
-          <span className="font-bold text-on-surface">${trade.amount_mxn} MXN</span>
+          <span className="num font-bold text-on-surface">${trade.amount_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm text-on-surface-variant">Comisión</span>
-          <span className="text-sm text-on-surface">${trade.platform_fee_mxn} MXN</span>
+          <span className="num text-sm text-on-surface">${trade.platform_fee_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-sm text-on-surface-variant">Expira en</span>
@@ -338,7 +338,7 @@ function CompletedView({ trade }: { trade: TradeDetailData }) {
       <div className="bg-surface-container-low rounded-sm p-4 w-full mb-6">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm text-on-surface-variant">Monto</span>
-          <span className="font-bold text-on-surface">${trade.amount_mxn} MXN</span>
+          <span className="num font-bold text-on-surface">${trade.amount_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-sm text-on-surface-variant">Fecha</span>
@@ -420,11 +420,11 @@ function ExpiredView({ canRefund, onRefund, refunding, trade, title, description
       <div className="bg-surface-container-low rounded-sm p-4 w-full mb-6">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm text-on-surface-variant">Monto</span>
-          <span className="font-bold text-on-surface">${trade.amount_mxn} MXN</span>
+          <span className="num font-bold text-on-surface">${trade.amount_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-sm text-on-surface-variant">Comisión</span>
-          <span className="text-sm text-on-surface">${trade.platform_fee_mxn} MXN</span>
+          <span className="num text-sm text-on-surface">${trade.platform_fee_mxn} MXN</span>
         </div>
       </div>
 
@@ -479,11 +479,11 @@ function RefundedView({ trade }: { trade: TradeDetailData }) {
       <div className="bg-surface-container-low rounded-sm p-4 w-full mb-6">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm text-on-surface-variant">Monto</span>
-          <span className="font-bold text-on-surface">${trade.amount_mxn} MXN</span>
+          <span className="num font-bold text-on-surface">${trade.amount_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-sm text-on-surface-variant">Comisión</span>
-          <span className="text-sm text-on-surface">${trade.platform_fee_mxn} MXN</span>
+          <span className="num text-sm text-on-surface">${trade.platform_fee_mxn} MXN</span>
         </div>
       </div>
 
@@ -623,15 +623,15 @@ function RefundConfirmDialog({
         <div className="mt-4 bg-surface-container-low rounded-sm p-4">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm text-on-surface-variant">Monto a recuperar</span>
-            <span className="font-bold text-on-surface">${amount} MXN</span>
+            <span className="num font-bold text-on-surface">${amount} MXN</span>
           </div>
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm text-on-surface-variant">Comisión de la operación</span>
-            <span className="text-sm text-on-surface">${fee} MXN</span>
+            <span className="num text-sm text-on-surface">${fee} MXN</span>
           </div>
           <div className="flex justify-between items-center pt-2 border-t border-linea">
             <span className="text-sm font-semibold text-on-surface-variant">Total devuelto</span>
-            <span className="font-bold text-primary">${amount} MXN</span>
+            <span className="num font-bold text-primary">${amount} MXN</span>
           </div>
           <p className="mt-3 text-xs text-on-surface-variant">
             * Se aplicará un gas fee en XLM por la transacción en Stellar. Los fondos en MXN

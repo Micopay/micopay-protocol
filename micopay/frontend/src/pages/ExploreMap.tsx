@@ -261,7 +261,7 @@ const ExploreMap = ({
                               {offer.distance} · {offer.walkMinutes} min
                             </p>
                             <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                              <span className="text-[12px] text-on-surface-variant">{offer.completionRate ? t('map.completion', { pct: Math.round(offer.completionRate) }) : t('map.noHistory')}</span>
+                              <span className="num text-[12px] text-on-surface-variant">{offer.completionRate ? t('map.completion', { pct: Math.round(offer.completionRate) }) : t('map.noHistory')}</span>
                               <span className="text-[12px] text-on-surface-variant">·</span>
                               <span className="text-[12px] text-on-surface-variant">{offer.tradesCompleted ?? 0} {t('map.ops')}</span>
                               {offer.tier && (

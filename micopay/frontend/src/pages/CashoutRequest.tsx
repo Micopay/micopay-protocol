@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import TradeStateBadge, { getTradeStateDebugOverride, TradeState } from '../components/TradeStateBadge';
+import { AmountField } from '../components/ui';
 
 export interface CashoutRequestProps {
   onBack: () => void;
@@ -46,23 +47,14 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
           </label>
         </div>
 
-        <div className="relative group mb-8 py-10 px-4 bg-surface-container-lowest rounded-sm border-2 border-tinta flex flex-col items-center">
-          <div className="flex items-center justify-center gap-3 w-full">
-            <span className="text-headline text-4xl font-extrabold text-on-surface">$</span>
-            <input
-              id="cashout-amount"
-              className="w-32 text-headline text-5xl font-extrabold text-on-surface bg-transparent border-none focus:ring-0 p-0 text-center"
-              placeholder="0"
-              type="text"
-              inputMode="numeric"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-            <span className="text-label text-xl font-bold text-primary px-3 py-1 bg-primary/5 rounded-sm">
-              MXN
-            </span>
-          </div>
-        </div>
+        <AmountField
+          id="cashout-amount"
+          divisa="MXN"
+          className="mb-8"
+          placeholder="0"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
 
         <div className="space-y-6">
           <div className="p-6 bg-surface-container-low rounded-sm border-l-4 border-primary/20">

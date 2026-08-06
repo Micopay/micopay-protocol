@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MoneyBlock } from '../components/ui';
+import { Label, MoneyBlock } from '../components/ui';
 import { Logo } from '../components/Logo';
 import ErrorBanner from '../components/ErrorBanner';
 import {
@@ -275,9 +275,9 @@ const Home = ({
 
         {/* Activos */}
         <section className="mb-8">
-          <h2 className="text-[11px] font-bold text-gris uppercase tracking-[0.15em] mb-4">
+          <h2 className="mb-4"><Label>
             {t('home.assets')}
-          </h2>
+          </Label></h2>
           <div className="bg-papel rounded-sm border-2 border-tinta divide-y divide-linea">
             {/* XLM */}
             <div className="flex items-center gap-4 p-4">
@@ -298,11 +298,11 @@ const Home = ({
                 <p className="font-bold text-on-surface text-sm">
                   {xlmBalance ?? "—"} XLM
                 </p>
-                <p className="text-[11px] text-gris">{xlmMxnValue}</p>
+                <p className="num text-[11px] text-gris">{xlmMxnValue}</p>
               </div>
             </div>
             {/* MXNE */}
-            <div className={`flex items-center gap-4 p-4 ${balanceLoading ? 'opacity-40' : ''}`}>
+            <div className={`num flex items-center gap-4 p-4 ${balanceLoading ? 'opacity-40' : ''}`}>
               <div className="w-10 h-10 rounded-sm border-2 border-tinta bg-verde flex items-center justify-center flex-shrink-0">
                 <span className="text-papel font-black text-xs">MXNE</span>
               </div>
@@ -323,7 +323,7 @@ const Home = ({
               </div>
             </div>
             {/* USDC */}
-            <div className={`flex items-center gap-4 p-4 ${balanceLoading ? 'opacity-40' : ''}`}>
+            <div className={`num flex items-center gap-4 p-4 ${balanceLoading ? 'opacity-40' : ''}`}>
               <div className="w-10 h-10 rounded-sm border-2 border-tinta bg-verde flex items-center justify-center flex-shrink-0">
                 <span className="text-papel font-black text-xs">USDC</span>
               </div>
@@ -363,9 +363,9 @@ const Home = ({
 
         {/* Actividad */}
         <section className="mb-8">
-          <h2 className="text-[11px] font-bold text-gris uppercase tracking-[0.15em] mb-4">
+          <h2 className="mb-4"><Label>
             {t('home.recentActivity')}
-          </h2>
+          </Label></h2>
 
           {historyError ? (
             <ErrorBanner
@@ -473,7 +473,7 @@ const Home = ({
 
         {/* Network indicator */}
         <div className="flex items-center justify-center gap-2 mb-2">
-          <span className="text-base" style={{ filter: 'grayscale(1) sepia(1) saturate(5) hue-rotate(-50deg) brightness(0.9)' }} aria-hidden="true">🍄</span>
+          <span className="num text-base" style={{ filter: 'grayscale(1) sepia(1) saturate(5) hue-rotate(-50deg) brightness(0.9)' }} aria-hidden="true">🍄</span>
           <span className="text-xs font-semibold text-on-surface-variant tracking-wide">
             Red Micopay
           </span>

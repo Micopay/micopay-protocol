@@ -293,7 +293,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
           <p className="text-[11px] text-on-surface-variant">{t('cetes.subtitle')}</p>
         </div>
         <div className="ml-auto bg-primary/10 border border-primary/20 rounded-full px-3 py-1">
-          <span className="text-primary font-bold text-sm">{t('cetes.annual', { rate: rate?.apy ?? 5.6 })}</span>
+          <span className="num text-primary font-bold text-sm">{t('cetes.annual', { rate: rate?.apy ?? 5.6 })}</span>
         </div>
       </header>
 
@@ -306,17 +306,17 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
               <span className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">trending_up</span>
             </div>
             <div>
-              <p className="font-bold text-on-surface text-base">{t('cetes.yieldRate')}</p>
+              <p className="num font-bold text-on-surface text-base">{t('cetes.yieldRate')}</p>
               {rateLoading ? (
                 <p className="text-xs text-gris">{t('cetes.loading')}</p>
               ) : (
-                <p className="text-xs text-on-surface-variant">{rate?.note}</p>
+                <p className="num text-xs text-on-surface-variant">{rate?.note}</p>
               )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-papel rounded-sm p-3 text-center">
-              <p className="text-2xl font-extrabold text-primary">{rate?.apy ?? 5.6}%</p>
+              <p className="num text-2xl font-extrabold text-primary">{rate?.apy ?? 5.6}%</p>
               <p className="text-xs text-on-surface-variant mt-1">{t('cetes.annualYield')}</p>
             </div>
             <div className="bg-papel rounded-sm p-3 text-center">
@@ -434,7 +434,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-xs text-on-surface-variant">{t('cetes.exchangeRate')}</span>
+                        <span className="num text-xs text-on-surface-variant">{t('cetes.exchangeRate')}</span>
                         <span className="text-xs font-bold text-on-surface">
                           {t('cetes.depositRate', { rate: quote.exchangeRate })}
                         </span>
@@ -521,7 +521,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                       <p className="font-bold text-on-surface text-sm">{depositOrder.depositAccountHolder ?? '—'}</p>
                     </div>
                     <div className="px-4 py-3">
-                      <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wide mb-0.5">{t('cetes.exactAmount')}</p>
+                      <p className="num text-[10px] font-bold text-on-surface-variant uppercase tracking-wide mb-0.5">{t('cetes.exactAmount')}</p>
                       <p className="font-extrabold text-on-surface text-base">
                         ${depositOrder.depositAmount ?? amount} MXN
                       </p>
@@ -650,7 +650,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
               {quote && (
                 <div className="bg-primary/5 rounded-sm px-4 py-3 flex flex-col items-center">
                   <span className="text-sm text-on-surface-variant">{t('cetes.willReceiveSpei')}</span>
-                  <span className="text-2xl font-extrabold text-primary">${parseFloat(quote.destinationAmount).toFixed(2)} MXN</span>
+                  <span className="num text-2xl font-extrabold text-primary">${parseFloat(quote.destinationAmount).toFixed(2)} MXN</span>
                   {!rampOrderId && (
                     <span className="text-xs text-error mt-2 font-bold">
                       {t('cetes.quoteExpires')} {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
