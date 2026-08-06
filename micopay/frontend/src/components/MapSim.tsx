@@ -55,7 +55,7 @@ const MapSim = ({
     const pins = getMerchantPins(merchants);
 
     return (
-        <div className="relative w-full h-64 bg-surface-container-low rounded-[32px] overflow-hidden border border-outline-variant/30 shadow-inner group">
+        <div className="relative w-full h-64 bg-surface-container-low rounded-sm overflow-hidden border-2 border-tinta shadow-inner group">
             {/* Real Map Background */}
             <div className="absolute inset-0 opacity-80 group-hover:scale-105 transition-transform duration-[20s] ease-linear">
                 <img
@@ -66,7 +66,7 @@ const MapSim = ({
                         e.currentTarget.style.display = 'none';
                     }}
                 />
-                <div className="absolute inset-0 bg-gradient-to-b from-primary/10 to-transparent"></div>
+                <div className="absolute inset-0 to-transparent"></div>
             </div>
 
             {/* Simulated Street Glow Overlay */}
@@ -75,7 +75,7 @@ const MapSim = ({
             {/* User Location Pulse */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
                 <div className="w-16 h-16 bg-primary/20 rounded-full animate-ping absolute"></div>
-                <div className="w-6 h-6 bg-primary rounded-full border-2 border-white shadow-[0_0_15px_rgba(0,105,76,0.5)] relative z-10"></div>
+                <div className="w-6 h-6 bg-primary rounded-full border-2 border-white relative z-10"></div>
             </div>
 
             {/* Merchant pins projected from API latitude/longitude. */}
@@ -101,9 +101,9 @@ const MapSim = ({
                     >
                         <span className={`relative w-14 h-14 cursor-pointer transition-transform ${isSelected ? 'scale-125' : 'hover:scale-110'}`}>
                             <span className={`absolute inset-0 rounded-full blur-md animate-pulse ${isSelected ? 'bg-primary/40' : 'bg-primary/20'}`}></span>
-                            <img src={image} alt="" className="w-full h-full object-contain relative z-10 drop-shadow-lg" />
+                            <img src={image} alt="" className="w-full h-full object-contain relative z-10 drop-" />
                         </span>
-                        <span className={`backdrop-blur-sm px-3 py-1 rounded-full mt-1 shadow-md border text-[9px] font-bold whitespace-nowrap ${isSelected ? 'bg-primary text-white border-primary' : 'bg-white/95 text-on-surface border-outline-variant/20'}`}>
+                        <span className={`px-3 py-1 rounded-full mt-1 border text-[9px] font-bold whitespace-nowrap ${isSelected ? 'bg-primary text-papel border-primary' : 'bg-papel text-on-surface border-linea'}`}>
                             {merchant.username}
                         </span>
                     </button>
@@ -111,15 +111,15 @@ const MapSim = ({
             })}
 
             {/* Location Label Floating */}
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full border border-outline-variant/10 flex items-center gap-2 shadow-lg z-20">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-papel px-4 py-1.5 rounded-full border-2 border-tinta flex items-center gap-2 z-20">
                 <span className="material-symbols-outlined text-primary text-sm font-bold">location_on</span>
                 <p className="text-[10px] font-bold text-on-surface uppercase tracking-widest">CDMX · ZONA CENTRO</p>
             </div>
 
             {/* Live Indicator */}
-            <div className="absolute bottom-4 right-4 bg-black/70 backdrop-blur-sm px-3 py-1.5 rounded-full flex items-center gap-2 z-20">
-                <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_#4ade80]"></div>
-                <p className="text-[9px] font-bold text-white uppercase tracking-tighter">Agentes reales cercanos</p>
+            <div className="absolute bottom-4 right-4 bg-black/70 px-3 py-1.5 rounded-full flex items-center gap-2 z-20">
+                <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse "></div>
+                <p className="text-[9px] font-bold text-papel uppercase tracking-tighter">Agentes reales cercanos</p>
             </div>
 
             <style>{`

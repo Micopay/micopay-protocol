@@ -89,7 +89,7 @@ const ChatRoom = ({
     return (
         <div className="bg-background text-on-surface font-body min-h-screen flex flex-col">
             {/* TopAppBar */}
-            <header className="fixed top-0 w-full z-50 flex items-center px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] justify-between bg-surface/80 backdrop-blur-md border-b border-surface-container">
+            <header className="fixed top-0 w-full z-50 flex items-center px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] justify-between bg-surface/80 border-b-2 border-tinta">
                 <div className="flex items-center gap-3">
                     <button 
                         onClick={onBack}
@@ -98,7 +98,7 @@ const ChatRoom = ({
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
                     <div className="flex items-center gap-2">
-                        <div className="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center text-white font-bold">
+                        <div className="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center text-papel font-bold">
                             {(counterpartyName ?? '—').slice(0, 2).toUpperCase()}
                         </div>
                         <div>
@@ -123,8 +123,8 @@ const ChatRoom = ({
             <main className="flex-1 mt-[calc(72px+env(safe-area-inset-top))] mb-24 px-4 max-w-2xl mx-auto w-full flex flex-col">
                 {/* Status Banner - role-specific */}
                 {isProvider ? (
-                    <div className="my-4 p-4 rounded-xl bg-primary-container/10 border border-primary/10 flex items-start gap-3">
-                        <div className={`rounded-full p-1 flex items-center justify-center shrink-0 mt-0.5 text-white ${
+                    <div className="my-4 p-4 rounded-sm bg-primary-container/10 border border-primary/10 flex items-start gap-3">
+                        <div className={`rounded-full p-1 flex items-center justify-center shrink-0 mt-0.5 text-papel ${
                             escrowStatus === 'locked' ? 'bg-emerald-500' : 'bg-amber-500'
                         }`}>
                             <span className="material-symbols-outlined text-sm">
@@ -153,8 +153,8 @@ const ChatRoom = ({
                         </div>
                     </div>
                 ) : (
-                    <div className="my-4 p-4 rounded-xl bg-primary-container/10 border border-primary/10 flex items-start gap-3">
-                        <div className="bg-primary text-white rounded-full p-1 flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="my-4 p-4 rounded-sm bg-primary-container/10 border border-primary/10 flex items-start gap-3">
+                        <div className="bg-primary text-papel rounded-full p-1 flex items-center justify-center shrink-0 mt-0.5">
                             <span className="material-symbols-outlined text-sm">check</span>
                         </div>
                         <div className="flex flex-col gap-1 min-w-0">
@@ -186,7 +186,7 @@ const ChatRoom = ({
 
                 {/* Error State with Retry */}
                 {error && !isLoading && (
-                    <div className="my-4 p-4 rounded-xl bg-red-50 border border-red-200 flex items-start gap-3">
+                    <div className="my-4 p-4 rounded-sm bg-red-50 border border-red-200 flex items-start gap-3">
                         <span className="material-symbols-outlined text-red-600 text-lg">error</span>
                         <div className="flex flex-col gap-2 flex-1">
                             <p className="text-sm font-semibold text-red-700">{t('chatRoom.couldntLoadMessages')}</p>
@@ -226,9 +226,9 @@ const ChatRoom = ({
                             key={msg.id}
                             className={`flex flex-col max-w-[85%] ${msg.isOwn ? 'items-end self-end' : 'items-start'}`}
                         >
-                            <div className={`p-4 rounded-t-2xl shadow-sm relative ${
+                            <div className={`p-4 rounded-t-2xl relative ${
                                 msg.isOwn
-                                    ? 'bg-primary text-on-primary rounded-bl-2xl rounded-br-none shadow-md' 
+                                    ? 'bg-primary text-on-primary rounded-bl-2xl rounded-br-none ' 
                                     : 'bg-surface-container-low text-on-surface rounded-br-2xl rounded-bl-none'
                             }`}>
                                 <p className="text-sm leading-relaxed">{msg.body}</p>
@@ -257,19 +257,19 @@ const ChatRoom = ({
                         {isProvider && escrowStatus === 'locked' && (
                             <button
                                 onClick={onViewQR}
-                                className="flex items-center justify-center gap-3 w-full h-[46px] rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20"
+                                className="flex items-center justify-center gap-3 w-full h-[46px] rounded-sm bg-emerald-600 text-papel font-semibold hover:bg-emerald-700 transition-colors shadow-emerald-600/20"
                             >
                                 <span className="material-symbols-outlined">qr_code_scanner</span>
                                 <span className="font-body text-sm">{t('chatRoom.scanClientQr')}</span>
                             </button>
                         )}
-                        <button className="flex items-center justify-center gap-3 w-full h-[46px] rounded-lg bg-surface-container-highest text-primary font-semibold hover:bg-surface-variant transition-colors group">
+                        <button className="flex items-center justify-center gap-3 w-full h-[46px] rounded-sm bg-surface-container-highest text-primary font-semibold hover:bg-surface-variant transition-colors group">
                             <span className="material-symbols-outlined group-hover:scale-110 transition-transform">location_on</span>
                             <span className="font-body text-sm">{t('chatRoom.shareLocation')}</span>
                         </button>
                         <button
                             onClick={onViewQR}
-                            className="flex items-center justify-center gap-3 w-full h-[46px] rounded-lg bg-primary text-white font-semibold hover:opacity-90 transition-opacity shadow-lg shadow-primary/20"
+                            className="flex items-center justify-center gap-3 w-full h-[46px] rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity "
                         >
                             <span className="material-symbols-outlined">qr_code_2</span>
                             <span className="font-body text-sm">{t('chatRoom.viewMyQr')}</span>
@@ -279,10 +279,10 @@ const ChatRoom = ({
             </main>
 
             {/* Bottom Chat Input */}
-            <div className="fixed bottom-0 w-full bg-surface/80 backdrop-blur-xl px-4 pt-3 pb-[max(2rem,env(safe-area-inset-bottom))] border-t border-surface-container">
+            <div className="fixed bottom-0 w-full bg-surface/80 px-4 pt-3 pb-[max(2rem,env(safe-area-inset-bottom))] border-t border-surface-container">
                 <div className="max-w-2xl mx-auto flex flex-col gap-2">
                     {sendError && (
-                        <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+                        <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-sm">
                             {t('chatRoom.sendFailed', { error: sendError.message })} <button onClick={() => {}} className="underline ml-1">{t('chatRoom.retry')}</button>
                         </div>
                     )}
@@ -295,7 +295,7 @@ const ChatRoom = ({
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                className="w-full bg-surface-container-low border-none focus:ring-2 focus:ring-primary rounded-2xl py-3 px-4 pr-12 text-sm text-on-surface placeholder:text-outline resize-none overflow-hidden disabled:opacity-50" 
+                                className="w-full bg-surface-container-low border-none focus:ring-2 focus:ring-primary rounded-sm py-3 px-4 pr-12 text-sm text-on-surface placeholder:text-outline resize-none overflow-hidden disabled:opacity-50" 
                                 placeholder={t('chatRoom.messagePlaceholder')}
                                 rows={1}
                                 disabled={isSending}
@@ -307,7 +307,7 @@ const ChatRoom = ({
                         <button 
                             onClick={handleSendMessage}
                             disabled={isSending || !inputValue.trim()}
-                            className="w-11 h-11 bg-primary text-white rounded-full flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all mb-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-11 h-11 bg-primary text-papel rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all mb-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isSending ? (
                                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>

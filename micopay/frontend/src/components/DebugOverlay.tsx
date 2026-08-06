@@ -48,8 +48,8 @@ export default function DebugOverlay({
   const mxneId = backendHealth?.mxneContractId || "No configurado";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm animate-fade-in font-['Manrope']">
-      <div className="w-full max-w-lg bg-surface rounded-t-3xl shadow-2xl border-t border-gray-200 overflow-hidden flex flex-col max-h-[85vh] animate-slide-up">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 animate-fade-in font-['Manrope']">
+      <div className="w-full max-w-lg bg-surface rounded-t-3xl border-t border-gray-200 overflow-hidden flex flex-col max-h-[85vh] animate-slide-up">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-primary/5">
           <div className="flex items-center gap-2">
@@ -71,7 +71,7 @@ export default function DebugOverlay({
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           
           {/* Server Connection Status */}
-          <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-3">
+          <div className="bg-gray-50 rounded-sm p-4 border border-gray-100 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-gray-500">Conexión Backend</span>
               <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -101,7 +101,7 @@ export default function DebugOverlay({
           {/* Contracts & Keys */}
           <div className="space-y-2">
             <span className="text-xs font-semibold text-gray-500 px-1">Contratos Soroban & Cuentas</span>
-            <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-3">
+            <div className="bg-gray-50 rounded-sm p-4 border border-gray-100 space-y-3">
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-[11px] font-semibold text-gray-500">
                   <span>Escrow Contract ID</span>
@@ -112,7 +112,7 @@ export default function DebugOverlay({
                     {copiedKey === "escrow" ? "Copiado" : "Copiar"}
                   </button>
                 </div>
-                <div className="text-xs font-mono bg-white p-2 rounded-lg border border-gray-100 break-all select-all text-on-surface">
+                <div className="text-xs font-mono bg-papel p-2 rounded-sm border border-gray-100 break-all select-all text-on-surface">
                   {escrowId}
                 </div>
               </div>
@@ -127,7 +127,7 @@ export default function DebugOverlay({
                     {copiedKey === "mxne" ? "Copiado" : "Copiar"}
                   </button>
                 </div>
-                <div className="text-xs font-mono bg-white p-2 rounded-lg border border-gray-100 break-all select-all text-on-surface">
+                <div className="text-xs font-mono bg-papel p-2 rounded-sm border border-gray-100 break-all select-all text-on-surface">
                   {mxneId}
                 </div>
               </div>
@@ -137,10 +137,10 @@ export default function DebugOverlay({
           {/* Developer Tools */}
           <div className="space-y-2">
             <span className="text-xs font-semibold text-gray-500 px-1">Herramientas de Desarrollador</span>
-            <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-3">
+            <div className="bg-gray-50 rounded-sm p-4 border border-gray-100 space-y-3">
               <button 
                 onClick={handleResetData}
-                className="w-full py-2.5 px-4 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1 border border-red-200"
+                className="w-full py-2.5 px-4 bg-red-50 hover:bg-red-100 text-red-700 rounded-sm text-xs font-semibold transition-colors flex items-center justify-center gap-1 border border-red-200"
               >
                 <span className="material-symbols-outlined text-sm">delete_forever</span>
                 Restablecer Usuarios Locales (Limpiar Caché)
@@ -148,14 +148,14 @@ export default function DebugOverlay({
               
               <button 
                 onClick={() => setShowUsers(!showUsers)}
-                className="w-full py-2.5 px-4 bg-white hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1 border border-gray-200"
+                className="w-full py-2.5 px-4 bg-papel hover:bg-gray-100 text-gray-700 rounded-sm text-xs font-semibold transition-colors flex items-center justify-center gap-1 border border-gray-200"
               >
                 <span className="material-symbols-outlined text-sm">people</span>
                 {showUsers ? "Ocultar Detalles de Sesión" : "Ver Detalles de Sesión"}
               </button>
 
               {showUsers && (
-                <div className="p-3 bg-white border border-gray-200 rounded-xl space-y-2">
+                <div className="p-3 bg-papel border border-gray-200 rounded-sm space-y-2">
                   <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">Identidad de Comprador</div>
                   <div className="text-[11px] font-mono break-all text-on-surface">
                     <strong>ID:</strong> {backendHealth?.buyerUser?.id || "Generado dinámicamente en cliente"}

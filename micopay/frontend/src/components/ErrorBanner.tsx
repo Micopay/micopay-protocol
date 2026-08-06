@@ -78,7 +78,7 @@ export default function ErrorBanner({
 
   return (
     <div
-      className={`rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 flex flex-col gap-2 ${className}`}
+      className={`rounded-sm border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 flex flex-col gap-2 ${className}`}
       role="alert"
       aria-live="assertive"
     >

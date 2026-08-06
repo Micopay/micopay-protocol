@@ -118,7 +118,7 @@ function EffectiveFeeNote({
       {exceeds && (
         <div
           role="alert"
-          className="flex items-start gap-2 rounded-xl border border-error/30 bg-error/5 px-3 py-2"
+          className="flex items-start gap-2 rounded-sm border border-error/30 bg-error/5 px-3 py-2"
         >
           <span className="material-symbols-outlined text-error text-base leading-none">warning</span>
           <p className="text-[12px] font-medium text-error leading-snug">
@@ -173,7 +173,7 @@ const ExploreMap = ({
   return (
     <div className="bg-surface-container-lowest text-on-surface font-body min-h-screen pb-24">
       {/* Top Navigation */}
-      <header className="fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-white/80 backdrop-blur-md shadow-sm">
+      <header className="border-b-2 border-tinta fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel ">
         <button
           onClick={onBack}
           className="flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
@@ -232,10 +232,10 @@ const ExploreMap = ({
                     <article
                       key={offer.id}
                       ref={isSelected ? selectedOfferRef : null}
-                      className={`relative bg-surface p-6 rounded-[24px] border shadow-[0_4px_24px_rgba(0,133,96,0.06)] overflow-hidden transition-all ${isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-primary-container/10'}`}
+                      className={`relative bg-surface p-6 rounded-sm border overflow-hidden transition-all ${isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-primary-container/10'}`}
                     >
                       <div className="flex gap-2 mb-4">
-                        <span className="px-3 py-1 bg-primary text-white text-[11px] font-bold rounded-full uppercase tracking-wider">
+                        <span className="px-3 py-1 bg-primary text-papel text-[11px] font-bold rounded-full uppercase tracking-wider">
                           {t('map.bestOffer')}
                         </span>
                         {isSelected && (
@@ -251,7 +251,7 @@ const ExploreMap = ({
                       </div>
                       <div className="flex items-start justify-between mb-6">
                         <div className="flex gap-4 min-w-0">
-                          <div className="w-14 h-14 bg-primary-container/10 rounded-2xl flex items-center justify-center flex-shrink-0">
+                          <div className="w-14 h-14 bg-primary-container/10 rounded-sm flex items-center justify-center flex-shrink-0">
                             <span className="material-symbols-outlined text-primary text-3xl">{offer.icon}</span>
                           </div>
                           <div className="min-w-0">
@@ -265,16 +265,16 @@ const ExploreMap = ({
                               <span className="text-[12px] text-on-surface-variant">·</span>
                               <span className="text-[12px] text-on-surface-variant">{offer.tradesCompleted ?? 0} {t('map.ops')}</span>
                               {offer.tier && (
-                                <span className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-surface-container-high text-primary">{offer.tier}</span>
+                                <span className="px-2 py-0.5 text-[11px] font-bold rounded-sm bg-surface-container-high text-primary">{offer.tier}</span>
                               )}
-                              <span className={`px-2 py-0.5 text-[11px] font-bold rounded-md ${offer.isBusiness ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                              <span className={`px-2 py-0.5 text-[11px] font-bold rounded-sm ${offer.isBusiness ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
                                 {offer.isBusiness ? t('map.business') : t('map.individual')}
                               </span>
                             </div>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between mb-6 p-4 bg-white/50 rounded-2xl">
+                      <div className="flex items-center justify-between mb-6 p-4 bg-papel rounded-sm">
                         <div>
                           <p className="text-[11px] font-bold text-outline uppercase tracking-wider mb-1">{t('map.youReceive')}</p>
                           <p className="text-2xl font-headline font-extrabold text-[#5DCAA5]">
@@ -288,7 +288,7 @@ const ExploreMap = ({
                           </p>
                         </div>
                       </div>
-                      <div className="mb-6 p-4 bg-white/50 rounded-2xl">
+                      <div className="mb-6 p-4 bg-papel rounded-sm">
                         <EffectiveFeeNote
                           commissionPct={offer.commissionPct}
                           platformFeePct={offer.platformFeePct}
@@ -311,7 +311,7 @@ const ExploreMap = ({
                           }
                         }}
                         disabled={loading}
-                        className="w-full h-[52px] bg-gradient-to-r from-primary to-primary-container text-white font-headline font-bold rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+                        className="w-full h-[52px] from-primary to-primary-container text-papel font-headline font-bold rounded-sm active:scale-95 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
                       >
                         {loading ? (
                           <>
@@ -330,17 +330,17 @@ const ExploreMap = ({
                   <article
                     key={offer.id}
                     ref={isSelected ? selectedOfferRef : null}
-                    className={`bg-surface-container-low/30 p-5 rounded-[24px] border transition-all ${isSelected ? 'border-primary ring-2 ring-primary/30 bg-primary/5' : 'border-transparent hover:border-surface-container-high'}`}
+                    className={`bg-surface-container-low/30 p-5 rounded-sm border transition-all ${isSelected ? 'border-primary ring-2 ring-primary/30 bg-primary/5' : 'border-transparent hover:border-surface-container-high'}`}
                   >
                     <div className="flex items-start justify-between gap-3 mb-4">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center border border-surface-container-high flex-shrink-0">
+                        <div className="w-11 h-11 bg-papel rounded-full flex items-center justify-center border-2 border-tinta-high flex-shrink-0">
                           <span className="material-symbols-outlined text-outline">{offer.icon}</span>
                         </div>
                         <div className="min-w-0">
                           <h3 className="font-headline font-bold text-on-surface truncate">{offer.name}</h3>
                             {offer.badge && (
-                            <span className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                            <span className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-sm">
                               {offer.badge}
                             </span>
                           )}
@@ -348,13 +348,13 @@ const ExploreMap = ({
                               <span>{offer.completionRate ? `${Math.round(offer.completionRate)}%` : t('map.noHistory')}</span>
                               <span>·</span>
                               <span>{offer.tradesCompleted ?? 0} {t('map.ops')}</span>
-                              {offer.tier && <span className="px-2 py-0.5 text-[10px] rounded-md bg-surface-container-high text-primary">{offer.tier}</span>}
-                              <span className={`px-2 py-0.5 text-[10px] rounded-md ${offer.isBusiness ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                              {offer.tier && <span className="px-2 py-0.5 text-[10px] rounded-sm bg-surface-container-high text-primary">{offer.tier}</span>}
+                              <span className={`px-2 py-0.5 text-[10px] rounded-sm ${offer.isBusiness ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
                                 {offer.isBusiness ? t('map.business') : t('map.individual')}
                               </span>
                             </div>
                           {isSelected && (
-                            <span className="inline-block mt-1 text-[11px] font-bold text-primary bg-white px-2 py-0.5 rounded-md">
+                            <span className="inline-block mt-1 text-[11px] font-bold text-primary bg-papel px-2 py-0.5 rounded-sm">
                               {t('map.selectedOnMap')}
                             </span>
                           )}
@@ -391,7 +391,7 @@ const ExploreMap = ({
                         }
                       }}
                       disabled={loading}
-                      className="w-full py-3 border border-primary text-primary font-bold rounded-xl active:scale-95 transition-all disabled:opacity-70"
+                      className="w-full py-3 border border-primary text-primary font-bold rounded-sm active:scale-95 transition-all disabled:opacity-70"
                     >
                       {t('map.viewOffer')}
                     </button>
@@ -418,7 +418,7 @@ const ExploreMap = ({
 function StateHeader({ onBack }: { onBack: () => void }) {
   const { t } = useTranslation();
   return (
-    <header className="fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-white/80 backdrop-blur-md shadow-sm">
+    <header className="border-b-2 border-tinta fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel ">
       <button
         onClick={onBack}
         className="flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
@@ -450,7 +450,7 @@ function StateShell({
     <div className="bg-surface-container-lowest text-on-surface font-body min-h-screen pb-24">
       <StateHeader onBack={onBack} />
       <main className="pt-[calc(6rem+env(safe-area-inset-top))] px-6 max-w-2xl mx-auto flex flex-col items-center text-center">
-        <div className="w-16 h-16 bg-primary-container/10 rounded-2xl flex items-center justify-center mt-16 mb-6">
+        <div className="w-16 h-16 bg-primary-container/10 rounded-sm flex items-center justify-center mt-16 mb-6">
           <span className={`material-symbols-outlined text-primary text-4xl ${spin ? 'animate-spin' : ''}`}>
             {icon}
           </span>
@@ -482,7 +482,7 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
       </p>
       <button
         onClick={onBack}
-        className="px-6 py-3 border border-primary text-primary font-bold rounded-xl active:scale-95 transition-all"
+        className="px-6 py-3 border border-primary text-primary font-bold rounded-sm active:scale-95 transition-all"
       >
         {t('map.back')}
       </button>
@@ -499,7 +499,7 @@ function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => vo
       </p>
       <button
         onClick={onRetry}
-        className="px-6 py-3 bg-primary text-white font-bold rounded-xl active:scale-95 transition-all"
+        className="px-6 py-3 bg-primary text-papel font-bold rounded-sm active:scale-95 transition-all"
       >
         {t('map.retry')}
       </button>
@@ -516,7 +516,7 @@ function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) 
       </p>
       <button
         onClick={onBack}
-        className="px-6 py-3 border border-primary text-primary font-bold rounded-xl active:scale-95 transition-all"
+        className="px-6 py-3 border border-primary text-primary font-bold rounded-sm active:scale-95 transition-all"
       >
         {t('map.changeAmount')}
       </button>

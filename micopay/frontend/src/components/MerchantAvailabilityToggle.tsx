@@ -70,7 +70,7 @@ export default function MerchantAvailabilityToggle({
       >
         <span
           className={`
-            inline-block h-6 w-6 rounded-full bg-white shadow-lg transform transition-transform
+            inline-block h-6 w-6 rounded-full bg-papel transform transition-transform
             ${available ? 'translate-x-5' : 'translate-x-1'}
           `}
         />

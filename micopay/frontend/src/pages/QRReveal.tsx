@@ -118,7 +118,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
     return (
         <div className="bg-surface font-body text-on-surface min-h-screen">
             {/* Top Navigation */}
-            <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-md bg-white/90 border-b border-outline-variant/20">
+            <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
                 <div className="flex items-center gap-3">
                     <button onClick={onBack} aria-label="Volver" className="p-2 hover:bg-surface-container-low rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary">
                         <span aria-hidden="true" className="material-symbols-outlined text-primary">arrow_back</span>
@@ -148,7 +148,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
 
                 {/* Chat Preview Section */}
                 <section className="mb-10">
-                    <div className="bg-surface-container-lowest border border-surface-container-low p-4 rounded-2xl shadow-sm">
+                    <div className="bg-surface-container-lowest border-2 border-tinta-low p-4 rounded-sm ">
                         <div className="flex gap-3 mb-4">
                             <div className="w-10 h-10 rounded-full bg-surface-container-high flex-shrink-0 flex items-center justify-center overflow-hidden">
                                 <img
@@ -167,12 +167,12 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
                             <button
                                 onClick={onChat}
                                 aria-label="Abrir chat con el agente"
-                                className="flex-1 py-2 px-4 rounded-lg border border-primary text-primary font-bold text-sm hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                                className="flex-1 py-2 px-4 rounded-sm border border-primary text-primary font-bold text-sm hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
                             >
                                 <span aria-hidden="true" className="material-symbols-outlined text-sm">chat</span>
                                 {t('qrReveal.openChat')}
                             </button>
-                            <button aria-label="Ver ubicación del agente" className="flex-1 py-2 px-4 rounded-lg border border-primary text-primary font-bold text-sm hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary">
+                            <button aria-label="Ver ubicación del agente" className="flex-1 py-2 px-4 rounded-sm border border-primary text-primary font-bold text-sm hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary">
                                 <span aria-hidden="true" className="material-symbols-outlined text-sm">location_on</span>
                                 {t('qrReveal.location')}
                             </button>
@@ -202,7 +202,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
                             supportState="QR_REVEAL_SECRET"
                         />
                     ) : showQr ? (
-                        <div className="bg-surface-container-low p-8 rounded-[32px] inline-block mx-auto mb-6 border border-outline-variant/10 shadow-sm">
+                        <div className="bg-surface-container-low p-8 rounded-sm inline-block mx-auto mb-6 border-2 border-tinta ">
                             <QRCodeSVG
                                 value={qrPayload}
                                 size={224}

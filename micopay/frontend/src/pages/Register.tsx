@@ -87,28 +87,28 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
 
   if (showOnboarding) {
     return (
-      <div className="min-h-screen bg-[#F4FAFF] flex flex-col items-center justify-center px-6 py-12 overflow-y-auto">
-        <div className="w-full max-w-md bg-white rounded-3xl shadow-lg p-8 space-y-6">
+      <div className="min-h-screen bg-fondo flex flex-col items-center justify-center px-6 py-12 overflow-y-auto">
+        <div className="w-full max-w-md bg-papel rounded-sm p-8 space-y-6">
           <div className="text-center">
-            <h1 className="font-extrabold text-2xl text-[#0B1E26]">¡Tu Wallet está lista!</h1>
-            <p className="text-sm text-[#67808C] mt-2">Hemos creado una billetera (wallet) no-custodial en tu dispositivo. Esto significa que solo tú tienes el control de tus fondos.</p>
+            <h1 className="font-extrabold text-2xl text-tinta">¡Tu Wallet está lista!</h1>
+            <p className="text-sm text-gris mt-2">Hemos creado una billetera (wallet) no-custodial en tu dispositivo. Esto significa que solo tú tienes el control de tus fondos.</p>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-[#67808C] uppercase tracking-wider mb-1">
+              <label className="block text-xs font-bold text-gris uppercase tracking-wider mb-1">
                 Tu Dirección Pública
               </label>
-              <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3">
-                <span className="text-xs font-mono text-[#0B1E26] truncate mr-2">{pubKey}</span>
-                <button onClick={copyPublicKey} className="text-[#00694C] flex-shrink-0">
+              <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-sm px-4 py-3">
+                <span className="text-xs font-mono text-tinta truncate mr-2">{pubKey}</span>
+                <button onClick={copyPublicKey} className="text-verde flex-shrink-0">
                   <span className="material-symbols-outlined text-lg">{copiedPub ? 'check' : 'content_copy'}</span>
                 </button>
               </div>
-              <p className="text-[11px] text-[#67808C] mt-1 ml-1">Puedes compartir esta dirección para recibir fondos.</p>
+              <p className="text-[11px] text-gris mt-1 ml-1">Puedes compartir esta dirección para recibir fondos.</p>
             </div>
 
-            <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
+            <div className="bg-red-50 border border-red-200 rounded-sm p-4">
               <label className="block text-xs font-bold text-red-800 uppercase tracking-wider mb-2 flex items-center gap-1">
                 <span className="material-symbols-outlined text-sm">warning</span>
                 Tu Llave Secreta (Backup)
@@ -118,7 +118,7 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
               </p>
               <button
                 onClick={copySecretKey}
-                className="w-full bg-red-100 hover:bg-red-200 text-red-800 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                className="w-full bg-red-100 hover:bg-red-200 text-red-800 font-bold py-3 rounded-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
               >
                 <span className="material-symbols-outlined text-base">{copiedSec ? 'check' : 'content_copy'}</span>
                 {copiedSec ? '¡Llave Secreta Copiada!' : 'Copiar Llave Secreta'}
@@ -128,7 +128,7 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
 
           <button
             onClick={finishOnboarding}
-            className="w-full bg-[#00694C] text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+            className="w-full bg-verde text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
           >
             Continuar y explorar
           </button>
@@ -138,21 +138,21 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4FAFF] flex flex-col items-center justify-center px-6">
-      <div className="w-full max-w-sm bg-white rounded-3xl shadow-lg p-8 space-y-6">
+    <div className="min-h-screen bg-fondo flex flex-col items-center justify-center px-6">
+      <div className="w-full max-w-sm bg-papel rounded-sm p-8 space-y-6">
         <div className="text-center">
-          <h1 className="font-extrabold text-2xl text-[#0B1E26]">Crear cuenta</h1>
-          <p className="text-sm text-[#67808C] mt-1">Tu identidad Stellar se genera en tu dispositivo</p>
+          <h1 className="font-extrabold text-2xl text-tinta">Crear cuenta</h1>
+          <p className="text-sm text-gris mt-1">Tu identidad Stellar se genera en tu dispositivo</p>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
+          <div className="bg-red-50 border border-red-200 rounded-sm px-4 py-3">
             <p className="text-sm text-red-800">{error}</p>
           </div>
         )}
 
         <div>
-          <label className="block text-xs font-bold text-[#67808C] uppercase tracking-wider mb-1">
+          <label className="block text-xs font-bold text-gris uppercase tracking-wider mb-1">
             Nombre de usuario
           </label>
           <input
@@ -161,17 +161,17 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
             onChange={(e) => setUsername(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleRegister()}
             placeholder="mi_usuario"
-            className="w-full px-4 py-3 rounded-2xl border border-[#D7E3EA] text-[#0B1E26] text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full px-4 py-3 rounded-sm border-2 border-tinta text-tinta text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
             autoCapitalize="none"
             autoCorrect="off"
             maxLength={30}
           />
-          <p className="text-[11px] text-[#67808C] mt-1 ml-1">Solo letras, números y guiones bajos</p>
+          <p className="text-[11px] text-gris mt-1 ml-1">Solo letras, números y guiones bajos</p>
         </div>
 
-        <div className="bg-[#E8F5EE] rounded-2xl p-4 flex items-start gap-3">
-          <span className="material-symbols-outlined text-[#00694C] text-lg mt-0.5">key</span>
-          <p className="text-xs text-[#00694C] leading-relaxed">
+        <div className="bg-[#E8F5EE] rounded-sm p-4 flex items-start gap-3">
+          <span className="material-symbols-outlined text-verde text-lg mt-0.5">key</span>
+          <p className="text-xs text-verde leading-relaxed">
             Se generará un keypair Stellar en tu dispositivo. Tu clave privada <strong>nunca sale del teléfono</strong>. Guarda tu nombre de usuario — lo necesitarás para recuperar el acceso.
           </p>
         </div>
@@ -179,7 +179,7 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
         <button
           onClick={handleRegister}
           disabled={loading}
-          className="w-full bg-[#00694C] text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60"
+          className="w-full bg-verde text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60"
         >
           {loading ? (
             <>
@@ -191,11 +191,11 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
           )}
         </button>
 
-        <p className="text-center text-sm text-[#67808C]">
+        <p className="text-center text-sm text-gris">
           ¿Ya tienes cuenta?{' '}
           <button
             onClick={() => navigate('/login')}
-            className="text-[#00694C] font-bold hover:underline"
+            className="text-verde font-bold hover:underline"
           >
             Inicia sesión
           </button>

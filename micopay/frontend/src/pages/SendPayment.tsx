@@ -107,7 +107,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
 
   return (
     <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col">
-      <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-md bg-white/90 border-b border-outline-variant/10">
+      <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
         <button
           onClick={step === 'review' ? () => setStep('form') : onBack}
           aria-label="Volver"
@@ -129,8 +129,8 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
                   <button
                     key={a.code}
                     onClick={() => setAssetCode(a.code)}
-                    className={`py-2.5 rounded-xl font-bold text-sm border transition-all ${
-                      assetCode === a.code ? 'text-white border-transparent' : 'bg-white text-on-surface-variant border-outline-variant/30'
+                    className={`py-2.5 rounded-sm font-bold text-sm border transition-all ${
+                      assetCode === a.code ? 'text-papel border-transparent' : 'bg-papel text-on-surface-variant border-linea'
                     }`}
                     style={assetCode === a.code ? { backgroundColor: a.color } : undefined}
                   >
@@ -153,9 +153,9 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
                   placeholder={t('send.recipientPlaceholder')}
                   spellCheck={false}
                   autoCapitalize="none"
-                  className="flex-1 min-w-0 bg-surface-container-low border border-outline-variant/20 rounded-2xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-primary transition-colors"
+                  className="flex-1 min-w-0 bg-surface-container-low border-2 border-tinta rounded-sm px-4 py-3 text-sm font-mono focus:outline-none focus:border-primary transition-colors"
                 />
-                <button onClick={handleScan} aria-label="Escanear QR" className="w-12 flex-shrink-0 bg-primary/10 text-primary rounded-2xl flex items-center justify-center active:scale-95 transition-all">
+                <button onClick={handleScan} aria-label="Escanear QR" className="w-12 flex-shrink-0 bg-primary/10 text-primary rounded-sm flex items-center justify-center active:scale-95 transition-all">
                   <span className="material-symbols-outlined">qr_code_scanner</span>
                 </button>
               </div>
@@ -175,7 +175,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
                   min="0"
                   step="any"
                   placeholder="0.00"
-                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-2xl px-4 py-3 text-2xl font-bold focus:outline-none focus:border-primary transition-colors"
+                  className="w-full bg-surface-container-low border-2 border-tinta rounded-sm px-4 py-3 text-2xl font-bold focus:outline-none focus:border-primary transition-colors"
                 />
                 <button
                   onClick={() => setAmount(String(available))}
@@ -195,14 +195,14 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
                 onChange={(e) => setMemo(e.target.value)}
                 maxLength={28}
                 placeholder={t('send.memoPlaceholder')}
-                className="w-full bg-surface-container-low border border-outline-variant/20 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                className="w-full bg-surface-container-low border-2 border-tinta rounded-sm px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
               />
             </div>
 
             <button
               onClick={() => setStep('review')}
               disabled={!canContinue}
-              className="w-full h-[52px] bg-primary text-white font-bold rounded-2xl active:scale-[0.98] transition-all disabled:opacity-40"
+              className="w-full h-[52px] bg-primary text-papel font-bold rounded-sm active:scale-[0.98] transition-all disabled:opacity-40"
             >
               {t('send.continue')}
             </button>
@@ -210,7 +210,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
         ) : (
           // ── Review step ───────────────────────────────────────────────────────
           <>
-            <div className="bg-white rounded-[24px] border border-outline-variant/10 shadow-sm p-6 space-y-4">
+            <div className="bg-papel rounded-sm border-2 border-tinta p-6 space-y-4">
               <div className="text-center pb-2">
                 <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-gris">{t('send.youWillSend')}</p>
                 <p className="text-3xl font-headline font-extrabold mt-1" style={{ color: asset.color }}>
@@ -229,7 +229,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
             <button
               onClick={handleSend}
               disabled={step === 'sending'}
-              className="w-full h-[52px] bg-primary text-white font-bold rounded-2xl active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+              className="w-full h-[52px] bg-primary text-papel font-bold rounded-sm active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {step === 'sending' ? (
                 <>
@@ -280,7 +280,7 @@ function ResultScreen({
   return (
     <div className="bg-surface min-h-screen flex flex-col items-center justify-center px-8 text-center font-body">
       <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 ${ok ? 'bg-[#E1F5EE]' : 'bg-error/10'}`}>
-        <span className={`material-symbols-outlined text-4xl ${ok ? 'text-[#1D9E75]' : 'text-error'}`} style={{ fontVariationSettings: '"FILL" 1' }}>
+        <span className={`material-symbols-outlined text-4xl ${ok ? 'text-verde-claro' : 'text-error'}`} style={{ fontVariationSettings: '"FILL" 1' }}>
           {ok ? 'check_circle' : 'error'}
         </span>
       </div>
@@ -291,11 +291,11 @@ function ResultScreen({
           {explorerLabel ?? 'Ver en el explorador'} <span className="material-symbols-outlined text-[18px]">open_in_new</span>
         </a>
       )}
-      <button onClick={onPrimary} className="w-full max-w-xs h-[52px] bg-primary text-white font-bold rounded-2xl active:scale-[0.98] transition-all">
+      <button onClick={onPrimary} className="w-full max-w-xs h-[52px] bg-primary text-papel font-bold rounded-sm active:scale-[0.98] transition-all">
         {primaryLabel}
       </button>
       {onSecondary && secondaryLabel && (
-        <button onClick={onSecondary} className="mt-3 w-full max-w-xs h-[52px] text-on-surface-variant font-bold rounded-2xl">
+        <button onClick={onSecondary} className="mt-3 w-full max-w-xs h-[52px] text-on-surface-variant font-bold rounded-sm">
           {secondaryLabel}
         </button>
       )}

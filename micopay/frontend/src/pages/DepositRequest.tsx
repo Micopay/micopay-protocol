@@ -13,20 +13,20 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
   const state: TradeState = getTradeStateDebugOverride('pending_cash');
 
   return (
-    <div className="bg-[#f4faff] min-h-screen text-on-surface font-body">
-      <header className="w-full top-0 sticky bg-[#F4FAFF] shadow-[0px_32px_32px_rgba(11,30,38,0.04)] z-40 transition-colors duration-300 pt-[max(0px,env(safe-area-inset-top))]">
+    <div className="bg-fondo min-h-screen text-on-surface font-body">
+      <header className="border-b-2 border-tinta w-full top-0 sticky bg-fondo z-40 transition-colors duration-300 pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between px-6 py-4 w-full">
           <div className="flex items-center gap-4">
             <button
               onClick={onBack}
               aria-label="Volver"
-              className="text-[#00694C] hover:opacity-80 transition-opacity active:scale-95 duration-200 focus:outline-none focus:ring-2 focus:ring-primary rounded-full p-1"
+              className="text-verde hover:opacity-80 transition-opacity active:scale-95 duration-200 focus:outline-none focus:ring-2 focus:ring-primary rounded-full p-1"
             >
               <span aria-hidden="true" className="material-symbols-outlined">arrow_back</span>
             </button>
             <div className="flex flex-col">
-              <span className="font-headline font-extrabold text-[#00694C] tracking-tight text-xs uppercase opacity-60">MicoPay</span>
-              <h1 className="font-headline font-bold text-xl text-[#00694C]">{t('deposit.title')}</h1>
+              <span className="font-headline font-extrabold text-verde tracking-tight text-xs uppercase opacity-60">MicoPay</span>
+              <h1 className="font-headline font-bold text-xl text-verde">{t('deposit.title')}</h1>
             </div>
           </div>
         </div>
@@ -45,7 +45,7 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
               {t('deposit.amountLabel')}
             </label>
             <div className="relative group">
-              <div className="flex items-baseline space-x-2 border-b border-outline-variant/20 group-focus-within:border-primary transition-all duration-300 pb-2">
+              <div className="flex items-baseline space-x-2 border-b border-linea group-focus-within:border-primary transition-all duration-300 pb-2">
                 <span className="text-4xl font-headline font-bold text-primary">$</span>
                 <input
                   id="deposit-amount"
@@ -61,9 +61,9 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
             </div>
           </div>
 
-          <div className="bg-surface-container-lowest p-6 rounded-xl shadow-[0_8px_24px_rgba(11,30,38,0.02)] space-y-4">
+          <div className="bg-surface-container-lowest p-6 rounded-sm space-y-4">
             <div className="flex items-start space-x-4">
-              <div className="p-3 bg-primary/10 rounded-lg">
+              <div className="p-3 bg-primary/10 rounded-sm">
                 <span aria-hidden="true" className="material-symbols-outlined text-primary">travel_explore</span>
               </div>
               <div className="flex-1">
@@ -78,7 +78,7 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
             <button
               onClick={() => onSearch(amount)}
               aria-label="Buscar agentes"
-              className="w-full bg-[linear-gradient(135deg,#00694c_0%,#008560_100%)] text-white h-[56px] rounded-xl font-headline font-bold text-lg shadow-lg shadow-primary/20 active:scale-95 transition-all duration-200 flex items-center justify-center space-x-2 focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full bg-[linear-gradient(135deg,#00694c_0%,#008560_100%)] text-papel h-[56px] rounded-sm font-headline font-bold text-lg active:scale-95 transition-all duration-200 flex items-center justify-center space-x-2 focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <span>{t('deposit.search')}</span>
               <span aria-hidden="true" className="material-symbols-outlined text-xl">chevron_right</span>

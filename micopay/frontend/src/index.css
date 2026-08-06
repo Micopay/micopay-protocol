@@ -115,6 +115,11 @@
      máximo es 4px. Ver F1 / D-8 del plan. */
   --shadow-solida: 4px 4px 0 var(--color-tinta);
   --shadow-solida-sm: 2px 2px 0 var(--color-tinta);
+  /* -xs es el estado :active — el botón se hunde sobre su propia sombra. */
+  --shadow-solida-xs: 1px 1px 0 var(--color-tinta);
+  /* Invertidas: sobre tinta, una sombra de tinta sería invisible. */
+  --shadow-solida-inv: 4px 4px 0 var(--color-papel);
+  --shadow-solida-inv-xs: 1px 1px 0 var(--color-papel);
 
   /* ══════════════════════════════════════════════════════════════════
      ALIAS TEMPORALES — Material 3 remapeado sobre la paleta nueva.

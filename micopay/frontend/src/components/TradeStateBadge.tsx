@@ -67,9 +67,9 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     next: 'Puedes volver al inicio o revisar el historial de actividad.',
     safe: 'Tus fondos ya se movieron al destino final de esta operación.',
     tone: {
-      container: 'bg-[#1D9E75]/10 border-[#1D9E75]/30',
-      iconBg: 'bg-[#1D9E75]/15',
-      icon: 'text-[#1D9E75]',
+      container: 'bg-verde-claro/10 border-[#1D9E75]/30',
+      iconBg: 'bg-verde-claro/15',
+      icon: 'text-verde-claro',
     },
     icon: 'check_circle',
   },
@@ -79,7 +79,7 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     next: 'Inicia una nueva solicitud cuando quieras intentarlo de nuevo.',
     safe: 'Tus fondos no se pierden: quedan asegurados para devolución o reintento.',
     tone: {
-      container: 'bg-surface-container-low border-outline-variant/30',
+      container: 'bg-surface-container-low border-linea',
       iconBg: 'bg-surface-container-high',
       icon: 'text-on-surface-variant',
     },
@@ -92,7 +92,7 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     next: 'Puedes iniciar otra operación para continuar.',
     safe: 'El sistema protege tu saldo y procede a liberar o reembolsar.',
     tone: {
-      container: 'bg-surface-container-low border-outline-variant/30',
+      container: 'bg-surface-container-low border-linea',
       iconBg: 'bg-surface-container-high',
       icon: 'text-on-surface-variant',
     },
@@ -105,7 +105,7 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     next: 'Puedes crear una nueva solicitud cuando te convenga.',
     safe: 'Tus fondos ya están de vuelta y disponibles.',
     tone: {
-      container: 'bg-surface-container-low border-outline-variant/30',
+      container: 'bg-surface-container-low border-linea',
       iconBg: 'bg-surface-container-high',
       icon: 'text-on-surface-variant',
     },
@@ -148,7 +148,7 @@ const TradeStateBadge = ({ state, onRecover, recoverLabel, className = '' }: Tra
   const buttonLabel = recoverLabel ?? copy.recoveryLabel ?? 'Volver a intentar';
 
   return (
-    <section className={`rounded-2xl border p-4 ${copy.tone.container} ${className}`}>
+    <section className={`rounded-sm border p-4 ${copy.tone.container} ${className}`}>
       <div className="flex items-start gap-3">
         <div className={`w-9 h-9 rounded-full flex items-center justify-center ${copy.tone.iconBg}`}>
           <span className={`material-symbols-outlined text-base ${copy.tone.icon}`}>{copy.icon}</span>
@@ -161,7 +161,7 @@ const TradeStateBadge = ({ state, onRecover, recoverLabel, className = '' }: Tra
           {showRecovery && onRecover && (
             <button
               onClick={onRecover}
-              className="mt-3 inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition-colors"
+              className="mt-3 inline-flex items-center gap-2 rounded-sm border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition-colors"
             >
               <span className="material-symbols-outlined text-sm">refresh</span>
               {buttonLabel}

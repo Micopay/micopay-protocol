@@ -4,7 +4,7 @@ import { getTradeHistory, TradeHistoryItem } from '../services/api';
 import { mapApiError, type MappedApiError } from '../utils/apiError';
 
 const STATUS_LABEL: Record<string, { label: string; color: string; bg: string }> = {
-  completed: { label: 'Completado', color: 'text-[#1D9E75]', bg: 'bg-[#1D9E75]/10' },
+  completed: { label: 'Completado', color: 'text-verde-claro', bg: 'bg-verde-claro/10' },
   locked:    { label: 'Bloqueado',  color: 'text-primary',   bg: 'bg-primary/10' },
   revealing: { label: 'Revelando',  color: 'text-primary',   bg: 'bg-primary/10' },
   pending:   { label: 'Pendiente',  color: 'text-outline',   bg: 'bg-outline/10' },
@@ -61,7 +61,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
 
   return (
     <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col">
-      <header className="fixed top-0 left-0 w-full z-50 flex items-center px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-white/90 backdrop-blur-md border-b border-outline-variant/10">
+      <header className="fixed top-0 left-0 w-full z-50 flex items-center px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
         <button onClick={onBack} className="p-2 hover:bg-surface-container-low rounded-full transition-colors">
           <span className="material-symbols-outlined text-on-surface">arrow_back</span>
         </button>
@@ -77,8 +77,8 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
               onClick={() => handleFilterChange(f.id)}
               className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
                 status === f.id
-                  ? 'bg-primary text-white shadow-md'
-                  : 'bg-white border border-outline-variant/20 text-outline hover:border-primary/50'
+                  ? 'bg-primary text-papel '
+                  : 'bg-papel border-2 border-tinta text-outline hover:border-primary/50'
               }`}
             >
               {f.label}
@@ -104,7 +104,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
             <p className="text-sm font-medium">Cargando historial...</p>
           </div>
         ) : loadError ? null : trades.length === 0 ? (
-          <div className="bg-white rounded-[24px] border border-outline-variant/10 shadow-sm p-12 text-center mt-10">
+          <div className="bg-papel rounded-sm border-2 border-tinta p-12 text-center mt-10">
             <div className="w-16 h-16 bg-surface-container-low rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="material-symbols-outlined text-outline text-3xl">history_toggle_off</span>
             </div>
@@ -126,11 +126,11 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
                 <div
                   key={trade.id}
                   onClick={() => onSelectTrade(trade)}
-                  className="bg-white rounded-[20px] p-4 border border-outline-variant/10 shadow-sm hover:shadow-md transition-all active:scale-[0.98] cursor-pointer"
+                  className="bg-papel rounded-sm p-4 border-2 border-tinta hover:transition-all active:scale-[0.98] cursor-pointer"
                 >
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${isCashIn ? 'bg-[#1D9E75]/10' : 'bg-primary/10'}`}>
-                      <span className={`material-symbols-outlined ${isCashIn ? 'text-[#1D9E75]' : 'text-primary'}`}>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${isCashIn ? 'bg-verde-claro/10' : 'bg-primary/10'}`}>
+                      <span className={`material-symbols-outlined ${isCashIn ? 'text-verde-claro' : 'text-primary'}`}>
                         {isCashIn ? 'south_west' : 'north_east'}
                       </span>
                     </div>
@@ -147,7 +147,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
                       
                       <div className="flex justify-between items-center">
                         <p className="text-[11px] text-outline font-medium uppercase tracking-wider">{date}</p>
-                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest ${s.color} ${s.bg}`}>
+                        <span className={`px-2 py-0.5 rounded-sm text-[10px] font-black uppercase tracking-widest ${s.color} ${s.bg}`}>
                           {s.label}
                         </span>
                       </div>
@@ -165,7 +165,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
             <button
               disabled={page === 1}
               onClick={() => setPage(p => Math.max(1, p - 1))}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/20 text-sm font-bold disabled:opacity-30 disabled:pointer-events-none hover:bg-surface-container-low transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded-sm border-2 border-tinta text-sm font-bold disabled:opacity-30 disabled:pointer-events-none hover:bg-surface-container-low transition-colors"
             >
               <span className="material-symbols-outlined text-sm">chevron_left</span>
               Anterior
@@ -174,7 +174,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
             <button
               disabled={trades.length < 10}
               onClick={() => setPage(p => p + 1)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/20 text-sm font-bold disabled:opacity-30 disabled:pointer-events-none hover:bg-surface-container-low transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded-sm border-2 border-tinta text-sm font-bold disabled:opacity-30 disabled:pointer-events-none hover:bg-surface-container-low transition-colors"
             >
               Siguiente
               <span className="material-symbols-outlined text-sm">chevron_right</span>

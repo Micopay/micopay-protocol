@@ -15,7 +15,7 @@ export default function MerchantUnavailableBanner({
 }: MerchantUnavailableBannerProps) {
   return (
     <div
-      className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950 shadow-sm"
+      className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950 "
       role="status"
       aria-live="polite"
     >
@@ -36,7 +36,7 @@ export default function MerchantUnavailableBanner({
             <button
               type="button"
               onClick={onWait}
-              className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-950 hover:bg-amber-100/80 transition-colors"
+              className="rounded-sm border border-amber-300 bg-papel px-3 py-2 text-xs font-semibold text-amber-950 hover:bg-amber-100/80 transition-colors"
             >
               Esperar
             </button>
@@ -44,7 +44,7 @@ export default function MerchantUnavailableBanner({
               type="button"
               disabled={cancelLoading}
               onClick={onCancelRematch}
-              className="rounded-lg bg-amber-800 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-900 disabled:opacity-60 transition-colors"
+              className="rounded-sm bg-amber-800 px-3 py-2 text-xs font-semibold text-papel hover:bg-amber-900 disabled:opacity-60 transition-colors"
             >
               {cancelLoading ? 'Cancelando…' : 'Cancelar y buscar otro'}
             </button>

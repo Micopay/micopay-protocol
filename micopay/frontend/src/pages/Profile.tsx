@@ -172,8 +172,8 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
   };
 
   return (
-      <div className="bg-[#F4FAFF] text-[#0B1E26] min-h-screen flex flex-col pb-28">
-        <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-md bg-white/90 border-b border-[#D7E3EA]/60">
+      <div className="bg-fondo text-tinta min-h-screen flex flex-col pb-28">
+        <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta/60">
           <button
               onClick={onBack}
               className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#EFF6FA] transition-colors"
@@ -182,7 +182,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
           </button>
           <div>
             <h1 className="font-bold text-lg leading-tight">{t('profile.title')}</h1>
-            <p className="text-[11px] text-[#67808C]">
+            <p className="text-[11px] text-gris">
               {t('profile.subtitle')}
             </p>
           </div>
@@ -190,23 +190,23 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
 
         <main className="flex-1 mt-[calc(5rem+env(safe-area-inset-top))] px-4 pt-4 space-y-5">
           {loading && (
-              <div className="bg-white rounded-[24px] p-6 border border-[#D7E3EA]/60 shadow-sm text-center">
-            <span className="material-symbols-outlined animate-spin text-[#00694C] text-3xl">
+              <div className="bg-papel rounded-sm p-6 border-2 border-tinta/60 text-center">
+            <span className="material-symbols-outlined animate-spin text-verde text-3xl">
               progress_activity
             </span>
-                <p className="mt-3 text-sm text-[#67808C]">{t('profile.loadingProfile')}</p>
+                <p className="mt-3 text-sm text-gris">{t('profile.loadingProfile')}</p>
               </div>
           )}
 
           {!loading && error && (
-              <div className="bg-[#FFECEF] border border-[#F5B6C0] rounded-2xl px-5 py-4 space-y-3">
+              <div className="bg-[#FFECEF] border border-[#F5B6C0] rounded-sm px-5 py-4 space-y-3">
                 <div className="flex items-start gap-3">
-                  <span className="material-symbols-outlined text-[#C62828] text-xl mt-0.5" style={{ fontVariationSettings: '"FILL" 1' }}>error</span>
-                  <p className="text-sm text-[#C62828] font-medium leading-snug">{error}</p>
+                  <span className="material-symbols-outlined text-rojo text-xl mt-0.5" style={{ fontVariationSettings: '"FILL" 1' }}>error</span>
+                  <p className="text-sm text-rojo font-medium leading-snug">{error}</p>
                 </div>
                 <button
                   onClick={onLogout}
-                  className="w-full h-10 text-sm font-bold bg-[#C62828] text-white rounded-xl active:scale-95 transition-all"
+                  className="w-full h-10 text-sm font-bold bg-[#C62828] text-papel rounded-sm active:scale-95 transition-all"
                 >
                   Iniciar sesión de nuevo
                 </button>
@@ -215,17 +215,17 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
 
           {!loading && profile && (
               <>
-                <section className="bg-gradient-to-br from-[#E1F5EE] to-[#F0FBF7] rounded-[28px] p-5 border border-[#BFE7D9]/70 shadow-sm">
+                <section className="from-[#E1F5EE] to-[#F0FBF7] rounded-sm p-5 border border-[#BFE7D9]/70 ">
                   <div className="flex items-center gap-4">
                     <div
-                      className="w-16 h-16 rounded-2xl shadow-sm flex items-center justify-center text-white font-extrabold text-2xl flex-shrink-0"
+                      className="w-16 h-16 rounded-sm flex items-center justify-center text-papel font-extrabold text-2xl flex-shrink-0"
                       style={{ background: avatarGradient(profile.stellar_address) }}
                     >
                       {profile.username.slice(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#00694C]">
+                        <p className="text-xs font-bold uppercase tracking-[0.15em] text-verde">
                           {t('profile.activeAccount')}
                         </p>
                         {(() => {
@@ -242,10 +242,10 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                           );
                         })()}
                       </div>
-                      <h2 className="text-2xl font-extrabold text-[#0B1E26] truncate">
+                      <h2 className="text-2xl font-extrabold text-tinta truncate">
                         @{profile.username}
                       </h2>
-                      <p className="text-xs text-[#67808C] truncate font-mono">
+                      <p className="text-xs text-gris truncate font-mono">
                         {profile.stellar_address}
                       </p>
                     </div>
@@ -253,52 +253,52 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
 
                   {/* Reputation stats */}
                   <div className="grid grid-cols-3 gap-2 mt-5">
-                    <div className="bg-white/70 rounded-2xl p-3 text-center">
-                      <p className="text-xl font-extrabold text-[#0B1E26]">{profile.trades_completed ?? 0}</p>
-                      <p className="text-[10px] text-[#67808C] mt-0.5 leading-tight">{t('profile.ops')}</p>
+                    <div className="bg-papel rounded-sm p-3 text-center">
+                      <p className="text-xl font-extrabold text-tinta">{profile.trades_completed ?? 0}</p>
+                      <p className="text-[10px] text-gris mt-0.5 leading-tight">{t('profile.ops')}</p>
                     </div>
-                    <div className="bg-white/70 rounded-2xl p-3 text-center">
-                      <p className="text-xl font-extrabold text-[#0B1E26]">
+                    <div className="bg-papel rounded-sm p-3 text-center">
+                      <p className="text-xl font-extrabold text-tinta">
                         {profile.completion_rate != null ? `${profile.completion_rate}%` : '—'}
                       </p>
-                      <p className="text-[10px] text-[#67808C] mt-0.5 leading-tight">{t('profile.completed')}</p>
+                      <p className="text-[10px] text-gris mt-0.5 leading-tight">{t('profile.completed')}</p>
                     </div>
-                    <div className="bg-white/70 rounded-2xl p-3 text-center">
-                      <p className="text-xl font-extrabold text-[#0B1E26]">
+                    <div className="bg-papel rounded-sm p-3 text-center">
+                      <p className="text-xl font-extrabold text-tinta">
                         {profile.created_at
                           ? new Date(profile.created_at).toLocaleDateString(i18n.language === 'en' ? 'en-US' : 'es-MX', { month: 'short', year: '2-digit' })
                           : '—'}
                       </p>
-                      <p className="text-[10px] text-[#67808C] mt-0.5 leading-tight">{t('profile.memberSince')}</p>
+                      <p className="text-[10px] text-gris mt-0.5 leading-tight">{t('profile.memberSince')}</p>
                     </div>
                   </div>
                 </section>
 
-                <section className="bg-white rounded-[24px] p-5 border border-[#D7E3EA]/60 shadow-sm space-y-4">
+                <section className="bg-papel rounded-sm p-5 border-2 border-tinta/60 space-y-4">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#67808C] mb-2">
+                    <p className="text-xs font-bold uppercase tracking-[0.15em] text-gris mb-2">
                       {t('profile.details')}
                     </p>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-4">
-                    <span className="text-sm text-[#67808C]">
+                    <span className="text-sm text-gris">
                       {t('profile.username')}
                     </span>
-                        <span className="text-sm font-bold text-[#0B1E26]">
+                        <span className="text-sm font-bold text-tinta">
                       @{profile.username}
                     </span>
                       </div>
                       <div className="flex items-center justify-between gap-4">
-                    <span className="text-sm text-[#67808C]">
+                    <span className="text-sm text-gris">
                       {t('profile.stellarAddress')}
                     </span>
-                        <span className="text-sm font-mono text-[#0B1E26] truncate max-w-[55%] text-right">
+                        <span className="text-sm font-mono text-tinta truncate max-w-[55%] text-right">
                       {profile.stellar_address}
                     </span>
                       </div>
                       <div className="flex items-center justify-between gap-4">
-                        <span className="text-sm text-[#67808C]">{t('profile.wallet')}</span>
-                        <span className="text-sm font-bold text-[#0B1E26]">
+                        <span className="text-sm text-gris">{t('profile.wallet')}</span>
+                        <span className="text-sm font-bold text-tinta">
                       {profile.wallet_type ?? "self_custodial"}
                     </span>
                       </div>
@@ -306,48 +306,48 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                   </div>
                 </section>
 
-                <section className="bg-white rounded-[24px] p-5 border border-[#D7E3EA]/60 shadow-sm space-y-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#67808C]">
+                <section className="bg-papel rounded-sm p-5 border-2 border-tinta/60 space-y-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-gris">
                     {t('profile.deviceKey')}
                   </p>
-                  <p className="font-mono text-xs text-[#0B1E26] break-all select-all bg-[#F4FAFF] rounded-xl p-3">
+                  <p className="font-mono text-xs text-tinta break-all select-all bg-fondo rounded-sm p-3">
                     {devicePublicKey ?? t('profile.noKeyGenerated')}
                   </p>
                   <div className="flex gap-2">
                     <button
                         onClick={handleCopyAddress}
                         disabled={!devicePublicKey}
-                        className="flex-1 h-10 text-sm font-bold border border-[#00694C] text-[#00694C] rounded-xl active:scale-95 transition-all disabled:opacity-40"
+                        className="flex-1 h-10 text-sm font-bold border border-[#00694C] text-verde rounded-sm active:scale-95 transition-all disabled:opacity-40"
                     >
                       {t('profile.copyAddress')}
                     </button>
                     <button
                         onClick={() => setShowImportModal(true)}
-                        className="flex-1 h-10 text-sm font-bold border border-[#D7E3EA] text-[#67808C] rounded-xl active:scale-95 transition-all"
+                        className="flex-1 h-10 text-sm font-bold border-2 border-tinta text-gris rounded-sm active:scale-95 transition-all"
                     >
                       {t('profile.importKey')}
                     </button>
                   </div>
                   <button
                       onClick={handleExport}
-                      className="w-full h-10 text-sm font-bold text-[#C62828] border border-[#F5B6C0] rounded-xl active:scale-95 transition-all"
+                      className="w-full h-10 text-sm font-bold text-rojo border border-[#F5B6C0] rounded-sm active:scale-95 transition-all"
                   >
                     {t('profile.exportKey')}
                   </button>
                 </section>
 
                 {/* Language switcher */}
-                <section className="bg-white rounded-[24px] p-5 border border-[#D7E3EA]/60 shadow-sm">
-                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#67808C] mb-3">{t('profile.language')}</p>
+                <section className="bg-papel rounded-sm p-5 border-2 border-tinta/60 ">
+                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-gris mb-3">{t('profile.language')}</p>
                   <div className="flex gap-2">
                     {(['es', 'en'] as const).map((lang) => (
                       <button
                         key={lang}
                         onClick={() => setLanguage(lang)}
-                        className={`flex-1 h-11 rounded-xl font-bold text-sm border transition-all active:scale-95 ${
+                        className={`flex-1 h-11 rounded-sm font-bold text-sm border transition-all active:scale-95 ${
                           i18n.language === lang
-                            ? 'bg-[#00694C] text-white border-transparent'
-                            : 'bg-white text-[#67808C] border-[#D7E3EA]'
+                            ? 'bg-verde text-papel border-transparent'
+                            : 'bg-papel text-gris border-linea'
                         }`}
                       >
                         {lang === 'es' ? '🇲🇽 Español' : '🇺🇸 English'}
@@ -356,42 +356,42 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                   </div>
                 </section>
 
-                <section className="bg-white rounded-[24px] p-5 border border-[#D7E3EA]/60 shadow-sm">
-                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#67808C] mb-3">{t('profile.legal')}</p>
+                <section className="bg-papel rounded-sm p-5 border-2 border-tinta/60 ">
+                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-gris mb-3">{t('profile.legal')}</p>
                   <div className="space-y-1">
                     <button
                         onClick={onNavigatePrivacy}
-                        className="w-full flex items-center justify-between py-2.5 text-sm text-[#0B1E26] hover:text-[#00694C] transition-colors"
+                        className="w-full flex items-center justify-between py-2.5 text-sm text-tinta hover:text-verde transition-colors"
                     >
                       <span>{t('profile.privacy')}</span>
-                      <span className="material-symbols-outlined text-base text-[#67808C]">chevron_right</span>
+                      <span className="material-symbols-outlined text-base text-gris">chevron_right</span>
                     </button>
-                    <div className="border-t border-[#D7E3EA]/40" />
+                    <div className="border-t border-linea/40" />
                     <button
                         onClick={onNavigateTerms}
-                        className="w-full flex items-center justify-between py-2.5 text-sm text-[#0B1E26] hover:text-[#00694C] transition-colors"
+                        className="w-full flex items-center justify-between py-2.5 text-sm text-tinta hover:text-verde transition-colors"
                     >
                       <span>{t('profile.terms')}</span>
-                      <span className="material-symbols-outlined text-base text-[#67808C]">chevron_right</span>
+                      <span className="material-symbols-outlined text-base text-gris">chevron_right</span>
                     </button>
                   </div>
                 </section>
 
-                <section className="bg-white rounded-[24px] p-5 border border-[#F5B6C0] shadow-sm space-y-4">
+                <section className="bg-papel rounded-sm p-5 border border-[#F5B6C0] space-y-4">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#C62828] mb-2">
+                    <p className="text-xs font-bold uppercase tracking-[0.15em] text-rojo mb-2">
                       {t('profile.dangerZone')}
                     </p>
-                    <h3 className="text-xl font-bold text-[#0B1E26] mb-2">
+                    <h3 className="text-xl font-bold text-tinta mb-2">
                       {t('profile.deleteTitle')}
                     </h3>
-                    <p className="text-sm text-[#67808C] leading-relaxed">
+                    <p className="text-sm text-gris leading-relaxed">
                       {t('profile.deleteDesc')}
                     </p>
                   </div>
 
-                  <div className="bg-[#FFECEF] rounded-2xl p-4 border border-[#F5B6C0]">
-                    <p className="text-sm text-[#C62828] font-medium">
+                  <div className="bg-[#FFECEF] rounded-sm p-4 border border-[#F5B6C0]">
+                    <p className="text-sm text-rojo font-medium">
                       {t('profile.deleteWarning')}
                     </p>
                   </div>
@@ -399,7 +399,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                   <button
                       type="button"
                       onClick={openDeleteModal}
-                      className="w-full bg-[#C62828] text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-[#C62828]/20 transition-all active:scale-[0.98]"
+                      className="w-full bg-[#C62828] text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 /20 transition-all active:scale-[0.98]"
                   >
                 <span className="material-symbols-outlined text-lg">
                   delete_forever
@@ -408,12 +408,12 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                   </button>
                 </section>
 
-                <section className="bg-white rounded-[24px] p-5 border border-[#D7E3EA]/60 shadow-sm">
-                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#67808C] mb-3">{t('profile.session')}</p>
+                <section className="bg-papel rounded-sm p-5 border-2 border-tinta/60 ">
+                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-gris mb-3">{t('profile.session')}</p>
                   <button
                       type="button"
                       onClick={onLogout}
-                      className="w-full bg-gray-200 text-gray-800 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                      className="w-full bg-gray-200 text-gray-800 font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
                   >
                 <span className="material-symbols-outlined text-lg">
                   logout
@@ -425,11 +425,11 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
           )}
 
           {!loading && !profile && !error && (
-              <div className="bg-white rounded-[24px] p-6 border border-[#D7E3EA]/60 shadow-sm text-center">
-            <span className="material-symbols-outlined text-[#67808C] text-3xl">
+              <div className="bg-papel rounded-sm p-6 border-2 border-tinta/60 text-center">
+            <span className="material-symbols-outlined text-gris text-3xl">
               person_off
             </span>
-                <p className="mt-3 text-sm text-[#67808C]">
+                <p className="mt-3 text-sm text-gris">
                   {t('profile.noProfile')}
                 </p>
               </div>
@@ -449,10 +449,10 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
         )}
 
         {showImportModal && (
-            <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 backdrop-blur-sm p-4">
-              <div className="w-full bg-white rounded-[28px] p-6 space-y-4 shadow-2xl">
-                <h3 className="text-lg font-bold text-[#0B1E26]">{t('profile.importKeyTitle')}</h3>
-                <p className="text-sm text-[#67808C]">
+            <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 p-4">
+              <div className="w-full bg-papel rounded-sm p-6 space-y-4 ">
+                <h3 className="text-lg font-bold text-tinta">{t('profile.importKeyTitle')}</h3>
+                <p className="text-sm text-gris">
                   {t('profile.importKeyDesc')}
                 </p>
                 <textarea
@@ -460,19 +460,19 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                     onChange={e => setImportInput(e.target.value)}
                     placeholder={t('profile.importPlaceholder')}
                     rows={3}
-                    className="w-full font-mono text-xs border border-[#D7E3EA] rounded-xl p-3 resize-none focus:outline-none focus:ring-2 focus:ring-[#00694C]"
+                    className="w-full font-mono text-xs border-2 border-tinta rounded-sm p-3 resize-none focus:outline-none focus:ring-2 focus:ring-[#00694C]"
                 />
                 <div className="flex gap-3">
                   <button
                       onClick={() => { setShowImportModal(false); setImportInput(''); }}
-                      className="flex-1 h-12 font-bold border border-[#D7E3EA] text-[#67808C] rounded-2xl"
+                      className="flex-1 h-12 font-bold border-2 border-tinta text-gris rounded-sm"
                   >
                     {t('profile.importCancel')}
                   </button>
                   <button
                       onClick={handleImport}
                       disabled={!importInput.trim()}
-                      className="flex-1 h-12 font-bold bg-[#00694C] text-white rounded-2xl disabled:opacity-40"
+                      className="flex-1 h-12 font-bold bg-verde text-papel rounded-sm disabled:opacity-40"
                   >
                     {t('profile.importConfirm')}
                   </button>
@@ -482,8 +482,8 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
         )}
 
         {success && (
-            <div className="fixed bottom-24 left-1/2 z-[70] -translate-x-1/2 rounded-2xl bg-[#E6F9F1] border border-[#1D9E75]/20 px-4 py-3 shadow-lg">
-              <p className="text-sm text-[#1D9E75] font-medium">
+            <div className="fixed bottom-24 left-1/2 z-[70] -translate-x-1/2 rounded-sm bg-[#E6F9F1] border border-[#1D9E75]/20 px-4 py-3 ">
+              <p className="text-sm text-verde-claro font-medium">
                 {t('profile.accountDeleted')}
               </p>
             </div>

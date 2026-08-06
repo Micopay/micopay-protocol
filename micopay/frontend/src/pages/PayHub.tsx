@@ -13,7 +13,7 @@ const PayHub = ({ onSend, onReceive }: PayHubProps) => {
 
   return (
     <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col pb-28">
-      <header className="fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-md bg-white/90 border-b border-outline-variant/10">
+      <header className="fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
         <h1 className="font-headline font-bold text-xl text-primary">{t('pay.title')}</h1>
       </header>
 
@@ -24,20 +24,20 @@ const PayHub = ({ onSend, onReceive }: PayHubProps) => {
         <div className="grid grid-cols-2 gap-4">
           <button
             onClick={onSend}
-            className="bg-primary text-white rounded-[24px] p-6 flex flex-col items-start gap-3 shadow-lg shadow-primary/20 active:scale-[0.97] transition-all"
+            className="bg-primary text-papel rounded-sm p-6 flex flex-col items-start gap-3 active:scale-[0.97] transition-all"
           >
-            <span className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center">
+            <span className="w-12 h-12 rounded-sm bg-papel flex items-center justify-center">
               <span className="material-symbols-outlined text-2xl">arrow_upward</span>
             </span>
             <span className="font-headline font-bold text-lg">{t('pay.send')}</span>
-            <span className="text-[12px] text-white/80 text-left leading-snug">{t('pay.sendDesc')}</span>
+            <span className="text-[12px] text-papel/80 text-left leading-snug">{t('pay.sendDesc')}</span>
           </button>
 
           <button
             onClick={onReceive}
-            className="bg-white border border-outline-variant/10 rounded-[24px] p-6 flex flex-col items-start gap-3 shadow-sm active:scale-[0.97] transition-all"
+            className="bg-papel border-2 border-tinta rounded-sm p-6 flex flex-col items-start gap-3 active:scale-[0.97] transition-all"
           >
-            <span className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <span className="w-12 h-12 rounded-sm bg-primary/10 flex items-center justify-center">
               <span className="material-symbols-outlined text-2xl text-primary">qr_code_2</span>
             </span>
             <span className="font-headline font-bold text-lg text-on-surface">{t('pay.receive')}</span>
@@ -48,7 +48,7 @@ const PayHub = ({ onSend, onReceive }: PayHubProps) => {
         {/* Balances */}
         <section>
           <h2 className="text-[11px] font-bold text-gris uppercase tracking-[0.15em] mb-3">{t('pay.yourAssets')}</h2>
-          <div className="bg-white rounded-[20px] border border-outline-variant/10 shadow-sm divide-y divide-outline-variant/10">
+          <div className="bg-papel rounded-sm border-2 border-tinta divide-y divide-linea">
             {ASSETS.map((a) => {
               const bal = tokens.find((t) => t.code.toLowerCase() === a.code.toLowerCase())?.balance ?? 0;
               return (

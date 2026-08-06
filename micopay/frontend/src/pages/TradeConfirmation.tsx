@@ -49,7 +49,7 @@ export default function TradeConfirmationPage({
 
   return (
     <div className="min-h-screen bg-surface-container-lowest text-on-surface font-body pb-28">
-      <header className="sticky top-0 z-40 border-b border-outline-variant/20 bg-surface/90 backdrop-blur-md px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center gap-3">
+      <header className="sticky top-0 z-40 border-b-2 border-tinta bg-surface/90 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center gap-3">
         <button
           type="button"
           onClick={onBack}
@@ -64,14 +64,14 @@ export default function TradeConfirmationPage({
       <main className="max-w-md mx-auto px-4 pt-6 space-y-5">
         {errorMessage ? (
           <div
-            className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+            className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
             role="alert"
           >
             {errorMessage}
           </div>
         ) : null}
 
-        <section className="rounded-2xl border border-outline-variant/20 bg-surface p-5 space-y-4 shadow-sm">
+        <section className="rounded-sm border-2 border-tinta bg-surface p-5 space-y-4 ">
           <h2 className="text-xs font-bold tracking-widest text-on-surface-variant uppercase">
             {t('confirm.summary')}
           </h2>
@@ -86,7 +86,7 @@ export default function TradeConfirmationPage({
               <dd className="font-semibold text-right">{agentType}</dd>
             </div>
 
-            <div className="flex justify-between gap-4 border-t border-outline-variant/15 pt-3">
+            <div className="flex justify-between gap-4 border-t border-linea pt-3">
               <dt className="text-on-surface-variant">{t('confirm.youReceive')}</dt>
               <dd className="font-bold text-lg text-primary">
                 ${receiveMxn.toFixed(2)} MXN
@@ -98,7 +98,7 @@ export default function TradeConfirmationPage({
               <dd className="font-semibold tabular-nums">${totalFee.toFixed(2)} MXN</dd>
             </div>
 
-            <div className="text-xs text-on-surface-variant pl-2 border-l-2 border-outline-variant/20 ml-1 space-y-1">
+            <div className="text-xs text-on-surface-variant pl-2 border-l-2 border-linea ml-1 space-y-1">
               <div className="flex justify-between">
                 <span>{t('confirm.agentCommission', { pct: commissionPct })}</span>
                 <span>${providerFee.toFixed(2)} MXN</span>
@@ -109,7 +109,7 @@ export default function TradeConfirmationPage({
               </div>
             </div>
 
-            <div className="flex justify-between gap-4 border-t border-outline-variant/15 pt-3">
+            <div className="flex justify-between gap-4 border-t border-linea pt-3">
               <dt className="text-on-surface-variant">{t('confirm.totalEffectiveCost')}</dt>
               <dd
                 className={`font-bold tabular-nums ${exceedsThreshold ? 'text-error' : 'text-on-surface'}`}
@@ -118,7 +118,7 @@ export default function TradeConfirmationPage({
               </dd>
             </div>
 
-            <div className="flex justify-between gap-4 border-t border-outline-variant/15 pt-3">
+            <div className="flex justify-between gap-4 border-t border-linea pt-3">
               <dt className="text-on-surface-variant">{t('confirm.agentStatus')}</dt>
               <dd className={`flex items-center gap-1.5 font-medium ${merchantOnline ? 'text-green-700' : 'text-red-600'}`}>
                 <span className={`w-2 h-2 rounded-full inline-block ${merchantOnline ? 'bg-green-500' : 'bg-red-500'}`} />
@@ -138,7 +138,7 @@ export default function TradeConfirmationPage({
         {exceedsThreshold && (
           <div
             role="alert"
-            className="flex items-start gap-2 rounded-xl border border-error/30 bg-error/5 px-4 py-3"
+            className="flex items-start gap-2 rounded-sm border border-error/30 bg-error/5 px-4 py-3"
           >
             <span className="material-symbols-outlined text-error text-base leading-none">warning</span>
             <p className="text-sm font-medium text-error leading-snug">
@@ -151,7 +151,7 @@ export default function TradeConfirmationPage({
           type="button"
           disabled={loading}
           onClick={async () => { await onConfirm(); }}
-          className="w-full rounded-xl bg-primary py-3.5 text-sm font-semibold text-on-primary shadow-md hover:opacity-95 disabled:opacity-50 transition-opacity"
+          className="w-full rounded-sm bg-primary py-3.5 text-sm font-semibold text-on-primary hover:opacity-95 disabled:opacity-50 transition-opacity"
         >
           {loading ? t('confirm.creating') : t('confirm.confirmBtn')}
         </button>
@@ -160,7 +160,7 @@ export default function TradeConfirmationPage({
           type="button"
           disabled={loading}
           onClick={onBack}
-          className="w-full rounded-xl border border-outline-variant/30 py-3.5 text-sm font-semibold text-on-surface hover:bg-surface-container-low transition-colors"
+          className="w-full rounded-sm border-2 border-tinta py-3.5 text-sm font-semibold text-on-surface hover:bg-surface-container-low transition-colors"
         >
           {t('confirm.cancel')}
         </button>

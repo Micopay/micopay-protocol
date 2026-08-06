@@ -464,7 +464,7 @@ function SuccessRoute() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F4FAFF]">
+      <div className="min-h-screen flex items-center justify-center bg-fondo">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
@@ -1007,7 +1007,7 @@ function App() {
   if (startupError) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FFF8F8] px-6 py-12">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-red-100 animate-fade-in font-['Manrope']">
+        <div className="max-w-md w-full bg-papel rounded-sm p-8 border border-red-100 animate-fade-in font-['Manrope']">
           <div className="flex items-center justify-center w-16 h-16 rounded-full bg-red-50 text-red-500 mx-auto mb-6">
             <span className="material-symbols-outlined text-4xl">warning</span>
           </div>
@@ -1018,7 +1018,7 @@ function App() {
             {startupError.message}
           </p>
           {startupError.details && (
-            <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 mb-6">
+            <div className="bg-gray-50 rounded-sm p-4 border border-gray-100 mb-6">
               <p className="text-[10px] text-gray-500 font-mono break-words leading-normal">
                 {startupError.details}
               </p>
@@ -1026,7 +1026,7 @@ function App() {
           )}
           <button
             onClick={() => window.location.reload()}
-            className="w-full py-3 px-4 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-semibold text-xs transition-all duration-200 shadow-md flex items-center justify-center gap-2"
+            className="w-full py-3 px-4 bg-gray-900 hover:bg-gray-800 text-papel rounded-sm font-semibold text-xs transition-all duration-200 flex items-center justify-center gap-2"
           >
             <span className="material-symbols-outlined text-base">refresh</span>
             Reintentar
@@ -1038,7 +1038,7 @@ function App() {
 
   if (!authReady) {
     return (
-        <div className="min-h-screen flex items-center justify-center bg-[#F4FAFF]">
+        <div className="min-h-screen flex items-center justify-center bg-fondo">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </div>
     );
@@ -1048,7 +1048,7 @@ function App() {
       <ErrorBoundary>
         <AppContext.Provider value={ctx}>
           <HashRouter>
-            <div className="flex flex-col min-h-screen bg-[#F4FAFF]">
+            <div className="flex flex-col min-h-screen bg-fondo">
               <Routes>
                 <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
                 <Route path="/register" element={<Register onLoginSuccess={handleLoginSuccess} />} />
@@ -1085,22 +1085,22 @@ function App() {
 
               {showBackupPrompt && (
                 <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-6 animate-fade-in">
-                  <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl relative overflow-hidden">
+                  <div className="bg-papel rounded-sm w-full max-w-sm p-6 relative overflow-hidden">
                     <div className="text-center mb-6">
                       <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500">
                         <span className="material-symbols-outlined text-3xl">shield_lock</span>
                       </div>
-                      <h2 className="text-xl font-extrabold text-[#0B1E26]">Respaldo Requerido</h2>
-                      <p className="text-sm text-[#67808C] mt-2">Antes de iniciar una operación con fondos, debes respaldar tu llave secreta. Sin ella, podrías perder tus fondos.</p>
+                      <h2 className="text-xl font-extrabold text-tinta">Respaldo Requerido</h2>
+                      <p className="text-sm text-gris mt-2">Antes de iniciar una operación con fondos, debes respaldar tu llave secreta. Sin ella, podrías perder tus fondos.</p>
                     </div>
 
-                    <div className="bg-red-50 border border-red-100 rounded-2xl p-4 mb-6">
+                    <div className="bg-red-50 border border-red-100 rounded-sm p-4 mb-6">
                       <label className="block text-xs font-bold text-red-800 uppercase tracking-wider mb-2">
                         Tu Llave Secreta
                       </label>
                       <button
                         onClick={handleCopyBackup}
-                        className="w-full bg-red-100 hover:bg-red-200 text-red-800 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                        className="w-full bg-red-100 hover:bg-red-200 text-red-800 font-bold py-3 rounded-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
                       >
                         <span className="material-symbols-outlined text-base">{copiedBackup ? 'check' : 'content_copy'}</span>
                         {copiedBackup ? '¡Copiada!' : 'Copiar Llave Secreta'}
@@ -1111,13 +1111,13 @@ function App() {
                     <div className="flex gap-3">
                       <button
                         onClick={handleCancelBackup}
-                        className="flex-1 py-3 text-[#67808C] font-bold rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
+                        className="flex-1 py-3 text-gris font-bold rounded-sm bg-gray-50 hover:bg-gray-100 transition-colors"
                       >
                         Cancelar
                       </button>
                       <button
                         onClick={handleConfirmBackup}
-                        className="flex-1 py-3 text-white font-bold rounded-xl bg-[#00694C] hover:bg-[#005740] transition-colors"
+                        className="flex-1 py-3 text-papel font-bold rounded-sm bg-verde hover:bg-[#005740] transition-colors"
                       >
                         Continuar
                       </button>

@@ -112,7 +112,7 @@ export default function MerchantSettings({
         <p>Cargando…</p>
       ) : (
         <div className="space-y-5">
-          <section className="bg-white rounded-[24px] p-5 border border-slate-100 shadow-sm mb-8">
+          <section className="bg-papel rounded-sm p-5 border border-slate-100 mb-8">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="font-bold text-on-surface">
@@ -129,8 +129,8 @@ export default function MerchantSettings({
                 disabled={saving}
                 className={`px-6 py-2 rounded-full font-bold text-xs transition-all ${
                   availability === "paused"
-                    ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
-                    : "bg-error text-white shadow-lg shadow-error/20"
+                    ? "bg-emerald-500 text-papel shadow-emerald-500/20"
+                    : "bg-error text-papel shadow-error/20"
                 }`}
               >
                 {availability === "paused" ? "Reanudar" : "Pausar"}
@@ -169,7 +169,7 @@ export default function MerchantSettings({
           />
 
           <button
-            className="w-full rounded-xl bg-primary text-white font-semibold py-3 disabled:opacity-60"
+            className="w-full rounded-sm bg-primary text-papel font-semibold py-3 disabled:opacity-60"
             disabled={saving || !token || offlineQueue.isSyncing}
             onClick={save}
           >
@@ -210,7 +210,7 @@ function Field({
         step={step}
         value={Number.isFinite(value) ? value : 0}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-slate-200 px-4 py-3"
+        className="w-full rounded-sm border border-slate-200 px-4 py-3"
       />
     </label>
   );

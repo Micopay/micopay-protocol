@@ -46,7 +46,7 @@ function EffectiveFeeNote({
   const exceeds = totalPct > maxPct;
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2 border-t border-outline-variant/10 pt-3">
+      <div className="flex items-center justify-between gap-2 border-t border-linea pt-3">
         <span className="text-xs text-on-surface-variant font-label uppercase">
           Costo total efectivo
         </span>
@@ -60,7 +60,7 @@ function EffectiveFeeNote({
       {exceeds && (
         <div
           role="alert"
-          className="flex items-start gap-2 rounded-lg border border-error/30 bg-error/5 px-3 py-2"
+          className="flex items-start gap-2 rounded-sm border border-error/30 bg-error/5 px-3 py-2"
         >
           <span className="material-symbols-outlined text-error text-base leading-none">warning</span>
           <p className="text-[12px] font-medium text-error leading-snug">
@@ -77,13 +77,13 @@ function EffectiveFeeNote({
 function LoadingSkeleton({ onBack, amount }: { onBack: () => void; amount: number }) {
   return (
     <div className="bg-surface text-on-surface min-h-screen pb-24">
-      <header className="w-full top-0 sticky bg-[#E7F6FF] shadow-[0px_32px_32px_rgba(11,30,38,0.04)] z-50 pt-[max(0px,env(safe-area-inset-top))]">
+      <header className="border-b-2 border-tinta w-full top-0 sticky bg-[#E7F6FF] z-50 pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between px-6 py-4 w-full">
           <div className="flex items-center gap-4">
-            <button onClick={onBack} className="text-[#00694C] active:scale-95 duration-200">
+            <button onClick={onBack} className="text-verde active:scale-95 duration-200">
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
-            <h1 className="font-headline font-bold text-xl text-[#00694C]">Ofertas de depósito</h1>
+            <h1 className="font-headline font-bold text-xl text-verde">Ofertas de depósito</h1>
           </div>
         </div>
       </header>
@@ -101,23 +101,23 @@ function LoadingSkeleton({ onBack, amount }: { onBack: () => void; amount: numbe
         </section>
 
         <section>
-          <div className="w-full h-64 bg-surface-container-low rounded-[32px] animate-pulse" />
+          <div className="w-full h-64 bg-surface-container-low rounded-sm animate-pulse" />
         </section>
 
         <div className="space-y-6">
           {[0, 1].map((i) => (
             <div
               key={i}
-              className="bg-surface-container-lowest rounded-xl p-6 ring-1 ring-outline-variant/10 space-y-4 animate-pulse"
+              className="bg-surface-container-lowest rounded-sm p-6 ring-1 ring-outline-variant/10 space-y-4 animate-pulse"
             >
               <div className="flex gap-4">
-                <div className="w-12 h-12 bg-surface-container-high rounded-xl" />
+                <div className="w-12 h-12 bg-surface-container-high rounded-sm" />
                 <div className="flex-1 space-y-2">
                   <div className="h-4 w-40 bg-surface-container-high rounded" />
                   <div className="h-3 w-24 bg-surface-container-high rounded" />
                 </div>
               </div>
-              <div className="h-[46px] w-full rounded-lg bg-surface-container-high" />
+              <div className="h-[46px] w-full rounded-sm bg-surface-container-high" />
             </div>
           ))}
         </div>
@@ -131,12 +131,12 @@ function LoadingSkeleton({ onBack, amount }: { onBack: () => void; amount: numbe
 function LocationDenied({ onBack }: { onBack: () => void }) {
   return (
     <div className="bg-surface text-on-surface min-h-screen pb-24">
-      <header className="w-full top-0 sticky bg-[#E7F6FF] shadow-[0px_32px_32px_rgba(11,30,38,0.04)] z-50 pt-[max(0px,env(safe-area-inset-top))]">
+      <header className="border-b-2 border-tinta w-full top-0 sticky bg-[#E7F6FF] z-50 pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center px-6 py-4">
-          <button onClick={onBack} className="text-[#00694C] active:scale-95 duration-200">
+          <button onClick={onBack} className="text-verde active:scale-95 duration-200">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
-          <h1 className="ml-4 font-headline font-bold text-xl text-[#00694C]">Ofertas de depósito</h1>
+          <h1 className="ml-4 font-headline font-bold text-xl text-verde">Ofertas de depósito</h1>
         </div>
       </header>
 
@@ -148,7 +148,7 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
         </p>
         <button
           onClick={onBack}
-          className="mt-2 px-6 py-3 border-2 border-primary text-primary font-bold rounded-xl active:scale-95 transition-all"
+          className="mt-2 px-6 py-3 border-2 border-primary text-primary font-bold rounded-sm active:scale-95 transition-all"
         >
           Volver
         </button>
@@ -162,12 +162,12 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
 function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => void }) {
   return (
     <div className="bg-surface text-on-surface min-h-screen pb-24">
-      <header className="w-full top-0 sticky bg-[#E7F6FF] shadow-[0px_32px_32px_rgba(11,30,38,0.04)] z-50 pt-[max(0px,env(safe-area-inset-top))]">
+      <header className="border-b-2 border-tinta w-full top-0 sticky bg-[#E7F6FF] z-50 pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center px-6 py-4">
-          <button onClick={onBack} className="text-[#00694C] active:scale-95 duration-200">
+          <button onClick={onBack} className="text-verde active:scale-95 duration-200">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
-          <h1 className="ml-4 font-headline font-bold text-xl text-[#00694C]">Ofertas de depósito</h1>
+          <h1 className="ml-4 font-headline font-bold text-xl text-verde">Ofertas de depósito</h1>
         </div>
       </header>
 
@@ -180,13 +180,13 @@ function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => vo
         <div className="flex gap-3 mt-2">
           <button
             onClick={onRetry}
-            className="px-6 py-3 bg-primary text-white font-bold rounded-xl active:scale-95 transition-all"
+            className="px-6 py-3 bg-primary text-papel font-bold rounded-sm active:scale-95 transition-all"
           >
             Reintentar
           </button>
           <button
             onClick={onBack}
-            className="px-6 py-3 border border-outline text-on-surface font-bold rounded-xl active:scale-95 transition-all"
+            className="px-6 py-3 border border-outline text-on-surface font-bold rounded-sm active:scale-95 transition-all"
           >
             Volver
           </button>
@@ -210,7 +210,7 @@ function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) 
       </p>
       <button
         onClick={onBack}
-        className="mt-2 h-[48px] px-8 border-2 border-primary text-primary font-bold rounded-xl active:scale-95 transition-all duration-200 flex items-center gap-2"
+        className="mt-2 h-[48px] px-8 border-2 border-primary text-primary font-bold rounded-sm active:scale-95 transition-all duration-200 flex items-center gap-2"
       >
         <span className="material-symbols-outlined text-sm">tune</span>
         Cambiar monto
@@ -246,14 +246,14 @@ function MerchantOfferCard({
     return (
       <div className="relative group">
         <div className="absolute -top-3 left-6 z-10">
-          <span className="bg-primary text-on-primary text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">
+          <span className="bg-primary text-on-primary text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest ">
             Mejor oferta
           </span>
         </div>
-        <div className="bg-surface-container-lowest rounded-xl p-6 shadow-[0px_32px_32px_rgba(11,30,38,0.04)] ring-1 ring-outline-variant/10 flex flex-col gap-5 transition-transform hover:scale-[1.01] duration-300">
+        <div className="bg-surface-container-lowest rounded-sm p-6 ring-1 ring-outline-variant/10 flex flex-col gap-5 transition-transform hover:scale-[1.01] duration-300">
           <div className="flex justify-between items-start gap-3">
             <div className="flex gap-4 min-w-0">
-              <div className="w-12 h-12 bg-primary-fixed rounded-xl flex items-center justify-center text-primary flex-shrink-0">
+              <div className="w-12 h-12 bg-primary-fixed rounded-sm flex items-center justify-center text-primary flex-shrink-0">
                 <span
                   className="material-symbols-outlined"
                   style={{ fontVariationSettings: '"FILL" 1' }}
@@ -275,8 +275,8 @@ function MerchantOfferCard({
                   <span>{merchant.completion_rate ? `${Math.round(merchant.completion_rate)}% completitud` : 'Sin historial'}</span>
                   <span>·</span>
                   <span>{merchant.trades_completed ?? 0} ops</span>
-                  {merchant.tier && <span className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-surface-container-high text-primary">{merchant.tier}</span>}
-                  <span className={`px-2 py-0.5 text-[11px] font-bold rounded-md ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                  {merchant.tier && <span className="px-2 py-0.5 text-[11px] font-bold rounded-sm bg-surface-container-high text-primary">{merchant.tier}</span>}
+                  <span className={`px-2 py-0.5 text-[11px] font-bold rounded-sm ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
                     {((merchant.seller_type === 'business') || merchant.is_business) ? 'Negocio' : 'Individuo'}
                   </span>
                 </div>
@@ -297,7 +297,7 @@ function MerchantOfferCard({
             </div>
           </div>
 
-          <div className="bg-surface-container-low rounded-lg p-4 flex justify-between items-center">
+          <div className="bg-surface-container-low rounded-sm p-4 flex justify-between items-center">
             <div className="space-y-1">
               <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-tight">Entregas en efectivo</p>
               <p className="font-bold text-on-surface">${amount} MXN</p>
@@ -318,7 +318,7 @@ function MerchantOfferCard({
           <button
             onClick={() => onSelectOffer(merchant.seller_id)}
             disabled={loading}
-            className="w-full h-[46px] bg-gradient-to-r from-primary to-primary-container text-white font-semibold rounded-lg shadow-md active:scale-95 duration-200 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-wait"
+            className="w-full h-[46px] from-primary to-primary-container text-papel font-semibold rounded-sm active:scale-95 duration-200 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-wait"
           >
             {loading ? 'Conectando con el agente…' : 'Elegir este agente'}
           </button>
@@ -328,10 +328,10 @@ function MerchantOfferCard({
   }
 
   return (
-    <div className="bg-surface-container rounded-xl p-6 ring-1 ring-outline-variant/5 flex flex-col gap-4">
+    <div className="bg-surface-container rounded-sm p-6 ring-1 ring-outline-variant/5 flex flex-col gap-4">
       <div className="flex justify-between items-start gap-3">
         <div className="flex gap-4 min-w-0">
-          <div className="w-12 h-12 bg-surface-container-highest rounded-xl flex items-center justify-center text-outline flex-shrink-0">
+          <div className="w-12 h-12 bg-surface-container-highest rounded-sm flex items-center justify-center text-outline flex-shrink-0">
             <span className="material-symbols-outlined">storefront</span>
           </div>
           <div className="min-w-0">
@@ -340,8 +340,8 @@ function MerchantOfferCard({
               <span>{merchant.completion_rate ? `${Math.round(merchant.completion_rate)}%` : 'Sin historial'}</span>
               <span>·</span>
               <span>{merchant.trades_completed ?? 0} ops</span>
-              {merchant.tier && <span className="px-2 py-0.5 text-[10px] rounded-md bg-surface-container-high text-primary">{merchant.tier}</span>}
-              <span className={`px-2 py-0.5 text-[10px] rounded-md ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+              {merchant.tier && <span className="px-2 py-0.5 text-[10px] rounded-sm bg-surface-container-high text-primary">{merchant.tier}</span>}
+              <span className={`px-2 py-0.5 text-[10px] rounded-sm ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
                 {((merchant.seller_type === 'business') || merchant.is_business) ? 'Negocio' : 'Individuo'}
               </span>
             </div>
@@ -361,12 +361,12 @@ function MerchantOfferCard({
         platformFeePct={platformFeePct}
         maxPct={maxEffectiveFeePercent}
       />
-      <div className="flex justify-between items-center border-t border-outline-variant/10 pt-4">
+      <div className="flex justify-between items-center border-t border-linea pt-4">
         <p className="text-xs text-on-surface-variant">{distanceLabel} de distancia</p>
         <button
           onClick={() => onSelectOffer(merchant.seller_id)}
           disabled={loading}
-          className="text-primary font-bold text-sm px-4 py-2 hover:bg-primary/5 rounded-lg transition-colors disabled:opacity-50"
+          className="text-primary font-bold text-sm px-4 py-2 hover:bg-primary/5 rounded-sm transition-colors disabled:opacity-50"
         >
           Ver detalles
         </button>
@@ -411,17 +411,17 @@ const DepositMap = ({
   return (
     <div className="bg-surface text-on-surface min-h-screen pb-24">
       {/* TopAppBar */}
-      <header className="w-full top-0 sticky bg-[#E7F6FF] transition-colors duration-300 shadow-[0px_32px_32px_rgba(11,30,38,0.04)] z-50 pt-[max(0px,env(safe-area-inset-top))]">
+      <header className="border-b-2 border-tinta w-full top-0 sticky bg-[#E7F6FF] transition-colors duration-300 z-50 pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between px-6 py-4 w-full">
           <div className="flex items-center gap-4">
             <button
               onClick={onBack}
-              className="text-[#00694C] active:scale-95 duration-200"
+              className="text-verde active:scale-95 duration-200"
               aria-label="Volver"
             >
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
-            <h1 className="font-headline font-bold text-xl text-[#00694C]">Ofertas de depósito</h1>
+            <h1 className="font-headline font-bold text-xl text-verde">Ofertas de depósito</h1>
           </div>
         </div>
       </header>
@@ -480,7 +480,7 @@ const DepositMap = ({
         )}
 
         {/* Informative note */}
-        <div className="bg-surface-container-low rounded-2xl p-6 border border-primary/10">
+        <div className="bg-surface-container-low rounded-sm p-6 border border-primary/10">
           <div className="flex gap-4">
             <span className="material-symbols-outlined text-primary">info</span>
             <p className="text-sm text-on-surface-variant leading-relaxed">

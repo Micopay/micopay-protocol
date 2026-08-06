@@ -86,24 +86,24 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[#F4FAFF] flex flex-col items-center justify-center px-6">
-      <div className="w-full max-w-sm bg-white rounded-3xl shadow-lg p-8 space-y-6">
+    <div className="min-h-screen bg-fondo flex flex-col items-center justify-center px-6">
+      <div className="w-full max-w-sm bg-papel rounded-sm p-8 space-y-6">
         <div className="text-center">
-          <h1 className="font-extrabold text-2xl text-[#0B1E26]">MicoPay</h1>
-          <p className="text-sm text-[#67808C] mt-1">
+          <h1 className="font-extrabold text-2xl text-tinta">MicoPay</h1>
+          <p className="text-sm text-gris mt-1">
             {showRestore ? 'Restaura tu cuenta con tu llave secreta' : 'Ingresa a tu cuenta'}
           </p>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
+          <div className="bg-red-50 border border-red-200 rounded-sm px-4 py-3">
             <p className="text-sm text-red-800">{error}</p>
           </div>
         )}
 
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-[#67808C] uppercase tracking-wider mb-1">
+            <label className="block text-xs font-bold text-gris uppercase tracking-wider mb-1">
               Nombre de usuario
             </label>
             <input
@@ -112,7 +112,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               onChange={(e) => setUsername(e.target.value)}
               onKeyDown={(e) => !showRestore && e.key === 'Enter' && handleLogin()}
               placeholder="tu_usuario"
-              className="w-full px-4 py-3 rounded-2xl border border-[#D7E3EA] text-[#0B1E26] text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full px-4 py-3 rounded-sm border-2 border-tinta text-tinta text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
               autoCapitalize="none"
               autoCorrect="off"
             />
@@ -120,7 +120,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
           {showRestore && (
             <div>
-              <label className="block text-xs font-bold text-[#67808C] uppercase tracking-wider mb-1">
+              <label className="block text-xs font-bold text-gris uppercase tracking-wider mb-1">
                 Llave secreta (empieza con S…)
               </label>
               <input
@@ -128,7 +128,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 value={secretKey}
                 onChange={(e) => setSecretKey(e.target.value)}
                 placeholder="SABCD…"
-                className="w-full px-4 py-3 rounded-2xl border border-[#D7E3EA] text-[#0B1E26] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="w-full px-4 py-3 rounded-sm border-2 border-tinta text-tinta text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
                 autoCapitalize="none"
                 autoCorrect="off"
                 autoComplete="off"
@@ -140,7 +140,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         <button
           onClick={showRestore ? handleRestore : handleLogin}
           disabled={loading}
-          className="w-full bg-[#00694C] text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60"
+          className="w-full bg-verde text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60"
         >
           {loading ? (
             <>
@@ -152,17 +152,17 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           )}
         </button>
 
-        <div className="flex flex-col gap-2 text-center text-sm text-[#67808C]">
+        <div className="flex flex-col gap-2 text-center text-sm text-gris">
           <button
             onClick={() => { setShowRestore(!showRestore); setError(null); setSecretKey(''); }}
-            className="text-[#00694C] font-bold hover:underline"
+            className="text-verde font-bold hover:underline"
           >
             {showRestore ? '← Volver al login normal' : 'Restaurar con llave secreta'}
           </button>
           {!showRestore && (
             <span>
               ¿No tienes cuenta?{' '}
-              <button onClick={() => navigate('/register')} className="text-[#00694C] font-bold hover:underline">
+              <button onClick={() => navigate('/register')} className="text-verde font-bold hover:underline">
                 Regístrate
               </button>
             </span>

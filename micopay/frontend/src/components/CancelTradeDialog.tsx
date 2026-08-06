@@ -69,7 +69,7 @@ export default function CancelTradeDialog({
       aria-modal="true"
       aria-labelledby="cancel-trade-title"
     >
-      <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl border border-outline-variant/20">
+      <div className="w-full max-w-md rounded-sm bg-surface p-6 border-2 border-tinta">
         {step === 1 ? (
           <>
             <h2 id="cancel-trade-title" className="font-headline text-lg font-bold text-on-surface">
@@ -81,14 +81,14 @@ export default function CancelTradeDialog({
             <div className="mt-6 flex gap-2 justify-end">
               <button
                 type="button"
-                className="rounded-lg px-4 py-2 text-sm font-semibold text-primary hover:bg-surface-container-low"
+                className="rounded-sm px-4 py-2 text-sm font-semibold text-primary hover:bg-surface-container-low"
                 onClick={resetAndClose}
               >
                 Volver
               </button>
               <button
                 type="button"
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-on-primary"
+                className="rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-on-primary"
                 onClick={() => setStep(2)}
               >
                 Continuar
@@ -110,7 +110,7 @@ export default function CancelTradeDialog({
               </p>
             )}
             {requestError ? (
-              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+              <div className="mt-4 rounded-sm border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
                 <p>{requestError}</p>
                 <p className="mt-2 text-xs">
                   <a href="mailto:soporte@micopay.app" className="font-semibold underline">
@@ -122,7 +122,7 @@ export default function CancelTradeDialog({
             <div className="mt-6 flex flex-wrap gap-2 justify-end">
               <button
                 type="button"
-                className="rounded-lg px-4 py-2 text-sm font-semibold text-primary hover:bg-surface-container-low"
+                className="rounded-sm px-4 py-2 text-sm font-semibold text-primary hover:bg-surface-container-low"
                 onClick={() => {
                   setRequestError(null);
                   setStep(1);
@@ -133,7 +133,7 @@ export default function CancelTradeDialog({
               <button
                 type="button"
                 disabled={submitting}
-                className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                className="rounded-sm bg-red-700 px-4 py-2 text-sm font-semibold text-papel disabled:opacity-50"
                 onClick={() => void handleFinalConfirm()}
               >
                 {submitting ? 'Cancelando…' : 'Sí, cancelar operación'}
