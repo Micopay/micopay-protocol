@@ -47,7 +47,7 @@ const PayHub = ({ onSend, onReceive }: PayHubProps) => {
 
         {/* Balances */}
         <section>
-          <h2 className="text-[11px] font-bold text-outline-variant uppercase tracking-[0.15em] mb-3">{t('pay.yourAssets')}</h2>
+          <h2 className="text-[11px] font-bold text-gris uppercase tracking-[0.15em] mb-3">{t('pay.yourAssets')}</h2>
           <div className="bg-white rounded-[20px] border border-outline-variant/10 shadow-sm divide-y divide-outline-variant/10">
             {ASSETS.map((a) => {
               const bal = tokens.find((t) => t.code.toLowerCase() === a.code.toLowerCase())?.balance ?? 0;

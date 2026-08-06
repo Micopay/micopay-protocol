@@ -310,7 +310,7 @@ const Home = ({
 
         {/* Activos */}
         <section className="mb-8">
-          <h2 className="text-[11px] font-bold text-outline-variant uppercase tracking-[0.15em] mb-4">
+          <h2 className="text-[11px] font-bold text-gris uppercase tracking-[0.15em] mb-4">
             {t('home.assets')}
           </h2>
           <div className="bg-white rounded-[20px] border border-outline-variant/10 shadow-sm divide-y divide-outline-variant/10">
@@ -398,7 +398,7 @@ const Home = ({
 
         {/* Actividad */}
         <section className="mb-8">
-          <h2 className="text-[11px] font-bold text-outline-variant uppercase tracking-[0.15em] mb-4">
+          <h2 className="text-[11px] font-bold text-gris uppercase tracking-[0.15em] mb-4">
             {t('home.recentActivity')}
           </h2>
 
@@ -414,7 +414,7 @@ const Home = ({
             <div className="bg-white rounded-[20px] border border-outline-variant/10 shadow-sm p-6 text-center">
               <span
                 aria-hidden="true"
-                className="material-symbols-outlined text-outline-variant text-3xl mb-2 block"
+                className="material-symbols-outlined text-gris text-3xl mb-2 block"
               >
                 receipt_long
               </span>

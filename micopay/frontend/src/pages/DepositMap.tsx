@@ -302,7 +302,7 @@ function MerchantOfferCard({
               <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-tight">Entregas en efectivo</p>
               <p className="font-bold text-on-surface">${amount} MXN</p>
             </div>
-            <span className="material-symbols-outlined text-outline-variant">trending_flat</span>
+            <span className="material-symbols-outlined text-gris">trending_flat</span>
             <div className="space-y-1 text-right">
               <p className="text-[10px] text-accent uppercase font-bold tracking-tight">Recibes en wallet</p>
               <p className="font-bold text-on-surface text-lg">${merchant.payout_mxn.toFixed(2)} MXNe</p>

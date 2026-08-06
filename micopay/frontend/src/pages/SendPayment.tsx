@@ -123,7 +123,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
           <>
             {/* Asset selector */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">{t('send.asset')}</label>
+              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-gris mb-2">{t('send.asset')}</label>
               <div className="grid grid-cols-4 gap-2">
                 {SENDABLE_ASSETS.map((a) => (
                   <button
@@ -145,7 +145,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
 
             {/* Destination */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">{t('send.recipient')}</label>
+              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-gris mb-2">{t('send.recipient')}</label>
               <div className="flex gap-2">
                 <input
                   value={destination}
@@ -165,7 +165,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
 
             {/* Amount */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">{t('send.amount')}</label>
+              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-gris mb-2">{t('send.amount')}</label>
               <div className="relative">
                 <input
                   value={amount}
@@ -189,7 +189,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
 
             {/* Memo */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">{t('send.memo')}</label>
+              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-gris mb-2">{t('send.memo')}</label>
               <input
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
@@ -212,7 +212,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
           <>
             <div className="bg-white rounded-[24px] border border-outline-variant/10 shadow-sm p-6 space-y-4">
               <div className="text-center pb-2">
-                <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant">{t('send.youWillSend')}</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-gris">{t('send.youWillSend')}</p>
                 <p className="text-3xl font-headline font-extrabold mt-1" style={{ color: asset.color }}>
                   {amountNum.toLocaleString('es-MX', { maximumFractionDigits: asset.decimals })} {asset.code}
                 </p>

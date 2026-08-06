@@ -182,7 +182,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
 
                 {/* QR Section */}
                 <section className="mb-10 text-center">
-                    <h2 className="text-[11px] font-bold text-outline-variant uppercase tracking-[0.2em] mb-6">{t('qrReveal.exchangeCode')}</h2>
+                    <h2 className="text-[11px] font-bold text-gris uppercase tracking-[0.2em] mb-6">{t('qrReveal.exchangeCode')}</h2>
 
                     {secretLoading ? (
                         <div className="flex flex-col items-center gap-3 py-12">

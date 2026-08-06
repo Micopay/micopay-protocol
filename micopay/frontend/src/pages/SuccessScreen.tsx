@@ -134,7 +134,7 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
 
             {/* Receipt — trade evidence */}
             <section className="w-full bg-white border border-outline-variant/15 rounded-2xl p-5 mb-6 space-y-3">
-                <h3 className="text-[11px] font-bold text-outline-variant uppercase tracking-[0.15em] mb-3">{t('success.receiptTitle')}</h3>
+                <h3 className="text-[11px] font-bold text-gris uppercase tracking-[0.15em] mb-3">{t('success.receiptTitle')}</h3>
 
                 <div className="flex justify-between items-center">
                     <span className="text-on-surface-variant text-xs">{t('success.tradeId')}</span>
@@ -253,7 +253,7 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
                         {[1, 2, 3, 4, 5].map((star) => (
                             <span
                                 key={star}
-                                className="material-symbols-outlined text-outline-variant text-[32px] cursor-pointer hover:text-primary transition-colors"
+                                className="material-symbols-outlined text-gris text-[32px] cursor-pointer hover:text-primary transition-colors"
                             >
                                 star
                             </span>

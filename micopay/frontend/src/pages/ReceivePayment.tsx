@@ -50,7 +50,7 @@ const ReceivePayment = ({ address, onBack }: ReceivePaymentProps) => {
         {address && (
           <>
             <div className="mt-6 w-full bg-surface-container-low rounded-2xl p-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-1">{t('receive.yourAddress')}</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-gris mb-1">{t('receive.yourAddress')}</p>
               <p className="font-mono text-xs text-on-surface break-all select-all">{address}</p>
             </div>
 
@@ -65,7 +65,7 @@ const ReceivePayment = ({ address, onBack }: ReceivePaymentProps) => {
         )}
 
         <div className="mt-8 w-full bg-surface-container-lowest border border-outline-variant/10 rounded-2xl p-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-3">{t('receive.accepts')}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-gris mb-3">{t('receive.accepts')}</p>
           <div className="flex flex-wrap gap-2">
             {ASSETS.map((a) => (
               <span key={a.code} className="px-3 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: `${a.color}1A`, color: a.color }}>
