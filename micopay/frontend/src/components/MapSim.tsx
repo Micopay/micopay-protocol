@@ -1,4 +1,5 @@
 import type { AvailableMerchant } from '../services/api';
+import { Hongo } from './ui';
 
 interface MapSimProps {
     type?: 'cashout' | 'deposit';
@@ -44,7 +45,8 @@ function getMerchantPins(merchants: AvailableMerchant[]): MerchantPin[] {
     });
 }
 
-const mushroomImages = ['/mushroom_red.png', '/mushroom_green.png', '/mushroom_gold.png'];
+/* El tier solo cambia el color del sombrero (ver Hongo.tsx). */
+const TIERS = ['maestro', 'avanzado', 'inicial'] as const;
 
 const MapSim = ({
     type = 'cashout',
@@ -82,7 +84,7 @@ const MapSim = ({
             {pins.map(({ merchant, top, left }, index) => {
                 const canSelect = Boolean(onSelectMerchant);
                 const isSelected = selectedMerchantId === merchant.seller_id;
-                const image = type === 'deposit' ? '/mushroom_green.png' : mushroomImages[index % mushroomImages.length];
+                const tier = type === 'deposit' ? 'maestro' : TIERS[index % TIERS.length];
 
                 return (
                     <button
@@ -101,7 +103,7 @@ const MapSim = ({
                     >
                         <span className={`relative w-14 h-14 cursor-pointer transition-transform ${isSelected ? 'scale-125' : 'hover:scale-110'}`}>
                             <span className={`absolute inset-0 rounded-full blur-md ${isSelected ? 'bg-primary/40' : 'bg-primary/20'}`}></span>
-                            <img src={image} alt="" className="w-full h-full object-contain relative z-10 drop-" />
+                            <Hongo tier={tier} size={44} className="relative z-10" />
                         </span>
                         <span className={`px-3 py-1 rounded-full mt-1 border text-[9px] font-bold whitespace-nowrap ${isSelected ? 'bg-primary text-papel border-primary' : 'bg-papel text-on-surface border-linea'}`}>
                             {merchant.username}

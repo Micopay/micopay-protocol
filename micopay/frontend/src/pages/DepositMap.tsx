@@ -108,7 +108,7 @@ function LoadingSkeleton({ onBack, amount }: { onBack: () => void; amount: numbe
           {[0, 1].map((i) => (
             <div
               key={i}
-              className="bg-surface-container-lowest rounded-sm p-6 ring-1 ring-outline-variant/10 space-y-4"
+              className="bg-papel rounded-sm border-2 border-tinta shadow-solida p-5 space-y-4"
             >
               <div className="flex gap-4">
                 <div className="w-12 h-12 bg-surface-container-high rounded-sm" />
@@ -246,11 +246,11 @@ function MerchantOfferCard({
     return (
       <div className="relative group">
         <div className="absolute -top-3 left-6 z-10">
-          <span className="bg-primary text-on-primary text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest ">
+          <span className="bg-naranja text-papel text-[10px] font-bold px-2 py-0.5 rounded-sm border-[1.5px] border-tinta uppercase tracking-[.1em] ">
             Mejor oferta
           </span>
         </div>
-        <div className="bg-surface-container-lowest rounded-sm p-6 ring-1 ring-outline-variant/10 flex flex-col gap-5 transition-transform hover:scale-[1.01] duration-300">
+        <div className="bg-papel rounded-sm border-2 border-tinta shadow-solida p-5 flex flex-col gap-5">
           <div className="flex justify-between items-start gap-3">
             <div className="flex gap-4 min-w-0">
               <div className="w-12 h-12 bg-primary-fixed rounded-sm flex items-center justify-center text-primary flex-shrink-0">
@@ -299,13 +299,13 @@ function MerchantOfferCard({
 
           <div className="bg-surface-container-low rounded-sm p-4 flex justify-between items-center">
             <div className="space-y-1">
-              <p className="text-[10px] text-on-surface-variant uppercase font-bold tracking-tight">Entregas en efectivo</p>
-              <p className="num font-bold text-on-surface">${amount} MXN</p>
+              <p className="text-[10px] text-gris uppercase font-bold tracking-[.1em]">Entregas en efectivo</p>
+              <p className="num font-bold text-naranja">${amount} MXN</p>
             </div>
             <span className="material-symbols-outlined text-gris">trending_flat</span>
             <div className="space-y-1 text-right">
-              <p className="text-[10px] text-accent uppercase font-bold tracking-tight">Recibes en wallet</p>
-              <p className="num font-bold text-on-surface text-lg">${merchant.payout_mxn.toFixed(2)} MXNe</p>
+              <p className="text-[10px] text-gris uppercase font-bold tracking-[.1em]">Recibes en wallet</p>
+              <p className="num font-bold text-verde text-lg">${merchant.payout_mxn.toFixed(2)} MXNe</p>
             </div>
           </div>
 
@@ -318,7 +318,7 @@ function MerchantOfferCard({
           <button
             onClick={() => onSelectOffer(merchant.seller_id)}
             disabled={loading}
-            className="w-full h-[46px] bg-naranja text-papel border-2 border-tinta shadow-solida font-semibold rounded-sm active:scale-95 duration-200 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-wait"
+            className="w-full h-[46px] bg-naranja text-papel border-2 border-tinta shadow-solida font-semibold rounded-sm active:translate-x-[3px] active:translate-y-[3px] active:shadow-solida-xs transition-[transform,box-shadow] disabled:opacity-50 disabled:cursor-wait"
           >
             {loading ? 'Conectando con el agente…' : 'Elegir este agente'}
           </button>

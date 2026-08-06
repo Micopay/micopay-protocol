@@ -195,7 +195,7 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
           ¿Ya tienes cuenta?{' '}
           <button
             onClick={() => navigate('/login')}
-            className="text-verde font-bold hover:underline"
+            className="inline-flex min-h-12 items-center justify-center text-verde font-bold underline"
           >
             Inicia sesión
           </button>

@@ -155,14 +155,14 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         <div className="flex flex-col gap-2 text-center text-sm text-gris">
           <button
             onClick={() => { setShowRestore(!showRestore); setError(null); setSecretKey(''); }}
-            className="text-verde font-bold hover:underline"
+            className="inline-flex min-h-12 items-center justify-center text-verde font-bold underline"
           >
             {showRestore ? '← Volver al login normal' : 'Restaurar con llave secreta'}
           </button>
           {!showRestore && (
             <span>
               ¿No tienes cuenta?{' '}
-              <button onClick={() => navigate('/register')} className="text-verde font-bold hover:underline">
+              <button onClick={() => navigate('/register')} className="inline-flex min-h-12 items-center justify-center text-verde font-bold underline">
                 Regístrate
               </button>
             </span>
