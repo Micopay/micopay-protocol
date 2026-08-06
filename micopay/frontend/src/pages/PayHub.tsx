@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useWalletBalance } from '../hooks/useWalletBalance';
 import { ASSETS } from '../constants/assets';
+import BetaBanner from '../components/BetaBanner';
 
 interface PayHubProps {
   onSend: () => void;
@@ -18,6 +19,8 @@ const PayHub = ({ onSend, onReceive }: PayHubProps) => {
       </header>
 
       <main className="flex-1 mt-[calc(5rem+env(safe-area-inset-top))] px-6 space-y-6 max-w-md mx-auto w-full">
+        {/* Antes del saldo, a proposito: la cifra se lee como real. */}
+        <BetaBanner className="-mx-6 mb-6" />
         <p className="text-on-surface-variant font-medium opacity-70 pt-2">{t('pay.subtitle')}</p>
 
         {/* Primary actions */}

@@ -7,6 +7,7 @@ import {
   BlendTxResult,
 } from '../services/api';
 import { extractApiErrorPayload } from '../utils/apiError';
+import BetaBanner from '../components/BetaBanner';
 
 interface BlendScreenProps {
   onBack: () => void;
@@ -146,6 +147,8 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
       </header>
 
       <main className="flex-1 mt-[calc(5rem+env(safe-area-inset-top))] px-4 pt-4 space-y-5">
+        {/* Antes del saldo, a proposito: la cifra se lee como real. */}
+        <BetaBanner className="-mx-4 mb-6" />
         {/* Main tabs */}
         <div className="flex gap-2 bg-surface-container-low rounded-sm p-1">
           <button

@@ -12,6 +12,7 @@ import {
 } from '../services/api';
 import { mapApiError, type MappedApiError } from '../utils/apiError';
 import { useWalletBalance } from '../hooks/useWalletBalance';
+import BetaBanner from '../components/BetaBanner';
 
 const EXPLORER = "https://stellar.expert/explorer/testnet/tx";
 
@@ -216,6 +217,8 @@ const Home = ({
       </header>
 
       <main className="flex-1 mt-[5.5rem] px-6 pb-32" style={{ paddingTop: 'max(0px, env(safe-area-inset-top))' }}>
+        {/* Antes del saldo, a proposito: la cifra se lee como real. */}
+        <BetaBanner className="-mx-6 mb-6" />
         {availability === "paused" && (
           <div className="mb-6 bg-error/10 border border-error/20 rounded-sm p-4 flex items-center gap-3">
             <span className="material-symbols-outlined text-error">

@@ -19,6 +19,7 @@ import {
 import { sendCETESToEtherfuse } from '../services/stellarRamp';
 import { buildTxUrl } from '../utils/stellarExplorer';
 import { extractApiErrorPayload } from '../utils/apiError';
+import BetaBanner from '../components/BetaBanner';
 
 interface CETESScreenProps {
   onBack: () => void;
@@ -297,6 +298,8 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
       </header>
 
       <main className="flex-1 mt-[calc(5rem+env(safe-area-inset-top))] px-4 pt-4 space-y-5">
+        {/* Antes del saldo, a proposito: la cifra se lee como real. */}
+        <BetaBanner className="-mx-4 mb-6" />
         <div className="rounded-sm p-5 border border-primary/10">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-papel rounded-sm flex items-center justify-center ">
