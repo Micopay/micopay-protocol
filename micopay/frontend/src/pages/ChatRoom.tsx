@@ -307,7 +307,7 @@ const ChatRoom = ({
                         <button 
                             onClick={handleSendMessage}
                             disabled={isSending || !inputValue.trim()}
-                            className="w-11 h-11 bg-primary text-papel rounded-sm flex items-center justify-center hover:scale-105 active:scale-95 transition-all mb-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-11 h-11 bg-primary text-papel rounded-sm flex items-center justify-center hover:scale-105 active:translate-x-[2px] active:translate-y-[2px] transition-all mb-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isSending ? (
                                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>

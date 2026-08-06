@@ -56,7 +56,7 @@ const ReceivePayment = ({ address, onBack }: ReceivePaymentProps) => {
 
             <button
               onClick={handleCopy}
-              className="mt-4 w-full h-12 bg-primary text-papel font-bold rounded-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+              className="mt-4 w-full h-12 bg-primary text-papel font-bold rounded-sm flex items-center justify-center gap-2 active:translate-x-[2px] active:translate-y-[2px] transition-all"
             >
               <span className="material-symbols-outlined text-lg">{copied ? 'check' : 'content_copy'}</span>
               {copied ? t('receive.copied') : t('receive.copy')}

@@ -226,7 +226,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
               <button
                 onClick={handleCollateral}
                 disabled={collateralLoading || !collateralAmount || parseFloat(collateralAmount) <= 0}
-                className="w-full bg-on-surface text-papel font-bold py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all active:scale-[0.98]"
+                className="w-full bg-on-surface text-papel font-bold py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all active:translate-x-[2px] active:translate-y-[2px]"
               >
                 {collateralLoading ? (
                   <>
@@ -300,7 +300,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
               <button
                 onClick={handleBorrow}
                 disabled={borrowLoading || !borrowAmount || parseFloat(borrowAmount) <= 0 || !collateralResult}
-                className="w-full bg-primary text-papel font-bold py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all active:scale-[0.98]"
+                className="w-full bg-primary text-papel font-bold py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all active:translate-x-[2px] active:translate-y-[2px]"
               >
                 {borrowLoading ? (
                   <>
@@ -405,7 +405,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
               <button
                 onClick={handleSupply}
                 disabled={supplyLoading || !supplyAmount || parseFloat(supplyAmount) <= 0}
-                className="w-full bg-primary text-papel font-bold py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all active:scale-[0.98]"
+                className="w-full bg-primary text-papel font-bold py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all active:translate-x-[2px] active:translate-y-[2px]"
               >
                 {supplyLoading ? (
                   <>

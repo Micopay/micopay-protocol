@@ -21,7 +21,7 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
             <button
               onClick={onBack}
               aria-label="Volver"
-              className="min-h-12 min-w-12 text-verde hover:opacity-80 transition-opacity active:scale-95 duration-200 focus:outline-none focus:ring-2 focus:ring-primary rounded-sm p-1"
+              className="min-h-12 min-w-12 text-verde hover:opacity-80 transition-opacity active:translate-x-[2px] active:translate-y-[2px] duration-200 focus:outline-none focus:ring-2 focus:ring-primary rounded-sm p-1"
             >
               <span aria-hidden="true" className="material-symbols-outlined">arrow_back</span>
             </button>
@@ -71,7 +71,7 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
             <button
               onClick={() => onSearch(amount)}
               aria-label="Buscar agentes"
-              className="w-full bg-naranja text-papel border-2 border-tinta shadow-solida h-[56px] rounded-sm font-headline font-bold text-lg active:scale-95 transition-all duration-200 flex items-center justify-center space-x-2 focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full bg-naranja text-papel border-2 border-tinta shadow-solida h-[56px] rounded-sm font-headline font-bold text-lg active:translate-x-[2px] active:translate-y-[2px] transition-all duration-200 flex items-center justify-center space-x-2 focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <span>{t('deposit.search')}</span>
               <span aria-hidden="true" className="material-symbols-outlined text-xl">chevron_right</span>

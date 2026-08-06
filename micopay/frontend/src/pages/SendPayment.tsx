@@ -155,7 +155,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
                   autoCapitalize="none"
                   className="flex-1 min-w-0 bg-surface-container-low border-2 border-tinta rounded-sm px-4 py-3 text-sm font-mono focus:outline-none focus:border-primary transition-colors"
                 />
-                <button onClick={handleScan} aria-label="Escanear QR" className="w-12 flex-shrink-0 bg-primary/10 text-primary rounded-sm flex items-center justify-center active:scale-95 transition-all">
+                <button onClick={handleScan} aria-label="Escanear QR" className="w-12 flex-shrink-0 bg-primary/10 text-primary rounded-sm flex items-center justify-center active:translate-x-[2px] active:translate-y-[2px] transition-all">
                   <span className="material-symbols-outlined">qr_code_scanner</span>
                 </button>
               </div>
@@ -204,7 +204,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
             <button
               onClick={() => setStep('review')}
               disabled={!canContinue}
-              className="w-full h-[52px] bg-primary text-papel font-bold rounded-sm active:scale-[0.98] transition-all disabled:opacity-40"
+              className="w-full h-[52px] bg-primary text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-40"
             >
               {t('send.continue')}
             </button>
@@ -231,7 +231,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
             <button
               onClick={handleSend}
               disabled={step === 'sending'}
-              className="w-full h-[52px] bg-primary text-papel font-bold rounded-sm active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+              className="w-full h-[52px] bg-primary text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {step === 'sending' ? (
                 <>
@@ -293,7 +293,7 @@ function ResultScreen({
           {explorerLabel ?? 'Ver en el explorador'} <span className="material-symbols-outlined text-[18px]">open_in_new</span>
         </a>
       )}
-      <button onClick={onPrimary} className="w-full max-w-xs h-[52px] bg-primary text-papel font-bold rounded-sm active:scale-[0.98] transition-all">
+      <button onClick={onPrimary} className="w-full max-w-xs h-[52px] bg-primary text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all">
         {primaryLabel}
       </button>
       {onSecondary && secondaryLabel && (

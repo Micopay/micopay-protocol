@@ -80,7 +80,7 @@ export function PermissionGate({
       {isPermanent ? (
         <button
           onClick={onOpenSettings}
-          className="mt-2 h-[48px] px-8 bg-primary text-papel font-bold rounded-sm active:scale-95 transition-all flex items-center gap-2"
+          className="mt-2 h-[48px] px-8 bg-primary text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all flex items-center gap-2"
         >
           <span className="material-symbols-outlined text-sm">settings</span>
           Ir a Ajustes
@@ -88,7 +88,7 @@ export function PermissionGate({
       ) : (
         <button
           onClick={onRequest}
-          className="mt-2 h-[48px] px-8 bg-primary text-papel font-bold rounded-sm active:scale-95 transition-all flex items-center gap-2"
+          className="mt-2 h-[48px] px-8 bg-primary text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all flex items-center gap-2"
         >
           <span className="material-symbols-outlined text-sm">{icon}</span>
           {isRationale ? 'Permitir acceso' : 'Reintentar'}

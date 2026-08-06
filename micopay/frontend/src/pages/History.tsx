@@ -123,7 +123,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
                 <div
                   key={trade.id}
                   onClick={() => onSelectTrade(trade)}
-                  className="bg-papel rounded-sm p-4 border-2 border-tinta hover:transition-all active:scale-[0.98] cursor-pointer"
+                  className="bg-papel rounded-sm p-4 border-2 border-tinta hover:transition-all active:translate-x-[2px] active:translate-y-[2px] cursor-pointer"
                 >
                   <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-sm flex items-center justify-center flex-shrink-0 ${isCashIn ? 'bg-verde-claro/10' : 'bg-primary/10'}`}>

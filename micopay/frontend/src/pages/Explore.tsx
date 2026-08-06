@@ -39,7 +39,7 @@ const Explore = ({ onBack, onNavigate, showDefi = true, showSpeiRamp = false }: 
                 <div className="space-y-6">
                     {/* CETES tokenizados — shown if either DeFi or SPEI ramp is enabled */}
                     {(showDefi || showSpeiRamp) && (
-                        <article className="p-6 rounded-sm border border-primary/10 relative overflow-hidden group active:scale-[0.98] transition-all">
+                        <article className="p-6 rounded-sm border border-primary/10 relative overflow-hidden group active:translate-x-[2px] active:translate-y-[2px] transition-all">
                             <div className="flex items-center gap-4 mb-4">
                                 <div className="w-12 h-12 bg-papel rounded-sm flex items-center justify-center ">
                                     <span className="material-symbols-outlined text-primary text-3xl">trending_up</span>
@@ -63,7 +63,7 @@ const Explore = ({ onBack, onNavigate, showDefi = true, showSpeiRamp = false }: 
 
                     {/* Blend DeFi — feature-gated */}
                     {showDefi && (
-                        <article className="bg-papel p-6 rounded-sm border-2 border-tinta relative overflow-hidden group active:scale-[0.98] transition-all">
+                        <article className="bg-papel p-6 rounded-sm border-2 border-tinta relative overflow-hidden group active:translate-x-[2px] active:translate-y-[2px] transition-all">
                             <div className="flex items-center gap-4 mb-4">
                                 <div className="w-12 h-12 bg-papel rounded-sm flex items-center justify-center border-2 border-tinta">
                                     <span className="material-symbols-outlined text-on-surface text-3xl">account_balance</span>

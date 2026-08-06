@@ -21,7 +21,7 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
             <button
               onClick={onBack}
               aria-label="Volver"
-              className="min-h-12 min-w-12 text-primary active:scale-95 duration-200 p-2 hover:bg-primary/10 rounded-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="min-h-12 min-w-12 text-primary active:translate-x-[2px] active:translate-y-[2px] duration-200 p-2 hover:bg-primary/10 rounded-sm focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <span aria-hidden="true" className="material-symbols-outlined font-bold">arrow_back</span>
             </button>
@@ -83,7 +83,7 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
           <button
             onClick={() => onSearch(Number(amount))}
             aria-label="Buscar ofertas de efectivo"
-            className="w-full bg-naranja text-papel border-2 border-tinta shadow-solida font-body font-semibold py-4 rounded-sm active:scale-95 duration-200 transition-all flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full bg-naranja text-papel border-2 border-tinta shadow-solida font-body font-semibold py-4 rounded-sm active:translate-x-[2px] active:translate-y-[2px] duration-200 transition-all flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <span>{t('cashout.search')}</span>
             <span aria-hidden="true" className="material-symbols-outlined text-lg">search</span>

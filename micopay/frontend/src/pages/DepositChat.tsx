@@ -86,7 +86,7 @@ const DepositChat = ({
                 <div className="flex items-center gap-4">
                     <button 
                         onClick={onBack}
-                        className="min-h-12 min-w-12 flex items-center justify-center p-2 text-verde hover:bg-[#E7F6FF] transition-colors rounded-sm active:scale-95 duration-150"
+                        className="min-h-12 min-w-12 flex items-center justify-center p-2 text-verde hover:bg-[#E7F6FF] transition-colors rounded-sm active:translate-x-[2px] active:translate-y-[2px] duration-150"
                     >
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
@@ -204,13 +204,13 @@ const DepositChat = ({
                 {/* Footer / Input */}
                 <footer className="sticky bottom-0 bg-papel px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 flex flex-col gap-4 border-t border-[#E7F6FF]">
                     <div className="grid grid-cols-2 gap-3">
-                        <button className="flex items-center justify-center gap-2 py-3 px-4 rounded-sm border border-primary/20 bg-papel text-primary font-bold text-sm hover:bg-surface-container-low transition-all active:scale-95 disabled:opacity-50" disabled={isSending}>
+                        <button className="flex items-center justify-center gap-2 py-3 px-4 rounded-sm border border-primary/20 bg-papel text-primary font-bold text-sm hover:bg-surface-container-low transition-all active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50" disabled={isSending}>
                             <span className="material-symbols-outlined !text-[20px]">location_on</span>
                             {t('chatRoom.shareLocation')}
                         </button>
                         <button
                             onClick={onViewQR}
-                            className="flex items-center justify-center gap-2 py-3 px-4 rounded-sm bg-naranja text-papel border-2 border-tinta shadow-solida font-bold text-sm hover:brightness-110 transition-all active:scale-95 disabled:opacity-50"
+                            className="flex items-center justify-center gap-2 py-3 px-4 rounded-sm bg-naranja text-papel border-2 border-tinta shadow-solida font-bold text-sm hover:brightness-110 transition-all active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50"
                             disabled={isSending}
                         >
                             <span className="material-symbols-outlined !text-[20px]">qr_code_2</span>

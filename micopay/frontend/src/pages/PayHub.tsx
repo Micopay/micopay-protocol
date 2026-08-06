@@ -28,7 +28,7 @@ const PayHub = ({ onSend, onReceive }: PayHubProps) => {
         <div className="grid grid-cols-2 gap-4">
           <button
             onClick={onSend}
-            className="bg-primary text-papel rounded-sm p-6 flex flex-col items-start gap-3 active:scale-[0.97] transition-all"
+            className="bg-primary text-papel rounded-sm p-6 flex flex-col items-start gap-3 active:translate-x-[2px] active:translate-y-[2px] transition-all"
           >
             <span className="w-12 h-12 rounded-sm bg-papel flex items-center justify-center">
               <span className="material-symbols-outlined text-2xl">arrow_upward</span>
@@ -39,7 +39,7 @@ const PayHub = ({ onSend, onReceive }: PayHubProps) => {
 
           <button
             onClick={onReceive}
-            className="bg-papel border-2 border-tinta rounded-sm p-6 flex flex-col items-start gap-3 active:scale-[0.97] transition-all"
+            className="bg-papel border-2 border-tinta rounded-sm p-6 flex flex-col items-start gap-3 active:translate-x-[2px] active:translate-y-[2px] transition-all"
           >
             <span className="w-12 h-12 rounded-sm bg-primary/10 flex items-center justify-center">
               <span className="material-symbols-outlined text-2xl text-primary">qr_code_2</span>

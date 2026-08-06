@@ -1100,7 +1100,7 @@ function App() {
                       </label>
                       <button
                         onClick={handleCopyBackup}
-                        className="w-full bg-red-100 hover:bg-red-200 text-red-800 font-bold py-3 rounded-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                        className="w-full bg-red-100 hover:bg-red-200 text-red-800 font-bold py-3 rounded-sm flex items-center justify-center gap-2 transition-all active:translate-x-[2px] active:translate-y-[2px]"
                       >
                         <span className="material-symbols-outlined text-base">{copiedBackup ? 'check' : 'content_copy'}</span>
                         {copiedBackup ? '¡Copiada!' : 'Copiar Llave Secreta'}

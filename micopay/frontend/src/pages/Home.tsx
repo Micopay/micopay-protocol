@@ -484,7 +484,7 @@ const Home = ({
           <button
             onClick={onNavigateCashout}
             aria-label={t('home.cashout')}
-            className="w-full h-[56px] bg-naranja text-papel border-2 border-tinta shadow-solida font-bold rounded-sm active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full h-[56px] bg-naranja text-papel border-2 border-tinta shadow-solida font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <span aria-hidden="true" className="material-symbols-outlined">
               payments
@@ -494,7 +494,7 @@ const Home = ({
           <button
             onClick={onNavigateDeposit}
             aria-label={t('home.deposit')}
-            className="w-full h-[56px] bg-papel text-tinta border-2 border-tinta shadow-solida font-bold rounded-sm active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full h-[56px] bg-papel text-tinta border-2 border-tinta shadow-solida font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <span aria-hidden="true" className="material-symbols-outlined">
               add_circle

@@ -199,7 +199,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                 </div>
                 <button
                   onClick={onLogout}
-                  className="w-full min-h-12 text-sm font-bold bg-[#C62828] text-papel rounded-sm active:scale-95 transition-all"
+                  className="w-full min-h-12 text-sm font-bold bg-[#C62828] text-papel rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
                 >
                   Iniciar sesión de nuevo
                 </button>
@@ -309,20 +309,20 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                     <button
                         onClick={handleCopyAddress}
                         disabled={!devicePublicKey}
-                        className="flex-1 min-h-12 text-sm font-bold border-2 border-tinta text-verde rounded-sm active:scale-95 transition-all disabled:opacity-40"
+                        className="flex-1 min-h-12 text-sm font-bold border-2 border-tinta text-verde rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-40"
                     >
                       {t('profile.copyAddress')}
                     </button>
                     <button
                         onClick={() => setShowImportModal(true)}
-                        className="flex-1 min-h-12 text-sm font-bold border-2 border-tinta text-gris rounded-sm active:scale-95 transition-all"
+                        className="flex-1 min-h-12 text-sm font-bold border-2 border-tinta text-gris rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
                     >
                       {t('profile.importKey')}
                     </button>
                   </div>
                   <button
                       onClick={handleExport}
-                      className="w-full min-h-12 text-sm font-bold text-rojo border-2 border-tinta rounded-sm active:scale-95 transition-all"
+                      className="w-full min-h-12 text-sm font-bold text-rojo border-2 border-tinta rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
                   >
                     {t('profile.exportKey')}
                   </button>
@@ -336,7 +336,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                       <button
                         key={lang}
                         onClick={() => setLanguage(lang)}
-                        className={`flex-1 h-11 rounded-sm font-bold text-sm border transition-all active:scale-95 ${
+                        className={`flex-1 h-11 rounded-sm font-bold text-sm border transition-all active:translate-x-[2px] active:translate-y-[2px] ${
                           i18n.language === lang
                             ? 'bg-verde text-papel border-transparent'
                             : 'bg-papel text-gris border-linea'
@@ -391,7 +391,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                   <button
                       type="button"
                       onClick={openDeleteModal}
-                      className="w-full bg-[#C62828] text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 /20 transition-all active:scale-[0.98]"
+                      className="w-full bg-[#C62828] text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 /20 transition-all active:translate-x-[2px] active:translate-y-[2px]"
                   >
                 <span className="material-symbols-outlined text-lg">
                   delete_forever
@@ -405,7 +405,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                   <button
                       type="button"
                       onClick={onLogout}
-                      className="w-full bg-gray-200 text-gray-800 font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                      className="w-full bg-gray-200 text-gray-800 font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 transition-all active:translate-x-[2px] active:translate-y-[2px]"
                   >
                 <span className="material-symbols-outlined text-lg">
                   logout

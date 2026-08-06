@@ -33,7 +33,7 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
             {/* TopAppBar */}
             <header className="border-b-2 border-tinta bg-fondo w-full top-0 sticky flex items-center justify-between px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] z-50">
                 <div className="flex items-center gap-3">
-                    <button onClick={onBack} className="min-h-12 min-w-12 text-verde active:scale-95 duration-200">
+                    <button onClick={onBack} className="min-h-12 min-w-12 text-verde active:translate-x-[2px] active:translate-y-[2px] duration-200">
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
                     <div className="flex flex-col">
@@ -126,7 +126,7 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
                         <button
                             onClick={handleComplete}
                             disabled={!activeTrade || !buyerToken}
-                            className="w-full h-[52px] bg-primary text-papel font-bold rounded-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-40"
+                            className="w-full h-[52px] bg-primary text-papel font-bold rounded-sm flex items-center justify-center gap-2 active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-40"
                         >
                             <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>check_circle</span>
                             Ya entregué el efectivo al agente

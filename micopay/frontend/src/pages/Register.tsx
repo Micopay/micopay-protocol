@@ -118,7 +118,7 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
               </p>
               <button
                 onClick={copySecretKey}
-                className="w-full bg-red-100 hover:bg-red-200 text-red-800 font-bold py-3 rounded-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                className="w-full bg-red-100 hover:bg-red-200 text-red-800 font-bold py-3 rounded-sm flex items-center justify-center gap-2 transition-all active:translate-x-[3px] active:translate-y-[3px] active:shadow-solida-xs"
               >
                 <span className="material-symbols-outlined text-base">{copiedSec ? 'check' : 'content_copy'}</span>
                 {copiedSec ? '¡Llave Secreta Copiada!' : 'Copiar Llave Secreta'}
@@ -128,7 +128,7 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
 
           <button
             onClick={finishOnboarding}
-            className="w-full bg-verde text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+            className="w-full min-h-12 bg-naranja text-papel border-2 border-tinta shadow-solida font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 transition-all active:translate-x-[3px] active:translate-y-[3px] active:shadow-solida-xs"
           >
             Continuar y explorar
           </button>
@@ -179,7 +179,7 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
         <button
           onClick={handleRegister}
           disabled={loading}
-          className="w-full bg-verde text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60"
+          className="w-full min-h-12 bg-naranja text-papel border-2 border-tinta shadow-solida font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 transition-all active:translate-x-[3px] active:translate-y-[3px] active:shadow-solida-xs disabled:opacity-60"
         >
           {loading ? (
             <>

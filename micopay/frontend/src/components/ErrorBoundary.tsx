@@ -68,7 +68,7 @@ class ErrorBoundary extends Component<Props, State> {
             <div className="flex flex-col gap-3 items-center">
               <button
                 onClick={() => window.location.reload()}
-                className="px-6 py-3 rounded-sm bg-primary text-on-primary font-bold text-sm active:scale-95 transition-transform"
+                className="px-6 py-3 rounded-sm bg-primary text-on-primary font-bold text-sm active:translate-x-[2px] active:translate-y-[2px] transition-transform"
               >
                 Reintentar
               </button>

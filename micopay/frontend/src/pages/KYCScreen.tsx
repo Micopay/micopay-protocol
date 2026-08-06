@@ -240,7 +240,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
           <button
             onClick={handleOpenHostedFlow}
             disabled={loading}
-            className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+            className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
           >
             {loading ? (
               <>
@@ -259,7 +259,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
             <button
               onClick={handleOpenHostedFlow}
               disabled={loading}
-              className="w-full bg-papel border border-error/30 text-error font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+              className="w-full bg-papel border border-error/30 text-error font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
             >
               <span className="material-symbols-outlined">refresh</span>
               {t('kyc.retryVerification')}

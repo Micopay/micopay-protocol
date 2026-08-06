@@ -80,7 +80,7 @@ function LoadingSkeleton({ onBack, amount }: { onBack: () => void; amount: numbe
       <header className="border-b-2 border-tinta w-full top-0 sticky bg-[#E7F6FF] z-50 pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between px-6 py-4 w-full">
           <div className="flex items-center gap-4">
-            <button onClick={onBack} className="min-h-12 min-w-12 text-verde active:scale-95 duration-200">
+            <button onClick={onBack} className="min-h-12 min-w-12 text-verde active:translate-x-[2px] active:translate-y-[2px] duration-200">
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
             <h1 className="font-headline font-bold text-xl text-verde">Ofertas de depósito</h1>
@@ -133,7 +133,7 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
     <div className="bg-surface text-on-surface min-h-screen pb-24">
       <header className="border-b-2 border-tinta w-full top-0 sticky bg-[#E7F6FF] z-50 pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center px-6 py-4">
-          <button onClick={onBack} className="min-h-12 min-w-12 text-verde active:scale-95 duration-200">
+          <button onClick={onBack} className="min-h-12 min-w-12 text-verde active:translate-x-[2px] active:translate-y-[2px] duration-200">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
           <h1 className="ml-4 font-headline font-bold text-xl text-verde">Ofertas de depósito</h1>
@@ -148,7 +148,7 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
         </p>
         <button
           onClick={onBack}
-          className="mt-2 px-6 py-3 border-2 border-primary text-primary font-bold rounded-sm active:scale-95 transition-all"
+          className="mt-2 px-6 py-3 border-2 border-primary text-primary font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
         >
           Volver
         </button>
@@ -164,7 +164,7 @@ function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => vo
     <div className="bg-surface text-on-surface min-h-screen pb-24">
       <header className="border-b-2 border-tinta w-full top-0 sticky bg-[#E7F6FF] z-50 pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center px-6 py-4">
-          <button onClick={onBack} className="min-h-12 min-w-12 text-verde active:scale-95 duration-200">
+          <button onClick={onBack} className="min-h-12 min-w-12 text-verde active:translate-x-[2px] active:translate-y-[2px] duration-200">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
           <h1 className="ml-4 font-headline font-bold text-xl text-verde">Ofertas de depósito</h1>
@@ -180,13 +180,13 @@ function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => vo
         <div className="flex gap-3 mt-2">
           <button
             onClick={onRetry}
-            className="px-6 py-3 bg-primary text-papel font-bold rounded-sm active:scale-95 transition-all"
+            className="px-6 py-3 bg-primary text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
           >
             Reintentar
           </button>
           <button
             onClick={onBack}
-            className="px-6 py-3 border border-outline text-on-surface font-bold rounded-sm active:scale-95 transition-all"
+            className="px-6 py-3 border border-outline text-on-surface font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
           >
             Volver
           </button>
@@ -210,7 +210,7 @@ function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) 
       </p>
       <button
         onClick={onBack}
-        className="mt-2 h-[48px] px-8 border-2 border-primary text-primary font-bold rounded-sm active:scale-95 transition-all duration-200 flex items-center gap-2"
+        className="mt-2 h-[48px] px-8 border-2 border-primary text-primary font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all duration-200 flex items-center gap-2"
       >
         <span className="material-symbols-outlined text-sm">tune</span>
         Cambiar monto
@@ -416,7 +416,7 @@ const DepositMap = ({
           <div className="flex items-center gap-4">
             <button
               onClick={onBack}
-              className="min-h-12 min-w-12 text-verde active:scale-95 duration-200"
+              className="min-h-12 min-w-12 text-verde active:translate-x-[2px] active:translate-y-[2px] duration-200"
               aria-label="Volver"
             >
               <span className="material-symbols-outlined">arrow_back</span>

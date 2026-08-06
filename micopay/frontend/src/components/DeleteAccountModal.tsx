@@ -92,7 +92,7 @@ const DeleteAccountModal = ({
             type="button"
             onClick={onConfirm}
             disabled={!canConfirm}
-            className="rounded-sm bg-[#C62828] px-4 py-3 font-bold text-papel /20 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-sm bg-[#C62828] px-4 py-3 font-bold text-papel /20 transition-all active:translate-x-[2px] active:translate-y-[2px] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? (
               <span className="inline-flex items-center justify-center gap-2">

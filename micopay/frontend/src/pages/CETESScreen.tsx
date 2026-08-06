@@ -456,7 +456,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                     <button
                       onClick={handleGetDepositQuote}
                       disabled={txLoading || !amount || parseFloat(amount) <= 0}
-                      className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+                      className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
                     >
                       {txLoading ? (
                         <><span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>{t('cetes.quoting')}</>
@@ -468,7 +468,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                     <button
                       onClick={handleCreateDepositOrder}
                       disabled={txLoading}
-                      className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+                      className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
                     >
                       {txLoading ? (
                         <><span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>{t('cetes.creatingOrder')}</>
@@ -503,7 +503,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                       {depositOrder.depositClabe && (
                         <button
                           onClick={() => handleCopyClabe(depositOrder.depositClabe!)}
-                          className="flex-shrink-0 flex items-center gap-1 bg-primary/10 text-primary font-bold text-xs min-h-12 px-3 rounded-sm active:scale-95 transition-all"
+                          className="flex-shrink-0 flex items-center gap-1 bg-primary/10 text-primary font-bold text-xs min-h-12 px-3 rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
                         >
                           <span className="material-symbols-outlined text-sm">{copied ? 'check' : 'content_copy'}</span>
                           {copied ? t('cetes.copiedLabel') : t('cetes.copy')}
@@ -544,7 +544,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
 
                   <button
                     onClick={handleConfirmTransferred}
-                    className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                    className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 transition-all active:translate-x-[2px] active:translate-y-[2px]"
                   >
                     {t('cetes.alreadyTransferred')}
                     <span className="material-symbols-outlined text-lg">schedule</span>
@@ -578,7 +578,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                       </div>
                       <button
                         onClick={handleResetDeposit}
-                        className="w-full border border-primary text-primary font-bold py-3 rounded-sm transition-all active:scale-[0.98]"
+                        className="w-full border border-primary text-primary font-bold py-3 rounded-sm transition-all active:translate-x-[2px] active:translate-y-[2px]"
                       >
                         {t('cetes.makeAnotherDeposit')}
                       </button>
@@ -596,14 +596,14 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                       </div>
                       <a
                         href="mailto:soporte@micopay.mx"
-                        className="w-full flex items-center justify-center gap-2 border border-error text-error font-bold py-3 rounded-sm transition-all active:scale-[0.98]"
+                        className="w-full flex items-center justify-center gap-2 border border-error text-error font-bold py-3 rounded-sm transition-all active:translate-x-[2px] active:translate-y-[2px]"
                       >
                         <span className="material-symbols-outlined text-base">mail</span>
                         {t('cetes.contactSupport')}
                       </a>
                       <button
                         onClick={handleResetDeposit}
-                        className="w-full border-2 border-tinta text-on-surface-variant font-bold py-3 rounded-sm transition-all active:scale-[0.98]"
+                        className="w-full border-2 border-tinta text-on-surface-variant font-bold py-3 rounded-sm transition-all active:translate-x-[2px] active:translate-y-[2px]"
                       >
                         {t('cetes.tryAgain')}
                       </button>
@@ -786,7 +786,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
               <button
                 onClick={handleTx}
                 disabled={txLoading || !amount || parseFloat(amount) <= 0}
-                className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+                className="w-full bg-primary text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
               >
                 {txLoading ? (
                   <>
@@ -811,7 +811,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
 
         <button
           onClick={onBanco}
-          className="w-full bg-papel border-2 border-tinta rounded-sm p-5 flex items-center gap-4 active:scale-[0.98] transition-all text-left"
+          className="w-full bg-papel border-2 border-tinta rounded-sm p-5 flex items-center gap-4 active:translate-x-[2px] active:translate-y-[2px] transition-all text-left"
         >
           <div className="w-10 h-10 bg-primary/10 rounded-sm flex items-center justify-center flex-shrink-0">
             <span className="material-symbols-outlined text-verde">account_balance_wallet</span>

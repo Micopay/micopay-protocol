@@ -311,7 +311,7 @@ const ExploreMap = ({
                           }
                         }}
                         disabled={loading}
-                        className="w-full h-[52px] bg-naranja text-papel border-2 border-tinta shadow-solida font-headline font-bold rounded-sm active:scale-95 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+                        className="w-full h-[52px] bg-naranja text-papel border-2 border-tinta shadow-solida font-headline font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-70 flex items-center justify-center gap-2"
                       >
                         {loading ? (
                           <>
@@ -391,7 +391,7 @@ const ExploreMap = ({
                         }
                       }}
                       disabled={loading}
-                      className="w-full py-3 border border-primary text-primary font-bold rounded-sm active:scale-95 transition-all disabled:opacity-70"
+                      className="w-full py-3 border border-primary text-primary font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-70"
                     >
                       {t('map.viewOffer')}
                     </button>
@@ -482,7 +482,7 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
       </p>
       <button
         onClick={onBack}
-        className="px-6 py-3 border border-primary text-primary font-bold rounded-sm active:scale-95 transition-all"
+        className="px-6 py-3 border border-primary text-primary font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
       >
         {t('map.back')}
       </button>
@@ -499,7 +499,7 @@ function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => vo
       </p>
       <button
         onClick={onRetry}
-        className="px-6 py-3 bg-primary text-papel font-bold rounded-sm active:scale-95 transition-all"
+        className="px-6 py-3 bg-primary text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
       >
         {t('map.retry')}
       </button>
@@ -516,7 +516,7 @@ function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) 
       </p>
       <button
         onClick={onBack}
-        className="px-6 py-3 border border-primary text-primary font-bold rounded-sm active:scale-95 transition-all"
+        className="px-6 py-3 border border-primary text-primary font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
       >
         {t('map.changeAmount')}
       </button>

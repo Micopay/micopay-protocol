@@ -369,7 +369,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
         <button
           onClick={handleScan}
           aria-label="Escanear QR del cliente"
-          className="flex items-center gap-1 bg-primary text-papel min-h-12 px-3 rounded-sm text-xs font-bold active:scale-95"
+          className="flex items-center gap-1 bg-primary text-papel min-h-12 px-3 rounded-sm text-xs font-bold active:translate-x-[2px] active:translate-y-[2px]"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-sm">
             qr_code_scanner
