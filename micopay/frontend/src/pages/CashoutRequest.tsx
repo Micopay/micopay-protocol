@@ -25,7 +25,7 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
             >
               <span aria-hidden="true" className="material-symbols-outlined font-bold">arrow_back</span>
             </button>
-            <h1 className="font-headline font-bold text-xl tracking-tight text-primary">
+            <h1 className="font-headline font-bold text-xl tracking-tight text-tinta">
               {t('cashout.title')}
             </h1>
           </div>
@@ -60,7 +60,7 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
           <div className="p-6 bg-surface-container-low rounded-sm border-l-4 border-primary/20">
             <div className="flex gap-4">
               <span aria-hidden="true" className="material-symbols-outlined text-primary opacity-60">info</span>
-              <p className="text-body text-[14px] leading-relaxed text-on-surface-variant font-medium">
+              <p className="font-body text-[14px] leading-relaxed text-on-surface-variant font-medium">
                 {t('cashout.info')}
               </p>
             </div>

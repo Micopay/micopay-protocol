@@ -61,7 +61,7 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
 
                 {/* Chat Preview */}
                 <section>
-                    <div className="bg-surface-container-lowest border-2 border-tinta-low p-4 rounded-sm ">
+                    <div className="bg-surface-container-lowest border-2 border-tinta p-4 rounded-sm ">
                         <div className="flex gap-3 mb-4">
                             <div className="w-10 h-10 rounded-sm bg-emerald-100 flex-shrink-0 flex items-center justify-center">
                                 <span className="material-symbols-outlined text-emerald-700 text-lg">storefront</span>
@@ -105,7 +105,7 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
                 </div>
 
                 {/* Info */}
-                <div className="bg-surface-container-lowest rounded-sm p-4 flex gap-4 items-start border-2 border-tinta-low ">
+                <div className="bg-surface-container-lowest rounded-sm p-4 flex gap-4 items-start border-2 border-tinta ">
                     <span className="material-symbols-outlined text-primary shrink-0">info</span>
                         <p className="text-[13px] leading-relaxed text-on-surface/80">
                         El comerciante acreditará el saldo a tu billetera después de recibir el efectivo y escanear este código.

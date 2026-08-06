@@ -249,7 +249,7 @@ const ExploreMap = ({
                       </div>
                       <div className="flex items-start justify-between mb-6">
                         <div className="flex gap-4 min-w-0">
-                          <div className="w-14 h-14 bg-verde-container/10 rounded-sm flex items-center justify-center flex-shrink-0">
+                          <div className="w-14 h-14 bg-verde-suave rounded-sm flex items-center justify-center flex-shrink-0">
                             <span className="material-symbols-outlined text-verde text-3xl">{offer.icon}</span>
                           </div>
                           <div className="min-w-0">
@@ -331,7 +331,7 @@ const ExploreMap = ({
                   >
                     <div className="flex items-start justify-between gap-3 mb-4">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-11 h-11 bg-papel rounded-sm flex items-center justify-center border-2 border-tinta-high flex-shrink-0">
+                        <div className="w-11 h-11 bg-papel rounded-sm flex items-center justify-center border-2 border-tinta flex-shrink-0">
                           <span className="material-symbols-outlined text-gris">{offer.icon}</span>
                         </div>
                         <div className="min-w-0">
@@ -445,7 +445,7 @@ function StateShell({
     <div className="bg-surface-container-lowest text-on-surface font-body min-h-screen pb-24">
       <StateHeader onBack={onBack} />
       <main className="pt-[calc(6rem+env(safe-area-inset-top))] px-6 max-w-2xl mx-auto flex flex-col items-center text-center">
-        <div className="w-16 h-16 bg-verde-container/10 rounded-sm flex items-center justify-center mt-16 mb-6">
+        <div className="w-16 h-16 bg-verde-suave rounded-sm flex items-center justify-center mt-16 mb-6">
           <span className={`material-symbols-outlined text-verde text-4xl ${spin ? 'animate-spin' : ''}`}>
             {icon}
           </span>

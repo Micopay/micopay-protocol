@@ -9,6 +9,7 @@ import {
 } from '../services/api';
 import { parseQRPayload } from '../utils/qrPayload';
 import SupportLink from '../components/SupportLink';
+import { Pill } from '../components/ui';
 
 // ── Status display config ──────────────────────────────────────────────────
 
@@ -445,19 +446,19 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
         )}
 
         {/* ── Filters ───────────────────────────────────────────────────── */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+        {/* Estos filtros eran chips propios: activo en verde y borde de 1 px.
+            El estado activo del sistema es el cintillo de TINTA invertido
+            (.pill[data-on]), no un relleno de color — es lo mismo que hace la
+            pestaña activa de BottomNav. Ahora usan la primitiva. */}
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2 -mx-6 px-6">
           {filters.map((f) => (
-            <button
+            <Pill
               key={f.key}
+              activa={activeFilter === f.key}
               onClick={() => setActiveFilter(f.key)}
-              className={`min-h-12 px-4 rounded-sm text-sm font-bold whitespace-nowrap transition-colors ${
-                activeFilter === f.key
-                  ? 'bg-primary text-papel'
-                  : 'bg-papel text-primary border border-primary'
-              }`}
             >
               {f.label}
-            </button>
+            </Pill>
           ))}
         </div>
 
@@ -467,9 +468,13 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
           </div>
         ) : trades.length === 0 ? (
-          <div className="text-center py-12">
-            <span className="material-symbols-outlined text-6xl text-gray-300 mb-4">inbox</span>
-            <p className="text-gray-500">{t('inbox.noTrades')}{activeFilter !== 'all' ? t('inbox.withStatus', { status: t(`home.status.${activeFilter}`) }) : ''}</p>
+          /* §4.6: sin ilustración y sin icono gigante en gris de Tailwind, que
+             además no era un gris del sistema. Queda la línea en --gris, que es
+             la que dice qué falta. El cintillo se omite a propósito: el único
+             texto disponible sería "Bandeja de entrada", que ya está en el
+             encabezado, y el copy no se toca aquí (§7). */
+          <div className="py-12">
+            <p className="text-gris">{t('inbox.noTrades')}{activeFilter !== 'all' ? t('inbox.withStatus', { status: t(`home.status.${activeFilter}`) }) : ''}</p>
           </div>
         ) : (
           <div className="space-y-4">

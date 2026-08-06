@@ -253,7 +253,7 @@ function MerchantOfferCard({
         <div className="bg-papel rounded-sm border-2 border-tinta shadow-solida p-5 flex flex-col gap-5">
           <div className="flex justify-between items-start gap-3">
             <div className="flex gap-4 min-w-0">
-              <div className="w-12 h-12 bg-verde-fixed rounded-sm flex items-center justify-center text-verde flex-shrink-0">
+              <div className="w-12 h-12 bg-verde-suave rounded-sm flex items-center justify-center text-verde flex-shrink-0">
                 <span
                   className="material-symbols-outlined"
                   style={{ fontVariationSettings: '"FILL" 1' }}

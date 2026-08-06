@@ -16,7 +16,7 @@ const PayHub = ({ onSend, onReceive }: PayHubProps) => {
   return (
     <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col pb-28">
       <header className="fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
-        <h1 className="font-headline font-bold text-xl text-primary">{t('pay.title')}</h1>
+        <h1 className="font-headline font-bold text-xl text-tinta">{t('pay.title')}</h1>
       </header>
 
       <main className="flex-1 mt-[calc(5rem+env(safe-area-inset-top))] px-6 space-y-6 max-w-md mx-auto w-full">
@@ -30,8 +30,10 @@ const PayHub = ({ onSend, onReceive }: PayHubProps) => {
             onClick={onSend}
             className="bg-primary text-papel rounded-sm p-6 flex flex-col items-start gap-3 active:translate-x-[2px] active:translate-y-[2px] transition-all"
           >
+            {/* El icono FIJA su color: el boton es `text-papel` y el tile es
+                `bg-papel`, asi que heredarlo lo dejaba papel sobre papel. */}
             <span className="w-12 h-12 rounded-sm bg-papel flex items-center justify-center">
-              <span className="material-symbols-outlined text-2xl">arrow_upward</span>
+              <span className="material-symbols-outlined text-2xl text-verde">arrow_upward</span>
             </span>
             <span className="font-headline font-bold text-lg">{t('pay.send')}</span>
             <span className="text-[12px] text-papel text-left leading-snug">{t('pay.sendDesc')}</span>
@@ -57,8 +59,11 @@ const PayHub = ({ onSend, onReceive }: PayHubProps) => {
               const bal = tokens.find((t) => t.code.toLowerCase() === a.code.toLowerCase())?.balance ?? 0;
               return (
                 <div key={a.code} className="flex items-center gap-3 p-4">
-                  <span className="w-10 h-10 rounded-sm border-2 border-tinta bg-verde text-papel flex items-center justify-center flex-shrink-0 font-black text-[11px]" >
-                    {a.code === 'XLM' ? 'XLM' : a.code.slice(0, 4)}
+                  {/* El codigo completo: `slice(0, 4)` imprimia "CETE". El
+                      cintillo es lo unico que distingue un activo de otro
+                      (§4.3: ningun activo tiene color), asi que no se recorta. */}
+                  <span className="w-10 h-10 rounded-sm border-2 border-tinta bg-verde text-papel flex items-center justify-center flex-shrink-0 font-black text-[10px] tracking-tight" >
+                    {a.code.toUpperCase()}
                   </span>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-on-surface text-sm">{a.label}</p>

@@ -143,11 +143,14 @@ const Home = ({
     ? "—"
     : `$${(rawXlm * xlmRate).toLocaleString("es-MX", { maximumFractionDigits: 2 })} MXN`;
 
-  const today = new Date().toLocaleDateString("es-MX", {
+  /* Solo la primera letra. La clase `capitalize` de CSS sube la inicial de
+     CADA palabra, y en es-MX eso imprimia "Jueves, 6 De Agosto". */
+  const rawToday = new Date().toLocaleDateString("es-MX", {
     weekday: "long",
     day: "numeric",
     month: "long",
   });
+  const today = rawToday.charAt(0).toUpperCase() + rawToday.slice(1);
 
   const { t } = useTranslation();
 
@@ -190,29 +193,21 @@ const Home = ({
               notifications
             </span>
             {pendingCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-error text-papel text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+              /* §4.5: cuadro de 18 dp con radio 2 px y borde de tinta, en
+                 NARANJA, no un circulo rojo. Una notificacion pendiente aqui
+                 casi siempre es "alguien quiere cobrarte o entregarte
+                 efectivo" — es accion, y la accion es naranja. El rojo queda
+                 para lo destructivo. */
+              <span className="absolute -top-1 -right-1 h-[18px] min-w-[18px] rounded-sm border-[1.5px] border-tinta bg-naranja px-1 text-[10px] font-extrabold text-papel flex items-center justify-center num">
                 {pendingCount}
               </span>
             )}
           </button>
-          <div className="w-10 h-10 rounded-sm border-2 border-primary-container bg-surface-container-low flex items-center justify-center">
-            <svg
-              fill="none"
-              height="20"
-              viewBox="0 0 24 24"
-              width="20"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <circle cx="7" cy="7" r="3" stroke="#1A2830" strokeWidth="2" />
-              <circle cx="17" cy="17" r="3" stroke="#1D9E75" strokeWidth="2" />
-              <path
-                d="M10 10L14 14"
-                stroke="#00694C"
-                strokeLinecap="round"
-                strokeWidth="2"
-              />
-            </svg>
-          </div>
+          {/* Aqui habia un tile con la marca dibujada a mano en los hexes de la
+              paleta anterior (#1A2830 / #1D9E75 / #00694C), sin handler: era el
+              logo repetido a dos centimetros del logo. Fuera, por las dos
+              razones del sistema — desaparece el tile de icono sobre el
+              encabezado, y no quedan hexes de la paleta muerta. */}
         </div>
       </header>
 
@@ -239,7 +234,7 @@ const Home = ({
           <h1 className="font-headline font-extrabold text-3xl text-on-surface leading-tight mb-1">
             {t('home.greeting', { name: username || '...' })}
           </h1>
-          <p className="text-on-surface-variant font-medium opacity-70 capitalize">
+          <p className="text-on-surface-variant font-medium opacity-70">
             {today}
           </p>
         </section>
@@ -258,7 +253,11 @@ const Home = ({
         {/* Balance — el saldo es dinero DIGITAL, así que la cifra va en
             verde. El naranja queda reservado al efectivo por recibir: en el
             sitio las tres cifras naranjas son "Recibes...", ninguna es un
-            saldo. Ver MoneyBlock. */}
+            saldo. Ver MoneyBlock.
+
+            El pie lleva solo el estado transitorio: la red ya la dice la
+            etiqueta ("VALOR TOTAL · STELLAR TESTNET"), y repetirla debajo
+            imprimía "Stellar Testnet" dos veces en el mismo bloque. */}
         <MoneyBlock
           className="mb-8"
           onClick={loadBalance}
@@ -269,7 +268,7 @@ const Home = ({
               ? t('home.notAvailable')
               : balanceLoading
                 ? t('home.loadingBalanceStatus')
-                : t('home.stellarTestnet')
+                : undefined
           }
         />
 

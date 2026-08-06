@@ -29,6 +29,9 @@ function createProps(overrides = {}) {
     token: 'buyer-token',
     merchantToken: 'merchant-token',
     onNavigateInbox: vi.fn(),
+    // El saludo sale de la prop `username`; sin ella Home imprime "Hola, ..."
+    // y la asercion /hola, juan/ del test no podia pasar.
+    username: 'Juan',
     ...overrides,
   };
 }
@@ -43,6 +46,11 @@ describe('Home — pending-trades badge', () => {
       loading: false,
       error: null,
       refresh: vi.fn(),
+      // Home calcula el total desde `tokens`, no desde `xlmBalance`. Sin este
+      // campo el mock devolvia undefined y el componente reventaba en
+      // `tokens.reduce` antes de renderizar nada.
+      tokens: [{ code: 'XLM', balance: 250 }],
+      usdMxnRate: 17.5,
     });
     mockGetTradeHistory.mockResolvedValue([]);
     mockGetCurrentUser.mockResolvedValue({ verification_status: 'verified' } as any);
@@ -117,6 +125,11 @@ describe('Home — XLM→MXN rate', () => {
       loading: false,
       error: null,
       refresh: vi.fn(),
+      // Home calcula el total desde `tokens`, no desde `xlmBalance`. Sin este
+      // campo el mock devolvia undefined y el componente reventaba en
+      // `tokens.reduce` antes de renderizar nada.
+      tokens: [{ code: 'XLM', balance: 250 }],
+      usdMxnRate: 17.5,
     });
     mockGetTradeHistory.mockResolvedValue([]);
     mockGetCurrentUser.mockResolvedValue({ verification_status: 'verified' } as any);
@@ -161,6 +174,8 @@ describe('Home — non-custodial wallet balance states', () => {
       loading: false,
       error: null,
       refresh: vi.fn(),
+      tokens: [{ code: 'XLM', balance: 0 }],
+      usdMxnRate: 17.5,
     });
 
     render(<Home {...createProps()} />);
@@ -178,6 +193,8 @@ describe('Home — non-custodial wallet balance states', () => {
       loading: true,
       error: null,
       refresh: vi.fn(),
+      tokens: [],
+      usdMxnRate: null,
     });
 
     render(<Home {...createProps()} />);
@@ -195,6 +212,8 @@ describe('Home — non-custodial wallet balance states', () => {
       loading: false,
       error: new Error('Horizon connection failed'),
       refresh: vi.fn(),
+      tokens: [],
+      usdMxnRate: null,
     });
 
     render(<Home {...createProps()} />);

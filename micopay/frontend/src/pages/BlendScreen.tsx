@@ -289,7 +289,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
               {collateralResult && borrowAmount && parseFloat(borrowAmount) > 0 && (
                 <div className="bg-surface-container-low rounded-sm px-4 py-2 flex justify-between">
                   <span className="text-xs text-on-surface-variant">Health Factor</span>
-                  <span className={`text-xs font-bold ${healthFactor > 1.5 ? 'text-verde-claro' : healthFactor > 1.0 ? 'text-warning' : 'text-error'}`}>
+                  <span className={`text-xs font-bold ${healthFactor > 1.5 ? 'text-verde-claro' : healthFactor > 1.0 ? 'text-aviso-texto' : 'text-error'}`}>
                     {healthFactor > 99 ? '∞' : healthFactor.toFixed(2)}
                   </span>
                 </div>

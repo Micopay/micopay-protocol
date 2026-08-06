@@ -31,10 +31,13 @@ export default function TradeCancelled({
   return (
     <div className="min-h-screen bg-fondo text-on-surface font-body flex flex-col">
       <header className="border-b-2 border-tinta px-4 pt-14 pb-4 text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-sm bg-amber-100 text-amber-800">
+        {/* `cancelled` es un estado NEUTRO (§4.4): fondo, linea y gris.
+            Estaba en `bg-amber-100 text-amber-800`, que ni es del sistema ni
+            corresponde — el ambar es advertencia, no cancelacion. */}
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-sm border-2 border-linea bg-fondo text-gris">
           <span className="material-symbols-outlined text-3xl">undo</span>
         </div>
-        <h1 className="font-headline text-2xl font-bold text-primary">Operación cancelada</h1>
+        <h1 className="font-headline text-2xl font-bold text-tinta">Operación cancelada</h1>
         <p className="mt-2 text-sm text-on-surface-variant max-w-sm mx-auto">
           La operación <span className="font-mono text-xs">{tradeId.slice(0, 8)}…</span> quedó en estado{' '}
           <strong>cancelada</strong>. Monto referido: <strong>${amountMxn} MXN</strong>.
