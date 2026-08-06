@@ -86,7 +86,7 @@ const DepositChat = ({
                 <div className="flex items-center gap-4">
                     <button 
                         onClick={onBack}
-                        className="flex items-center justify-center p-2 text-verde hover:bg-[#E7F6FF] transition-colors rounded-full active:scale-95 duration-150"
+                        className="min-h-12 min-w-12 flex items-center justify-center p-2 text-verde hover:bg-[#E7F6FF] transition-colors rounded-full active:scale-95 duration-150"
                     >
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
@@ -170,7 +170,7 @@ const DepositChat = ({
 
                     {!isLoading && !error && messages.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-12 text-center">
-                            <span className="material-symbols-outlined text-[48px] text-outline/40 mb-3">chat_bubble</span>
+                            <span className="material-symbols-outlined text-[48px] text-gris/40 mb-3">chat_bubble</span>
                             <p className="text-sm text-on-surface/60 font-medium">{t('chatRoom.noMessagesYet')}</p>
                             <p className="text-xs text-on-surface/40 mt-1">{t('chatRoom.startConversation')}</p>
                         </div>
@@ -210,7 +210,7 @@ const DepositChat = ({
                         </button>
                         <button
                             onClick={onViewQR}
-                            className="flex items-center justify-center gap-2 py-3 px-4 rounded-sm from-primary to-primary-container text-papel font-bold text-sm hover:brightness-110 transition-all active:scale-95 disabled:opacity-50"
+                            className="flex items-center justify-center gap-2 py-3 px-4 rounded-sm bg-naranja text-papel border-2 border-tinta shadow-solida font-bold text-sm hover:brightness-110 transition-all active:scale-95 disabled:opacity-50"
                             disabled={isSending}
                         >
                             <span className="material-symbols-outlined !text-[20px]">qr_code_2</span>
@@ -218,7 +218,7 @@ const DepositChat = ({
                         </button>
                     </div>
                     {sendError && (
-                        <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-sm">
+                        <div className="text-xs text-red-600 bg-red-50 min-h-12 px-3 rounded-sm">
                             {t('chatRoom.sendFailed', { error: sendError.message })}
                         </div>
                     )}

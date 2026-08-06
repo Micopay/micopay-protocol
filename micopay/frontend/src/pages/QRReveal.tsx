@@ -120,8 +120,8 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
             {/* Top Navigation */}
             <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
                 <div className="flex items-center gap-3">
-                    <button onClick={onBack} aria-label="Volver" className="p-2 hover:bg-surface-container-low rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary">
-                        <span aria-hidden="true" className="material-symbols-outlined text-primary">arrow_back</span>
+                    <button onClick={onBack} aria-label="Volver" className="min-h-12 min-w-12 min-h-12 min-w-12 flex items-center justify-center rounded-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary">
+                        <span aria-hidden="true" className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">arrow_back</span>
                     </button>
                     <div className="flex flex-col">
                         <div className="flex items-center gap-2">
@@ -131,7 +131,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
                     </div>
                 </div>
                 <button aria-label="Más opciones" className="w-10 h-10 rounded-full bg-surface-container-low flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary">
-                    <span aria-hidden="true" className="material-symbols-outlined text-primary">more_vert</span>
+                    <span aria-hidden="true" className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">more_vert</span>
                 </button>
             </header>
 
@@ -190,7 +190,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
                                 <div className="absolute inset-0 border-4 border-surface-container-high rounded-full"></div>
                                 <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
                             </div>
-                            <p className="text-sm font-medium text-outline">{t('qrReveal.generatingCode')}</p>
+                            <p className="text-sm font-medium text-gris">{t('qrReveal.generatingCode')}</p>
                         </div>
                     ) : secretError ? (
                         <ErrorBanner
@@ -258,14 +258,14 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
                                     <div className="absolute inset-0 border-4 border-surface-container-high rounded-full"></div>
                                     <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
                                 </div>
-                                <p className="text-sm font-medium text-outline">{t('qrReveal.waitingForBuyer')}</p>
+                                <p className="text-sm font-medium text-gris">{t('qrReveal.waitingForBuyer')}</p>
                             </div>
                         )}
                     </section>
                 )}
 
                 <footer className="mt-12 text-center pb-10 space-y-3">
-                    <p className="text-[12px] text-outline leading-relaxed px-6 font-medium">
+                    <p className="text-[12px] text-gris leading-relaxed px-6 font-medium">
                         {t('qrReveal.autoCancelNotice')}
                     </p>
                     <SupportLink tradeId={activeTrade?.id} state="QR_REVEAL" />

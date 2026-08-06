@@ -56,7 +56,7 @@ export function PermissionGate({
       >
         <span
           className={`material-symbols-outlined text-3xl ${
-            isPermanent ? 'text-error' : isRationale ? 'text-primary' : 'text-outline'
+            isPermanent ? 'text-error' : isRationale ? 'text-primary' : 'text-gris'
           }`}
         >
           {isPermanent ? 'lock' : isRationale ? icon : 'block'}
@@ -68,11 +68,11 @@ export function PermissionGate({
         <h3 className="font-headline font-bold text-lg text-on-surface">
           {isRationale ? title : copy.title}
         </h3>
-        <p className="text-sm text-outline leading-snug max-w-[280px] mx-auto">
+        <p className="text-sm text-gris leading-snug max-w-[280px] mx-auto">
           {isRationale ? description : copy.body}
         </p>
         {isPermanent && (
-          <p className="text-xs text-outline/60 font-mono mt-1">{COPY.permanently_denied.settingsNote}</p>
+          <p className="text-xs text-gris/60 font-mono mt-1">{COPY.permanently_denied.settingsNote}</p>
         )}
       </div>
 

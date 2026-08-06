@@ -30,7 +30,7 @@ const PayHub = ({ onSend, onReceive }: PayHubProps) => {
               <span className="material-symbols-outlined text-2xl">arrow_upward</span>
             </span>
             <span className="font-headline font-bold text-lg">{t('pay.send')}</span>
-            <span className="text-[12px] text-papel/80 text-left leading-snug">{t('pay.sendDesc')}</span>
+            <span className="text-[12px] text-papel text-left leading-snug">{t('pay.sendDesc')}</span>
           </button>
 
           <button
@@ -53,12 +53,12 @@ const PayHub = ({ onSend, onReceive }: PayHubProps) => {
               const bal = tokens.find((t) => t.code.toLowerCase() === a.code.toLowerCase())?.balance ?? 0;
               return (
                 <div key={a.code} className="flex items-center gap-3 p-4">
-                  <span className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 font-black text-xs" style={{ backgroundColor: `${a.color}1A`, color: a.color }}>
+                  <span className="w-10 h-10 rounded-sm border-2 border-tinta bg-verde text-papel flex items-center justify-center flex-shrink-0 font-black text-[11px]" >
                     {a.code === 'XLM' ? 'XLM' : a.code.slice(0, 4)}
                   </span>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-on-surface text-sm">{a.label}</p>
-                    <p className="text-[11px] text-outline">{a.code}</p>
+                    <p className="text-[11px] text-gris">{a.code}</p>
                   </div>
                   <p className="font-bold text-on-surface text-sm whitespace-nowrap">
                     {loading ? '…' : bal.toLocaleString('es-MX', { maximumFractionDigits: a.decimals })}

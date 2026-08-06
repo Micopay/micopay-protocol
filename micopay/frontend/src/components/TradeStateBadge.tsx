@@ -31,9 +31,9 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     next: 'Comparte o presenta el código para continuar con la entrega de efectivo.',
     safe: 'Tu saldo sigue protegido en contrato hasta que el proceso termine.',
     tone: {
-      container: 'bg-primary/5 border-primary/20',
-      iconBg: 'bg-primary/10',
-      icon: 'text-primary',
+      container: 'bg-verde-suave border-tinta',
+      iconBg: 'bg-verde',
+      icon: 'text-papel',
     },
     icon: 'lock',
   },
@@ -43,9 +43,9 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     next: 'Cuando recibas el efectivo, confirma para liberar los fondos.',
     safe: 'Si algo falla o se vence el tiempo, el flujo regresa tus fondos según estado.',
     tone: {
-      container: 'bg-secondary-container/30 border-secondary/20',
-      iconBg: 'bg-secondary-container/50',
-      icon: 'text-secondary',
+      container: 'bg-naranja-suave border-tinta',
+      iconBg: 'bg-naranja',
+      icon: 'text-papel',
     },
     icon: 'payments',
   },
@@ -55,9 +55,9 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     next: 'Muestra el QR al agente y confirma cuando recibas el efectivo.',
     safe: 'El proceso queda trazado y sólo se libera cuando se completa correctamente.',
     tone: {
-      container: 'bg-primary-container/20 border-primary/25',
-      iconBg: 'bg-primary/10',
-      icon: 'text-primary',
+      container: 'bg-tinta border-tinta',
+      iconBg: 'bg-naranja-claro',
+      icon: 'text-tinta',
     },
     icon: 'qr_code_2',
   },
@@ -67,9 +67,9 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     next: 'Puedes volver al inicio o revisar el historial de actividad.',
     safe: 'Tus fondos ya se movieron al destino final de esta operación.',
     tone: {
-      container: 'bg-verde-claro/10 border-[#1D9E75]/30',
-      iconBg: 'bg-verde-claro/15',
-      icon: 'text-verde-claro',
+      container: 'bg-verde-suave border-tinta',
+      iconBg: 'bg-verde-claro',
+      icon: 'text-papel',
     },
     icon: 'check_circle',
   },
@@ -79,9 +79,9 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     next: 'Inicia una nueva solicitud cuando quieras intentarlo de nuevo.',
     safe: 'Tus fondos no se pierden: quedan asegurados para devolución o reintento.',
     tone: {
-      container: 'bg-surface-container-low border-linea',
-      iconBg: 'bg-surface-container-high',
-      icon: 'text-on-surface-variant',
+      container: 'bg-fondo border-tinta',
+      iconBg: 'bg-gris',
+      icon: 'text-papel',
     },
     icon: 'cancel',
     recoveryLabel: 'Crear nueva solicitud',
@@ -92,9 +92,9 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     next: 'Puedes iniciar otra operación para continuar.',
     safe: 'El sistema protege tu saldo y procede a liberar o reembolsar.',
     tone: {
-      container: 'bg-surface-container-low border-linea',
-      iconBg: 'bg-surface-container-high',
-      icon: 'text-on-surface-variant',
+      container: 'bg-fondo border-tinta',
+      iconBg: 'bg-gris',
+      icon: 'text-papel',
     },
     icon: 'schedule',
     recoveryLabel: 'Intentar de nuevo',
@@ -105,9 +105,9 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     next: 'Puedes crear una nueva solicitud cuando te convenga.',
     safe: 'Tus fondos ya están de vuelta y disponibles.',
     tone: {
-      container: 'bg-surface-container-low border-linea',
-      iconBg: 'bg-surface-container-high',
-      icon: 'text-on-surface-variant',
+      container: 'bg-verde-suave border-tinta',
+      iconBg: 'bg-verde',
+      icon: 'text-papel',
     },
     icon: 'undo',
     recoveryLabel: 'Hacer otra solicitud',
@@ -148,15 +148,15 @@ const TradeStateBadge = ({ state, onRecover, recoverLabel, className = '' }: Tra
   const buttonLabel = recoverLabel ?? copy.recoveryLabel ?? 'Volver a intentar';
 
   return (
-    <section className={`rounded-sm border p-4 ${copy.tone.container} ${className}`}>
+    <section className={`rounded-sm border-2 p-4 ${copy.tone.container} ${className}`}>
       <div className="flex items-start gap-3">
-        <div className={`w-9 h-9 rounded-full flex items-center justify-center ${copy.tone.iconBg}`}>
+        <div className={`w-9 h-9 rounded-sm border-2 border-tinta flex items-center justify-center ${copy.tone.iconBg}`}>
           <span className={`material-symbols-outlined text-base ${copy.tone.icon}`}>{copy.icon}</span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-sm text-on-surface">{copy.label}</p>
-          <p className="mt-2 text-[13px] leading-relaxed text-on-surface-variant">{copy.happened}</p>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-on-surface-variant">{copy.next}</p>
+          <p className={`font-bold text-sm ${state === "revealed" ? "text-papel" : "text-tinta"}`}>{copy.label}</p>
+          <p className="mt-2 text-[13px] leading-relaxed text-gris">{copy.happened}</p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-gris">{copy.next}</p>
           <p className="mt-1.5 text-[13px] leading-relaxed font-medium text-on-surface">{copy.safe}</p>
           {showRecovery && onRecover && (
             <button

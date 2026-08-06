@@ -19,9 +19,9 @@ const STATUS_COLOR: Record<string, string> = {
   completed: "text-verde-claro",
   locked: "text-primary",
   revealing: "text-primary",
-  pending: "text-outline",
+  pending: "text-gris",
   cancelled: "text-error",
-  refunded: "text-outline",
+  refunded: "text-gris",
 };
 
 interface HomeProps {
@@ -180,11 +180,11 @@ const Home = ({
         <div className="flex items-center gap-4">
           <button
             onClick={onNavigateInbox}
-            className="relative p-2 rounded-full hover:bg-surface-container-low transition-colors"
+            className="relative min-h-12 min-w-12 flex items-center justify-center rounded-sm transition-colors"
           >
             <span
               aria-hidden="true"
-              className="material-symbols-outlined text-primary"
+              className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center"
             >
               notifications
             </span>
@@ -278,14 +278,14 @@ const Home = ({
           <div className="bg-papel rounded-sm border-2 border-tinta divide-y divide-linea">
             {/* XLM */}
             <div className="flex items-center gap-4 p-4">
-              <div className="w-10 h-10 rounded-full bg-[#7B61FF]/10 flex items-center justify-center flex-shrink-0">
-                <span className="text-[#7B61FF] font-black text-sm">XLM</span>
+              <div className="w-10 h-10 rounded-sm border-2 border-tinta bg-verde flex items-center justify-center flex-shrink-0">
+                <span className="text-papel font-black text-sm">XLM</span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-on-surface text-sm">
                   Stellar Lumens
                 </p>
-                <p className="text-[11px] text-outline truncate font-mono">
+                <p className="text-[11px] text-gris truncate font-mono">
                   {stellarAddress
                     ? `${stellarAddress.substring(0, 8)}…${stellarAddress.slice(-6)}`
                     : "—"}
@@ -295,19 +295,19 @@ const Home = ({
                 <p className="font-bold text-on-surface text-sm">
                   {xlmBalance ?? "—"} XLM
                 </p>
-                <p className="text-[11px] text-outline">{xlmMxnValue}</p>
+                <p className="text-[11px] text-gris">{xlmMxnValue}</p>
               </div>
             </div>
             {/* MXNE */}
             <div className={`flex items-center gap-4 p-4 ${balanceLoading ? 'opacity-40' : ''}`}>
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <span className="text-primary font-black text-xs">MXNE</span>
+              <div className="w-10 h-10 rounded-sm border-2 border-tinta bg-verde flex items-center justify-center flex-shrink-0">
+                <span className="text-papel font-black text-xs">MXNE</span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-on-surface text-sm">
                   Peso Digital (MXNE)
                 </p>
-                <p className="text-[11px] text-outline truncate font-mono">
+                <p className="text-[11px] text-gris truncate font-mono">
                   {stellarAddress
                     ? `${stellarAddress.substring(0, 8)}…${stellarAddress.slice(-6)}`
                     : "—"}
@@ -321,14 +321,14 @@ const Home = ({
             </div>
             {/* USDC */}
             <div className={`flex items-center gap-4 p-4 ${balanceLoading ? 'opacity-40' : ''}`}>
-              <div className="w-10 h-10 rounded-full bg-[#2775CA]/10 flex items-center justify-center flex-shrink-0">
-                <span className="text-[#2775CA] font-black text-xs">USDC</span>
+              <div className="w-10 h-10 rounded-sm border-2 border-tinta bg-verde flex items-center justify-center flex-shrink-0">
+                <span className="text-papel font-black text-xs">USDC</span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-on-surface text-sm">
                   USD Coin
                 </p>
-                <p className="text-[11px] text-outline truncate font-mono">
+                <p className="text-[11px] text-gris truncate font-mono">
                   {stellarAddress
                     ? `${stellarAddress.substring(0, 8)}…${stellarAddress.slice(-6)}`
                     : "—"}
@@ -380,7 +380,7 @@ const Home = ({
               >
                 receipt_long
               </span>
-              <p className="text-sm text-outline font-medium">
+              <p className="text-sm text-gris font-medium">
                 {t('home.noTransactions')}
               </p>
             </div>
@@ -389,7 +389,7 @@ const Home = ({
               {trades.map((trade) => {
                 const s = {
                   label: t(`home.status.${trade.status}`, { defaultValue: trade.status }),
-                  color: STATUS_COLOR[trade.status] ?? "text-outline",
+                  color: STATUS_COLOR[trade.status] ?? "text-gris",
                 };
                 const date = new Date(trade.created_at).toLocaleString(
                   "es-MX",
@@ -416,7 +416,7 @@ const Home = ({
                           <p className="font-bold text-on-surface text-sm">
                             ${trade.amount_mxn.toLocaleString("es-MX")} MXN
                           </p>
-                          <p className="text-[11px] text-outline">{date}</p>
+                          <p className="text-[11px] text-gris">{date}</p>
                         </div>
                       </div>
                       <span className={`text-[11px] font-bold ${s.color}`}>
@@ -481,7 +481,7 @@ const Home = ({
           <button
             onClick={onNavigateCashout}
             aria-label={t('home.cashout')}
-            className="w-full h-[56px] from-primary to-primary-container text-papel font-bold rounded-sm active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full h-[56px] bg-naranja text-papel border-2 border-tinta shadow-solida font-bold rounded-sm active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <span aria-hidden="true" className="material-symbols-outlined">
               payments
@@ -491,7 +491,7 @@ const Home = ({
           <button
             onClick={onNavigateDeposit}
             aria-label={t('home.deposit')}
-            className="w-full h-[56px] from-[#1D9E75] to-[#14815F] text-papel font-bold rounded-sm active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full h-[56px] bg-papel text-tinta border-2 border-tinta shadow-solida font-bold rounded-sm active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <span aria-hidden="true" className="material-symbols-outlined">
               add_circle

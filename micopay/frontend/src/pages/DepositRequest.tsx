@@ -20,7 +20,7 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
             <button
               onClick={onBack}
               aria-label="Volver"
-              className="text-verde hover:opacity-80 transition-opacity active:scale-95 duration-200 focus:outline-none focus:ring-2 focus:ring-primary rounded-full p-1"
+              className="min-h-12 min-w-12 text-verde hover:opacity-80 transition-opacity active:scale-95 duration-200 focus:outline-none focus:ring-2 focus:ring-primary rounded-full p-1"
             >
               <span aria-hidden="true" className="material-symbols-outlined">arrow_back</span>
             </button>
@@ -64,7 +64,7 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
           <div className="bg-surface-container-lowest p-6 rounded-sm space-y-4">
             <div className="flex items-start space-x-4">
               <div className="p-3 bg-primary/10 rounded-sm">
-                <span aria-hidden="true" className="material-symbols-outlined text-primary">travel_explore</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">travel_explore</span>
               </div>
               <div className="flex-1">
                 <p className="text-on-surface font-medium leading-relaxed">
@@ -78,7 +78,7 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
             <button
               onClick={() => onSearch(amount)}
               aria-label="Buscar agentes"
-              className="w-full bg-[linear-gradient(135deg,#00694c_0%,#008560_100%)] text-papel h-[56px] rounded-sm font-headline font-bold text-lg active:scale-95 transition-all duration-200 flex items-center justify-center space-x-2 focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full bg-naranja text-papel border-2 border-tinta shadow-solida h-[56px] rounded-sm font-headline font-bold text-lg active:scale-95 transition-all duration-200 flex items-center justify-center space-x-2 focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <span>{t('deposit.search')}</span>
               <span aria-hidden="true" className="material-symbols-outlined text-xl">chevron_right</span>

@@ -46,7 +46,7 @@ export default function ErrorBanner({
         <button
           type="button"
           onClick={onDismiss}
-          className="text-xs font-semibold text-outline underline hover:no-underline"
+          className="text-xs font-semibold text-gris underline hover:no-underline"
         >
           Ocultar
         </button>

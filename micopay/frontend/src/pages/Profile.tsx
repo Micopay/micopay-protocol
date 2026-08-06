@@ -11,13 +11,6 @@ import {
 import { setLanguage } from "../i18n";
 
 /** Deterministic avatar gradient seeded by the Stellar address (no external images). */
-function avatarGradient(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  const hue = h % 360;
-  return `linear-gradient(135deg, hsl(${hue} 55% 45%), hsl(${(hue + 40) % 360} 60% 35%))`;
-}
-
 const TIER_STYLE: Record<string, { bg: string; text: string; icon: string }> = {
   Oro: { bg: "#FFF6DB", text: "#9A7B12", icon: "workspace_premium" },
   Plata: { bg: "#EEF1F4", text: "#5A6B78", icon: "military_tech" },
@@ -176,7 +169,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
         <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta/60">
           <button
               onClick={onBack}
-              className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#EFF6FA] transition-colors"
+              className="min-h-12 min-w-12 w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#EFF6FA] transition-colors"
           >
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
@@ -199,14 +192,14 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
           )}
 
           {!loading && error && (
-              <div className="bg-[#FFECEF] border border-[#F5B6C0] rounded-sm px-5 py-4 space-y-3">
+              <div className="bg-[#FFECEF] border-2 border-tinta rounded-sm px-5 py-4 space-y-3">
                 <div className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-rojo text-xl mt-0.5" style={{ fontVariationSettings: '"FILL" 1' }}>error</span>
                   <p className="text-sm text-rojo font-medium leading-snug">{error}</p>
                 </div>
                 <button
                   onClick={onLogout}
-                  className="w-full h-10 text-sm font-bold bg-[#C62828] text-papel rounded-sm active:scale-95 transition-all"
+                  className="w-full min-h-12 text-sm font-bold bg-[#C62828] text-papel rounded-sm active:scale-95 transition-all"
                 >
                   Iniciar sesión de nuevo
                 </button>
@@ -215,11 +208,10 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
 
           {!loading && profile && (
               <>
-                <section className="from-[#E1F5EE] to-[#F0FBF7] rounded-sm p-5 border border-[#BFE7D9]/70 ">
+                <section className="bg-verde-suave rounded-sm p-5 border-2 border-tinta ">
                   <div className="flex items-center gap-4">
                     <div
-                      className="w-16 h-16 rounded-sm flex items-center justify-center text-papel font-extrabold text-2xl flex-shrink-0"
-                      style={{ background: avatarGradient(profile.stellar_address) }}
+                      className="w-16 h-16 rounded-sm border-2 border-tinta bg-tinta flex items-center justify-center text-papel font-extrabold text-2xl flex-shrink-0"
                     >
                       {profile.username.slice(0, 2).toUpperCase()}
                     </div>
@@ -317,20 +309,20 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                     <button
                         onClick={handleCopyAddress}
                         disabled={!devicePublicKey}
-                        className="flex-1 h-10 text-sm font-bold border border-[#00694C] text-verde rounded-sm active:scale-95 transition-all disabled:opacity-40"
+                        className="flex-1 min-h-12 text-sm font-bold border-2 border-tinta text-verde rounded-sm active:scale-95 transition-all disabled:opacity-40"
                     >
                       {t('profile.copyAddress')}
                     </button>
                     <button
                         onClick={() => setShowImportModal(true)}
-                        className="flex-1 h-10 text-sm font-bold border-2 border-tinta text-gris rounded-sm active:scale-95 transition-all"
+                        className="flex-1 min-h-12 text-sm font-bold border-2 border-tinta text-gris rounded-sm active:scale-95 transition-all"
                     >
                       {t('profile.importKey')}
                     </button>
                   </div>
                   <button
                       onClick={handleExport}
-                      className="w-full h-10 text-sm font-bold text-rojo border border-[#F5B6C0] rounded-sm active:scale-95 transition-all"
+                      className="w-full min-h-12 text-sm font-bold text-rojo border-2 border-tinta rounded-sm active:scale-95 transition-all"
                   >
                     {t('profile.exportKey')}
                   </button>
@@ -377,7 +369,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                   </div>
                 </section>
 
-                <section className="bg-papel rounded-sm p-5 border border-[#F5B6C0] space-y-4">
+                <section className="bg-papel rounded-sm p-5 border-2 border-tinta space-y-4">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.15em] text-rojo mb-2">
                       {t('profile.dangerZone')}
@@ -390,7 +382,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                     </p>
                   </div>
 
-                  <div className="bg-[#FFECEF] rounded-sm p-4 border border-[#F5B6C0]">
+                  <div className="bg-[#FFECEF] rounded-sm p-4 border-2 border-tinta">
                     <p className="text-sm text-rojo font-medium">
                       {t('profile.deleteWarning')}
                     </p>
@@ -482,7 +474,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
         )}
 
         {success && (
-            <div className="fixed bottom-24 left-1/2 z-[70] -translate-x-1/2 rounded-sm bg-[#E6F9F1] border border-[#1D9E75]/20 px-4 py-3 ">
+            <div className="fixed bottom-24 left-1/2 z-[70] -translate-x-1/2 rounded-sm bg-[#E6F9F1] border-2 border-tinta px-4 py-3 ">
               <p className="text-sm text-verde-claro font-medium">
                 {t('profile.accountDeleted')}
               </p>

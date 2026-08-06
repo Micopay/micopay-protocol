@@ -28,7 +28,7 @@ const DeleteAccountModal = ({
         onClick={onCancel}
       />
 
-      <div className="relative w-full max-w-md rounded-sm bg-papel p-6 border border-[#F5B6C0]">
+      <div className="relative w-full max-w-md rounded-sm bg-papel p-6 border-2 border-tinta">
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-sm bg-[#FFECEF] flex items-center justify-center shrink-0">
             <span className="material-symbols-outlined text-rojo text-3xl">
@@ -52,7 +52,7 @@ const DeleteAccountModal = ({
             recuperarla después de confirmar.
           </p>
 
-          <div className="rounded-sm bg-[#FFECEF] border border-[#F5B6C0] p-4">
+          <div className="rounded-sm bg-[#FFECEF] border-2 border-tinta p-4">
             <p className="text-sm text-rojo font-medium leading-relaxed">
               Escribe <span className="font-bold font-mono">@{username}</span>{" "}
               para habilitar el botón de eliminación.
@@ -73,7 +73,7 @@ const DeleteAccountModal = ({
           </div>
 
           {error && (
-            <div className="rounded-sm border border-[#F5B6C0] bg-[#FFECEF] px-4 py-3">
+            <div className="rounded-sm border-2 border-tinta bg-[#FFECEF] px-4 py-3">
               <p className="text-sm text-rojo font-medium">{error}</p>
             </div>
           )}

@@ -88,7 +88,7 @@ const Explore = ({ onBack, onNavigate, showDefi = true, showSpeiRamp = false }: 
 
                 {/* Footer Section */}
                 <footer className="mt-12 text-center">
-                    <p className="text-xs text-outline font-medium">{t('exploreScreen.poweredBy')}</p>
+                    <p className="text-xs text-gris font-medium">{t('exploreScreen.poweredBy')}</p>
                 </footer>
             </main>
         </div>

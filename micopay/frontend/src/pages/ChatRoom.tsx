@@ -93,7 +93,7 @@ const ChatRoom = ({
                 <div className="flex items-center gap-3">
                     <button 
                         onClick={onBack}
-                        className="p-2 hover:bg-surface-container-low transition-colors rounded-full text-primary"
+                        className="min-h-12 min-w-12 p-2 hover:bg-surface-container-low transition-colors rounded-full text-primary"
                     >
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
@@ -204,7 +204,7 @@ const ChatRoom = ({
                 {/* Date Separator */}
                 {!isLoading && messages.length > 0 && (
                     <div className="flex justify-center my-6">
-                        <span className="text-[11px] font-bold text-outline uppercase tracking-widest bg-surface-container-low px-3 py-1 rounded-full">
+                        <span className="text-[11px] font-bold text-gris uppercase tracking-widest bg-surface-container-low px-3 py-1 rounded-full">
                             {t('chatRoom.today')}
                         </span>
                     </div>
@@ -213,7 +213,7 @@ const ChatRoom = ({
                 {/* Empty State */}
                 {!isLoading && !error && messages.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <span className="material-symbols-outlined text-[48px] text-outline/40 mb-3">chat_bubble</span>
+                        <span className="material-symbols-outlined text-[48px] text-gris/40 mb-3">chat_bubble</span>
                         <p className="text-sm text-on-surface/60 font-medium">{t('chatRoom.noMessagesYet')}</p>
                         <p className="text-xs text-on-surface/40 mt-1">{t('chatRoom.startConversation')}</p>
                     </div>
@@ -239,7 +239,7 @@ const ChatRoom = ({
                                 )}
                             </div>
                             <div className={`flex items-center gap-1 mt-1 px-1 ${msg.isOwn ? 'justify-end' : ''}`}>
-                                <span className="text-[10px] text-outline font-medium">
+                                <span className="text-[10px] text-gris font-medium">
                                     {new Date(msg.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true })}
                                 </span>
                                 {msg.isOwn && (
@@ -282,7 +282,7 @@ const ChatRoom = ({
             <div className="fixed bottom-0 w-full bg-surface/80 px-4 pt-3 pb-[max(2rem,env(safe-area-inset-bottom))] border-t border-surface-container">
                 <div className="max-w-2xl mx-auto flex flex-col gap-2">
                     {sendError && (
-                        <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-sm">
+                        <div className="text-xs text-red-600 bg-red-50 min-h-12 px-3 rounded-sm">
                             {t('chatRoom.sendFailed', { error: sendError.message })} <button onClick={() => {}} className="underline ml-1">{t('chatRoom.retry')}</button>
                         </div>
                     )}
@@ -295,7 +295,7 @@ const ChatRoom = ({
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                className="w-full bg-surface-container-low border-none focus:ring-2 focus:ring-primary rounded-sm py-3 px-4 pr-12 text-sm text-on-surface placeholder:text-outline resize-none overflow-hidden disabled:opacity-50" 
+                                className="w-full bg-surface-container-low border-none focus:ring-2 focus:ring-primary rounded-sm py-3 px-4 pr-12 text-sm text-on-surface placeholder:text-gris resize-none overflow-hidden disabled:opacity-50" 
                                 placeholder={t('chatRoom.messagePlaceholder')}
                                 rows={1}
                                 disabled={isSending}

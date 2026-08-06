@@ -315,7 +315,7 @@ function RevealedView({ trade, onComplete, token }: { trade: TradeDetailData; on
             <div className="absolute inset-0 border-4 border-surface-container-high rounded-full"></div>
             <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
           </div>
-          <p className="text-sm font-medium text-outline">Confirmando intercambio…</p>
+          <p className="text-sm font-medium text-gris">Confirmando intercambio…</p>
         </div>
       )}
     </div>
@@ -933,7 +933,7 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
           <div className="flex items-center gap-3">
             <button
               onClick={onBack}
-              className="p-2 hover:bg-surface-container-low rounded-full transition-colors text-primary"
+              className="min-h-12 min-w-12 min-h-12 min-w-12 flex items-center justify-center rounded-sm transition-colors text-primary"
             >
               <span className="material-symbols-outlined">arrow_back</span>
             </button>

@@ -80,7 +80,7 @@ function LoadingSkeleton({ onBack, amount }: { onBack: () => void; amount: numbe
       <header className="border-b-2 border-tinta w-full top-0 sticky bg-[#E7F6FF] z-50 pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between px-6 py-4 w-full">
           <div className="flex items-center gap-4">
-            <button onClick={onBack} className="text-verde active:scale-95 duration-200">
+            <button onClick={onBack} className="min-h-12 min-w-12 text-verde active:scale-95 duration-200">
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
             <h1 className="font-headline font-bold text-xl text-verde">Ofertas de depósito</h1>
@@ -101,14 +101,14 @@ function LoadingSkeleton({ onBack, amount }: { onBack: () => void; amount: numbe
         </section>
 
         <section>
-          <div className="w-full h-64 bg-surface-container-low rounded-sm animate-pulse" />
+          <div className="w-full h-64 bg-surface-container-low rounded-sm" />
         </section>
 
         <div className="space-y-6">
           {[0, 1].map((i) => (
             <div
               key={i}
-              className="bg-surface-container-lowest rounded-sm p-6 ring-1 ring-outline-variant/10 space-y-4 animate-pulse"
+              className="bg-surface-container-lowest rounded-sm p-6 ring-1 ring-outline-variant/10 space-y-4"
             >
               <div className="flex gap-4">
                 <div className="w-12 h-12 bg-surface-container-high rounded-sm" />
@@ -133,7 +133,7 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
     <div className="bg-surface text-on-surface min-h-screen pb-24">
       <header className="border-b-2 border-tinta w-full top-0 sticky bg-[#E7F6FF] z-50 pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center px-6 py-4">
-          <button onClick={onBack} className="text-verde active:scale-95 duration-200">
+          <button onClick={onBack} className="min-h-12 min-w-12 text-verde active:scale-95 duration-200">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
           <h1 className="ml-4 font-headline font-bold text-xl text-verde">Ofertas de depósito</h1>
@@ -141,9 +141,9 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
       </header>
 
       <main className="max-w-xl mx-auto px-6 flex flex-col items-center justify-center min-h-[60vh] text-center gap-4">
-        <span className="material-symbols-outlined text-5xl text-outline">location_off</span>
+        <span className="material-symbols-outlined text-5xl text-gris">location_off</span>
         <h2 className="font-headline font-bold text-xl text-on-surface">Necesitamos tu ubicación</h2>
-        <p className="text-sm text-outline font-medium max-w-xs leading-snug">
+        <p className="text-sm text-gris font-medium max-w-xs leading-snug">
           Para mostrarte agentes cercanos, activa el permiso de ubicación en Ajustes de tu dispositivo.
         </p>
         <button
@@ -164,7 +164,7 @@ function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => vo
     <div className="bg-surface text-on-surface min-h-screen pb-24">
       <header className="border-b-2 border-tinta w-full top-0 sticky bg-[#E7F6FF] z-50 pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center px-6 py-4">
-          <button onClick={onBack} className="text-verde active:scale-95 duration-200">
+          <button onClick={onBack} className="min-h-12 min-w-12 text-verde active:scale-95 duration-200">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
           <h1 className="ml-4 font-headline font-bold text-xl text-verde">Ofertas de depósito</h1>
@@ -174,7 +174,7 @@ function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => vo
       <main className="max-w-xl mx-auto px-6 flex flex-col items-center justify-center min-h-[60vh] text-center gap-4">
         <span className="material-symbols-outlined text-5xl text-error">wifi_off</span>
         <h2 className="font-headline font-bold text-xl text-on-surface">No pudimos cargar las ofertas</h2>
-        <p className="text-sm text-outline font-medium max-w-xs">
+        <p className="text-sm text-gris font-medium max-w-xs">
           Revisa tu conexión e intenta de nuevo.
         </p>
         <div className="flex gap-3 mt-2">
@@ -202,10 +202,10 @@ function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) 
   return (
     <div className="flex flex-col items-center text-center py-12 px-4 gap-4">
       <div className="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center">
-        <span className="material-symbols-outlined text-outline text-3xl">location_off</span>
+        <span className="material-symbols-outlined text-gris text-3xl">location_off</span>
       </div>
       <h2 className="font-headline font-bold text-xl text-on-surface">Sin agentes disponibles</h2>
-      <p className="text-sm text-outline leading-snug max-w-[280px]">
+      <p className="text-sm text-gris leading-snug max-w-[280px]">
         No hay agentes disponibles en tu zona para ${amount} MXN en este momento. Intenta más tarde.
       </p>
       <button
@@ -285,7 +285,7 @@ function MerchantOfferCard({
                   <span>{distanceLabel} de distancia</span>
                 </div>
                 {merchant.address_text && (
-                  <p className="text-xs text-outline mt-0.5 truncate max-w-[200px]">
+                  <p className="text-xs text-gris mt-0.5 truncate max-w-[200px]">
                     {merchant.address_text}
                   </p>
                 )}
@@ -318,7 +318,7 @@ function MerchantOfferCard({
           <button
             onClick={() => onSelectOffer(merchant.seller_id)}
             disabled={loading}
-            className="w-full h-[46px] from-primary to-primary-container text-papel font-semibold rounded-sm active:scale-95 duration-200 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-wait"
+            className="w-full h-[46px] bg-naranja text-papel border-2 border-tinta shadow-solida font-semibold rounded-sm active:scale-95 duration-200 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-wait"
           >
             {loading ? 'Conectando con el agente…' : 'Elegir este agente'}
           </button>
@@ -331,7 +331,7 @@ function MerchantOfferCard({
     <div className="bg-surface-container rounded-sm p-6 ring-1 ring-outline-variant/5 flex flex-col gap-4">
       <div className="flex justify-between items-start gap-3">
         <div className="flex gap-4 min-w-0">
-          <div className="w-12 h-12 bg-surface-container-highest rounded-sm flex items-center justify-center text-outline flex-shrink-0">
+          <div className="w-12 h-12 bg-surface-container-highest rounded-sm flex items-center justify-center text-gris flex-shrink-0">
             <span className="material-symbols-outlined">storefront</span>
           </div>
           <div className="min-w-0">
@@ -416,7 +416,7 @@ const DepositMap = ({
           <div className="flex items-center gap-4">
             <button
               onClick={onBack}
-              className="text-verde active:scale-95 duration-200"
+              className="min-h-12 min-w-12 text-verde active:scale-95 duration-200"
               aria-label="Volver"
             >
               <span className="material-symbols-outlined">arrow_back</span>
@@ -482,7 +482,7 @@ const DepositMap = ({
         {/* Informative note */}
         <div className="bg-surface-container-low rounded-sm p-6 border border-primary/10">
           <div className="flex gap-4">
-            <span className="material-symbols-outlined text-primary">info</span>
+            <span className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">info</span>
             <p className="text-sm text-on-surface-variant leading-relaxed">
               Las ofertas están basadas en la tasa de cambio actual y la cercanía de los agentes.
               Todas las transacciones están protegidas por el contrato de depósito en garantía de MicoPay.

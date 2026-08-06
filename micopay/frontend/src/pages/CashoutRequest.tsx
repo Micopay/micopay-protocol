@@ -20,7 +20,7 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
             <button
               onClick={onBack}
               aria-label="Volver"
-              className="text-primary active:scale-95 duration-200 p-2 hover:bg-primary/10 rounded-full focus:outline-none focus:ring-2 focus:ring-primary"
+              className="min-h-12 min-w-12 text-primary active:scale-95 duration-200 p-2 hover:bg-primary/10 rounded-full focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <span aria-hidden="true" className="material-symbols-outlined font-bold">arrow_back</span>
             </button>
@@ -75,12 +75,12 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-surface-container-highest/30 p-4 rounded-sm flex flex-col gap-2">
-              <span aria-hidden="true" className="material-symbols-outlined text-primary">location_on</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">location_on</span>
               <span className="text-xs font-bold text-on-surface-variant">{t('cashout.location')}</span>
               <span className="text-sm font-semibold text-on-surface">{t('cashout.locationValue')}</span>
             </div>
             <div className="bg-surface-container-highest/30 p-4 rounded-sm flex flex-col gap-2">
-              <span aria-hidden="true" className="material-symbols-outlined text-primary">speed</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">speed</span>
               <span className="text-xs font-bold text-on-surface-variant">{t('cashout.time')}</span>
               <span className="text-sm font-semibold text-on-surface">{t('cashout.timeValue')}</span>
             </div>
@@ -91,7 +91,7 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
           <button
             onClick={() => onSearch(Number(amount))}
             aria-label="Buscar ofertas de efectivo"
-            className="w-full from-primary to-primary-container text-on-primary font-body font-semibold py-4 rounded-sm active:scale-95 duration-200 transition-all flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full bg-naranja text-papel border-2 border-tinta shadow-solida font-body font-semibold py-4 rounded-sm active:scale-95 duration-200 transition-all flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <span>{t('cashout.search')}</span>
             <span aria-hidden="true" className="material-symbols-outlined text-lg">search</span>

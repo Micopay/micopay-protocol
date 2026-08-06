@@ -32,7 +32,7 @@ export default function OfflineQueueStatus({
           </>
         ) : offlineQueue.hasPending ? (
           <>
-            <span className="material-symbols-outlined text-sm animate-pulse">pending</span>
+            <span className="material-symbols-outlined text-sm">pending</span>
             Pendiente de sincronizar
           </>
         ) : null}

@@ -22,7 +22,7 @@ function StatusLine({ status }: { status: KYCStatus }) {
   if (status === 'pending') {
     return (
       <div className="flex items-center gap-3 bg-primary/5 border border-primary/10 rounded-sm px-4 py-3">
-        <span className="material-symbols-outlined text-primary">hourglass_top</span>
+        <span className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">hourglass_top</span>
         <div>
           <p className="font-bold text-on-surface">{t('kyc.verifyingIdentity')}</p>
           <p className="text-xs text-on-surface-variant">{t('kyc.verifyingDesc')}</p>
@@ -32,7 +32,7 @@ function StatusLine({ status }: { status: KYCStatus }) {
   }
   if (status === 'approved') {
     return (
-      <div className="flex items-center gap-3 bg-verde-claro/10 border border-[#1D9E75]/20 rounded-sm px-4 py-3">
+      <div className="flex items-center gap-3 bg-verde-claro/10 border-2 border-tinta rounded-sm px-4 py-3">
         <span className="material-symbols-outlined text-verde-claro">check_circle</span>
         <div>
           <p className="font-bold text-on-surface">{t('kyc.identityVerified')}</p>
@@ -198,7 +198,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
         <div className="flex items-center gap-3">
           <button
             onClick={onApproved}
-            className="p-2 hover:bg-surface-container-low rounded-full transition-colors text-primary"
+            className="min-h-12 min-w-12 flex items-center justify-center rounded-sm transition-colors text-primary"
             aria-label={t('kyc.continue')}
           >
             <span className="material-symbols-outlined">verified</span>
@@ -266,7 +266,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
             </button>
           )}
 
-          <p className="text-center text-xs text-outline pt-2">
+          <p className="text-center text-xs text-gris pt-2">
             {t('kyc.sessionExpires')}
           </p>
         </div>

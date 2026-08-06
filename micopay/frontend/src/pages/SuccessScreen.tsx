@@ -266,7 +266,7 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
             <div className="w-full pt-8">
                 <button
                     onClick={onHome}
-                    className="w-full h-[54px] from-primary to-primary-container text-papel font-bold rounded-sm active:scale-95 transition-all flex items-center justify-center gap-2"
+                    className="w-full h-[54px] bg-naranja text-papel border-2 border-tinta shadow-solida font-bold rounded-sm active:scale-95 transition-all flex items-center justify-center gap-2"
                 >
                     {t('success.backToHome')}
                     <span className="material-symbols-outlined">arrow_forward</span>

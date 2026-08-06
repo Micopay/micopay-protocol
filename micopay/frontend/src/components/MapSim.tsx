@@ -100,7 +100,7 @@ const MapSim = ({
                         aria-pressed={canSelect ? isSelected : undefined}
                     >
                         <span className={`relative w-14 h-14 cursor-pointer transition-transform ${isSelected ? 'scale-125' : 'hover:scale-110'}`}>
-                            <span className={`absolute inset-0 rounded-full blur-md animate-pulse ${isSelected ? 'bg-primary/40' : 'bg-primary/20'}`}></span>
+                            <span className={`absolute inset-0 rounded-full blur-md ${isSelected ? 'bg-primary/40' : 'bg-primary/20'}`}></span>
                             <img src={image} alt="" className="w-full h-full object-contain relative z-10 drop-" />
                         </span>
                         <span className={`px-3 py-1 rounded-full mt-1 border text-[9px] font-bold whitespace-nowrap ${isSelected ? 'bg-primary text-papel border-primary' : 'bg-papel text-on-surface border-linea'}`}>
@@ -117,8 +117,8 @@ const MapSim = ({
             </div>
 
             {/* Live Indicator */}
-            <div className="absolute bottom-4 right-4 bg-black/70 px-3 py-1.5 rounded-full flex items-center gap-2 z-20">
-                <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse "></div>
+            <div className="absolute bottom-4 right-4 bg-tinta border-2 border-papel px-3 py-1.5 rounded-sm flex items-center gap-2 z-20">
+                <div className="w-1.5 h-1.5 bg-green-400 rounded-full "></div>
                 <p className="text-[9px] font-bold text-papel uppercase tracking-tighter">Agentes reales cercanos</p>
             </div>
 

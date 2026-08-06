@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Pill } from '../components/ui';
 import ErrorBanner from '../components/ErrorBanner';
 import { getTradeHistory, TradeHistoryItem } from '../services/api';
 import { mapApiError, type MappedApiError } from '../utils/apiError';
@@ -7,9 +8,9 @@ const STATUS_LABEL: Record<string, { label: string; color: string; bg: string }>
   completed: { label: 'Completado', color: 'text-verde-claro', bg: 'bg-verde-claro/10' },
   locked:    { label: 'Bloqueado',  color: 'text-primary',   bg: 'bg-primary/10' },
   revealing: { label: 'Revelando',  color: 'text-primary',   bg: 'bg-primary/10' },
-  pending:   { label: 'Pendiente',  color: 'text-outline',   bg: 'bg-outline/10' },
+  pending:   { label: 'Pendiente',  color: 'text-gris',   bg: 'bg-outline/10' },
   cancelled: { label: 'Cancelado',  color: 'text-error',     bg: 'bg-error/10' },
-  expired:   { label: 'Expirado',   color: 'text-outline',   bg: 'bg-outline/10' },
+  expired:   { label: 'Expirado',   color: 'text-gris',   bg: 'bg-outline/10' },
   refunded:  { label: 'Reembolsado', color: 'text-[#8b5cf6]', bg: 'bg-[#8b5cf6]/10' },
 };
 
@@ -62,7 +63,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
   return (
     <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col">
       <header className="fixed top-0 left-0 w-full z-50 flex items-center px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
-        <button onClick={onBack} className="p-2 hover:bg-surface-container-low rounded-full transition-colors">
+        <button onClick={onBack} className="min-h-12 min-w-12 min-h-12 min-w-12 flex items-center justify-center rounded-sm transition-colors">
           <span className="material-symbols-outlined text-on-surface">arrow_back</span>
         </button>
         <h1 className="flex-1 text-center font-headline font-bold text-lg mr-10">Historial de Transacciones</h1>
@@ -72,17 +73,13 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
         {/* Status Filters */}
         <section className="flex gap-2 overflow-x-auto pb-4 no-scrollbar mb-4">
           {FILTERS.map((f) => (
-            <button
+            <Pill
               key={f.id}
+              activa={status === f.id}
               onClick={() => handleFilterChange(f.id)}
-              className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
-                status === f.id
-                  ? 'bg-primary text-papel '
-                  : 'bg-papel border-2 border-tinta text-outline hover:border-primary/50'
-              }`}
             >
               {f.label}
-            </button>
+            </Pill>
           ))}
         </section>
 
@@ -106,10 +103,10 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
         ) : loadError ? null : trades.length === 0 ? (
           <div className="bg-papel rounded-sm border-2 border-tinta p-12 text-center mt-10">
             <div className="w-16 h-16 bg-surface-container-low rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="material-symbols-outlined text-outline text-3xl">history_toggle_off</span>
+              <span className="material-symbols-outlined text-gris text-3xl">history_toggle_off</span>
             </div>
             <h3 className="font-headline font-bold text-on-surface mb-2">Sin transacciones</h3>
-            <p className="text-sm text-outline leading-relaxed max-w-[200px] mx-auto">
+            <p className="text-sm text-gris leading-relaxed max-w-[200px] mx-auto">
               No encontramos transacciones que coincidan con tu filtro actual.
             </p>
           </div>
@@ -146,7 +143,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
                       </div>
                       
                       <div className="flex justify-between items-center">
-                        <p className="text-[11px] text-outline font-medium uppercase tracking-wider">{date}</p>
+                        <p className="text-[11px] text-gris font-medium uppercase tracking-wider">{date}</p>
                         <span className={`px-2 py-0.5 rounded-sm text-[10px] font-black uppercase tracking-widest ${s.color} ${s.bg}`}>
                           {s.label}
                         </span>
@@ -170,7 +167,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
               <span className="material-symbols-outlined text-sm">chevron_left</span>
               Anterior
             </button>
-            <span className="text-xs font-bold text-outline">Página {page}</span>
+            <span className="text-xs font-bold text-gris">Página {page}</span>
             <button
               disabled={trades.length < 10}
               onClick={() => setPage(p => p + 1)}

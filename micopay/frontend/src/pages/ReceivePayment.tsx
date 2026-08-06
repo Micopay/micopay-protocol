@@ -26,8 +26,8 @@ const ReceivePayment = ({ address, onBack }: ReceivePaymentProps) => {
   return (
     <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col">
       <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
-        <button onClick={onBack} aria-label={t('send.cancel')} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors">
-          <span className="material-symbols-outlined text-primary">arrow_back</span>
+        <button onClick={onBack} aria-label={t('send.cancel')} className="min-h-12 min-w-12 w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors">
+          <span className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">arrow_back</span>
         </button>
         <h1 className="font-headline font-bold text-lg">{t('receive.title')}</h1>
       </header>
@@ -42,7 +42,7 @@ const ReceivePayment = ({ address, onBack }: ReceivePaymentProps) => {
             <QRCodeSVG value={address} size={216} bgColor="transparent" fgColor="#0B1E26" level="M" />
           </div>
         ) : (
-          <div className="bg-surface-container-low p-8 rounded-sm text-center text-sm text-outline">
+          <div className="bg-surface-container-low p-8 rounded-sm text-center text-sm text-gris">
             {t('profile.noKeyGenerated')}
           </div>
         )}
@@ -68,12 +68,12 @@ const ReceivePayment = ({ address, onBack }: ReceivePaymentProps) => {
           <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-gris mb-3">{t('receive.accepts')}</p>
           <div className="flex flex-wrap gap-2">
             {ASSETS.map((a) => (
-              <span key={a.code} className="px-3 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: `${a.color}1A`, color: a.color }}>
+              <span key={a.code} className="px-3 py-1 rounded-sm border-2 border-tinta bg-verde text-papel text-xs font-bold" >
                 {a.code}
               </span>
             ))}
           </div>
-          <p className="text-[11px] text-outline mt-3 leading-relaxed">
+          <p className="text-[11px] text-gris mt-3 leading-relaxed">
             {t('receive.scanTip')}
           </p>
         </div>

@@ -103,7 +103,7 @@ function EffectiveFeeNote({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-bold text-outline uppercase tracking-wider">
+        <span className="text-[11px] font-bold text-gris uppercase tracking-wider">
           {t('map.totalEffectiveCost')}
         </span>
         <span
@@ -112,7 +112,7 @@ function EffectiveFeeNote({
           {totalPct.toFixed(1)}%
         </span>
       </div>
-      <p className="text-[11px] text-outline font-medium">
+      <p className="text-[11px] text-gris font-medium">
         {t('map.feeBreakdown', { platformPct: platformFeePct, providerPct: commissionPct })}
       </p>
       {exceeds && (
@@ -176,10 +176,10 @@ const ExploreMap = ({
       <header className="border-b-2 border-tinta fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel ">
         <button
           onClick={onBack}
-          className="flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
+          className="min-h-12 min-w-12 flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
           aria-label="Volver"
         >
-          <span className="material-symbols-outlined text-primary">arrow_back</span>
+          <span className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">arrow_back</span>
         </button>
         <h1 className="ml-4 font-headline font-bold text-xl text-primary tracking-tight">
           {t('map.title')}
@@ -218,7 +218,7 @@ const ExploreMap = ({
               </h2>
               <div className="flex items-center gap-1 mt-1">
                 <span className="material-symbols-outlined text-primary text-sm">location_on</span>
-                <p className="text-sm text-outline font-medium">{t('map.nearYou')}</p>
+                <p className="text-sm text-gris font-medium">{t('map.nearYou')}</p>
               </div>
             </div>
 
@@ -256,7 +256,7 @@ const ExploreMap = ({
                           </div>
                           <div className="min-w-0">
                             <h3 className="font-headline font-bold text-lg text-on-surface truncate">{offer.name}</h3>
-                            <p className="text-sm text-outline font-medium flex items-center gap-1">
+                            <p className="text-sm text-gris font-medium flex items-center gap-1">
                               <span className="material-symbols-outlined text-sm">directions_walk</span>
                               {offer.distance} · {offer.walkMinutes} min
                             </p>
@@ -276,13 +276,13 @@ const ExploreMap = ({
                       </div>
                       <div className="flex items-center justify-between mb-6 p-4 bg-papel rounded-sm">
                         <div>
-                          <p className="text-[11px] font-bold text-outline uppercase tracking-wider mb-1">{t('map.youReceive')}</p>
+                          <p className="text-[11px] font-bold text-gris uppercase tracking-wider mb-1">{t('map.youReceive')}</p>
                           <p className="text-2xl font-headline font-extrabold text-[#5DCAA5]">
                             ${offer.receiveMxn.toFixed(2)} MXN
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-[11px] font-bold text-outline uppercase tracking-wider mb-1">{t('map.commission')}</p>
+                          <p className="text-[11px] font-bold text-gris uppercase tracking-wider mb-1">{t('map.commission')}</p>
                           <p className="text-sm font-bold text-on-surface">
                             ${(amount - offer.receiveMxn).toFixed(2)} ({offer.commissionPct}%)
                           </p>
@@ -311,7 +311,7 @@ const ExploreMap = ({
                           }
                         }}
                         disabled={loading}
-                        className="w-full h-[52px] from-primary to-primary-container text-papel font-headline font-bold rounded-sm active:scale-95 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+                        className="w-full h-[52px] bg-naranja text-papel border-2 border-tinta shadow-solida font-headline font-bold rounded-sm active:scale-95 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
                       >
                         {loading ? (
                           <>
@@ -335,7 +335,7 @@ const ExploreMap = ({
                     <div className="flex items-start justify-between gap-3 mb-4">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-11 h-11 bg-papel rounded-full flex items-center justify-center border-2 border-tinta-high flex-shrink-0">
-                          <span className="material-symbols-outlined text-outline">{offer.icon}</span>
+                          <span className="material-symbols-outlined text-gris">{offer.icon}</span>
                         </div>
                         <div className="min-w-0">
                           <h3 className="font-headline font-bold text-on-surface truncate">{offer.name}</h3>
@@ -361,7 +361,7 @@ const ExploreMap = ({
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <p className="text-[10px] font-bold text-outline uppercase tracking-wider">{t('map.offer')}</p>
+                        <p className="text-[10px] font-bold text-gris uppercase tracking-wider">{t('map.offer')}</p>
                         <p className="text-lg font-headline font-bold text-on-surface whitespace-nowrap">
                           ${offer.receiveMxn.toFixed(2)} MXN
                         </p>
@@ -402,7 +402,7 @@ const ExploreMap = ({
 
             {/* Footer Note */}
             <footer className="mt-10 mb-8 p-6 text-center">
-              <p className="text-[12px] leading-relaxed text-outline font-medium">
+              <p className="text-[12px] leading-relaxed text-gris font-medium">
                 {t('map.footerNote')}
               </p>
             </footer>
@@ -421,10 +421,10 @@ function StateHeader({ onBack }: { onBack: () => void }) {
     <header className="border-b-2 border-tinta fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel ">
       <button
         onClick={onBack}
-        className="flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
+        className="min-h-12 min-w-12 flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
         aria-label="Volver"
       >
-        <span className="material-symbols-outlined text-primary">arrow_back</span>
+        <span className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">arrow_back</span>
       </button>
       <h1 className="ml-4 font-headline font-bold text-xl text-primary tracking-tight">
         {t('map.title')}
@@ -466,7 +466,7 @@ function LoadingSkeleton({ onBack }: { onBack: () => void }) {
   const { t } = useTranslation();
   return (
     <StateShell onBack={onBack} icon="progress_activity" title={t('map.searchingOffers')} spin>
-      <p className="text-sm text-outline font-medium max-w-xs">
+      <p className="text-sm text-gris font-medium max-w-xs">
         {t('map.locatingAgents')}
       </p>
     </StateShell>
@@ -477,7 +477,7 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
   const { t } = useTranslation();
   return (
     <StateShell onBack={onBack} icon="location_off" title={t('map.needLocation')}>
-      <p className="text-sm text-outline font-medium max-w-xs mb-6">
+      <p className="text-sm text-gris font-medium max-w-xs mb-6">
         {t('map.enableLocation')}
       </p>
       <button
@@ -494,7 +494,7 @@ function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => vo
   const { t } = useTranslation();
   return (
     <StateShell onBack={onBack} icon="cloud_off" title={t('map.couldNotLoad')}>
-      <p className="text-sm text-outline font-medium max-w-xs mb-6">
+      <p className="text-sm text-gris font-medium max-w-xs mb-6">
         {t('map.checkConnection')}
       </p>
       <button
@@ -511,7 +511,7 @@ function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) 
   const { t } = useTranslation();
   return (
     <StateShell onBack={onBack} icon="search_off" title={t('map.noAgentsAvailable')}>
-      <p className="text-sm text-outline font-medium max-w-xs mb-6">
+      <p className="text-sm text-gris font-medium max-w-xs mb-6">
         {t('map.noAgentsDesc', { amount })}
       </p>
       <button

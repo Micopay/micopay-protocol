@@ -111,9 +111,9 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
         <button
           onClick={step === 'review' ? () => setStep('form') : onBack}
           aria-label="Volver"
-          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors"
+          className="min-h-12 min-w-12 w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors"
         >
-          <span className="material-symbols-outlined text-primary">arrow_back</span>
+          <span className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">arrow_back</span>
         </button>
         <h1 className="font-headline font-bold text-lg">{step === 'review' ? t('send.confirmTitle') : t('send.title')}</h1>
       </header>
@@ -138,7 +138,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
                   </button>
                 ))}
               </div>
-              <p className="text-[11px] text-outline mt-2">
+              <p className="text-[11px] text-gris mt-2">
                 {t('send.available')} <span className="font-bold text-on-surface">{balLoading ? '…' : available.toLocaleString('es-MX', { maximumFractionDigits: asset.decimals })} {asset.code}</span>
               </p>
             </div>
@@ -160,7 +160,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
                 </button>
               </div>
               {destination && !destValid && <p className="text-[11px] text-error mt-1">{t('send.invalidAddress')}</p>}
-              {scanMsg && <p className="text-[11px] text-outline mt-1">{scanMsg}</p>}
+              {scanMsg && <p className="text-[11px] text-gris mt-1">{scanMsg}</p>}
             </div>
 
             {/* Amount */}
@@ -223,7 +223,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
               <Row label={t('send.network')} value={t('send.networkName')} />
               <Row label={t('send.fee')} value={t('send.feeValue')} />
             </div>
-            <p className="text-[11px] text-outline text-center px-4">
+            <p className="text-[11px] text-gris text-center px-4">
               {t('send.warning')}
             </p>
             <button

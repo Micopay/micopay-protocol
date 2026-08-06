@@ -99,7 +99,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
   const shortHash = (h: string) => (h.length > 16 ? `${h.slice(0, 8)}…${h.slice(-8)}` : h);
 
   const TxCard = ({ result }: { result: BlendTxResult }) => (
-    <div className="bg-[#e6f9f1] border border-[#1D9E75]/20 rounded-sm px-4 py-3 space-y-2">
+    <div className="bg-[#e6f9f1] border-2 border-tinta rounded-sm px-4 py-3 space-y-2">
       <div className="flex items-center gap-2">
         <span className="material-symbols-outlined text-verde-claro text-xl">check_circle</span>
         <p className="font-bold text-verde-claro">
@@ -130,7 +130,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
       <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
         <button
           onClick={onBack}
-          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors"
+          className="min-h-12 min-w-12 w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors"
         >
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -150,7 +150,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
         <div className="flex gap-2 bg-surface-container-low rounded-sm p-1">
           <button
             onClick={() => { setTab('loan'); setError(null); }}
-            className={`flex-1 py-2.5 rounded-sm font-bold text-sm transition-all ${
+            className={`flex-1 min-h-12 py-2.5 rounded-sm font-bold text-sm transition-all ${
               tab === 'loan' ? 'bg-papel text-on-surface ' : 'text-on-surface-variant'
             }`}
           >
@@ -158,7 +158,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
           </button>
           <button
             onClick={() => { setTab('yield'); setError(null); }}
-            className={`flex-1 py-2.5 rounded-sm font-bold text-sm transition-all ${
+            className={`flex-1 min-h-12 py-2.5 rounded-sm font-bold text-sm transition-all ${
               tab === 'yield' ? 'bg-papel text-primary ' : 'text-on-surface-variant'
             }`}
           >
@@ -263,7 +263,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
                   <button
                     key={a}
                     onClick={() => setBorrowAsset(a)}
-                    className={`flex-1 py-2 rounded-sm font-bold text-sm border transition-all ${
+                    className={`flex-1 min-h-12 py-2 rounded-sm font-bold text-sm border transition-all ${
                       borrowAsset === a
                         ? 'bg-primary text-papel border-primary'
                         : 'bg-papel text-on-surface-variant border-linea'
@@ -369,7 +369,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
                   <button
                     key={a}
                     onClick={() => setSupplyAsset(a)}
-                    className={`flex-1 py-2 rounded-sm font-bold text-sm border transition-all ${
+                    className={`flex-1 min-h-12 py-2 rounded-sm font-bold text-sm border transition-all ${
                       supplyAsset === a
                         ? 'bg-primary text-papel border-primary'
                         : 'bg-papel text-on-surface-variant border-linea'
@@ -424,7 +424,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
               </button>
             </div>
 
-            <p className="text-center text-xs text-outline pb-4">
+            <p className="text-center text-xs text-gris pb-4">
               Blend Capital · Stellar Testnet · Las tasas son orientativas
             </p>
           </div>

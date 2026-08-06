@@ -362,14 +362,14 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
   return (
     <div className="min-h-screen bg-fondo">
       <header className="border-b-2 border-tinta fixed top-0 left-0 w-full z-50 bg-papel px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] flex items-center gap-4">
-        <button onClick={onBack} className="material-symbols-outlined text-primary">
+        <button onClick={onBack} className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">
           arrow_back
         </button>
         <h1 className="font-headline font-bold text-lg flex-1">{t('inbox.title')}</h1>
         <button
           onClick={handleScan}
           aria-label="Escanear QR del cliente"
-          className="flex items-center gap-1 bg-primary text-papel px-3 py-2 rounded-full text-xs font-bold shadow active:scale-95"
+          className="flex items-center gap-1 bg-primary text-papel min-h-12 px-3 rounded-sm text-xs font-bold active:scale-95"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-sm">
             qr_code_scanner
@@ -389,7 +389,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
                   {t('inbox.pollBanner')}
                 </p>
                 <p className="text-xs text-amber-800 mt-1">
-                  <a href="#" onClick={(e) => { e.preventDefault(); }} className="underline">
+                  <a href="#" onClick={(e) => { e.preventDefault(); }} className="underline inline-flex min-h-12 items-center font-bold">
                     {t('inbox.enableNotif')}
                   </a>
                 </p>
@@ -450,7 +450,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
             <button
               key={f.key}
               onClick={() => setActiveFilter(f.key)}
-              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+              className={`min-h-12 px-4 rounded-sm text-sm font-bold whitespace-nowrap transition-colors ${
                 activeFilter === f.key
                   ? 'bg-primary text-papel'
                   : 'bg-papel text-primary border border-primary'
