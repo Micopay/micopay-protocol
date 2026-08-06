@@ -121,7 +121,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
             <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
                 <div className="flex items-center gap-3">
                     <button onClick={onBack} aria-label="Volver" className="min-h-12 min-w-12 min-h-12 min-w-12 flex items-center justify-center rounded-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary">
-                        <span aria-hidden="true" className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">arrow_back</span>
+                        <span aria-hidden="true" className="material-symbols-outlined text-verde">arrow_back</span>
                     </button>
                     <div className="flex flex-col">
                         <div className="flex items-center gap-2">
@@ -130,8 +130,8 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
                         </div>
                     </div>
                 </div>
-                <button aria-label="Más opciones" className="w-10 h-10 rounded-full bg-surface-container-low flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary">
-                    <span aria-hidden="true" className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">more_vert</span>
+                <button aria-label="Más opciones" className="w-10 h-10 rounded-sm bg-surface-container-low flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary">
+                    <span aria-hidden="true" className="material-symbols-outlined text-verde">more_vert</span>
                 </button>
             </header>
 
@@ -150,7 +150,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
                 <section className="mb-10">
                     <div className="bg-surface-container-lowest border-2 border-tinta-low p-4 rounded-sm ">
                         <div className="flex gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-full bg-surface-container-high flex-shrink-0 flex items-center justify-center overflow-hidden">
+                            <div className="w-10 h-10 rounded-sm bg-surface-container-high flex-shrink-0 flex items-center justify-center overflow-hidden">
                                 <img
                                     className="w-full h-full object-cover"
                                     alt="Pharmacist"

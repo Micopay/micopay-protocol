@@ -201,7 +201,7 @@ function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => vo
 function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) {
   return (
     <div className="flex flex-col items-center text-center py-12 px-4 gap-4">
-      <div className="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center">
+      <div className="w-16 h-16 rounded-sm bg-surface-container-high flex items-center justify-center">
         <span className="material-symbols-outlined text-gris text-3xl">location_off</span>
       </div>
       <h2 className="font-headline font-bold text-xl text-on-surface">Sin agentes disponibles</h2>
@@ -275,8 +275,8 @@ function MerchantOfferCard({
                   <span>{merchant.completion_rate ? `${Math.round(merchant.completion_rate)}% completitud` : 'Sin historial'}</span>
                   <span>·</span>
                   <span>{merchant.trades_completed ?? 0} ops</span>
-                  {merchant.tier && <span className="px-2 py-0.5 text-[11px] font-bold rounded-sm bg-surface-container-high text-primary">{merchant.tier}</span>}
-                  <span className={`px-2 py-0.5 text-[11px] font-bold rounded-sm ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                  {merchant.tier && <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.1em] rounded-sm border-[1.5px] border-tinta bg-verde-suave text-verde">{merchant.tier}</span>}
+                  <span className={`px-2 py-0.5 text-[11px] font-bold rounded-sm ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-tinta text-papel' : 'bg-papel text-tinta'}`}>
                     {((merchant.seller_type === 'business') || merchant.is_business) ? 'Negocio' : 'Individuo'}
                   </span>
                 </div>
@@ -341,7 +341,7 @@ function MerchantOfferCard({
               <span>·</span>
               <span>{merchant.trades_completed ?? 0} ops</span>
               {merchant.tier && <span className="px-2 py-0.5 text-[10px] rounded-sm bg-surface-container-high text-primary">{merchant.tier}</span>}
-              <span className={`px-2 py-0.5 text-[10px] rounded-sm ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+              <span className={`px-2 py-0.5 text-[10px] rounded-sm ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-tinta text-papel' : 'bg-papel text-tinta'}`}>
                 {((merchant.seller_type === 'business') || merchant.is_business) ? 'Negocio' : 'Individuo'}
               </span>
             </div>
@@ -482,7 +482,7 @@ const DepositMap = ({
         {/* Informative note */}
         <div className="bg-surface-container-low rounded-sm p-6 border border-primary/10">
           <div className="flex gap-4">
-            <span className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">info</span>
+            <span className="material-symbols-outlined text-verde">info</span>
             <p className="text-sm text-on-surface-variant leading-relaxed">
               Las ofertas están basadas en la tasa de cambio actual y la cercanía de los agentes.
               Todas las transacciones están protegidas por el contrato de depósito en garantía de MicoPay.

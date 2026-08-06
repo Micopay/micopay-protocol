@@ -1008,7 +1008,7 @@ function App() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FFF8F8] px-6 py-12">
         <div className="max-w-md w-full bg-papel rounded-sm p-8 border border-red-100 animate-fade-in font-['Manrope']">
-          <div className="flex items-center justify-center w-16 h-16 rounded-full bg-red-50 text-red-500 mx-auto mb-6">
+          <div className="flex items-center justify-center w-16 h-16 rounded-sm bg-red-50 text-red-500 mx-auto mb-6">
             <span className="material-symbols-outlined text-4xl">warning</span>
           </div>
           <h1 className="text-xl font-bold text-gray-900 text-center mb-2">
@@ -1087,7 +1087,7 @@ function App() {
                 <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-6 animate-fade-in">
                   <div className="bg-papel rounded-sm w-full max-w-sm p-6 relative overflow-hidden">
                     <div className="text-center mb-6">
-                      <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500">
+                      <div className="w-16 h-16 bg-red-50 rounded-sm flex items-center justify-center mx-auto mb-4 text-red-500">
                         <span className="material-symbols-outlined text-3xl">shield_lock</span>
                       </div>
                       <h2 className="text-xl font-extrabold text-tinta">Respaldo Requerido</h2>

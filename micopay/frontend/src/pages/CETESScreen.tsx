@@ -285,7 +285,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
   return (
     <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col pb-10">
       <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
-        <button onClick={onBack} className="min-h-12 min-w-12 w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors">
+        <button onClick={onBack} className="min-h-12 min-w-12 flex items-center justify-center rounded-sm hover:bg-surface-container-low transition-colors">
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
         <div>
@@ -303,7 +303,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
         <div className="rounded-sm p-5 border border-primary/10">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-papel rounded-sm flex items-center justify-center ">
-              <span className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">trending_up</span>
+              <span className="material-symbols-outlined text-verde">trending_up</span>
             </div>
             <div>
               <p className="num font-bold text-on-surface text-base">{t('cetes.yieldRate')}</p>
@@ -413,10 +413,8 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                       {t('cetes.amountMxn')}
                     </label>
                     <input
-                      type="number"
+                      type="text"
                       inputMode="decimal"
-                      min="0"
-                      step="any"
                       placeholder="0.00"
                       value={amount}
                       onChange={(e) => { setAmount(e.target.value); setQuote(null); setError(null); }}
@@ -559,7 +557,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                   {orderState === 'completed' && (
                     <>
                       <div className="flex flex-col items-center gap-3 py-4 text-center">
-                        <div className="w-16 h-16 rounded-full bg-verde-claro/10 flex items-center justify-center">
+                        <div className="w-16 h-16 rounded-sm bg-verde-claro/10 flex items-center justify-center">
                           <span className="material-symbols-outlined text-verde-claro text-4xl">check_circle</span>
                         </div>
                         <p className="font-extrabold text-on-surface text-lg">{t('cetes.cetesCredited')}</p>
@@ -590,7 +588,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                   {orderState === 'failed' && (
                     <>
                       <div className="flex flex-col items-center gap-3 py-4 text-center">
-                        <div className="w-16 h-16 rounded-full bg-error/10 flex items-center justify-center">
+                        <div className="w-16 h-16 rounded-sm bg-error/10 flex items-center justify-center">
                           <span className="material-symbols-outlined text-error text-4xl">error</span>
                         </div>
                         <p className="font-extrabold text-on-surface text-lg">{t('cetes.depositError')}</p>
@@ -635,10 +633,8 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                   {t('cetes.sellAmountLabel')}
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   inputMode="decimal"
-                  min="0"
-                  step="any"
                   placeholder="0.00"
                   value={amount}
                   onChange={(e) => { setAmount(e.target.value); setQuote(null); }}
@@ -733,10 +729,8 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                   {tab === 'buy' ? t('cetes.amountIn', { asset: sourceAsset }) : t('cetes.amountInCetes')}
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   inputMode="decimal"
-                  min="0"
-                  step="any"
                   placeholder="0.00"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
@@ -820,7 +814,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
           className="w-full bg-papel border-2 border-tinta rounded-sm p-5 flex items-center gap-4 active:scale-[0.98] transition-all text-left"
         >
           <div className="w-10 h-10 bg-primary/10 rounded-sm flex items-center justify-center flex-shrink-0">
-            <span className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">account_balance_wallet</span>
+            <span className="material-symbols-outlined text-verde">account_balance_wallet</span>
           </div>
           <div className="flex-1">
             <p className="font-bold text-on-surface text-sm">{t('cetes.noCrypto')}</p>

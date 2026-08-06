@@ -102,7 +102,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
           </div>
         ) : loadError ? null : trades.length === 0 ? (
           <div className="bg-papel rounded-sm border-2 border-tinta p-12 text-center mt-10">
-            <div className="w-16 h-16 bg-surface-container-low rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 bg-surface-container-low rounded-sm flex items-center justify-center mx-auto mb-4">
               <span className="material-symbols-outlined text-gris text-3xl">history_toggle_off</span>
             </div>
             <h3 className="font-headline font-bold text-on-surface mb-2">Sin transacciones</h3>
@@ -126,7 +126,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
                   className="bg-papel rounded-sm p-4 border-2 border-tinta hover:transition-all active:scale-[0.98] cursor-pointer"
                 >
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${isCashIn ? 'bg-verde-claro/10' : 'bg-primary/10'}`}>
+                    <div className={`w-12 h-12 rounded-sm flex items-center justify-center flex-shrink-0 ${isCashIn ? 'bg-verde-claro/10' : 'bg-primary/10'}`}>
                       <span className={`material-symbols-outlined ${isCashIn ? 'text-verde-claro' : 'text-primary'}`}>
                         {isCashIn ? 'south_west' : 'north_east'}
                       </span>

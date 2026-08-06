@@ -8,7 +8,7 @@ const Terms = ({ onBack }: TermsProps) => {
       <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta/60">
         <button
           onClick={onBack}
-          className="min-h-12 min-w-12 w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#EFF6FA] transition-colors"
+          className="min-h-12 min-w-12 flex items-center justify-center rounded-sm hover:bg-[#EFF6FA] transition-colors"
           aria-label="Regresar"
         >
           <span className="material-symbols-outlined">arrow_back</span>

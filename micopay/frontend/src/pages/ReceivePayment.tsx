@@ -26,8 +26,8 @@ const ReceivePayment = ({ address, onBack }: ReceivePaymentProps) => {
   return (
     <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col">
       <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
-        <button onClick={onBack} aria-label={t('send.cancel')} className="min-h-12 min-w-12 w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors">
-          <span className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">arrow_back</span>
+        <button onClick={onBack} aria-label={t('send.cancel')} className="min-h-12 min-w-12 flex items-center justify-center rounded-sm hover:bg-surface-container-low transition-colors">
+          <span className="material-symbols-outlined text-verde">arrow_back</span>
         </button>
         <h1 className="font-headline font-bold text-lg">{t('receive.title')}</h1>
       </header>

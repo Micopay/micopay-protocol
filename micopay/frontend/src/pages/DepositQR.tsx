@@ -44,7 +44,7 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
                         <span className="text-[10px] tracking-wide uppercase font-semibold text-primary">Agente Autorizado</span>
                     </div>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center text-papel">
+                <div className="w-10 h-10 rounded-sm bg-primary-container flex items-center justify-center text-papel">
                     <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>person</span>
                 </div>
             </header>
@@ -63,7 +63,7 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
                 <section>
                     <div className="bg-surface-container-lowest border-2 border-tinta-low p-4 rounded-sm ">
                         <div className="flex gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-full bg-emerald-100 flex-shrink-0 flex items-center justify-center">
+                            <div className="w-10 h-10 rounded-sm bg-emerald-100 flex-shrink-0 flex items-center justify-center">
                                 <span className="material-symbols-outlined text-emerald-700 text-lg">storefront</span>
                             </div>
                             <div className="flex-1">

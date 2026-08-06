@@ -22,7 +22,7 @@ function StatusLine({ status }: { status: KYCStatus }) {
   if (status === 'pending') {
     return (
       <div className="flex items-center gap-3 bg-primary/5 border border-primary/10 rounded-sm px-4 py-3">
-        <span className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">hourglass_top</span>
+        <span className="material-symbols-outlined text-verde">hourglass_top</span>
         <div>
           <p className="font-bold text-on-surface">{t('kyc.verifyingIdentity')}</p>
           <p className="text-xs text-on-surface-variant">{t('kyc.verifyingDesc')}</p>

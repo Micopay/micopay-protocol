@@ -74,7 +74,7 @@ const MapSim = ({
 
             {/* User Location Pulse */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
-                <div className="w-16 h-16 bg-primary/20 rounded-full animate-ping absolute"></div>
+                <div className="w-16 h-16 bg-primary/20 rounded-sm animate-ping absolute"></div>
                 <div className="w-6 h-6 bg-primary rounded-full border-2 border-white relative z-10"></div>
             </div>
 

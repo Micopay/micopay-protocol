@@ -145,7 +145,7 @@ function PendingView({
 
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-amber-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-amber-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           hourglass_top
         </span>
@@ -216,7 +216,7 @@ function LockedView({ trade }: { trade: TradeDetailData }) {
 
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-blue-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-blue-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           lock
         </span>
@@ -248,7 +248,7 @@ function LockedView({ trade }: { trade: TradeDetailData }) {
 function RevealingView({ trade }: { trade: TradeDetailData }) {
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-purple-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-purple-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           qr_code
         </span>
@@ -289,7 +289,7 @@ function RevealedView({ trade, onComplete, token }: { trade: TradeDetailData; on
 
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-cyan-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-cyan-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-cyan-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           visibility
         </span>
@@ -327,7 +327,7 @@ function CompletedView({ trade }: { trade: TradeDetailData }) {
 
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-green-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-green-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           check_circle
         </span>
@@ -373,7 +373,7 @@ function CompletedView({ trade }: { trade: TradeDetailData }) {
 function CancelledView() {
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-red-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-red-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           cancel
         </span>
@@ -409,7 +409,7 @@ function ExpiredView({ canRefund, onRefund, refunding, trade, title, description
 }) {
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-gray-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-gray-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           schedule
         </span>
@@ -466,7 +466,7 @@ function RefundedView({ trade }: { trade: TradeDetailData }) {
 
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-purple-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-purple-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           undo
         </span>
@@ -514,7 +514,7 @@ function RefundedView({ trade }: { trade: TradeDetailData }) {
 function NotFoundError() {
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-red-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-red-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           search_off
         </span>
@@ -538,7 +538,7 @@ function NotFoundError() {
 function ForbiddenError() {
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-red-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-red-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           lock_person
         </span>
@@ -562,7 +562,7 @@ function ForbiddenError() {
 function NetworkError({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-orange-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-orange-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-orange-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           wifi_off
         </span>

@@ -131,7 +131,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
       <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
         <button
           onClick={onBack}
-          className="min-h-12 min-w-12 w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors"
+          className="min-h-12 min-w-12 flex items-center justify-center rounded-sm hover:bg-surface-container-low transition-colors"
         >
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -182,7 +182,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
             {/* Step 1: Deposit collateral */}
             <div className="bg-papel rounded-sm p-5 border-2 border-tinta space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 bg-primary rounded-sm flex items-center justify-center flex-shrink-0">
                   <span className="text-papel font-bold text-sm">1</span>
                 </div>
                 <div>
@@ -203,10 +203,8 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
                   Cantidad XLM
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   inputMode="decimal"
-                  min="0"
-                  step="any"
                   placeholder="0.00"
                   value={collateralAmount}
                   onChange={(e) => setCollateralAmount(e.target.value)}
@@ -247,7 +245,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
             {/* Step 2: Borrow */}
             <div className="bg-papel rounded-sm p-5 border-2 border-tinta space-y-4">
               <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${collateralResult ? 'bg-primary' : 'bg-outline'}`}>
+                <div className={`w-8 h-8 rounded-sm flex items-center justify-center flex-shrink-0 ${collateralResult ? 'bg-primary' : 'bg-outline'}`}>
                   <span className="text-papel font-bold text-sm">2</span>
                 </div>
                 <div>
@@ -278,10 +276,8 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
               </div>
 
               <input
-                type="number"
+                type="text"
                 inputMode="decimal"
-                min="0"
-                step="any"
                 placeholder="0.00"
                 value={borrowAmount}
                 onChange={(e) => setBorrowAmount(e.target.value)}
@@ -384,10 +380,8 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
               </div>
 
               <input
-                type="number"
+                type="text"
                 inputMode="decimal"
-                min="0"
-                step="any"
                 placeholder="0.00"
                 value={supplyAmount}
                 onChange={(e) => setSupplyAmount(e.target.value)}

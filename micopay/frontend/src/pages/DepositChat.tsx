@@ -86,7 +86,7 @@ const DepositChat = ({
                 <div className="flex items-center gap-4">
                     <button 
                         onClick={onBack}
-                        className="min-h-12 min-w-12 flex items-center justify-center p-2 text-verde hover:bg-[#E7F6FF] transition-colors rounded-full active:scale-95 duration-150"
+                        className="min-h-12 min-w-12 flex items-center justify-center p-2 text-verde hover:bg-[#E7F6FF] transition-colors rounded-sm active:scale-95 duration-150"
                     >
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
@@ -110,7 +110,7 @@ const DepositChat = ({
                 {/* Status Banner */}
                 <section className="px-6 py-4">
                     <div className="bg-papel border border-primary/10 rounded-sm p-4 flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                        <div className="w-10 h-10 rounded-sm bg-primary/10 flex items-center justify-center text-primary shrink-0">
                             <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>task_alt</span>
                         </div>
                         <div className="flex flex-col gap-1 min-w-0">
@@ -193,7 +193,7 @@ const DepositChat = ({
                                     {new Date(msg.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true })}
                                 </span>
                                 {msg.isOwn && (
-                                    <span className="material-symbols-outlined !text-[12px] text-[#5DCAA5]" style={{ fontVariationSettings: msg.readAt ? '"FILL" 1' : '"FILL" 0' }}>done_all</span>
+                                    <span className="material-symbols-outlined !text-[12px] text-naranja" style={{ fontVariationSettings: msg.readAt ? '"FILL" 1' : '"FILL" 0' }}>done_all</span>
                                 )}
                             </div>
                         </div>
@@ -240,7 +240,7 @@ const DepositChat = ({
                         <button 
                             onClick={handleSendMessage}
                             disabled={isSending || !inputValue.trim()}
-                            className="w-10 h-10 rounded-full bg-surface-container-low flex items-center justify-center text-primary hover:bg-primary hover:text-papel transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-10 h-10 rounded-sm bg-surface-container-low flex items-center justify-center text-primary hover:bg-primary hover:text-papel transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isSending ? (
                                 <div className="animate-spin rounded-full h-4 w-4 border-b border-current"></div>

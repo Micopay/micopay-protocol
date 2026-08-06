@@ -61,7 +61,7 @@ export default function ErrorBanner({
         role="alert"
         aria-live="assertive"
       >
-        <div className="w-16 h-16 rounded-full bg-error/10 flex items-center justify-center">
+        <div className="w-16 h-16 rounded-sm bg-error/10 flex items-center justify-center">
           <span
             aria-hidden="true"
             className="material-symbols-outlined text-error text-3xl"

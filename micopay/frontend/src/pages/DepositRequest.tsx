@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import TradeStateBadge, { getTradeStateDebugOverride, TradeState } from '../components/TradeStateBadge';
+import { AmountField } from '../components/ui';
 
 export interface DepositRequestProps {
   onBack: () => void;
@@ -20,7 +21,7 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
             <button
               onClick={onBack}
               aria-label="Volver"
-              className="min-h-12 min-w-12 text-verde hover:opacity-80 transition-opacity active:scale-95 duration-200 focus:outline-none focus:ring-2 focus:ring-primary rounded-full p-1"
+              className="min-h-12 min-w-12 text-verde hover:opacity-80 transition-opacity active:scale-95 duration-200 focus:outline-none focus:ring-2 focus:ring-primary rounded-sm p-1"
             >
               <span aria-hidden="true" className="material-symbols-outlined">arrow_back</span>
             </button>
@@ -44,27 +45,19 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
             <label htmlFor="deposit-amount" className="font-medium text-[10px] tracking-wide uppercase text-on-surface-variant/70">
               {t('deposit.amountLabel')}
             </label>
-            <div className="relative group">
-              <div className="flex items-baseline space-x-2 border-b border-linea group-focus-within:border-primary transition-all duration-300 pb-2">
-                <span className="text-4xl font-headline font-bold text-primary">$</span>
-                <input
-                  id="deposit-amount"
-                  className="w-full bg-transparent border-none p-0 text-5xl font-headline font-extrabold text-on-surface focus:ring-0 placeholder:text-surface-container-highest"
-                  placeholder="500"
-                  type="number"
-                  inputMode="numeric"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                />
-                <span className="text-xl font-headline font-bold text-on-surface-variant">MXN</span>
-              </div>
-            </div>
+            <AmountField
+              id="deposit-amount"
+              divisa="MXN"
+              placeholder="500"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
           </div>
 
           <div className="bg-surface-container-lowest p-6 rounded-sm space-y-4">
             <div className="flex items-start space-x-4">
               <div className="p-3 bg-primary/10 rounded-sm">
-                <span aria-hidden="true" className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">travel_explore</span>
+                <span aria-hidden="true" className="material-symbols-outlined text-verde">travel_explore</span>
               </div>
               <div className="flex-1">
                 <p className="text-on-surface font-medium leading-relaxed">

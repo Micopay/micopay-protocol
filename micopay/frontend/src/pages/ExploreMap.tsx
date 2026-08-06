@@ -176,10 +176,10 @@ const ExploreMap = ({
       <header className="border-b-2 border-tinta fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel ">
         <button
           onClick={onBack}
-          className="min-h-12 min-w-12 flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
+          className="min-h-12 min-w-12 flex items-center justify-center p-2 rounded-sm hover:bg-surface-container-low transition-colors duration-200"
           aria-label="Volver"
         >
-          <span className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">arrow_back</span>
+          <span className="material-symbols-outlined text-verde">arrow_back</span>
         </button>
         <h1 className="ml-4 font-headline font-bold text-xl text-primary tracking-tight">
           {t('map.title')}
@@ -265,9 +265,9 @@ const ExploreMap = ({
                               <span className="text-[12px] text-on-surface-variant">·</span>
                               <span className="text-[12px] text-on-surface-variant">{offer.tradesCompleted ?? 0} {t('map.ops')}</span>
                               {offer.tier && (
-                                <span className="px-2 py-0.5 text-[11px] font-bold rounded-sm bg-surface-container-high text-primary">{offer.tier}</span>
+                                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.1em] rounded-sm border-[1.5px] border-tinta bg-verde-suave text-verde">{offer.tier}</span>
                               )}
-                              <span className={`px-2 py-0.5 text-[11px] font-bold rounded-sm ${offer.isBusiness ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                              <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.1em] rounded-sm border-[1.5px] border-tinta ${offer.isBusiness ? 'bg-tinta text-papel' : 'bg-papel text-tinta'}`}>
                                 {offer.isBusiness ? t('map.business') : t('map.individual')}
                               </span>
                             </div>
@@ -277,7 +277,7 @@ const ExploreMap = ({
                       <div className="flex items-center justify-between mb-6 p-4 bg-papel rounded-sm">
                         <div>
                           <p className="text-[11px] font-bold text-gris uppercase tracking-wider mb-1">{t('map.youReceive')}</p>
-                          <p className="text-2xl font-headline font-extrabold text-[#5DCAA5]">
+                          <p className="text-2xl font-headline font-extrabold text-naranja">
                             ${offer.receiveMxn.toFixed(2)} MXN
                           </p>
                         </div>
@@ -334,7 +334,7 @@ const ExploreMap = ({
                   >
                     <div className="flex items-start justify-between gap-3 mb-4">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-11 h-11 bg-papel rounded-full flex items-center justify-center border-2 border-tinta-high flex-shrink-0">
+                        <div className="w-11 h-11 bg-papel rounded-sm flex items-center justify-center border-2 border-tinta-high flex-shrink-0">
                           <span className="material-symbols-outlined text-gris">{offer.icon}</span>
                         </div>
                         <div className="min-w-0">
@@ -349,7 +349,7 @@ const ExploreMap = ({
                               <span>·</span>
                               <span>{offer.tradesCompleted ?? 0} {t('map.ops')}</span>
                               {offer.tier && <span className="px-2 py-0.5 text-[10px] rounded-sm bg-surface-container-high text-primary">{offer.tier}</span>}
-                              <span className={`px-2 py-0.5 text-[10px] rounded-sm ${offer.isBusiness ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                              <span className={`px-2 py-0.5 text-[10px] rounded-sm ${offer.isBusiness ? 'bg-tinta text-papel' : 'bg-papel text-tinta'}`}>
                                 {offer.isBusiness ? t('map.business') : t('map.individual')}
                               </span>
                             </div>
@@ -421,10 +421,10 @@ function StateHeader({ onBack }: { onBack: () => void }) {
     <header className="border-b-2 border-tinta fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel ">
       <button
         onClick={onBack}
-        className="min-h-12 min-w-12 flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
+        className="min-h-12 min-w-12 flex items-center justify-center p-2 rounded-sm hover:bg-surface-container-low transition-colors duration-200"
         aria-label="Volver"
       >
-        <span className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">arrow_back</span>
+        <span className="material-symbols-outlined text-verde">arrow_back</span>
       </button>
       <h1 className="ml-4 font-headline font-bold text-xl text-primary tracking-tight">
         {t('map.title')}

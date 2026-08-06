@@ -54,7 +54,7 @@ export default function TradeConfirmation({
         <button
           type="button"
           onClick={onBack}
-          className="min-h-12 min-w-12 p-2 rounded-full hover:bg-surface-container-low text-primary transition-colors"
+          className="min-h-12 min-w-12 p-2 rounded-sm hover:bg-surface-container-low text-primary transition-colors"
           aria-label="Volver sin perder el monto"
         >
           <span className="material-symbols-outlined">arrow_back</span>

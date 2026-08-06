@@ -111,9 +111,9 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
         <button
           onClick={step === 'review' ? () => setStep('form') : onBack}
           aria-label="Volver"
-          className="min-h-12 min-w-12 w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors"
+          className="min-h-12 min-w-12 flex items-center justify-center rounded-sm hover:bg-surface-container-low transition-colors"
         >
-          <span className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">arrow_back</span>
+          <span className="material-symbols-outlined text-verde">arrow_back</span>
         </button>
         <h1 className="font-headline font-bold text-lg">{step === 'review' ? t('send.confirmTitle') : t('send.title')}</h1>
       </header>
@@ -166,20 +166,22 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
             {/* Amount */}
             <div>
               <label className="num block text-[11px] font-bold uppercase tracking-[0.15em] text-gris mb-2">{t('send.amount')}</label>
-              <div className="relative">
+              {/* No usa AmountField porque lleva el boton MÁX dentro del
+                  campo; se aplica el mismo lenguaje a mano. type="text" con
+                  inputMode decimal: el teclado numerico de algunos
+                  fabricantes Android no trae punto decimal. */}
+              <div className="relative flex min-h-14 items-center rounded-sm border-2 border-tinta bg-fondo pr-2">
                 <input
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  type="number"
+                  type="text"
                   inputMode="decimal"
-                  min="0"
-                  step="any"
                   placeholder="0.00"
-                  className="w-full bg-surface-container-low border-2 border-tinta rounded-sm px-4 py-3 text-2xl font-bold focus:outline-none focus:border-primary transition-colors"
+                  className="num min-w-0 flex-1 border-none bg-transparent px-4 py-3 font-display text-[26px] font-bold text-tinta outline-none placeholder:text-gris-3"
                 />
                 <button
                   onClick={() => setAmount(String(available))}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full"
+                  className="min-h-12 shrink-0 rounded-sm border-2 border-tinta bg-papel px-3 text-xs font-bold text-tinta active:translate-x-[2px] active:translate-y-[2px]"
                 >
                   MÁX
                 </button>

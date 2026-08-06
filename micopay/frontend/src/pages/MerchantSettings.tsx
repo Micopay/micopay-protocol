@@ -206,7 +206,8 @@ function Field({
     <label className="block">
       <span className="block text-sm font-medium mb-2">{label}</span>
       <input
-        type="number"
+        type="text"
+                  inputMode="decimal"
         step={step}
         value={Number.isFinite(value) ? value : 0}
         onChange={(e) => onChange(e.target.value)}

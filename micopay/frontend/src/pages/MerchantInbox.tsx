@@ -86,7 +86,7 @@ function TradeConfirmationCard({
     <div className="bg-papel rounded-sm border border-emerald-200 overflow-hidden">
       {/* Header */}
       <div className="bg-emerald-50 px-5 py-4 flex items-center gap-3 border-b border-emerald-100">
-        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-sm bg-emerald-100 flex items-center justify-center">
           <span
             className="material-symbols-outlined text-emerald-600"
             style={{ fontVariationSettings: '"FILL" 1' }}
@@ -210,7 +210,7 @@ function ScanErrorCard({
   return (
     <div className="bg-papel rounded-sm border border-red-200 overflow-hidden">
       <div className="bg-red-50 px-5 py-4 flex items-center gap-3 border-b border-red-100">
-        <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-sm bg-red-100 flex items-center justify-center">
           <span
             className="material-symbols-outlined text-red-600"
             style={{ fontVariationSettings: '"FILL" 1' }}

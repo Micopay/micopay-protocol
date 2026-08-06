@@ -46,7 +46,7 @@ export function PermissionGate({
     <div className="flex flex-col items-center gap-4 px-6 py-10 text-center">
       {/* Icon bubble */}
       <div
-        className={`w-16 h-16 rounded-full flex items-center justify-center ${
+        className={`w-16 h-16 rounded-sm flex items-center justify-center ${
           isPermanent
             ? 'bg-error/10'
             : isRationale

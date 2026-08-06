@@ -17,7 +17,7 @@ const Explore = ({ onBack, onNavigate, showDefi = true, showSpeiRamp = false }: 
             {/* Header */}
             <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
                 <Logo />
-                    <div className="w-10 h-10 rounded-full border-2 border-primary-container overflow-hidden">
+                    <div className="w-10 h-10 rounded-sm border-2 border-primary-container overflow-hidden">
                     <img
                         alt="Perfil de usuario"
                         className="w-full h-full object-cover"

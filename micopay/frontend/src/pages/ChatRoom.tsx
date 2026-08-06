@@ -93,12 +93,12 @@ const ChatRoom = ({
                 <div className="flex items-center gap-3">
                     <button 
                         onClick={onBack}
-                        className="min-h-12 min-w-12 p-2 hover:bg-surface-container-low transition-colors rounded-full text-primary"
+                        className="min-h-12 min-w-12 p-2 hover:bg-surface-container-low transition-colors rounded-sm text-primary"
                     >
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
                     <div className="flex items-center gap-2">
-                        <div className="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center text-papel font-bold">
+                        <div className="w-10 h-10 rounded-sm bg-primary-container flex items-center justify-center text-papel font-bold">
                             {(counterpartyName ?? '—').slice(0, 2).toUpperCase()}
                         </div>
                         <div>
@@ -307,7 +307,7 @@ const ChatRoom = ({
                         <button 
                             onClick={handleSendMessage}
                             disabled={isSending || !inputValue.trim()}
-                            className="w-11 h-11 bg-primary text-papel rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all mb-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-11 h-11 bg-primary text-papel rounded-sm flex items-center justify-center hover:scale-105 active:scale-95 transition-all mb-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isSending ? (
                                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>

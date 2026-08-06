@@ -61,7 +61,7 @@ export default function DebugOverlay({
           </div>
           <button 
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-colors"
+            className="w-8 h-8 rounded-sm bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-colors"
           >
             <span className="material-symbols-outlined text-lg">close</span>
           </button>
