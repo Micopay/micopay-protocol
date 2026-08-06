@@ -178,7 +178,7 @@ const ExploreMap = ({
         >
           <span className="material-symbols-outlined text-verde">arrow_back</span>
         </button>
-        <h1 className="ml-4 font-headline font-bold text-xl text-verde tracking-tight">
+        <h1 className="ml-4 font-headline font-bold text-xl text-tinta tracking-tight">
           {t('map.title')}
         </h1>
       </header>
@@ -421,7 +421,7 @@ function StateHeader({ onBack }: { onBack: () => void }) {
       >
         <span className="material-symbols-outlined text-verde">arrow_back</span>
       </button>
-      <h1 className="ml-4 font-headline font-bold text-xl text-verde tracking-tight">
+      <h1 className="ml-4 font-headline font-bold text-xl text-tinta tracking-tight">
         {t('map.title')}
       </h1>
     </header>

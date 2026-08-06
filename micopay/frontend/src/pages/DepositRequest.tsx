@@ -27,7 +27,7 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
             </button>
             <div className="flex flex-col">
               <span className="font-headline font-extrabold text-verde tracking-tight text-xs uppercase opacity-60">MicoPay</span>
-              <h1 className="font-headline font-bold text-xl text-verde">{t('deposit.title')}</h1>
+              <h1 className="font-headline font-bold text-xl text-tinta">{t('deposit.title')}</h1>
             </div>
           </div>
         </div>

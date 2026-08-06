@@ -83,7 +83,7 @@ function LoadingSkeleton({ onBack, amount }: { onBack: () => void; amount: numbe
             <button onClick={onBack} className="min-h-12 min-w-12 text-verde active:translate-x-[2px] active:translate-y-[2px] duration-200">
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
-            <h1 className="font-headline font-bold text-xl text-verde">Ofertas de depósito</h1>
+            <h1 className="font-headline font-bold text-xl text-tinta">Ofertas de depósito</h1>
           </div>
         </div>
       </header>
@@ -136,7 +136,7 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
           <button onClick={onBack} className="min-h-12 min-w-12 text-verde active:translate-x-[2px] active:translate-y-[2px] duration-200">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
-          <h1 className="ml-4 font-headline font-bold text-xl text-verde">Ofertas de depósito</h1>
+          <h1 className="ml-4 font-headline font-bold text-xl text-tinta">Ofertas de depósito</h1>
         </div>
       </header>
 
@@ -167,7 +167,7 @@ function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => vo
           <button onClick={onBack} className="min-h-12 min-w-12 text-verde active:translate-x-[2px] active:translate-y-[2px] duration-200">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
-          <h1 className="ml-4 font-headline font-bold text-xl text-verde">Ofertas de depósito</h1>
+          <h1 className="ml-4 font-headline font-bold text-xl text-tinta">Ofertas de depósito</h1>
         </div>
       </header>
 
@@ -421,7 +421,7 @@ const DepositMap = ({
             >
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
-            <h1 className="font-headline font-bold text-xl text-verde">Ofertas de depósito</h1>
+            <h1 className="font-headline font-bold text-xl text-tinta">Ofertas de depósito</h1>
           </div>
         </div>
       </header>

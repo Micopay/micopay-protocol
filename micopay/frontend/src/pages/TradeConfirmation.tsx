@@ -56,7 +56,7 @@ export default function TradeConfirmationPage({
         >
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
-        <h1 className="font-headline font-bold text-lg text-verde truncate">{title}</h1>
+        <h1 className="font-headline font-bold text-lg text-tinta truncate">{title}</h1>
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-6 space-y-5">
