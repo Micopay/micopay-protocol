@@ -129,10 +129,10 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
                   <button
                     key={a.code}
                     onClick={() => setAssetCode(a.code)}
-                    className={`py-2.5 rounded-sm font-bold text-sm border transition-all ${
-                      assetCode === a.code ? 'text-papel border-transparent' : 'bg-papel text-on-surface-variant border-linea'
+                    aria-pressed={assetCode === a.code}
+                    className={`min-h-12 rounded-sm border-2 border-tinta font-bold text-sm transition-colors ${
+                      assetCode === a.code ? 'bg-tinta text-papel' : 'bg-papel text-tinta'
                     }`}
-                    style={assetCode === a.code ? { backgroundColor: a.color } : undefined}
                   >
                     {a.code}
                   </button>
@@ -215,11 +215,11 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
             <div className="bg-papel rounded-sm border-2 border-tinta p-6 space-y-4">
               <div className="text-center pb-2">
                 <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-gris">{t('send.youWillSend')}</p>
-                <p className="text-3xl font-headline font-extrabold mt-1" style={{ color: asset.color }}>
+                <p className="num text-3xl font-display font-extrabold mt-1 text-verde">
                   {amountNum.toLocaleString('es-MX', { maximumFractionDigits: asset.decimals })} {asset.code}
                 </p>
               </div>
-              <div className="h-px bg-outline-variant/10" />
+              <div className="h-0.5 bg-linea" />
               <Row label={t('send.to')} value={`${destination.slice(0, 8)}…${destination.slice(-6)}`} mono />
               {memo.trim() && <Row label={t('send.note')} value={memo.trim()} />}
               <Row label={t('send.network')} value={t('send.networkName')} />
