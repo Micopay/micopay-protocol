@@ -1,10 +1,13 @@
 import type { FastifyInstance } from "fastify";
+import { randomUUID } from "crypto";
+import { StrKey } from "@stellar/stellar-sdk";
 import db from "../db/schema.js";
 import { config } from "../config.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import { deleteAccount } from "../services/account.service.js";
 import { createRateLimiter } from '../middleware/rateLimit.middleware.js';
-import { ConflictError } from "../utils/errors.js";
+import { ConflictError, ValidationError } from "../utils/errors.js";
+import { verifyAndConsumeChallenge } from "../services/challenge.service.js";
 
 const authRateLimit = createRateLimiter({
   windowMs: config.authRateLimitWindowMs,
@@ -15,6 +18,12 @@ export async function userRoutes(app: FastifyInstance) {
   /**
    * POST /users/register
    * Create a new user + wallet. Returns a JWT so the user is immediately authenticated.
+   *
+   * Requires a signed challenge (call POST /auth/challenge first) proving
+   * possession of stellar_address's private key — otherwise anyone could
+   * register someone else's public Stellar address before they do (address
+   * squatting), since Stellar addresses are public. See
+   * docs/AUDIT_MOBILE_MAINNET.md, "Registro sin prueba de posesión de llave".
    */
   app.post(
     "/users/register",
@@ -23,7 +32,7 @@ export async function userRoutes(app: FastifyInstance) {
       schema: {
         body: {
           type: "object",
-          required: ["stellar_address", "username"],
+          required: ["stellar_address", "username", "challenge", "signature"],
           properties: {
             stellar_address: { type: "string", minLength: 56, maxLength: 56 },
             username: {
@@ -33,17 +42,31 @@ export async function userRoutes(app: FastifyInstance) {
               pattern: "^[a-zA-Z0-9_]+$",
             },
             phone_hash: { type: "string", maxLength: 64 },
+            challenge: { type: "string" },
+            signature: { type: "string" },
           },
           additionalProperties: false,
         },
       },
     },
     async (request, reply) => {
-      const { stellar_address, username, phone_hash } = request.body as {
+      const { stellar_address, username, phone_hash, challenge, signature } = request.body as {
         stellar_address: string;
         username: string;
         phone_hash?: string;
+        challenge: string;
+        signature: string;
       };
+
+      if (!StrKey.isValidEd25519PublicKey(stellar_address)) {
+        throw new ValidationError(
+          "INVALID_STELLAR_ADDRESS",
+          "La dirección de Stellar no es válida.",
+          "stellar_address failed StrKey.isValidEd25519PublicKey",
+        );
+      }
+
+      await verifyAndConsumeChallenge(stellar_address, challenge, signature);
 
       // Check for existing user
       const existing = await db.getOne(
@@ -69,9 +92,10 @@ export async function userRoutes(app: FastifyInstance) {
         [user.id, stellar_address],
       );
 
-      // Issue JWT
+      // Issue JWT (with jti so it's revocable via logout, same as /auth/token)
+      const jti = randomUUID();
       const token = app.jwt.sign(
-        { id: user.id, stellar_address: user.stellar_address },
+        { id: user.id, stellar_address: user.stellar_address, jti },
         { expiresIn: config.jwtExpiry },
       );
 

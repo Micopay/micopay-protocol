@@ -61,3 +61,57 @@ jobs:
       - name: Tests (vitest) — informativo, NO bloqueante todavía
         run: npm run test
         continue-on-error: true
+
+  image:
+    name: Imagen Docker de producción (micopay/backend)
+    runs-on: ubuntu-latest
+    # El contenedor es el artefacto que se despliega en AWS (ver
+    # docs/AWS_MIGRATION_PLAN_2026-07.md). Este job lo construye y lo arranca
+    # en cada PR para que no pueda romperse sin que nadie se entere.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build — BLOQUEANTE
+        uses: docker/build-push-action@v6
+        with:
+          # Contexto `micopay/` (no `micopay/backend/`): la imagen necesita
+          # copiar sql/, que vive fuera de backend/. Ver el Dockerfile.
+          context: micopay
+          file: micopay/backend/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: micopay-backend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Las migraciones SQL tienen que viajar en la imagen
+        # Sin esto, runMigrations() falla en boot, el error solo se loguea y el
+        # servicio arranca contra una BD sin esquema.
+        run: |
+          docker run --rm --entrypoint sh micopay-backend:ci -c \
+            'ls -1 /app/sql/init.sql && ls -1 /app/sql/migrations | head -3'
+
+      - name: Smoke test — el contenedor arranca y responde /health
+        run: |
+          docker run -d --name micopay-smoke -p 3000:3000 \
+            -e NODE_ENV=test \
+            -e MOCK_STELLAR=true \
+            -e ALLOW_IN_MEMORY_DB=true \
+            -e PORT=3000 \
+            -e SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 \
+            micopay-backend:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:3000/health -o health.json && break
+            sleep 2
+          done
+          docker logs micopay-smoke
+          cat health.json
+          grep -q '"status":"ok"' health.json
+          curl -fsS http://localhost:3000/.well-known/assetlinks.json > /dev/null
+
+      - name: Limpieza
+        if: always()
+        run: docker rm -f micopay-smoke || true

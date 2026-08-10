@@ -72,6 +72,36 @@ const SOURCES: Array<() => Promise<CacheEntry>> = [
   },
 ];
 
+// USDC is pegged ~1:1 to USD, but stablecoins do depeg on occasion — check a
+// live USDC-USD spot price rather than assuming exactly 1.0, same
+// multi-source resilience pattern as XLM above.
+const USDC_FALLBACK_RATE = Number(process.env.USDC_MXN_FALLBACK ?? 17.5);
+let usdcCache: CacheEntry | null = null;
+
+/** @internal — exposed for testing */
+export function __resetUsdcCache(): void {
+  usdcCache = null;
+}
+
+const USDC_SOURCES: Array<() => Promise<CacheEntry>> = [
+  // Coinbase USDC-USD spot × er-api USD-MXN
+  async () => {
+    const d = await j('https://api.coinbase.com/v2/prices/USDC-USD/spot');
+    const usdcUsd = Number(d?.data?.amount);
+    if (!(usdcUsd > 0)) throw new Error('coinbase bad');
+    return { rate: round(usdcUsd * (await getUsdMxn())), source: 'coinbase+erapi', fetchedAt: new Date().toISOString() };
+  },
+  // CoinGecko direct USDC→MXN
+  async () => {
+    const d = await j('https://api.coingecko.com/api/v3/simple/price?ids=usd-coin&vs_currencies=mxn');
+    const rate = Number(d?.['usd-coin']?.mxn);
+    if (!(rate > 0)) throw new Error('coingecko bad');
+    return { rate, source: 'coingecko', fetchedAt: new Date().toISOString() };
+  },
+  // Last resort: assume the peg holds exactly and just convert USD→MXN.
+  async () => ({ rate: round(await getUsdMxn()), source: 'usd-peg+erapi', fetchedAt: new Date().toISOString() }),
+];
+
 export async function rateRoutes(app: FastifyInstance) {
   app.get('/rate/xlm-mxn', async (request) => {
     const now = Date.now();
@@ -93,5 +123,26 @@ export async function rateRoutes(app: FastifyInstance) {
     // Everything failed: serve last-known cache if any, else a marked estimate.
     if (cache) return { ...cache, stale: true };
     return { rate: FALLBACK_RATE, source: 'fallback', fetchedAt: new Date().toISOString(), stale: true };
+  });
+
+  app.get('/rate/usdc-mxn', async (request) => {
+    const now = Date.now();
+
+    if (usdcCache && now - new Date(usdcCache.fetchedAt).getTime() < CACHE_TTL_MS) {
+      return usdcCache;
+    }
+
+    for (const source of USDC_SOURCES) {
+      try {
+        const fresh = await source();
+        usdcCache = fresh;
+        return fresh;
+      } catch (err) {
+        request.log.warn({ err: err instanceof Error ? err.message : err, category: 'rate' }, '[rate] usdc source failed, trying next');
+      }
+    }
+
+    if (usdcCache) return { ...usdcCache, stale: true };
+    return { rate: USDC_FALLBACK_RATE, source: 'fallback', fetchedAt: new Date().toISOString(), stale: true };
   });
 }

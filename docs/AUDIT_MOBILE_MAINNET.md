@@ -132,6 +132,7 @@ El núcleo del producto (cashout/deposit P2P con escrow HTLC en Soroban) está *
   (El segundo check cubre que `auth.ts:95` salta la verificación de firma Ed25519 cuando `mockStellar=true`; el tercero cubre `secret.service.ts:4`, que hoy crashearía en runtime con una key de longitud incorrecta.)
 
 #### Finding: Registro emite JWT sin probar posesión de la llave (address squatting)
+- ✅ **FIXED (2026-07-02):** Extraída la lógica de challenge/response de `auth.ts` a `backend/src/services/challenge.service.ts` (`issueChallenge`/`verifyAndConsumeChallenge`), compartida ahora por `/auth/token` y `/users/register`. `POST /users/register` exige `challenge`+`signature` en el body, valida el formato con `StrKey.isValidEd25519PublicKey`, y el JWT emitido ahora incluye `jti` (antes no lo tenía, así que un token de registro no era revocable hasta el primer login). **Frontend:** `registerUser()` en `api.ts` ahora hace el mismo baile challenge→firma→registro que `getAuthToken()`; se eliminó `generateFallbackAddress` de ambas funciones (lanzan error explícito si no hay keypair en vez de fabricar una dirección inválida). ⚠️ **Es un cambio de contrato de API** (2 campos nuevos requeridos) — backend y frontend deben desplegarse juntos, o el registro de usuarios nuevos se rompe para quien tenga el APK viejo apuntando al backend nuevo. Cubierto por 5 tests nuevos en `challenge.service.test.ts` (incluye el caso central: un challenge emitido para la dirección A es rechazado si se usa para registrar la dirección B).
 - **Severity:** WARNING
 - **Location:** `micopay/backend/src/routes/users.ts:19-81`
 - **Description:** `POST /users/register` acepta cualquier `stellar_address` (solo valida longitud 56, ni siquiera `StrKey.isValidEd25519PublicKey`) y devuelve un JWT válido de 24h. Un atacante puede registrar la dirección pública de otra persona (las direcciones son públicas) antes que ella, bloqueando su registro legítimo y operando una identidad ligada a esa address (no puede firmar lock/release on-chain, pero sí crear trades, chatear, y quemar reputación).
@@ -159,6 +160,7 @@ El núcleo del producto (cashout/deposit P2P con escrow HTLC en Soroban) está *
 - **Description:** `assertNotReplayed` (tabla `processed_tx` con INSERT único) cubre lock/complete/refund ✅. `assertInvocationMatches` (`stellar.service.ts:47-99`) impide que un XDR firmado de un trade se envíe contra otro (contract id + function + args fund-relevant) ✅. Challenges de auth expiran en 5 min y son single-use ✅ — pero viven en un `Map` en memoria (`auth.ts:16`): con >1 instancia o restart de Render, los logins en vuelo fallan. Igual el rate-limit (`rateLimit.middleware.ts:8-26`) y la revocación de tokens. Aceptable para 1 instancia; documentar que escalar horizontalmente requiere Redis.
 
 #### Finding: `/defi/ramp/order/:orderId` sin check de pertenencia
+- ✅ **FIXED (2026-07-02):** Nueva tabla `ramp_orders (order_id, user_id)` (migración `20260702090000_ramp_order_ownership`) que registra el dueño al crear la orden (`recordRampOrderOwner`) y se valida en `GET /defi/ramp/order/:orderId` y en `regenerate_tx` (`assertRampOrderOwnership`, 403 si no coincide). Fail-open para órdenes creadas antes de esta migración (sin fila de ownership → se permite + se loguea warning) para no romper órdenes en curso.
 - **Severity:** WARNING
 - **Location:** `micopay/backend/src/routes/ramp.ts:129-148`
 - **Description:** Cualquier usuario autenticado puede consultar el status de la orden de otro (los `orderId` son UUIDs generados por el backend, difíciles de adivinar, pero es IDOR).
@@ -294,6 +296,7 @@ El núcleo del producto (cashout/deposit P2P con escrow HTLC en Soroban) está *
 - **Recommended Fix (barato):** Pausar polls con `CapApp.addListener('appStateChange')` (patrón ya usado en KYCScreen) y backoff a 10-15s después de 2 min sin cambios. (Ideal a mediano plazo: SSE en `GET /trades/:id/events`.)
 
 #### Finding: `getTradeHistory` carga todos los usuarios y pagina en memoria
+- ✅ **FIXED (2026-07-02):** Reescrito con `JOIN users su/bu` (por FK, nunca excluye filas — `seller_id`/`buyer_id` siempre referencian un usuario existente) y `LIMIT`/`OFFSET` parametrizados en SQL; el filtro `expired` (derivado, nunca se persiste) también se empujó a la cláusula WHERE (`status NOT IN (...) AND expires_at < NOW()`). Nota: el store en memoria usado en tests locales sin Postgres no soporta `JOIN` doble ni `LIMIT` parametrizado (limitación pre-existente del mock, no de esta query) — verificado que no crashea, solo cae a `merchant_username: 'Usuario Micopay'` en ese entorno; contra Postgres real (producción) resuelve el username correcto.
 - **Severity:** WARNING
 - **Location:** `micopay/backend/src/services/trade.service.ts:305-345` (`SELECT id, username FROM users` completo + `filtered.slice(offset...)` tras traer todos los trades del usuario)
 - **Recommended Fix:** JOIN con alias y LIMIT/OFFSET en SQL:
@@ -330,16 +333,15 @@ El núcleo del producto (cashout/deposit P2P con escrow HTLC en Soroban) está *
 - **Recommended Fix:** Un PR de "wire or delete": montar los 4 primeros, borrar el resto.
 
 #### Finding: Interfaces duplicadas `RampQuote`/`RampOrder` se fusionan silenciosamente
+- ✅ **FIXED (2026-07-01, como parte del fix de B5):** Las interfaces y funciones ramp viejas (`getOfframpQuote`, `createOfframpOrder`, `regenerateOfframpTx`, `getRampOrder`, y el primer par de interfaces `RampQuote`/`RampOrder`) se eliminaron al reparar SPEI — ver el finding "SPEI offramp roto" en §1.
 - **Severity:** WARNING
-- **Location:** `micopay/frontend/src/services/api.ts:90-103` y `:677-695`
-- **Description:** TypeScript hace declaration-merging de las dos declaraciones (no hay error de compilación porque no colisionan propiedades), produciendo un tipo mentiroso donde `quote.id` y `quote.quoteId` "existen" ambas — exactamente el bug que rompió SPEI (§1). Borrar la pareja vieja.
 
 #### Finding: Backend `updateMerchantReputation` escribe en una tabla `merchants` que no existe en este schema
+- ✅ **FIXED (2026-07-02):** Función y su llamada en `completeTrade` eliminadas por completo (la reputación ya se calcula on-read en `GET /users/me` desde `trades`, sin depender de esta tabla inexistente). Confirmado por grep que `getTier`/`TIERS`/`db.query` no se usaban en ningún otro lado del archivo antes de borrar.
 - **Severity:** WARNING
-- **Location:** `micopay/backend/src/services/trade.service.ts:674-749` (`UPDATE merchants ...`, `trades.updated_at` tampoco existe); envuelto en try/catch "non-critical" así que solo loguea warning en cada trade completado
-- **Recommended Fix:** Borrar la función y el bloque de `completeTrade:647-654` (la reputación ya se calcula on-read en `GET /users/me` desde `trades`), o migrarla a `merchant_configs`.
 
 #### Finding: Ruta backend definida pero no registrada: `client-errors`
+- ✅ **FIXED (2026-07-02):** Registrada en `index.ts` (`import { clientErrorRoutes } from './routes/client-errors.js'` + `app.register(clientErrorRoutes, { prefix: '' })`). Combinado con el fix de `reportError.ts` de ayer (leía la key de storage equivocada), el reporte de errores del cliente ahora funciona de punta a punta.
 - **Severity:** WARNING
 - **Location:** `micopay/backend/src/routes/client-errors.ts` existe; `micopay/backend/src/index.ts:218-228` no lo registra → `reportClientError` del frontend (ErrorBoundary) postea a un 404
 - **Recommended Fix:** `import { clientErrorRoutes } from './routes/client-errors.js';` + `app.register(clientErrorRoutes, { prefix: '' });`

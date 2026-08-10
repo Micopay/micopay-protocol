@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { App as CapApp } from '@capacitor/app';
 import { QRCodeSVG } from 'qrcode.react';
 import { getSecret, revealTrade, lockTrade, getTrade, TradeData } from '../services/api';
 import { ensureTrustline } from '../services/payment';
@@ -146,10 +147,13 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
                     </div>
                 </div>
 
-                {/* Chat Preview Section */}
+                {/* Chat / location quick actions — no fake message preview (see
+                    docs/AUDIT_MOBILE_MAINNET.md, "mensaje de chat falso en QRReveal";
+                    a static placeholder attributed to the real counterparty was
+                    misleading). Real messages live in the chat screen itself. */}
                 <section className="mb-10">
                     <div className="bg-surface-container-lowest border-2 border-tinta p-4 rounded-sm ">
-                        <div className="flex gap-3 mb-4">
+                        <div className="flex items-center gap-3 mb-4">
                             {/* Era una foto de stock remota con alt="Pharmacist".
                                 En la pantalla del dinero en vuelo, un hueco de
                                 imagen rota por falta de senal es lo ultimo que
@@ -158,11 +162,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
                             <div className="w-10 h-10 rounded-sm border-2 border-tinta bg-verde-suave flex-shrink-0 flex items-center justify-center font-headline font-extrabold text-verde">
                                 {(counterpartyName ?? '—').trim().charAt(0).toUpperCase()}
                             </div>
-                            <div>
-                                <p className="text-sm font-medium text-on-surface-variant">
-                                    <span className="font-bold text-on-surface">{counterpartyName ?? '—'}:</span>&nbsp;Estamos en Av. Juárez 34, a un costado del banco.
-                                </p>
-                            </div>
+                            <p className="text-sm font-bold text-on-surface">{counterpartyName ?? '—'}</p>
                         </div>
                         <div className="flex gap-3">
                             <button

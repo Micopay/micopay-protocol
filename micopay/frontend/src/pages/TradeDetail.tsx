@@ -12,6 +12,7 @@ import {
 import { ensureTrustline } from '../services/payment';
 import { errorMessages } from '../constants/errorMessages';
 import { readJSON } from '../services/secureStorage';
+import { buildTxUrl } from '../utils/stellarExplorer';
 
 type TradeDetailData = TradeDetailResponse['trade'] & {
   platform_fee_mxn?: number;
@@ -212,8 +213,6 @@ function PendingView({
 }
 
 function LockedView({ trade }: { trade: TradeDetailData }) {
-  const STELLAR_EXPLORER = 'https://stellar.expert/explorer/testnet/tx';
-
   return (
     <div className="flex flex-col items-center text-center">
       <div className="w-16 h-16 rounded-sm bg-blue-100 flex items-center justify-center mb-6">
@@ -228,7 +227,7 @@ function LockedView({ trade }: { trade: TradeDetailData }) {
 
       {trade.lock_tx_hash && (
         <a
-          href={`${STELLAR_EXPLORER}/${trade.lock_tx_hash}`}
+          href={buildTxUrl(trade.lock_tx_hash)}
           target="_blank"
           rel="noopener noreferrer"
           className="text-primary text-sm font-semibold hover:underline mb-6 flex items-center gap-1"
@@ -323,8 +322,6 @@ function RevealedView({ trade, onComplete, token }: { trade: TradeDetailData; on
 }
 
 function CompletedView({ trade }: { trade: TradeDetailData }) {
-  const STELLAR_EXPLORER = 'https://stellar.expert/explorer/testnet/tx';
-
   return (
     <div className="flex flex-col items-center text-center">
       <div className="w-16 h-16 rounded-sm bg-green-100 flex items-center justify-center mb-6">
@@ -350,7 +347,7 @@ function CompletedView({ trade }: { trade: TradeDetailData }) {
 
       {trade.release_tx_hash && (
         <a
-          href={`${STELLAR_EXPLORER}/${trade.release_tx_hash}`}
+          href={buildTxUrl(trade.release_tx_hash)}
           target="_blank"
           rel="noopener noreferrer"
           className="text-primary text-sm font-semibold hover:underline mb-6 flex items-center gap-1"
@@ -461,7 +458,6 @@ function ExpiredView({ canRefund, onRefund, refunding, trade, title, description
 }
 
 function RefundedView({ trade }: { trade: TradeDetailData }) {
-  const STELLAR_EXPLORER = 'https://stellar.expert/explorer/testnet/tx';
   const refundTxHash = trade.release_tx_hash;
 
   return (
@@ -489,7 +485,7 @@ function RefundedView({ trade }: { trade: TradeDetailData }) {
 
       {refundTxHash && (
         <a
-          href={`${STELLAR_EXPLORER}/${refundTxHash}`}
+          href={buildTxUrl(refundTxHash)}
           target="_blank"
           rel="noopener noreferrer"
           className="text-primary text-sm font-semibold hover:underline mb-6 flex items-center gap-1"
