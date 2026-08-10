@@ -2,7 +2,9 @@
 
 **Fecha:** 2026-08-07
 **Repo origen (este):** `micopay-protocol` — `C:\Users\eric\Desktop\HACKATON`
-**Repo destino:** nuevo, greenfield (nombre por definir; en este documento **`micopay-agents`**)
+**Repo destino:** **`Micopay/micopaybridge`** — https://github.com/Micopay/micopaybridge
+(ya existe: creado 2026-07-23, **público**, rama por defecto `main`, contiene solo
+`LICENSE` (MIT, © Micopay). Greenfield en la práctica.)
 **Ejecuta:** Sonnet, coordinado por Raúl
 **Entregable final:** puente XRPL↔Stellar para atomic swaps HTLC, con demo de agente sin custodio
 **Documento de la convocatoria:** [`SUBMISSION.md`](./SUBMISSION.md)
@@ -15,12 +17,12 @@ Dos cosas a la vez, en este orden:
 
 1. **Separar.** Todo lo de agentes —AIGENTS/x402, Bazaar, ZK, la API de protocolo, el
    frontend de demos y los contratos de swap— sale de este monorepo y se va a
-   `micopay-agents`. Este repo se queda **solo** con el APK y la app móvil.
+   `micopaybridge`. Este repo se queda **solo** con el APK y la app móvil.
 2. **Terminar el puente.** En el repo nuevo se completa la pata XRPL del atomic
    swap, que hoy no existe: está simulada con una segunda instancia de Soroban.
 
 > **Regla de oro: este repo no se toca hasta que el nuevo esté verde.**
-> El split es una copia, no un `git mv`. Primero `micopay-agents` compila, pasa
+> El split es una copia, no un `git mv`. Primero `micopaybridge` compila, pasa
 > tests y corre el demo; **después** se abre un PR aquí que borra lo movido. Si se
 > borra primero, cualquier problema deja las dos mitades rotas al mismo tiempo.
 
@@ -93,7 +95,7 @@ dos patas no existe todavía.** Es parte del entregable, no algo que se hereda.
 
 ## 2. Inventario del split
 
-### 2.1 Se mueve a `micopay-agents`
+### 2.1 Se mueve a `micopaybridge`
 
 | Origen | Qué es | L aprox. | Nota |
 |---|---|---|---|
@@ -128,7 +130,15 @@ documentación del rediseño visual y de cumplimiento.
 
 ### M0 — Preparar el repo destino
 
-1. Crear `micopay-agents` vacío, con licencia y `CONTRIBUTING.md` copiados de aquí.
+1. Clonar `Micopay/micopaybridge` (ya creado). Su `LICENSE` es MIT © Micopay: **no
+   sobrescribirlo** con el de aquí, que dice © ericmt-98. Copiar sí el
+   `CONTRIBUTING.md` de este repo.
+   1.1. **El repo es público.** Todo lo que se copie queda a la vista desde el
+   primer push, incluidos `middleware/x402.ts` con **SEC-13 y SEC-14 abiertos**
+   (§M5). Antes del primer push: barrer `.env*`, llaves y secretos del material
+   copiado, y decidir si SEC-13 se cierra antes de publicar o se documenta como
+   agujero conocido en el README. Publicar el hallazgo sin la nota es peor que no
+   publicar.
 2. Monorepo npm con workspaces, igual que aquí (`apps/*`, `packages/*`) y `turbo`.
    No inventar otra herramienta: el objetivo es que el código copiado compile sin
    reescribir imports.
@@ -336,7 +346,7 @@ Lo que sí verifiqué y está correcto: la nota de que `MicopayEscrow` implement
 
 **Del split:**
 
-- `micopay-agents` pasa `tsc --noEmit`, `npm test` y `cargo test` en CI.
+- `micopaybridge` pasa `tsc --noEmit`, `npm test` y `cargo test` en CI.
 - No queda **ninguna** referencia a `micopay/backend`, `micopay/frontend` ni a los
   IDs de contrato del stack móvil en el repo nuevo.
 - Ninguna de las rutas retail listadas en §3.2 existe en el repo nuevo.
@@ -385,7 +395,9 @@ Lo que sí verifiqué y está correcto: la nota de que `MicopayEscrow` implement
 
 ## 8. Preguntas abiertas para Eric
 
-1. Nombre y visibilidad del repo nuevo (¿público, por el hackathon?).
+1. ~~Nombre y visibilidad del repo nuevo.~~ **Resuelto:** `Micopay/micopaybridge`,
+   público. Queda la consecuencia, no la pregunta: ¿se cierra SEC-13 antes del
+   primer push o se publica con la nota de "agujero conocido"? (§M0.1, §M5)
 2. `apps/telegram-bot` y `contracts/micopay-badges`: ¿se mueven, se quedan o se
    archivan? (§2.3)
 3. Pata XRPL: ¿XRP nativo o token emitido? (§M4.1 — bloquea el diseño)
