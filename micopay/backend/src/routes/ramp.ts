@@ -41,6 +41,35 @@ function ensureEtherfuseConfigured() {
   }
 }
 
+/**
+ * order_id is a backend-generated UUID handed to Etherfuse, never guessable —
+ * but nothing previously stopped one authenticated user from polling another
+ * user's order if they learned its ID. This records ownership at creation and
+ * enforces it on every subsequent read (see docs/AUDIT_MOBILE_MAINNET.md,
+ * "IDOR ramp order"). Orders created before this migration have no row here —
+ * fail open for those (log + allow) rather than break in-flight orders.
+ */
+async function recordRampOrderOwner(orderId: string, userId: string): Promise<void> {
+  await db.execute(
+    'INSERT INTO ramp_orders (order_id, user_id) VALUES ($1, $2)',
+    [orderId, userId],
+  );
+}
+
+async function assertRampOrderOwnership(orderId: string, userId: string, request: { log: { warn: (obj: unknown, msg: string) => void } }): Promise<void> {
+  const owner = await db.getOne<{ user_id: string }>(
+    'SELECT user_id FROM ramp_orders WHERE order_id = $1',
+    [orderId],
+  );
+  if (!owner) {
+    request.log.warn({ order_id: orderId, user_id: userId, category: 'ramp' }, '[ramp] Order has no recorded owner (pre-migration) — allowing');
+    return;
+  }
+  if (owner.user_id !== userId) {
+    throw new ForbiddenError('No tienes permiso para ver esta orden');
+  }
+}
+
 export async function rampRoutes(app: FastifyInstance): Promise<void> {
   // Get quote: MXN->CETES (onramp) or CETES->MXN (offramp).
   app.post<{ Body: { type: 'onramp' | 'offramp'; sourceAmount: string } }>(
@@ -114,15 +143,18 @@ export async function rampRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const user = await requireOnboardedUser(request.user.id);
+      const orderId = randomUUID();
 
       try {
         const result = await createOrder({
-          orderId: randomUUID(),
+          orderId,
           quoteId,
           bankAccountId: user.etherfuse_bank_account_id!,
           publicKey: user.stellar_address,
           useAnchor,
         });
+
+        await recordRampOrderOwner(orderId, request.user.id);
 
         return 'offramp' in result ? result.offramp : result.onramp;
       } catch (err: any) {
@@ -141,6 +173,7 @@ export async function rampRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [authMiddleware] },
     async (request) => {
       const { orderId } = request.params;
+      await assertRampOrderOwnership(orderId, request.user.id, request);
       try {
         const order = await getOrder(orderId);
         return { orderId: order.orderId, status: order.status, type: order.orderType };
@@ -163,6 +196,7 @@ export async function rampRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [authMiddleware] },
     async (request, reply) => {
       const { orderId } = request.params;
+      await assertRampOrderOwnership(orderId, request.user.id, request);
       try {
         const { status, body } = await regenerateOrderTx(orderId);
         return reply.status(status).send(body ?? {});
