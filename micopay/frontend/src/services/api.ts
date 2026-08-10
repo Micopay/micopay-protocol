@@ -124,9 +124,36 @@ export async function patchMerchantAvailability(
   return res.data.user;
 }
 
+/**
+ * Registers a new user. The backend requires proof that this device holds
+ * stellar_address's private key (same challenge/response dance as login) —
+ * otherwise anyone could register someone else's public Stellar address
+ * before they do. See docs/AUDIT_MOBILE_MAINNET.md, "Registro sin prueba de
+ * posesión de llave".
+ *
+ * `phoneHash` stays optional and is forwarded untouched: it belongs to the
+ * anti-abuse controls added in #319 and is unrelated to key possession.
+ */
 export async function registerUser(username: string, phoneHash?: string): Promise<UserData> {
-  const stellar_address = (await getPublicKey()) ?? generateFallbackAddress(username);
-  const body: Record<string, string> = { username, stellar_address };
+  // No fallback address here: a synthetic address whose key we do not hold
+  // could never sign the challenge, so it would fail server-side anyway.
+  const stellar_address = await getPublicKey();
+  if (!stellar_address) {
+    throw new Error('No device keypair found — generateAndStoreKeypair() must run before registerUser()');
+  }
+
+  const challengeRes = await fetch(`${BASE_URL}/auth/challenge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stellar_address }),
+  });
+  const challengeData = await challengeRes.json();
+  const challenge: string | undefined = challengeData.challenge;
+  if (!challenge) throw new Error(`Auth challenge failed (${challengeRes.status}): ${challengeData.error ?? 'no challenge'}`);
+
+  const signature = await signChallenge(challenge);
+
+  const body: Record<string, string> = { username, stellar_address, challenge, signature };
   if (phoneHash) {
     body.phone_hash = phoneHash;
   }
@@ -134,18 +161,11 @@ export async function registerUser(username: string, phoneHash?: string): Promis
   return { ...res.data.user, token: res.data.token };
 }
 
-// Used only if keypair hasn't been generated yet (should not happen in normal flow)
-function generateFallbackAddress(prefix: string): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let address = "G" + prefix.toUpperCase().replace(/[^A-Z2-7]/g, "A");
-  while (address.length < 56) {
-    address += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return address.substring(0, 56);
-}
-
 export async function getAuthToken(username: string): Promise<string> {
-  const stellar_address = (await getPublicKey()) ?? generateFallbackAddress(username);
+  const stellar_address = await getPublicKey();
+  if (!stellar_address) {
+    throw new Error('No device keypair found — generateAndStoreKeypair() must run before getAuthToken()');
+  }
 
   // Step 1: request a one-time challenge from the server
   const challengeRes = await fetch(`${BASE_URL}/auth/challenge`, {
