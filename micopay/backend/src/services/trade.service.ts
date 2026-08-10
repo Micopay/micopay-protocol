@@ -308,45 +308,49 @@ export async function getActiveTrades(userId: string) {
 }
 
 export async function getTradeHistory(userId: string, status?: string, page = 1, limit = 20) {
-  const trades = await db.getMany(
-    `SELECT id, status, amount_mxn, platform_fee_mxn, lock_tx_hash, release_tx_hash,
-            created_at, completed_at, seller_id, buyer_id, expires_at
-     FROM trades
-     WHERE (seller_id = $1 OR buyer_id = $1)
-     ORDER BY created_at DESC`,
-    [userId],
-  );
-
-  let filtered = trades;
-  const now = new Date();
+  // 'expired' is a derived status (not stored) — computed from expires_at,
+  // same rule as before, just pushed into SQL instead of filtered client-side.
+  const conditions = ['(t.seller_id = $1 OR t.buyer_id = $1)'];
+  const params: unknown[] = [userId];
 
   if (status && status !== 'all') {
     if (status === 'expired') {
-      filtered = trades.filter(t =>
-        !['completed', 'cancelled'].includes(t.status) &&
-        new Date(t.expires_at) < now
-      );
+      conditions.push(`t.status NOT IN ('completed', 'cancelled') AND t.expires_at < NOW()`);
     } else {
-      filtered = trades.filter(t => t.status === status);
+      params.push(status);
+      conditions.push(`t.status = $${params.length}`);
     }
   }
 
-  // Fetch usernames to provide merchant info
-  const allUsers = await db.getMany('SELECT id, username FROM users');
-  const userMap = Object.fromEntries(allUsers.map(u => [u.id, u.username]));
+  params.push(limit, (page - 1) * limit);
 
-  const mapped = filtered.map(t => {
+  const trades = await db.getMany<{
+    id: string; status: string; amount_mxn: number; platform_fee_mxn: number;
+    lock_tx_hash: string | null; release_tx_hash: string | null; created_at: string;
+    completed_at: string | null; seller_id: string; buyer_id: string; expires_at: string;
+    seller_username: string | null; buyer_username: string | null;
+  }>(
+    `SELECT
+       t.id, t.status, t.amount_mxn, t.platform_fee_mxn, t.lock_tx_hash, t.release_tx_hash,
+       t.created_at, t.completed_at, t.seller_id, t.buyer_id, t.expires_at,
+       su.username AS seller_username, bu.username AS buyer_username
+     FROM trades t
+     JOIN users su ON su.id = t.seller_id
+     JOIN users bu ON bu.id = t.buyer_id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY t.created_at DESC
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params,
+  );
+
+  return trades.map(({ seller_username, buyer_username, ...t }) => {
     const isBuyer = t.buyer_id === userId;
-    const otherPartyId = isBuyer ? t.seller_id : t.buyer_id;
     return {
       ...t,
       direction: isBuyer ? 'cash-in' : 'cash-out',
-      merchant_username: userMap[otherPartyId] || 'Usuario Micopay',
+      merchant_username: (isBuyer ? seller_username : buyer_username) || 'Usuario Micopay',
     };
   });
-
-  const offset = (page - 1) * limit;
-  return mapped.slice(offset, offset + limit);
 }
 
 /**
@@ -648,16 +652,6 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
       },
     });
 
-    // Update merchant reputation after successful trade completion
-    try {
-      await updateMerchantReputation(trade.seller_id);
-    } catch (reputationError) {
-      logger.warn(
-        { trade_id: tradeId, seller_id: trade.seller_id },
-        '[reputation] Failed to update merchant reputation (non-critical)'
-      );
-    }
-
     return { status: 'completed', release_tx_hash: releaseTxHash };
   } catch (error) {
     await logTransitionFailure({
@@ -668,103 +662,6 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
     }, error);
     throw error;
   }
-}
-
-// ── Reputation calculation ───────────────────────────────────────────────────
-
-/**
- * Calculate and update merchant reputation from trade history.
- * Queries micopay backend's trades table for completed trades.
- */
-async function updateMerchantReputation(userId: string): Promise<void> {
-  // Query micopay backend for trade statistics
-  const result = await db.query(`
-    SELECT
-      COUNT(*) FILTER (WHERE status = 'completed') as completed_trades,
-      COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_trades,
-      COUNT(*) as total_trades,
-      AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60) FILTER (WHERE status = 'completed') as avg_time_minutes,
-      SUM(amount_mxn) FILTER (WHERE status = 'completed') as total_volume_mxn
-    FROM trades
-    WHERE seller_id = $1
-  `, [userId]);
-
-  const stats = result.rows[0];
-
-  if (!stats) {
-    // No trades yet - reset to defaults
-    await db.query(`
-      UPDATE merchants
-      SET trades_completed = 0,
-          completion_rate = 0,
-          avg_time_minutes = 0,
-          tier = 'espora',
-          total_volume_usdc = 0,
-          last_trade_at = NULL,
-          updated_at = NOW()
-      WHERE user_id = $1
-    `, [userId]);
-    return;
-  }
-
-  const completedTrades = parseInt(stats.completed_trades) || 0;
-  const cancelledTrades = parseInt(stats.cancelled_trades) || 0;
-  const totalTrades = parseInt(stats.total_trades) || 0;
-  const avgTimeMinutes = stats.avg_time_minutes ? Math.round(parseFloat(stats.avg_time_minutes)) : 0;
-  const totalVolumeMXN = parseFloat(stats.total_volume_mxn) || 0;
-
-  // Convert MXN to USDC (approximate: 1 USDC ≈ 17 MXN)
-  const totalVolumeUSDC = totalVolumeMXN / 17;
-
-  // Calculate completion rate
-  const completionRate = totalTrades > 0 ? completedTrades / totalTrades : 0;
-
-  // Determine tier
-  const tier = getTier(completedTrades, completionRate);
-
-  // Get last trade timestamp
-  const lastTradeResult = await db.query(`
-    SELECT updated_at FROM trades 
-    WHERE seller_id = $1 AND status = 'completed'
-    ORDER BY updated_at DESC LIMIT 1
-  `, [userId]);
-
-  const lastTradeAt = lastTradeResult.rows[0]?.updated_at || null;
-
-  // Update merchant record
-  await db.query(`
-    UPDATE merchants
-    SET trades_completed = $1,
-        completion_rate = $2,
-        avg_time_minutes = $3,
-        tier = $4,
-        total_volume_usdc = $5,
-        last_trade_at = $6,
-        updated_at = NOW()
-    WHERE user_id = $7
-  `, [
-    completedTrades,
-    completionRate,
-    avgTimeMinutes,
-    tier,
-    totalVolumeUSDC,
-    lastTradeAt,
-    userId,
-  ]);
-}
-
-// ── Tier definitions ─────────────────────────────────────────────────────────
-const TIERS = [
-  { name: "maestro", minTrades: 100, minCompletion: 0.95 },
-  { name: "experto", minTrades: 30, minCompletion: 0.88 },
-  { name: "activo", minTrades: 10, minCompletion: 0.80 },
-  { name: "espora", minTrades: 0, minCompletion: 0.0 },
-] as const;
-
-function getTier(tradesCompleted: number, completionRate: number): typeof TIERS[number]["name"] {
-  return TIERS.find(
-    (t) => tradesCompleted >= t.minTrades && completionRate >= t.minCompletion
-  )?.name ?? "espora";
 }
 
 /** Response shape for POST /trades/:id/cancel — drives refund copy on the client (#20). */
