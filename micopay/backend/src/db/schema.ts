@@ -323,7 +323,11 @@ async function initPg() {
 
 await initPg();
 
-export const pool = pgPool;
+// La anotación explícita es necesaria: TypeScript no ve la asignación que
+// ocurre dentro de initPg(), así que sin ella infiere el tipo `null` y todo
+// `if (pool)` en los consumidores queda narrowed a `never` — código muerto a
+// ojos del compilador aunque en runtime el pool exista.
+export const pool: InstanceType<typeof Pool> | null = pgPool;
 
 /**
  * B-7: live readiness check. Returns true only when a real PostgreSQL
