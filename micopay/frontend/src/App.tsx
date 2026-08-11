@@ -55,7 +55,7 @@ import {
   TradeHistoryItem,
 } from "./services/api";
 import { readJSON, writeJSON, removeKey, isBackupConfirmed, setBackupConfirmed } from "./services/secureStorage";
-import { mapApiError, type MappedApiError } from "./utils/apiError";
+import { ApiError, mapApiError, type MappedApiError } from "./utils/apiError";
 import { IS_DEMO_MODE } from "./utils/demoMode";
 
 const USERS_STORAGE_KEY = "micopay_user";
@@ -68,10 +68,13 @@ const USERS_STORAGE_KEY = "micopay_user";
 async function recoverSession(username: string): Promise<UserData> {
   try {
     return await registerUser(username);
-  } catch (e: any) {
-    if (e?.response?.status === 409) {
-      // User already exists — refresh the token via challenge/response.
-      const token = await getAuthToken(username);
+  } catch (e: unknown) {
+    // registerUser throws an ApiError, not a raw Axios error, so the old
+    // `e.response.status === 409` check never matched and recovery fell
+    // through to a rethrow. Match on the backend code instead.
+    if (e instanceof ApiError && e.code === 'ADDRESS_ALREADY_REGISTERED') {
+      // This device already has an account — refresh the token instead.
+      const token = await getAuthToken();
       const profile = await getCurrentUser(token);
       return { ...(profile as any), token } as UserData;
     }

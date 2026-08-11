@@ -68,14 +68,28 @@ export async function userRoutes(app: FastifyInstance) {
 
       await verifyAndConsumeChallenge(stellar_address, challenge, signature);
 
-      // Check for existing user
+      // Check for existing user. Two very distinct situations hide behind the
+      // same 409, and collapsing them into one message is a dead end for the
+      // user: if the collision is on stellar_address, this device already has
+      // an account and picking another username can never fix it — the caller
+      // should log in instead (the device key already proves the account is
+      // theirs). Only a username collision is worth asking for a new name.
       const existing = await db.getOne(
-        "SELECT id FROM users WHERE stellar_address = $1 OR username = $2",
+        "SELECT id, stellar_address, username FROM users WHERE stellar_address = $1 OR username = $2",
         [stellar_address, username],
       );
       if (existing) {
+        if (existing.stellar_address === stellar_address) {
+          throw new ConflictError(
+            "ADDRESS_ALREADY_REGISTERED",
+            "Este dispositivo ya tiene una cuenta de Micopay. Inicia sesión para entrar.",
+            `stellar_address ${stellar_address} is already registered as "${existing.username}"`,
+          );
+        }
         throw new ConflictError(
-          "User with this address or username already exists",
+          "USERNAME_TAKEN",
+          "Ese nombre de usuario ya está ocupado. Elige otro.",
+          `username "${username}" is already taken by another account`,
         );
       }
 

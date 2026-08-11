@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { registerUser, UserData } from '../services/api';
+import { registerUser, getAuthToken, getCurrentUser, UserData } from '../services/api';
 import { generateAndStoreKeypair, getPublicKey, exportSecretKey, keypairExists } from '../lib/keystore';
 import { setBackupConfirmed, writeJSON } from '../services/secureStorage';
+import { ApiError } from '../utils/apiError';
 
 interface RegisterProps {
   onLoginSuccess?: (user: UserData, seller: UserData | null) => void;
@@ -13,6 +14,8 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
   const [username, setUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  /** El backend respondió que esta dirección ya tiene cuenta (ADDRESS_ALREADY_REGISTERED). */
+  const [deviceHasAccount, setDeviceHasAccount] = useState(false);
 
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [pubKey, setPubKey] = useState('');
@@ -51,13 +54,42 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
       setShowOnboarding(true);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al registrarse';
-      if (msg.includes('409') || msg.toLowerCase().includes('exists') || msg.toLowerCase().includes('already')) {
-        setError('Ese nombre de usuario ya está registrado. Elige otro o inicia sesión si es tu cuenta.');
+      const code = e instanceof ApiError ? e.code : undefined;
+      if (code === 'ADDRESS_ALREADY_REGISTERED') {
+        // Cambiar de nombre no arregla esto: la colisión es de dirección, y la
+        // llave de este teléfono ya prueba que la cuenta es suya. Un toque.
+        setDeviceHasAccount(true);
+        setError(null);
+      } else if (code === 'USERNAME_TAKEN') {
+        setError('Ese nombre de usuario ya está ocupado. Elige otro.');
       } else if (msg.includes('Network') || msg.includes('fetch')) {
         setError('Sin conexión al servidor. Intenta en unos segundos.');
       } else {
         setError(`Error: ${msg}`);
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Entra a la cuenta que ya existe en este dispositivo. No pide nada más
+   * porque no hace falta: el servidor identifica la cuenta por la firma de la
+   * llave del teléfono, no por el nombre de usuario.
+   */
+  const handleUseExistingAccount = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const token = await getAuthToken();
+      const profile = await getCurrentUser(token);
+      const user: UserData = { id: profile.id, username: profile.username, token };
+      await writeJSON('micopay_user', user);
+      onLoginSuccess?.(user, null);
+      navigate('/', { replace: true });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'No se pudo entrar a la cuenta';
+      setError(`No se pudo entrar a la cuenta de este dispositivo: ${msg}`);
     } finally {
       setLoading(false);
     }
@@ -148,6 +180,22 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-sm px-4 py-3">
             <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
+
+        {deviceHasAccount && (
+          <div className="border-2 border-tinta bg-verde-suave rounded-sm px-4 py-3 space-y-3">
+            <p className="text-sm text-tinta">
+              Este teléfono ya tiene una cuenta de Micopay. No necesitas otro nombre de
+              usuario: tu llave ya prueba que es tuya.
+            </p>
+            <button
+              onClick={handleUseExistingAccount}
+              disabled={loading}
+              className="w-full min-h-12 bg-naranja text-papel border-2 border-tinta shadow-solida font-bold py-3 rounded-sm transition-all active:translate-x-[3px] active:translate-y-[3px] active:shadow-solida-xs disabled:opacity-60"
+            >
+              {loading ? 'Entrando…' : 'Entrar a mi cuenta'}
+            </button>
           </div>
         )}
 

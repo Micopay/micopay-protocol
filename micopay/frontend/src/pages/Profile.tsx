@@ -63,7 +63,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
         // 401 / 403 → try to get a fresh token with device keypair
         if ((status === 401 || status === 403) && username) {
           try {
-            const fresh = await getAuthToken(username);
+            const fresh = await getAuthToken();
             setActiveToken(fresh);
             const currentUser = await getCurrentUser(fresh);
             if (!cancelled) setProfile(currentUser);
@@ -83,7 +83,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
     } else if (username) {
       // No token at all → try to get one with device keypair
       setLoading(true);
-      getAuthToken(username)
+      getAuthToken()
         .then((fresh) => {
           if (!cancelled) {
             setActiveToken(fresh);

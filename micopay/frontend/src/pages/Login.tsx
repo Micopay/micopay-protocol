@@ -15,24 +15,19 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const location = useLocation();
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/';
 
-  const [username, setUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showRestore, setShowRestore] = useState(false);
   const [secretKey, setSecretKey] = useState('');
 
   const handleLogin = async () => {
-    if (!username.trim()) {
-      setError('Ingresa tu nombre de usuario.');
-      return;
-    }
     setError(null);
     setLoading(true);
     try {
       if (!await keypairExists()) {
         await generateAndStoreKeypair();
       }
-      const token = await getAuthToken(username.trim());
+      const token = await getAuthToken();
       const profile = await getCurrentUser(token);
       const user: UserData = { id: profile.id, username: profile.username, token };
       await writeJSON(USERS_STORAGE_KEY, user);
@@ -53,10 +48,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   };
 
   const handleRestore = async () => {
-    if (!username.trim()) {
-      setError('Ingresa tu nombre de usuario primero.');
-      return;
-    }
     if (!secretKey.trim().startsWith('S') || secretKey.trim().length < 56) {
       setError('La llave secreta debe empezar con "S" y tener 56 caracteres.');
       return;
@@ -65,7 +56,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setLoading(true);
     try {
       await importKeypair(secretKey.trim());
-      const token = await getAuthToken(username.trim());
+      const token = await getAuthToken();
       const profile = await getCurrentUser(token);
       const user: UserData = { id: profile.id, username: profile.username, token };
       await writeJSON(USERS_STORAGE_KEY, user);
@@ -76,7 +67,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       if (msg.includes('Invalid') || msg.includes('secret') || msg.includes('fromSecret')) {
         setError('Llave secreta inválida. Verifica que la copiaste completa.');
       } else if (msg.includes('404') || msg.includes('USER_NOT_FOUND')) {
-        setError('Esta llave no corresponde a ninguna cuenta con ese username.');
+        setError('Esta llave no corresponde a ninguna cuenta registrada.');
       } else {
         setError(`Error: ${msg}`);
       }
@@ -102,21 +93,16 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         )}
 
         <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-gris uppercase tracking-wider mb-1">
-              Nombre de usuario
-            </label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              onKeyDown={(e) => !showRestore && e.key === 'Enter' && handleLogin()}
-              placeholder="tu_usuario"
-              className="w-full px-4 py-3 rounded-sm border-2 border-tinta text-tinta text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              autoCapitalize="none"
-              autoCorrect="off"
-            />
-          </div>
+          {/* Antes había aquí un campo "Nombre de usuario" que nunca se enviaba
+              a ningún lado: el login es por firma de la llave del dispositivo,
+              y el servidor resuelve la cuenta por dirección Stellar. Pedir un
+              dato que se ignora hacía creer que un nombre equivocado era la
+              causa de los errores de sesión. */}
+          {!showRestore && (
+            <p className="text-sm text-gris text-center">
+              Entras con la llave guardada en este teléfono. No necesitas contraseña.
+            </p>
+          )}
 
           {showRestore && (
             <div>
