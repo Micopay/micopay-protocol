@@ -154,7 +154,15 @@ export const config = {
 
   // Rate Limiting
   authRateLimitWindowMs: parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS || '600000', 10), // 10 min
-  authRateLimitMax: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '5', 10),
+  // Un solo bucket por IP cubre /auth/challenge, /auth/token y /users/register
+  // (comparten el store por defecto del middleware). Como cada registro o
+  // login cuesta DOS peticiones — challenge y luego la operación — un máximo
+  // de 5 daba 2.5 intentos por cada 10 minutos: el usuario se bloqueaba solo
+  // al segundo intento, y detrás de un NAT (café, oficina, CGNAT móvil) los
+  // usuarios se bloqueaban entre sí. El riesgo real aquí no es adivinar
+  // credenciales (no hay password que romper: se firma un challenge), sino el
+  // alta masiva de cuentas, y 30 por 10 min por IP sigue frenando eso.
+  authRateLimitMax: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '30', 10),
   tradeRateLimitWindowMs: parseInt(process.env.TRADE_RATE_LIMIT_WINDOW_MS || '3600000', 10), // 1 hour
   tradeRateLimitMax: parseInt(process.env.TRADE_RATE_LIMIT_MAX || '10', 10),
   messageRateLimitWindowMs: parseInt(process.env.MESSAGE_RATE_LIMIT_WINDOW_MS || '60000', 10),
