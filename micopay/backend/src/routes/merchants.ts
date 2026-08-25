@@ -1,11 +1,18 @@
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../middleware/auth.middleware.js';
+import { createRateLimiter } from '../middleware/rateLimit.middleware.js';
 import {
   getOrCreateMerchantConfig,
   updateMerchantConfig,
   getAvailableMerchants,
 } from '../services/merchant.service.js';
 import db from '../db/schema.js';
+
+// G1: /merchants/available is public and unauthenticated — without a rate
+// limit it lets anyone scrape the full census of merchant locations by
+// sweeping lat/lng. 30 req/min per IP is generous for legitimate use (the
+// app makes one request per search).
+const discoveryRateLimit = createRateLimiter({ windowMs: 60_000, max: 30 });
 
 export async function merchantRoutes(app: FastifyInstance) {
   /**
@@ -20,6 +27,7 @@ export async function merchantRoutes(app: FastifyInstance) {
    *   flow       – 'cashout' | 'deposit' (optional, reserved)
    */
   app.get('/merchants/available', {
+    preHandler: [discoveryRateLimit],
     schema: {
       querystring: {
         type: 'object',
