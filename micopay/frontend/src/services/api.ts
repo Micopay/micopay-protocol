@@ -3,6 +3,7 @@ import { extractApiErrorPayload, toApiError } from '../utils/apiError';
 import { signChallenge, getPublicKey, signTransactionXdr } from '../lib/keystore';
 import { removeKey } from './secureStorage';
 import { PLATFORM_FEE_PERCENT } from '../constants/trade';
+import type { MutationType, MutationPayloadMap } from './offlineQueue';
 
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
@@ -543,7 +544,12 @@ export async function updateMerchantConfig(token: string, config: MerchantConfig
   return res.data.config;
 }
 
-type QueueFn = (type: string, payload: unknown) => Promise<string>;
+// Genérico y no `(string, unknown)`: así TypeScript verifica que el payload
+// que se encola tiene la forma que el sincronizador espera leer.
+type QueueFn = <T extends MutationType>(
+  type: T,
+  payload: MutationPayloadMap[T],
+) => Promise<string>;
 
 export async function updateMerchantConfigWithOfflineSupport(
   token: string,
@@ -553,7 +559,12 @@ export async function updateMerchantConfigWithOfflineSupport(
   try {
     const updated = await updateMerchantConfig(token, config);
     return { config: updated, queued: false };
-  } catch {
+  } catch (err: any) {
+    // Solo se encola si NO hubo respuesta del servidor, es decir, si fue un
+    // fallo de red. Un 400 de validación o un 401 de sesión expirada se van a
+    // rechazar igual al reintentar: propagarlos deja que la UI muestre el
+    // error real en vez de fingir que quedó guardado para más tarde.
+    if (err?.response) throw err;
     await queueFn('config', { config });
     return { config, queued: true };
   }
@@ -567,8 +578,11 @@ export async function updateMerchantAvailabilityWithOfflineSupport(
   try {
     await patchMerchantAvailability(token, available);
     return { queued: false };
-  } catch {
-    await queueFn('availability', { available });
+  } catch (err: any) {
+    // Mismo criterio que en updateMerchantConfigWithOfflineSupport: encolar
+    // solo los fallos de red, nunca los errores que el servidor sí respondió.
+    if (err?.response) throw err;
+    await queueFn('availability', { merchant_available: available });
     return { queued: true };
   }
 }
