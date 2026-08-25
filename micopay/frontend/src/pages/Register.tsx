@@ -6,6 +6,7 @@ import { generateAndStoreKeypair, getPublicKey, exportSecretKey, keypairExists }
 import { setBackupConfirmed, writeJSON } from '../services/secureStorage';
 import { ApiError } from '../utils/apiError';
 import { hashPhone } from '../lib/phoneHash';
+import SecretKeyBackupModal from '../components/SecretKeyBackupModal';
 
 interface RegisterProps {
   onLoginSuccess?: (user: UserData, seller: UserData | null) => void;
@@ -25,7 +26,8 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
   const [pubKey, setPubKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
   const [copiedPub, setCopiedPub] = useState(false);
-  const [copiedSec, setCopiedSec] = useState(false);
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [backedUp, setBackedUp] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState<UserData | null>(null);
 
   const handleRegister = async () => {
@@ -112,14 +114,12 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
     setTimeout(() => setCopiedPub(false), 2000);
   };
 
-  const copySecretKey = () => {
-    navigator.clipboard.writeText(secretKey);
-    setCopiedSec(true);
-    setTimeout(() => setCopiedSec(false), 2000);
-  };
-
   const finishOnboarding = async () => {
-    await setBackupConfirmed();
+    // Solo se marca como respaldada si el usuario realmente transcribió la
+    // llave. Antes se marcaba siempre al pulsar "Continuar", así que una
+    // cuenta sin respaldo quedaba registrada como respaldada y el modal
+    // bloqueante previo a la primera operación nunca aparecía.
+    if (backedUp) await setBackupConfirmed();
     if (loggedInUser && onLoginSuccess) {
       onLoginSuccess(loggedInUser, null);
       navigate('/', { replace: true });
@@ -160,11 +160,17 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
                 Esta es la única forma de recuperar tu cuenta si pierdes o cambias de dispositivo. <strong>NUNCA la compartas con nadie</strong>. Quien la tenga controla tus fondos.
               </p>
               <button
-                onClick={copySecretKey}
-                className="w-full bg-red-100 hover:bg-red-200 text-red-800 font-bold py-3 rounded-sm flex items-center justify-center gap-2 transition-all active:translate-x-[3px] active:translate-y-[3px] active:shadow-solida-xs"
+                onClick={() => setShowBackupModal(true)}
+                className={`w-full font-bold py-3 rounded-sm flex items-center justify-center gap-2 transition-all active:translate-x-[3px] active:translate-y-[3px] ${
+                  backedUp
+                    ? 'bg-[#E6F9F1] text-[#1D9E75]'
+                    : 'bg-red-100 hover:bg-red-200 text-red-800'
+                }`}
               >
-                <span className="material-symbols-outlined text-base">{copiedSec ? 'check' : 'content_copy'}</span>
-                {copiedSec ? '¡Llave Secreta Copiada!' : 'Copiar Llave Secreta'}
+                <span className="material-symbols-outlined text-base">
+                  {backedUp ? 'check_circle' : 'visibility'}
+                </span>
+                {backedUp ? 'Llave respaldada' : 'Respaldar mi llave'}
               </button>
             </div>
           </div>
@@ -175,6 +181,20 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
           >
             Continuar y explorar
           </button>
+          {!backedUp && (
+            <p className="text-[11px] text-[#67808C] text-center leading-relaxed">
+              Puedes continuar sin respaldar, pero te lo pediremos otra vez antes de tu
+              primera operación con fondos.
+            </p>
+          )}
+
+          {showBackupModal && (
+            <SecretKeyBackupModal
+              secretKey={secretKey}
+              onClose={() => setShowBackupModal(false)}
+              onConfirmed={() => setBackedUp(true)}
+            />
+          )}
         </div>
       </div>
     );

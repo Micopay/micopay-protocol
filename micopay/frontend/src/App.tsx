@@ -44,7 +44,6 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import MerchantSettings from "./pages/MerchantSettings";
 import BottomNav from "./components/BottomNav";
-import OfflineQueueStatus from "./components/OfflineQueueStatus";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import DebugOverlay from "./components/DebugOverlay";
 import OfflineQueueStatus from "./components/OfflineQueueStatus";

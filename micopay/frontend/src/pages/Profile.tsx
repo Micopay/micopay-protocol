@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import DeleteAccountModal from "../components/DeleteAccountModal";
-import ExportSecretKeyModal from "../components/ExportSecretKeyModal";
-import { importKeypair } from '../lib/keystore';
+import SecretKeyBackupModal from "../components/SecretKeyBackupModal";
+import { exportSecretKey, importKeypair } from '../lib/keystore';
 import {
   deleteAccount,
   getCurrentUser,
@@ -43,6 +43,10 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
   const [showImportModal, setShowImportModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [importInput, setImportInput] = useState('');
+  const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importedAddress, setImportedAddress] = useState<string | null>(null);
   const [activeToken, setActiveToken] = useState<string | null>(token);
 
   // Keep activeToken in sync with token prop (e.g., after parent refreshes session)
@@ -145,18 +149,29 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
     if (devicePublicKey) navigator.clipboard.writeText(devicePublicKey);
   };
 
-  const handleExport = () => {
-    setShowExportModal(true);
+  // La llave ya no pasa por el portapapeles: se revela en un modal con
+  // FLAG_SECURE activo (ISSUE-03 / SEC-33). Aquí no se exige transcripción
+  // porque el usuario puede estar solo consultándola, no respaldando por
+  // primera vez; el respaldo obligatorio se hace en el alta.
+  const handleExport = async () => {
+    setExportError(null);
+    try {
+      const secret = await exportSecretKey();
+      setRevealedSecret(secret);
+    } catch {
+      setExportError('No se pudo leer tu llave. Cierra la app y vuelve a intentarlo.');
+    }
   };
 
   const handleImport = async () => {
+    setImportError(null);
     try {
       const newPub = await importKeypair(importInput.trim());
-      alert(`Clave importada. Nueva dirección:\n${newPub}`);
+      setImportedAddress(newPub);
       setShowImportModal(false);
       setImportInput('');
     } catch {
-      alert('Clave inválida. Las claves secretas de Stellar empiezan con "S" y tienen 56 caracteres.');
+      setImportError('Llave inválida. Las llaves secretas de Stellar empiezan con "S" y tienen 56 caracteres.');
     }
   };
 
@@ -445,11 +460,14 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                 </p>
                 <textarea
                     value={importInput}
-                    onChange={e => setImportInput(e.target.value)}
+                    onChange={e => { setImportInput(e.target.value); setImportError(null); }}
                     placeholder={t('profile.importPlaceholder')}
                     rows={3}
                     className="w-full font-mono text-xs border-2 border-tinta rounded-sm p-3 resize-none focus:outline-none focus:ring-2 focus:ring-[#00694C]"
                 />
+                {importError && (
+                    <p className="text-xs text-red-600" role="alert">{importError}</p>
+                )}
                 <div className="flex gap-3">
                   <button
                       onClick={() => { setShowImportModal(false); setImportInput(''); }}
@@ -469,8 +487,31 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
             </div>
         )}
 
-        {showExportModal && (
-          <ExportSecretKeyModal onClose={() => setShowExportModal(false)} />
+        {revealedSecret && (
+            <SecretKeyBackupModal
+                secretKey={revealedSecret}
+                requireConfirmation={false}
+                onClose={() => setRevealedSecret(null)}
+            />
+        )}
+
+        {exportError && (
+            <div className="fixed bottom-24 left-1/2 z-[70] -translate-x-1/2 rounded-sm bg-red-50 border border-red-200 px-4 py-3 shadow-lg">
+              <p className="text-sm text-red-700 font-medium" role="alert">{exportError}</p>
+            </div>
+        )}
+
+        {importedAddress && (
+            <div className="fixed bottom-24 left-1/2 z-[70] -translate-x-1/2 max-w-[90vw] rounded-sm bg-[#E6F9F1] border border-[#1D9E75]/20 px-4 py-3 shadow-lg">
+              <p className="text-sm text-[#1D9E75] font-medium">Llave importada</p>
+              <p className="text-[11px] font-mono text-[#1D9E75] break-all mt-1">{importedAddress}</p>
+              <button
+                  onClick={() => setImportedAddress(null)}
+                  className="text-[11px] text-[#1D9E75] underline mt-1"
+              >
+                Cerrar
+              </button>
+            </div>
         )}
 
         {success && (
