@@ -23,7 +23,7 @@ Following the format of `AUDIT_APK_WAVE6.md` §6.2. Labels span five axes: **sur
 | APK-3 | Fix `TradeDetail.test.tsx` — literals vs i18next | `wave:frontend` | `wave:docs` | medium | `test` | ✅ | #22 Product & Release |
 | APK-4 | Strip x86 ABIs and limit packaged locales | `wave:frontend` | `wave:docs` | low | `enhancement` | ✅ | #22 Product & Release |
 | APK-5 | Remove 7 dead buttons from chat screens | `wave:frontend` | `wave:retail` | medium | `bug`, `ux` | ✅ | #20 UI Truth |
-| APK-6 | Accessible names for icon-only buttons | `wave:frontend` | `wave:retail` | medium | `accessibility` | ✅ | #20 UI Truth |
+| APK-6 | Accessible names for icon-only buttons | `wave:frontend` | `wave:retail` | high | `accessibility` | ✅ | #20 UI Truth |
 
 **Also apply `wave:good-first`** to APK-2 and APK-4 — both are single-file, low-risk onboarding tasks.
 
@@ -522,8 +522,14 @@ No upstream dependency. **APK-6 depends on this one** and must merge after it: b
 
 # APK-6 · Accessible names for icon-only buttons
 
-**Labels:** `wave:frontend` · `wave:retail` · `complexity: medium` · `accessibility` · `Stellar Wave`
+**Labels:** `wave:frontend` · `wave:retail` · `complexity: high` · `accessibility` · `Stellar Wave`
 **Milestone:** Wave 7: UI Truth (P1)
+
+> **Why `high` and not `medium`:** roughly 150 buttons to label, i18n keys in two locales, and a
+> TalkBack pass across four screens. That is beyond "a self-contained screen". `DRIPS_TEAM_GUIDE.md`
+> asks for `high` to be used sparingly and only when the issue is still realistically mergeable
+> inside the Wave — this one is, because the work is mechanical and the out-of-scope list below
+> keeps it from turning into a redesign. Consider it for a contributor who already has repo context.
 
 ## Problem statement
 
@@ -652,6 +658,11 @@ gh issue create \
 ```
 
 **Publish order:** APK-5 before APK-6 (file conflict). The rest in any order.
+
+**Complexity drives the reward.** Drips computes points automatically from the `complexity` label
+set on each issue, so the label is not cosmetic — it is the payout. Keep it honest in both
+directions: `DRIPS_TEAM_GUIDE.md` warns against inflating a small task to chase points, and
+under-labelling real work is just as unfair to whoever picks it up.
 
 **Decide before publishing:**
 
