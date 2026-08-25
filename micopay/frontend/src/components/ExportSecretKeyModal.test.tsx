@@ -43,12 +43,38 @@ Object.assign(navigator, {
 
 const MOCK_SECRET_KEY = 'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 
+/** Debe coincidir con RATE_LIMIT_MS de ExportSecretKeyModal.tsx. */
+const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+
+/**
+ * Desplazamiento acumulado del reloj entre tests.
+ *
+ * `lastExportTime` es un `let` a nivel de módulo en el componente, así que
+ * sobrevive de un test al siguiente: si uno pulsa copiar, el rate limit de 5
+ * minutos deja bloqueado al siguiente y `handleCopy` sale por `return` sin
+ * llegar al portapapeles.
+ *
+ * Tiene que ser ACUMULATIVO. Adelantar una cantidad fija en cada `beforeEach`
+ * no sirve: `vi.useFakeTimers()` devuelve el reloj a la hora real, así que
+ * todos los tests aterrizarían en el mismo instante y ninguno quedaría por
+ * delante del `lastExportTime` que dejó el anterior.
+ */
+let clockOffsetMs = 0;
+
 describe('ExportSecretKeyModal — SEC-25 QR + Clipboard security', () => {
   const onClose = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
+    // shouldAdvanceTime deja que el reloj falso avance solo en tiempo real.
+    // Sin él, waitFor de Testing Library —que sondea con temporizadores
+    // reales— se queda congelado y los siete tests agotan los 5000 ms.
+    // vi.advanceTimersByTime() sigue funcionando igual para el test del
+    // borrado automático del portapapeles.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // Ver clockOffsetMs arriba: aísla el rate limit entre tests.
+    clockOffsetMs += RATE_LIMIT_WINDOW_MS * 2;
+    vi.setSystemTime(Date.now() + clockOffsetMs);
     (exportSecretKey as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_SECRET_KEY);
   });
 
@@ -128,13 +154,23 @@ describe('ExportSecretKeyModal — SEC-25 QR + Clipboard security', () => {
     const copyBtn = screen.getByText('Copy to Clipboard');
     fireEvent.click(copyBtn);
 
+    // El manejador de copia es async: el setTimeout de borrado solo se
+    // programa DESPUÉS de que resuelva writeText(). Sin esperar aquí, el
+    // advanceTimersByTime de abajo corre antes de que ese temporizador
+    // exista y no dispara nada.
+    await waitFor(() => {
+      expect(mockWriteText).toHaveBeenCalledWith(MOCK_SECRET_KEY);
+    });
+
     // Advance time by 30 seconds
     act(() => {
       vi.advanceTimersByTime(30000);
     });
 
     // Clipboard should have been cleared (written with empty string)
-    expect(mockWriteText).toHaveBeenCalledWith('');
+    await waitFor(() => {
+      expect(mockWriteText).toHaveBeenCalledWith('');
+    });
   });
 
   it('shows masked secret key by default and reveals on toggle', async () => {
