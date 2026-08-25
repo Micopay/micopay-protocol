@@ -4,6 +4,7 @@
 **Convention:** `docs/AUDIT_APK_WAVE6.md` §6.2 (issue matrix) + `docs/DRIPS_TEAM_GUIDE.md`
 **Surface:** `micopay/frontend` — in-scope for the current Wave
 **Verified:** 2026-08-24 against branch `fix/auditoria-apk-2026-08`
+**Published:** 2026-08-25 as #355–#360, milestones Wave 8: UI Truth (P1) and Wave 8: Product & Release
 
 > Issue bodies are in **English**, matching the convention of #151, #160, #329–#331 and #340–#351.
 > The `APK-N ·` prefix avoids collisions with the existing `P0-N`, `P1-N`, `P2-N`, `B-N`, `V-N`,
@@ -18,12 +19,12 @@ Following the format of `AUDIT_APK_WAVE6.md` §6.2. Labels span five axes: **sur
 
 | ID | Short title | Surface | Track | Complexity | Type | `Stellar Wave` | Milestone |
 |----|-------------|---------|-------|:----------:|------|:--------------:|-----------|
-| APK-1 | KYC approval lands on Home instead of CETES | `wave:frontend` | `wave:retail` | medium | `bug` | ✅ | #20 UI Truth |
-| APK-2 | Fix `Home.test.tsx` — incomplete hook mock | `wave:frontend` | `wave:docs` | low | `test` | ✅ | #22 Product & Release |
-| APK-3 | Fix `TradeDetail.test.tsx` — literals vs i18next | `wave:frontend` | `wave:docs` | medium | `test` | ✅ | #22 Product & Release |
-| APK-4 | Strip x86 ABIs and limit packaged locales | `wave:frontend` | `wave:docs` | low | `enhancement` | ✅ | #22 Product & Release |
-| APK-5 | Remove 7 dead buttons from chat screens | `wave:frontend` | `wave:retail` | medium | `bug`, `ux` | ✅ | #20 UI Truth |
-| APK-6 | Accessible names for icon-only buttons | `wave:frontend` | `wave:retail` | high | `accessibility` | ✅ | #20 UI Truth |
+| [APK-1](https://github.com/Micopay/micopay-protocol/issues/355) | KYC approval lands on Home instead of CETES | `wave:frontend` | `wave:retail` | medium | `bug` | ✅ | #25 UI Truth |
+| [APK-2](https://github.com/Micopay/micopay-protocol/issues/356) | Fix `Home.test.tsx` — incomplete hook mock | `wave:frontend` | `wave:docs` | low | `test` | ✅ | #27 Product & Release |
+| [APK-3](https://github.com/Micopay/micopay-protocol/issues/357) | Fix `TradeDetail.test.tsx` — literals vs i18next | `wave:frontend` | `wave:docs` | medium | `test` | ✅ | #27 Product & Release |
+| [APK-4](https://github.com/Micopay/micopay-protocol/issues/358) | Strip x86 ABIs and limit packaged locales | `wave:frontend` | `wave:docs` | low | `enhancement` | ✅ | #27 Product & Release |
+| [APK-5](https://github.com/Micopay/micopay-protocol/issues/359) | Remove 7 dead buttons from chat screens | `wave:frontend` | `wave:retail` | medium | `bug`, `ux` | ✅ | #25 UI Truth |
+| [APK-6](https://github.com/Micopay/micopay-protocol/issues/360) | Accessible names for icon-only buttons | `wave:frontend` | `wave:retail` | high | `accessibility` | ✅ | #25 UI Truth |
 
 **Also apply `wave:good-first`** to APK-2 and APK-4 — both are single-file, low-risk onboarding tasks.
 
@@ -61,7 +62,7 @@ work is not handed to contributors:
 # APK-1 · KYC approval lands on Home instead of CETES
 
 **Labels:** `wave:frontend` · `wave:retail` · `complexity: medium` · `bug` · `Stellar Wave`
-**Milestone:** Wave 7: UI Truth (P1)
+**Milestone:** Wave 8: UI Truth (P1)
 
 ## Problem statement
 
@@ -153,7 +154,7 @@ None. Can be picked up immediately.
 # APK-2 · Fix `Home.test.tsx` — incomplete `useWalletBalance` mock
 
 **Labels:** `wave:frontend` · `wave:docs` · `complexity: low` · `test` · `wave:good-first` · `Stellar Wave`
-**Milestone:** Wave 7: Product & Release
+**Milestone:** Wave 8: Product & Release
 
 ## Problem statement
 
@@ -226,7 +227,7 @@ None. A good first issue for someone new to the repo.
 # APK-3 · Fix `TradeDetail.test.tsx` — asserts literals i18next no longer renders
 
 **Labels:** `wave:frontend` · `wave:docs` · `complexity: medium` · `test` · `Stellar Wave`
-**Milestone:** Wave 7: Product & Release
+**Milestone:** Wave 8: Product & Release
 
 ## Problem statement
 
@@ -311,7 +312,7 @@ they are different files. Only coordinate if you touch the shared vitest setup.
 # APK-4 · Strip x86 ABIs from release builds and limit packaged locales
 
 **Labels:** `wave:frontend` · `wave:docs` · `complexity: low` · `enhancement` · `wave:good-first` · `Stellar Wave`
-**Milestone:** Wave 7: Product & Release
+**Milestone:** Wave 8: Product & Release
 
 ## Problem statement
 
@@ -422,7 +423,7 @@ None. Single file, no overlap with the other issues.
 # APK-5 · Remove the 7 dead buttons from the chat screens
 
 **Labels:** `wave:frontend` · `wave:retail` · `complexity: medium` · `bug` · `ux` · `Stellar Wave`
-**Milestone:** Wave 7: UI Truth (P1)
+**Milestone:** Wave 8: UI Truth (P1)
 
 ## Problem statement
 
@@ -523,7 +524,7 @@ No upstream dependency. **APK-6 depends on this one** and must merge after it: b
 # APK-6 · Accessible names for icon-only buttons
 
 **Labels:** `wave:frontend` · `wave:retail` · `complexity: high` · `accessibility` · `Stellar Wave`
-**Milestone:** Wave 7: UI Truth (P1)
+**Milestone:** Wave 8: UI Truth (P1)
 
 > **Why `high` and not `medium`:** roughly 150 buttons to label, i18n keys in two locales, and a
 > TalkBack pass across four screens. That is beyond "a self-contained screen". `DRIPS_TEAM_GUIDE.md`
@@ -639,11 +640,11 @@ Every label used here already exists in the repo. Verify before publishing:
 gh label list --limit 100 | grep -E "wave:|complexity:|Stellar Wave|accessibility|^test|^ux|^bug|^enhancement"
 ```
 
-Milestones are open and empty — there is no need to create a `wave-8-drips` label:
+Milestones for Wave 8 (created 2026-08-25). Every issue also carries `wave-8-drips`:
 
 ```
-#20  Wave 7: UI Truth (P1)             ← APK-1, APK-5, APK-6
-#22  Wave 7: Product & Release         ← APK-2, APK-3, APK-4
+#25  Wave 8: UI Truth (P1)             ← APK-1, APK-5, APK-6
+#27  Wave 8: Product & Release         ← APK-2, APK-3, APK-4
 ```
 
 Example creation command (one body file per issue):
@@ -651,7 +652,7 @@ Example creation command (one body file per issue):
 ```bash
 gh issue create \
   --title "APK-1 · KYC approval lands on Home instead of CETES" \
-  --milestone "Wave 7: UI Truth (P1)" \
+  --milestone "Wave 8: UI Truth (P1)" \
   --label "wave:frontend" --label "wave:retail" \
   --label "complexity: medium" --label "bug" --label "Stellar Wave" \
   --body-file /path/to/apk-1-body.md
