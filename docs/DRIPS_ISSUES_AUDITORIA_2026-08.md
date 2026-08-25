@@ -47,15 +47,15 @@ work is not handed to contributors:
 > ⚠️ **ISSUE-03 was already known.** `#348 [SEC-25]` documents the same defect with a better analysis
 > than ours — tested on a Samsung Galaxy A12 (Android 12) and a Pixel 6 (Android 13), with the key
 > confirmed in Gboard's clipboard, Samsung's clipboard history and `adb shell dumpsys clipboard`. It
-> was **closed as NOT_PLANNED on 2026-08-18**, so the fix delivered in T-12/T-13 contradicts a
-> deliberate decision. `#257` is the same issue in Spanish, closed as completed. Before publishing
-> anything, decide whether to reopen `#348`, and reconcile `SEC-33` with `SEC-25`.
+> was closed as NOT_PLANNED on 2026-08-18. **Reopened on 2026-08-25** with the fix documented; left
+> open until `fix/auditoria-apk-2026-08` merges, since the defect still ships until then. `#257` is
+> the same issue in Spanish, closed as completed. `SEC-33` still needs reconciling with `SEC-25`.
 
-> 📝 **Draft P0-5 is still unpublished.** `AUDIT_APK_WAVE6.md` §10 holds a complete issue draft on
+> ✅ **Draft P0-5 closed out on 2026-08-25** (was: still unpublished). `AUDIT_APK_WAVE6.md` §10 holds a complete issue draft on
 > onboarding and key backup, blocked by `#160` — which has been **closed as completed** for a while.
 > Its acceptance criteria are already met by the current code, except one: *"cannot start a
 > real-funds trade without confirming the backup"*. That criterion was broken by an unconditional
-> `setBackupConfirmed()` call, fixed in T-13. **P0-5 can be closed out rather than published.**
+> `setBackupConfirmed()` call, fixed in T-13. Closed out in `AUDIT_APK_WAVE6.md` §10 rather than published, so no contributor is sent to build something that already exists.
 
 ---
 
