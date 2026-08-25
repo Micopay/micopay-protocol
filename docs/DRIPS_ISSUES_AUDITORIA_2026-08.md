@@ -7,7 +7,9 @@
 
 > ⚠️ **No publicar hasta que el APK de release esté repartido.** Ver `docs/PLAN_REMEDIACION_APK_2026-08-24.md` Fase 5.
 >
-> ⚠️ **Verificar cada issue contra el código actual antes de publicar** (tarea T-18). Las fases 2 y 3 del plan de remediación pueden haber arreglado alguno de paso.
+> ✅ **Verificado el 2026-08-24** contra la rama `fix/auditoria-apk-2026-08`, tras completar las fases 1 a 4 del plan de remediación (tarea T-18). Los 6 issues siguen reproduciendo. Referencias de línea y conteos actualizados a esa rama.
+>
+> El antiguo issue #4 (permisos innecesarios) **se retiró de esta lista**: bloqueaba la subida a Play Store y se resolvió internamente en la tarea T-19. La numeración de los demás se conserva para no romper referencias.
 
 ---
 
@@ -32,16 +34,16 @@
 
 ## Problem statement
 
-Al aprobarse la verificación de identidad, `src/App.tsx:561` ejecuta:
+Al aprobarse la verificación de identidad, `src/App.tsx:562` ejecuta:
 
 ```ts
 window.location.hash = '/#/cetes';
 ```
 
-La app usa `HashRouter` (`src/App.tsx:1070`), así que la ruta vive en el fragmento de la URL. Asignar `'/#/cetes'` al fragmento produce `https://localhost/#/#/cetes`, y el router interpreta la ruta como `/#/cetes`. Ninguna de las 29 rutas registradas coincide, así que cae en el catch-all:
+La app usa `HashRouter` (`src/App.tsx:1071`), así que la ruta vive en el fragmento de la URL. Asignar `'/#/cetes'` al fragmento produce `https://localhost/#/#/cetes`, y el router interpreta la ruta como `/#/cetes`. Ninguna de las 29 rutas registradas coincide, así que cae en el catch-all:
 
 ```tsx
-// src/App.tsx:1103
+// src/App.tsx:1106
 <Route path="*" element={<Navigate to="/" replace />} />
 ```
 
@@ -63,12 +65,12 @@ No hay mensaje de éxito, no hay pantalla nueva, no hay nada que indique que alg
 
 ## In-scope files
 
-- `micopay/frontend/src/App.tsx` (~línea 561)
-- `micopay/frontend/src/services/api.ts` (interceptor de 401, ~línea 769) — ver "Alcance secundario"
+- `micopay/frontend/src/App.tsx` (~línea 562)
+- `micopay/frontend/src/services/api.ts` (interceptor de 401, ~línea 783) — ver "Alcance secundario"
 
 ## Alcance secundario, opcional
 
-El interceptor de 401 en `api.ts:769` hace `window.location.href = '/#/login'`. **Hoy funciona**: la URL solo cambia en el fragmento, el navegador no recarga el documento y `HashRouter` navega al login correctamente.
+El interceptor de 401 en `api.ts:783` hace `window.location.href = '/#/login'`. **Hoy funciona**: la URL solo cambia en el fragmento, el navegador no recarga el documento y `HashRouter` navega al login correctamente.
 
 Es un patrón frágil —bastaría con que el path dejara de ser `/` para que provocara una recarga completa de la app— pero **no es un defecto observable ahora mismo**. Arreglarlo es bienvenido y suma al issue, pero no es obligatorio para cerrarlo. Si lo tomas, ten en cuenta que el interceptor vive fuera del árbol de React y no puede usar `useNavigate()`: hay que exponer la instancia del router desde un módulo.
 
@@ -323,7 +325,9 @@ Problema secundario del mismo tipo: `resources.arsc` (390 KB) incluye la etiquet
 
 ## Why it matters
 
-Quitando x86 el APK de release baja de 25,2 MB a unos 13 MB. La mitad de descarga y la mitad de espacio ocupado.
+> **Nota de alcance (2026-08-24).** El proyecto ya genera un AAB para Play Store (14,4 MiB de subida) y Play divide automáticamente la descarga por arquitectura, así que **quien instale desde la tienda no sufre este problema**. Este issue sigue teniendo valor para los APK que se reparten por enlace directo a testers, que es como se distribuye hoy, pero su impacto es menor de lo que sugería la auditoría original. Tómalo con esa expectativa.
+
+Quitando x86, el APK de release baja de 25,2 MB a unos 13 MB. La mitad de descarga y la mitad de espacio ocupado para quien lo instale por enlace directo.
 
 Buena parte de la gente del piloto en México va a descargar con datos móviles, no con WiFi, y en teléfonos de gama de entrada donde el almacenamiento libre escasea. Una app de 25 MB es una decisión que la persona se piensa; una de 13 MB es un clic. Esa diferencia es abandono de instalación medible y completamente evitable.
 
@@ -467,7 +471,7 @@ Ninguna hacia atrás. **El issue #7 depende de este** y debe mergearse después:
 
 ## Problem statement
 
-La app tiene 178 elementos `<button>` y solo 32 llevan `aria-label`. Al mismo tiempo hay 242 iconos de Material Symbols. La mayoría de los botones son solo un icono, sin texto visible.
+La app tiene 183 elementos `<button>` y solo 33 llevan `aria-label`. Al mismo tiempo hay 242 iconos de Material Symbols. La mayoría de los botones son solo un icono, sin texto visible.
 
 Para un lector de pantalla como TalkBack, un botón así no tiene nombre: se anuncia simplemente como "botón". El usuario no tiene forma de saber si es "volver", "copiar", "cerrar" o "cancelar operación".
 
