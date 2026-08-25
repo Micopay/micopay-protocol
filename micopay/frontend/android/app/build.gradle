@@ -1,5 +1,25 @@
 apply plugin: 'com.android.application'
 
+// versionCode a partir de la fecha/hora del build: AAMMDDHH.
+// Ejemplo: 26082416 = 2026-08-24, 16h.
+//
+// Por que asi y no un contador de commits: el contador depende de la rama, y
+// compilar desde una rama con menos historial generaria un numero MENOR que el
+// ya repartido, lo que impide instalar encima. La fecha siempre crece y es
+// independiente de la rama. Ademas identifica el build al dar soporte.
+//
+// Limite de Android: 2100000000. Este esquema llega a 99123123 en el ano 2099.
+// Granularidad de una hora: dos builds en la misma hora comparten numero, lo
+// cual es aceptable porque solo importa al repartir, no al compilar.
+// Se puede forzar con MICOPAY_VERSION_CODE para reproducir un build concreto.
+def computeVersionCode = { ->
+    def override = System.getenv('MICOPAY_VERSION_CODE')
+    if (override && override.isInteger()) {
+        return override.toInteger()
+    }
+    return new Date().format('yyMMddHH').toInteger()
+}
+
 android {
     namespace = "com.micopay.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,7 +27,7 @@ android {
         applicationId "com.micopay.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
+        versionCode computeVersionCode()
         versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
