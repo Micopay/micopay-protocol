@@ -27,7 +27,7 @@ const PayHub = ({ onSend, onReceive }: PayHubProps) => {
             className="bg-primary text-white rounded-[24px] p-6 flex flex-col items-start gap-3 shadow-lg shadow-primary/20 active:scale-[0.97] transition-all"
           >
             <span className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center">
-              <span className="material-symbols-outlined text-2xl">arrow_upward</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-2xl">arrow_upward</span>
             </span>
             <span className="font-headline font-bold text-lg">{t('pay.send')}</span>
             <span className="text-[12px] text-white/80 text-left leading-snug">{t('pay.sendDesc')}</span>
@@ -38,7 +38,7 @@ const PayHub = ({ onSend, onReceive }: PayHubProps) => {
             className="bg-white border border-outline-variant/10 rounded-[24px] p-6 flex flex-col items-start gap-3 shadow-sm active:scale-[0.97] transition-all"
           >
             <span className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <span className="material-symbols-outlined text-2xl text-primary">qr_code_2</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-2xl text-primary">qr_code_2</span>
             </span>
             <span className="font-headline font-bold text-lg text-on-surface">{t('pay.receive')}</span>
             <span className="text-[12px] text-on-surface-variant text-left leading-snug">{t('pay.receiveDesc')}</span>

@@ -360,7 +360,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                         className="w-full flex items-center justify-between py-2.5 text-sm text-[#0B1E26] hover:text-[#00694C] transition-colors"
                     >
                       <span>{t('profile.privacy')}</span>
-                      <span className="material-symbols-outlined text-base text-[#67808C]">chevron_right</span>
+                      <span aria-hidden="true" className="material-symbols-outlined text-base text-[#67808C]">chevron_right</span>
                     </button>
                     <div className="border-t border-[#D7E3EA]/40" />
                     <button
@@ -368,7 +368,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                         className="w-full flex items-center justify-between py-2.5 text-sm text-[#0B1E26] hover:text-[#00694C] transition-colors"
                     >
                       <span>{t('profile.terms')}</span>
-                      <span className="material-symbols-outlined text-base text-[#67808C]">chevron_right</span>
+                      <span aria-hidden="true" className="material-symbols-outlined text-base text-[#67808C]">chevron_right</span>
                     </button>
                   </div>
                 </section>
@@ -397,7 +397,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                       onClick={openDeleteModal}
                       className="w-full bg-[#C62828] text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-[#C62828]/20 transition-all active:scale-[0.98]"
                   >
-                <span className="material-symbols-outlined text-lg">
+                <span aria-hidden="true" className="material-symbols-outlined text-lg">
                   delete_forever
                 </span>
                     {t('profile.deleteBtn')}
@@ -411,7 +411,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                       onClick={onLogout}
                       className="w-full bg-gray-200 text-gray-800 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
                   >
-                <span className="material-symbols-outlined text-lg">
+                <span aria-hidden="true" className="material-symbols-outlined text-lg">
                   logout
                 </span>
                     {t('profile.logout')}

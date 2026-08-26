@@ -101,6 +101,31 @@ describe('accessible names on buttons (APK-6)', () => {
     expect(unnamed).toEqual([]);
   });
 
+  // The screens named by the issue's acceptance criteria: "a TalkBack pass over at
+  // least Map, Profile, Pay and History". A Material Symbols glyph is a ligature, so
+  // the span's text content is literally "arrow_upward". Inside a button that has no
+  // aria-label, that text joins the accessible name and TalkBack reads it out before
+  // the real label. aria-label wins over contents, so the buttons fixed above are
+  // immune — these are the ones that carry visible text instead.
+  const AC_SCREENS = [
+    'pages/PayHub.tsx',
+    'pages/Profile.tsx',
+    'pages/History.tsx',
+    'pages/DepositMap.tsx',
+    'pages/ExploreMap.tsx',
+  ];
+
+  it('hides decorative icons from the name on the acceptance-criteria screens', () => {
+    const leaking = all
+      .filter((b) => AC_SCREENS.includes(b.file) && !b.openTag.includes('aria-label'))
+      .filter((b) =>
+        (b.inner.match(ICON_SPAN) ?? []).some((span) => !/aria-hidden/.test(span)),
+      )
+      .map((b) => `${b.file}:${b.line}`);
+
+    expect(leaking).toEqual([]);
+  });
+
   it('names the action rather than the icon', () => {
     // "arrow_back" as a label would read the glyph name aloud, not the action.
     const iconNamed = all

@@ -169,7 +169,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
               onClick={() => setPage(p => Math.max(1, p - 1))}
               className="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/20 text-sm font-bold disabled:opacity-30 disabled:pointer-events-none hover:bg-surface-container-low transition-colors"
             >
-              <span className="material-symbols-outlined text-sm">chevron_left</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-sm">chevron_left</span>
               Anterior
             </button>
             <span className="text-xs font-bold text-outline">Página {page}</span>
@@ -179,7 +179,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
               className="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/20 text-sm font-bold disabled:opacity-30 disabled:pointer-events-none hover:bg-surface-container-low transition-colors"
             >
               Siguiente
-              <span className="material-symbols-outlined text-sm">chevron_right</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-sm">chevron_right</span>
             </button>
           </div>
         )}

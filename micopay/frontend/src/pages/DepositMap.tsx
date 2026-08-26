@@ -216,7 +216,7 @@ function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) 
         onClick={onBack}
         className="mt-2 h-[48px] px-8 border-2 border-primary text-primary font-bold rounded-xl active:scale-95 transition-all duration-200 flex items-center gap-2"
       >
-        <span className="material-symbols-outlined text-sm">tune</span>
+        <span aria-hidden="true" className="material-symbols-outlined text-sm">tune</span>
         Cambiar monto
       </button>
     </div>
@@ -392,6 +392,7 @@ const DepositMap = ({
   onRetryCreationError,
   maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
 }: DepositMapProps) => {
+  const { t } = useTranslation();
   const { state, refetch } = useMerchantsAvailable({
     amount_mxn: amount,
     flow: 'deposit',
@@ -421,7 +422,7 @@ const DepositMap = ({
             <button
               onClick={onBack}
               className="text-[#00694C] active:scale-95 duration-200"
-              aria-label="Volver"
+              aria-label={t('a11y.back')}
             >
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
