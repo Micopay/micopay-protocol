@@ -84,7 +84,7 @@ async function recoverSession(username: string): Promise<UserData> {
 
 type Flow = "cashout" | "deposit" | null;
 
-interface AppCtx {
+export interface AppCtx {
   buyerUser: UserData | null;
   sellerUser: UserData | null;
   activeTrade: TradeData | null;
@@ -553,14 +553,14 @@ function CetesRoute() {
   );
 }
 
-function KYCRoute() {
+export function KYCRoute() {
+  const navigate = useNavigate();
   const { buyerUser } = useAppCtx();
   return (
       <KYCScreen
           token={buyerUser?.token ?? null}
           onApproved={() => {
-            // Cache hit will redirect into CETES screen; this matches the acceptance criteria.
-            window.location.hash = '/#/cetes';
+            navigate('/cetes');
           }}
       />
   );
