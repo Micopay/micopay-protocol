@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
 import { completeTrade, TradeData } from '../services/api';
 
@@ -11,6 +12,7 @@ interface DepositQRProps {
 }
 
 const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: DepositQRProps) => {
+    const { t } = useTranslation();
     const [isConfirming, setIsConfirming] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -33,7 +35,7 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
             {/* TopAppBar */}
             <header className="bg-[#F4FAFF] w-full top-0 sticky flex items-center justify-between px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] z-50">
                 <div className="flex items-center gap-3">
-                    <button onClick={onBack} className="text-[#00694C] active:scale-95 duration-200">
+                    <button aria-label={t('a11y.back')} onClick={onBack} className="text-[#00694C] active:scale-95 duration-200">
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
                     <div className="flex flex-col">

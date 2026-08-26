@@ -170,7 +170,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
   return (
       <div className="bg-[#F4FAFF] text-[#0B1E26] min-h-screen flex flex-col pb-28">
         <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-md bg-white/90 border-b border-[#D7E3EA]/60">
-          <button
+          <button aria-label={t('a11y.back')}
               onClick={onBack}
               className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#EFF6FA] transition-colors"
           >

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { registerUser, UserData } from '../services/api';
 import { generateAndStoreKeypair, getPublicKey, exportSecretKey, keypairExists } from '../lib/keystore';
@@ -10,6 +11,7 @@ interface RegisterProps {
 }
 
 export default function Register({ onLoginSuccess }: RegisterProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
@@ -110,7 +112,7 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
               </label>
               <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3">
                 <span className="text-xs font-mono text-[#0B1E26] truncate mr-2">{pubKey}</span>
-                <button onClick={copyPublicKey} className="text-[#00694C] flex-shrink-0">
+                <button aria-label={t('a11y.copyPublicKey')} onClick={copyPublicKey} className="text-[#00694C] flex-shrink-0">
                   <span className="material-symbols-outlined text-lg">{copiedPub ? 'check' : 'content_copy'}</span>
                 </button>
               </div>

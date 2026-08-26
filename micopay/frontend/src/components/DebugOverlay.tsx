@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from 'react-i18next';
 import { readJSON, removeKey } from "../services/secureStorage";
 
 interface DebugOverlayProps {
@@ -22,6 +23,7 @@ export default function DebugOverlay({
   backendConnected,
   backendHealth,
 }: DebugOverlayProps) {
+  const { t } = useTranslation();
   const [showUsers, setShowUsers] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -61,6 +63,7 @@ export default function DebugOverlay({
           </div>
           <button 
             onClick={onClose}
+            aria-label={t('a11y.close')}
             className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-colors"
           >
             <span className="material-symbols-outlined text-lg">close</span>

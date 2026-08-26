@@ -1,4 +1,5 @@
 import MapSim from '../components/MapSim';
+import { useTranslation } from 'react-i18next';
 import { useMerchantsAvailable } from '../hooks/useMerchantsAvailable';
 import {
   effectiveFeePercent,
@@ -75,12 +76,13 @@ function EffectiveFeeNote({
 // ─── Loading skeleton ─────────────────────────────────────────────────────────
 
 function LoadingSkeleton({ onBack, amount }: { onBack: () => void; amount: number }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-surface text-on-surface min-h-screen pb-24">
       <header className="w-full top-0 sticky bg-[#E7F6FF] shadow-[0px_32px_32px_rgba(11,30,38,0.04)] z-50 pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between px-6 py-4 w-full">
           <div className="flex items-center gap-4">
-            <button onClick={onBack} className="text-[#00694C] active:scale-95 duration-200">
+            <button aria-label={t('a11y.back')} onClick={onBack} className="text-[#00694C] active:scale-95 duration-200">
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
             <h1 className="font-headline font-bold text-xl text-[#00694C]">Ofertas de depósito</h1>
@@ -129,11 +131,12 @@ function LoadingSkeleton({ onBack, amount }: { onBack: () => void; amount: numbe
 // ─── Location denied state ────────────────────────────────────────────────────
 
 function LocationDenied({ onBack }: { onBack: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-surface text-on-surface min-h-screen pb-24">
       <header className="w-full top-0 sticky bg-[#E7F6FF] shadow-[0px_32px_32px_rgba(11,30,38,0.04)] z-50 pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center px-6 py-4">
-          <button onClick={onBack} className="text-[#00694C] active:scale-95 duration-200">
+          <button aria-label={t('a11y.back')} onClick={onBack} className="text-[#00694C] active:scale-95 duration-200">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
           <h1 className="ml-4 font-headline font-bold text-xl text-[#00694C]">Ofertas de depósito</h1>
@@ -160,11 +163,12 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
 // ─── Error state ──────────────────────────────────────────────────────────────
 
 function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-surface text-on-surface min-h-screen pb-24">
       <header className="w-full top-0 sticky bg-[#E7F6FF] shadow-[0px_32px_32px_rgba(11,30,38,0.04)] z-50 pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center px-6 py-4">
-          <button onClick={onBack} className="text-[#00694C] active:scale-95 duration-200">
+          <button aria-label={t('a11y.back')} onClick={onBack} className="text-[#00694C] active:scale-95 duration-200">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
           <h1 className="ml-4 font-headline font-bold text-xl text-[#00694C]">Ofertas de depósito</h1>

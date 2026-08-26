@@ -193,6 +193,11 @@ const Home = ({
         <div className="flex items-center gap-4">
           <button
             onClick={onNavigateInbox}
+            aria-label={
+              pendingCount > 0
+                ? t('a11y.notificationsPending', { count: pendingCount })
+                : t('a11y.notifications')
+            }
             className="relative p-2 rounded-full hover:bg-surface-container-low transition-colors"
           >
             <span
@@ -202,7 +207,10 @@ const Home = ({
               notifications
             </span>
             {pendingCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-error text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+              <span
+                aria-hidden="true"
+                className="absolute -top-1 -right-1 bg-error text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center"
+              >
                 {pendingCount}
               </span>
             )}

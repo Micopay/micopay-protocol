@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 
 import {
@@ -669,6 +670,7 @@ function RefundConfirmDialog({
 // ── Main component ──────────────────────────────────────────────────────────
 
 function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProps) {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [trade, setTrade] = useState<TradeDetailData | null>(null);
@@ -924,7 +926,7 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
       <header className="sticky top-0 z-50 bg-surface-container-lowest/80 backdrop-blur-md border-b border-surface-container pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <button
+            <button aria-label={t('a11y.back')}
               onClick={onBack}
               className="p-2 hover:bg-surface-container-low rounded-full transition-colors text-primary"
             >

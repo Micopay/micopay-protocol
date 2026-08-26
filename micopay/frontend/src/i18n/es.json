@@ -490,5 +490,13 @@
       "approveFailed": "No se pudo aprobar la solicitud.",
       "rejectFailed": "No se pudo rechazar la solicitud."
     }
+  },
+  "a11y": {
+    "back": "Volver",
+    "close": "Cerrar",
+    "copyPublicKey": "Copiar clave pública",
+    "notifications": "Notificaciones",
+    "notificationsPending": "Notificaciones, {{count}} pendientes",
+    "userAvatar": "Foto de perfil"
   }
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { AvatarPlaceholder } from '../components/AvatarPlaceholder';
 import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
 import { getSecret, revealTrade, lockTrade, getTrade, TradeData } from '../services/api';
@@ -159,11 +160,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
                     <div className="bg-surface-container-lowest border border-surface-container-low p-4 rounded-2xl shadow-sm">
                         <div className="flex gap-3 mb-4">
                             <div className="w-10 h-10 rounded-full bg-surface-container-high flex-shrink-0 flex items-center justify-center overflow-hidden">
-                                <img
-                                    className="w-full h-full object-cover"
-                                    alt="Pharmacist"
-                                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKVHp5dyl0kxM83DVzGyzATg7Y2rWOd2uBB75zzCKjwdx5XBJ1hm2cpi0EmKLMdkS2b7KqgqNnQAO-bISXYa8IukOGxVY7WxThGBL_y_Mh2mQIdpi7A4P4yQFSg89545NSeRagiTRwjV-R0x8HVCIMo_BzpCAriGHdw3jgs8Wtw-D-3iFQYRhj1_1yo_b2o8RrrHMvwhxouUN3a-9SHvBQKrguCmQQV5tKNj1I70aK59bJHEhfMvqnNOvKg6gU9Tc834bGs8Xah50H"
-                                />
+                                <AvatarPlaceholder name={counterpartyName} />
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-on-surface-variant">

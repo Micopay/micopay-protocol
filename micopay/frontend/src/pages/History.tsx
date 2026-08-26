@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import ErrorBanner from '../components/ErrorBanner';
 import { getTradeHistory, TradeHistoryItem } from '../services/api';
 import { mapApiError, type MappedApiError } from '../utils/apiError';
@@ -28,6 +29,7 @@ const FILTERS = [
 ];
 
 const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
+  const { t } = useTranslation();
   const [trades, setTrades] = useState<TradeHistoryItem[]>([]);
   const [status, setStatus] = useState('all');
   const [page, setPage] = useState(1);
@@ -62,7 +64,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
   return (
     <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col">
       <header className="fixed top-0 left-0 w-full z-50 flex items-center px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-white/90 backdrop-blur-md border-b border-outline-variant/10">
-        <button onClick={onBack} className="p-2 hover:bg-surface-container-low rounded-full transition-colors">
+        <button aria-label={t('a11y.back')} onClick={onBack} className="p-2 hover:bg-surface-container-low rounded-full transition-colors">
           <span className="material-symbols-outlined text-on-surface">arrow_back</span>
         </button>
         <h1 className="flex-1 text-center font-headline font-bold text-lg mr-10">Historial de Transacciones</h1>
