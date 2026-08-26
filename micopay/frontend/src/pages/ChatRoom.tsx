@@ -114,9 +114,6 @@ const ChatRoom = ({
                         </div>
                     </div>
                 </div>
-                <button className="p-2 hover:bg-surface-container-low transition-colors rounded-full text-primary">
-                    <span className="material-symbols-outlined">more_vert</span>
-                </button>
             </header>
 
             {/* Content Area */}
@@ -263,10 +260,6 @@ const ChatRoom = ({
                                 <span className="font-body text-sm">{t('chatRoom.scanClientQr')}</span>
                             </button>
                         )}
-                        <button className="flex items-center justify-center gap-3 w-full h-[46px] rounded-lg bg-surface-container-highest text-primary font-semibold hover:bg-surface-variant transition-colors group">
-                            <span className="material-symbols-outlined group-hover:scale-110 transition-transform">location_on</span>
-                            <span className="font-body text-sm">{t('chatRoom.shareLocation')}</span>
-                        </button>
                         <button
                             onClick={onViewQR}
                             className="flex items-center justify-center gap-3 w-full h-[46px] rounded-lg bg-primary text-white font-semibold hover:opacity-90 transition-opacity shadow-lg shadow-primary/20"
@@ -287,22 +280,16 @@ const ChatRoom = ({
                         </div>
                     )}
                     <div className="flex items-end gap-3">
-                        <button className="p-3 text-primary hover:bg-surface-container-low rounded-full transition-colors mb-0.5 disabled:opacity-50" disabled={isSending}>
-                            <span className="material-symbols-outlined">add_circle</span>
-                        </button>
-                        <div className="flex-1 relative flex items-center">
-                            <textarea 
+                        <div className="flex-1 flex items-center">
+                            <textarea
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                className="w-full bg-surface-container-low border-none focus:ring-2 focus:ring-primary rounded-2xl py-3 px-4 pr-12 text-sm text-on-surface placeholder:text-outline resize-none overflow-hidden disabled:opacity-50" 
+                                className="w-full bg-surface-container-low border-none focus:ring-2 focus:ring-primary rounded-2xl py-3 px-4 text-sm text-on-surface placeholder:text-outline resize-none overflow-hidden disabled:opacity-50"
                                 placeholder={t('chatRoom.messagePlaceholder')}
                                 rows={1}
                                 disabled={isSending}
                             />
-                            <button className="absolute right-2 p-2 text-primary">
-                                <span className="material-symbols-outlined">mood</span>
-                            </button>
                         </div>
                         <button 
                             onClick={handleSendMessage}

@@ -323,7 +323,6 @@
     "noMessagesYet": "No messages yet",
     "startConversation": "Start the conversation",
     "scanClientQr": "Scan client's QR",
-    "shareLocation": "Share location",
     "viewMyQr": "View my trade QR",
     "sendFailed": "Send failed: {{error}}",
     "messagePlaceholder": "Type a message...",
