@@ -86,6 +86,25 @@ const ChatRoom = ({
         }
     };
 
+    const formattedAmount = escrowAmount != null
+        ? escrowAmount.toLocaleString('es-MX')
+        : '…';
+
+    const lockTxLink = displayLockTxHash ? (
+        <a
+            href={buildTxUrl(displayLockTxHash)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary transition-colors font-mono truncate mt-1"
+        >
+            <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+            {t('chatRoom.viewOnStellarTestnet')}
+            <span className="truncate opacity-60">· {displayLockTxHash.substring(0, 12)}…</span>
+        </a>
+    ) : (
+        <p className="text-xs text-on-surface/40 mt-1">{t('chatRoom.confirmingOnChain')}</p>
+    );
+
     return (
         <div className="bg-background text-on-surface font-body min-h-screen flex flex-col">
             {/* TopAppBar */}
@@ -119,60 +138,71 @@ const ChatRoom = ({
             {/* Content Area */}
             <main className="flex-1 mt-[calc(72px+env(safe-area-inset-top))] mb-24 px-4 max-w-2xl mx-auto w-full flex flex-col">
                 {/* Status Banner - role-specific */}
-                {isProvider ? (
-                    <div className="my-4 p-4 rounded-xl bg-primary-container/10 border border-primary/10 flex items-start gap-3">
-                        <div className={`rounded-full p-1 flex items-center justify-center shrink-0 mt-0.5 text-white ${
-                            escrowStatus === 'locked' ? 'bg-emerald-500' : 'bg-amber-500'
-                        }`}>
-                            <span className="material-symbols-outlined text-sm">
-                                {escrowStatus === 'locked' ? 'lock' : 'hourglass_top'}
-                            </span>
-                        </div>
-                        <div className="flex flex-col gap-1 min-w-0">
-                            {escrowStatus === 'locked' ? (
-                                <>
-                                    <p className="text-sm font-semibold text-emerald-700">USDC locked in escrow</p>
-                                    <p className="text-xs text-emerald-600 font-medium">
-                                        ${escrowAmount?.toLocaleString('es-MX') ?? '...'} MXN
+                <div className="my-4 p-4 rounded-xl bg-primary-container/10 border border-primary/10 flex items-start gap-3">
+                    {isProvider ? (
+                        <>
+                            <div className={`rounded-full p-1 flex items-center justify-center shrink-0 mt-0.5 text-white ${
+                                escrowStatus === 'locked' ? 'bg-emerald-500' : 'bg-amber-500'
+                            }`}>
+                                <span className="material-symbols-outlined text-sm">
+                                    {escrowStatus === 'locked' ? 'lock' : 'hourglass_top'}
+                                </span>
+                            </div>
+                            <div className="flex flex-col gap-1 min-w-0">
+                                {escrowStatus === 'locked' ? (
+                                    <>
+                                        <p className="text-sm font-semibold text-emerald-700">{t('chatRoom.cashoutAgentLockedTitle')}</p>
+                                        <p className="text-xs text-emerald-600 font-medium">
+                                            {t('chatRoom.cashoutAgentLockedDesc', { amount: formattedAmount })}
+                                        </p>
+                                    </>
+                                ) : escrowStatus === 'pending' ? (
+                                    <>
+                                        <p className="text-sm font-semibold text-amber-700">{t('chatRoom.cashoutAgentPendingTitle')}</p>
+                                        <p className="text-xs text-amber-600">{t('chatRoom.cashoutAgentPendingDesc')}</p>
+                                    </>
+                                ) : escrowStatus ? (
+                                    <p className="text-sm font-semibold text-on-surface/60">
+                                        {t('chatRoom.tradeStatus', { status: escrowStatus })}
                                     </p>
-                                </>
-                            ) : escrowStatus === 'pending' ? (
-                                <p className="text-sm font-semibold text-amber-700">
-                                    Waiting for buyer to lock funds in escrow
-                                </p>
-                            ) : escrowStatus ? (
-                                <p className="text-sm font-semibold text-on-surface/60">
-                                    Trade {escrowStatus}
-                                </p>
-                            ) : (
-                                <p className="text-xs text-on-surface/40">Verifying escrow status…</p>
-                            )}
-                        </div>
-                    </div>
-                ) : (
-                    <div className="my-4 p-4 rounded-xl bg-primary-container/10 border border-primary/10 flex items-start gap-3">
-                        <div className="bg-primary text-white rounded-full p-1 flex items-center justify-center shrink-0 mt-0.5">
-                            <span className="material-symbols-outlined text-sm">check</span>
-                        </div>
-                        <div className="flex flex-col gap-1 min-w-0">
-                            <p className="text-sm font-semibold text-primary">{t('chatRoom.offerAccepted')}</p>
-                            {displayLockTxHash ? (
-                                <a
-                                    href={buildTxUrl(displayLockTxHash)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary transition-colors font-mono truncate"
-                                >
-                                    <span className="material-symbols-outlined text-[14px]">open_in_new</span>
-                                    {t('chatRoom.viewOnStellarTestnet')}
-                                    <span className="truncate opacity-60">· {displayLockTxHash.substring(0, 12)}…</span>
-                                </a>
-                            ) : (
-                                <p className="text-xs text-on-surface/40">{t('chatRoom.confirmingOnChain')}</p>
-                            )}
-                        </div>
-                    </div>
-                )}
+                                ) : (
+                                    <p className="text-xs text-on-surface/40">{t('chatRoom.verifyingEscrowStatus')}</p>
+                                )}
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className={`rounded-full p-1 flex items-center justify-center shrink-0 mt-0.5 text-white ${
+                                escrowStatus === 'locked' ? 'bg-primary' : 'bg-amber-500'
+                            }`}>
+                                <span className="material-symbols-outlined text-sm">
+                                    {escrowStatus === 'locked' ? 'check' : 'hourglass_top'}
+                                </span>
+                            </div>
+                            <div className="flex flex-col gap-1 min-w-0">
+                                {escrowStatus === 'locked' ? (
+                                    <>
+                                        <p className="text-sm font-semibold text-primary">{t('chatRoom.cashoutClientLockedTitle')}</p>
+                                        <p className="text-xs text-on-surface/60">{t('chatRoom.cashoutClientLockedDesc')}</p>
+                                        {lockTxLink}
+                                    </>
+                                ) : escrowStatus === 'pending' ? (
+                                    <>
+                                        <p className="text-sm font-semibold text-amber-700">{t('chatRoom.cashoutClientPendingTitle')}</p>
+                                        <p className="text-xs text-amber-600">{t('chatRoom.cashoutClientPendingDesc')}</p>
+                                        {lockTxLink}
+                                    </>
+                                ) : escrowStatus ? (
+                                    <p className="text-sm font-semibold text-on-surface/60">
+                                        {t('chatRoom.tradeStatus', { status: escrowStatus })}
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-on-surface/40">{t('chatRoom.verifyingEscrowStatus')}</p>
+                                )}
+                            </div>
+                        </>
+                    )}
+                </div>
 
                 {/* Loading State */}
                 {isLoading && (

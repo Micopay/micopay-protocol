@@ -329,7 +329,17 @@
     "authorizedAgent": "Agente Autorizado",
     "agentFoundTitle": "Agente encontrado · Activos digitales en garantía",
     "agentFoundDesc": "El agente bloqueó los activos que recibirás. Ve a su ubicación y entrégale el efectivo.",
-    "viewMyQrAgent": "Ver mi QR para el agente"
+    "viewMyQrAgent": "Ver mi QR para el agente",
+    "cashoutClientLockedTitle": "Oferta aceptada · Tu saldo en garantía",
+    "cashoutClientLockedDesc": "Bloqueaste tu saldo. Ve a la ubicación del agente; te entregará el efectivo.",
+    "cashoutClientPendingTitle": "Preparando tu garantía",
+    "cashoutClientPendingDesc": "Estamos bloqueando tu saldo en cadena. Espera la confirmación antes de moverte.",
+    "cashoutAgentLockedTitle": "Cliente conectado · Saldo en garantía",
+    "cashoutAgentLockedDesc": "El cliente bloqueó {{amount}} MXN en garantía. Entrégale el efectivo en persona para completar el intercambio.",
+    "cashoutAgentPendingTitle": "Esperando garantía del cliente",
+    "cashoutAgentPendingDesc": "El cliente está bloqueando su saldo. Cuando se confirme, entrégale el efectivo.",
+    "verifyingEscrowStatus": "Verificando estado de la garantía…",
+    "tradeStatus": "Operación: {{status}}"
   },
   "qrReveal": {
     "verified": "Verificado",
