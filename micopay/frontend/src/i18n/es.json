@@ -323,7 +323,6 @@
     "noMessagesYet": "Aún no hay mensajes",
     "startConversation": "Inicia la conversación",
     "scanClientQr": "Escanear QR del cliente",
-    "shareLocation": "Compartir ubicación",
     "viewMyQr": "Ver mi QR de operación",
     "sendFailed": "Error al enviar: {{error}}",
     "messagePlaceholder": "Escribe un mensaje...",
