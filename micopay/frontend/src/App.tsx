@@ -333,27 +333,31 @@ function ConfirmRoute() {
   );
 }
 
-/** Whichever participant isn't this device — the real counterparty name to show in the UI. */
-function useCounterpartyName(activeTrade: TradeData | null, buyerUser: UserData | null) {
+/** Counterparty display name and cash-out role for ChatRoom banners. */
+function useTradeParticipantInfo(activeTrade: TradeData | null, buyerUser: UserData | null) {
   const [counterpartyName, setCounterpartyName] = useState<string | null>(null);
+  const [isProvider, setIsProvider] = useState(false);
 
   useEffect(() => {
     if (!activeTrade || !buyerUser?.token) return;
     fetchTradeDetail(activeTrade.id, buyerUser.token)
       .then(({ trade, seller_username, buyer_username }) => {
-        const isMeTheSeller = trade.seller_id === buyerUser.id;
-        setCounterpartyName(isMeTheSeller ? buyer_username : seller_username);
+        const isMeTheEscrowSeller = trade.seller_id === buyerUser.id;
+        setCounterpartyName(isMeTheEscrowSeller ? buyer_username : seller_username);
+        // Cash-out (/chat): the client locks crypto (escrow seller); the agent
+        // hands over cash (escrow buyer). isProvider marks the agent view.
+        setIsProvider(!isMeTheEscrowSeller);
       })
       .catch(() => {});
   }, [activeTrade, buyerUser?.token, buyerUser?.id]);
 
-  return counterpartyName;
+  return { counterpartyName, isProvider };
 }
 
 function ChatRoute() {
   const navigate = useNavigate();
   const { lockTxHash, activeTrade, buyerUser } = useAppCtx();
-  const counterpartyName = useCounterpartyName(activeTrade, buyerUser);
+  const { counterpartyName, isProvider } = useTradeParticipantInfo(activeTrade, buyerUser);
   return (
       <ChatRoom
           tradeId={activeTrade?.id ?? ''}
@@ -362,6 +366,7 @@ function ChatRoute() {
           apiBaseUrl={import.meta.env.VITE_API_URL}
           lockTxHash={lockTxHash}
           counterpartyName={counterpartyName}
+          isProvider={isProvider}
           onBack={() => navigate('/map')}
           onViewQR={() => navigate('/qr-reveal')}
       />
@@ -371,7 +376,7 @@ function ChatRoute() {
 function ChatDepositRoute() {
   const navigate = useNavigate();
   const { lockTxHash, activeTrade, buyerUser } = useAppCtx();
-  const counterpartyName = useCounterpartyName(activeTrade, buyerUser);
+  const { counterpartyName } = useTradeParticipantInfo(activeTrade, buyerUser);
   return (
       <DepositChat
           tradeId={activeTrade?.id ?? ''}
@@ -389,7 +394,7 @@ function ChatDepositRoute() {
 function QRRevealRoute() {
   const navigate = useNavigate();
   const { activeTrade, sellerUser, buyerUser, activeAmount, setReleaseTxHash } = useAppCtx();
-  const counterpartyName = useCounterpartyName(activeTrade, buyerUser);
+  const { counterpartyName } = useTradeParticipantInfo(activeTrade, buyerUser);
 
   return (
       <QRReveal

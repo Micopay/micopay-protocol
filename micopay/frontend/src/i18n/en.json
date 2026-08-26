@@ -330,7 +330,17 @@
     "authorizedAgent": "Authorized Agent",
     "agentFoundTitle": "Agent found · Digital assets in escrow",
     "agentFoundDesc": "The agent locked the assets you'll receive. Go to their location and hand over the cash.",
-    "viewMyQrAgent": "View my QR for the agent"
+    "viewMyQrAgent": "View my QR for the agent",
+    "cashoutClientLockedTitle": "Offer accepted · Your balance in escrow",
+    "cashoutClientLockedDesc": "You locked your balance. Go to the agent's location; they will hand you the cash.",
+    "cashoutClientPendingTitle": "Preparing your escrow",
+    "cashoutClientPendingDesc": "We are locking your balance on-chain. Wait for confirmation before heading out.",
+    "cashoutAgentLockedTitle": "Client connected · Balance in escrow",
+    "cashoutAgentLockedDesc": "The client locked {{amount}} MXN in escrow. Hand over the cash in person to complete the exchange.",
+    "cashoutAgentPendingTitle": "Waiting for client escrow",
+    "cashoutAgentPendingDesc": "The client is locking their balance. Once confirmed, hand over the cash.",
+    "verifyingEscrowStatus": "Verifying escrow status…",
+    "tradeStatus": "Trade: {{status}}"
   },
   "qrReveal": {
     "verified": "Verified",
