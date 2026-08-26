@@ -489,5 +489,13 @@
       "approveFailed": "Could not approve the request.",
       "rejectFailed": "Could not reject the request."
     }
+  },
+  "a11y": {
+    "back": "Go back",
+    "close": "Close",
+    "copyPublicKey": "Copy public key",
+    "notifications": "Notifications",
+    "notificationsPending": "Notifications, {{count}} pending",
+    "userAvatar": "Profile picture"
   }
 }

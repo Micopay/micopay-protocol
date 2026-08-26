@@ -294,7 +294,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
   return (
     <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col pb-10">
       <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-md bg-white/90 border-b border-outline-variant/10">
-        <button onClick={onBack} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors">
+        <button onClick={onBack} aria-label={t('a11y.back')} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors">
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
         <div>

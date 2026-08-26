@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { AvatarPlaceholder } from '../components/AvatarPlaceholder';
 import { Logo } from '../components/Logo';
 
 interface ExploreProps {
@@ -18,11 +19,7 @@ const Explore = ({ onBack, onNavigate, showDefi = true, showSpeiRamp = false }: 
             <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-md bg-white/90 border-b border-outline-variant/10">
                 <Logo />
                     <div className="w-10 h-10 rounded-full border-2 border-primary-container overflow-hidden">
-                    <img
-                        alt="Perfil de usuario"
-                        className="w-full h-full object-cover"
-                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuB67y-i20YKZ74EdUyBhPSynmndCKS-h3EA_TY5I4DqJOMVotSw1KNKnJkRorXphGGSC2O37IzK3Ne0ucqSrLTuM5yBABSXmcqkmRAyds2slhc0jFDuu8bya9fX1W0jjxuPpCDkellmiwXSghk0lbLSUG_ZS_wCQ2m2oeltlvvyv4kQarhZZ8l-AC3gUy-wtgF301WK7zIlo5utKmx_I6CTuAQ_zqkXyiN6Di4UFiRzq5ASwVi017MoYgq_LhBYMO_AEIf4ZAHp1Dh"
-                    />
+                    <AvatarPlaceholder />
                 </div>
             </header>
 

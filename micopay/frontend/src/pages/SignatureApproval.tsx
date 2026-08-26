@@ -164,7 +164,7 @@ export const SignatureApproval: React.FC<SignatureApprovalProps> = ({
     return (
       <div className="min-h-screen bg-[#F4FAFF] flex flex-col p-4">
         <header className="flex items-center mb-6">
-          <button
+          <button aria-label={t('a11y.back')}
             onClick={onBack}
             className="p-2 rounded-full hover:bg-gray-200 transition-colors"
           >
@@ -199,7 +199,7 @@ export const SignatureApproval: React.FC<SignatureApprovalProps> = ({
       {/* Top Header */}
       <div>
         <header className="flex items-center justify-between mb-4">
-          <button
+          <button aria-label={t('a11y.back')}
             onClick={onBack}
             className="p-2 rounded-full hover:bg-gray-200 transition-colors"
           >
