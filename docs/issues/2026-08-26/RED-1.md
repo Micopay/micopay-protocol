@@ -1,5 +1,5 @@
 <!-- Title: RED-1 · Add explicit Red MicoPay provider enrollment and fail-closed discovery -->
-<!-- Suggested labels: wave:backend, wave:merchant, wave:trust, complexity: high -->
+<!-- Suggested labels: wave:backend, wave:merchant, wave:trust, complexity: high, Stellar Wave, wave-8-drips -->
 <!-- Suggested milestone: Wave 8: Core Retail Flow (P0) -->
 
 ## Problem

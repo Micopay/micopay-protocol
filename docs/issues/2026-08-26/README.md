@@ -33,7 +33,7 @@ are approved.**
 
 | ID | Title | Dependency | Campaign treatment |
 |---|---|---|---|
-| [CASH-1](./CASH-1.md) | Persist trade flow and provider identity | — | New foundation; Drips candidate after data preflight |
+| [CASH-1](./CASH-1.md) | Persist trade flow and provider identity | — | **New foundation; approved for Drips (`Stellar Wave`, `wave-8-drips`)** |
 | [CASH-2](./CASH-2.md) | Make cancellation flow-aware | CASH-1, CASH-4 | Product rule + regression campaign review required |
 | [CASH-3](./CASH-3.md) | Show cash-outs in the provider inbox | CASH-1, CASH-5A, CASH-7, RED-1 | Regression of #25; campaign review required |
 | [CASH-4](./CASH-4.md) | Complete cash-out from provider scan | CASH-1 | Regression of #70; campaign review required |
@@ -44,7 +44,7 @@ are approved.**
 | [CASH-8](./CASH-8.md) | Route provider policy through `provider_id` | CASH-1, CASH-9, RED-1, CASH-10 source order | Regression of #24/#31/#76/#82; campaign review required |
 | [CASH-9](./CASH-9.md) | Attribute initiator abuse controls correctly | CASH-1 | Regression of #2/#82; campaign review required |
 | [CASH-10](./CASH-10.md) | Enforce and account P2P KYC for both participants | CASH-1 source order | Correction of GrantFox #314/#316; do not label Drips by default |
-| [RED-1](./RED-1.md) | Add explicit Red MicoPay provider enrollment | — | New Merchant Operations work; Drips candidate |
+| [RED-1](./RED-1.md) | Add explicit Red MicoPay provider enrollment | — | **New Merchant Operations work; approved for Drips (`Stellar Wave`, `wave-8-drips`)** |
 | [RED-2](./RED-2.md) | Add provider onboarding to the retail APK | RED-1, RED-3, KYC-1, CASH-7 | New retail work; publish blocked or after dependencies |
 | [RED-3](./RED-3.md) | Keep exact meeting details out of public discovery | — | Product rule + privacy campaign review required |
 | [KYC-1](./KYC-1.md) | Make general Didit KYC usable in the APK | CASH-7 for route adapter | Correction of GrantFox #315; do not label Drips by default |
@@ -64,8 +64,8 @@ complete. It does not mean that the issue has been authorized, published or acce
 
 | Candidate | Draft readiness | Remaining gate |
 |---|---|---|
-| `RED-1` | Ready for maintainer review | Explicit publication authorization and campaign/reward confirmation |
-| `CASH-1` | Ready for maintainer review | Campaign/reward confirmation. Data preflight settled 2026-08-27: production has no real trades or users |
+| `RED-1` | **Ready to publish** | None. Campaign settled 2026-08-27: `Stellar Wave` + `wave-8-drips`. Awaiting the maintainer's explicit go-ahead to create it |
+| `CASH-1` | **Ready to publish** | None. Data preflight and campaign both settled 2026-08-27: `Stellar Wave` + `wave-8-drips`. Awaiting the maintainer's explicit go-ahead to create it |
 | `RED-2` | Not ready for assignment | `RED-1`/`RED-3`/`KYC-1`/`CASH-7` and the `1cf99eb` integration decision |
 
 The public repository has no issue with any of these three exact titles as of 2026-08-27. No

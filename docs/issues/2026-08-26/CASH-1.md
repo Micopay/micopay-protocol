@@ -1,5 +1,5 @@
 <!-- Title: CASH-1 · Persist trade flow and liquidity-provider identity -->
-<!-- Suggested labels: wave:backend, wave:retail, complexity: high -->
+<!-- Suggested labels: wave:backend, wave:retail, complexity: high, Stellar Wave, wave-8-drips -->
 <!-- Suggested milestone: Wave 8: Core Retail Flow (P0) -->
 
 ## Problem
