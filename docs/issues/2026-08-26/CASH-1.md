@@ -75,6 +75,62 @@ must rebase its atomic transaction around the canonical columns introduced here.
       refusal when ambiguous rows exist.
 - [ ] Backend build and typecheck pass.
 
+## Test notes
+
+Backend and schema only. No frontend behavior changes here.
+
+**There is no `npm test` in `micopay/backend`.** Suites are individual scripts. The closest models
+for what this issue needs are `test:trade-auth` and `test:refund`, which already exercise trade
+creation and carry their environment inline:
+
+```bash
+cd micopay/backend
+npm install
+npm run test:trade-auth
+npm run test:refund
+```
+
+If you add a suite without inline env, pass it yourself:
+
+```bash
+ALLOW_IN_MEMORY_DB=true MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/<your-test>.ts
+```
+
+`SECRET_ENCRYPTION_KEY` must be exactly 64 hex characters — `validateConfig` rejects anything else
+in every environment. Locally `NODE_ENV` is unset, so the in-memory store is used automatically and
+**Postgres is not required for the service-level tests**.
+
+**On Windows, `npm run test:*` fails.** Several of these scripts set the environment inline with
+POSIX syntax (`VAR=value node ...`), and npm runs scripts through `cmd.exe`, which reports
+`"ALLOW_IN_MEMORY_DB" no se reconoce como un comando`. Run them from Git Bash or WSL, or invoke
+node directly with the variables, as shown above. Both forms were verified working.
+
+Expect five `PostgreSQL connect attempt N/5 failed` lines followed by
+`PostgreSQL unavailable — using in-memory store` before the assertions run. That is the normal
+local path, not a failure.
+
+**The migration does need a real Postgres**, because the constraint and the abort path cannot be
+proven against the in-memory store:
+
+```bash
+DATABASE_URL=<your postgres> npm run migrate   # init.sql, then sql/migrations/ lexicographically
+```
+
+Run `up` and `down`, in that order, and confirm the schema returns to its previous shape.
+
+**Three things to prove, not assert:**
+
+1. The database itself rejects an inconsistent `flow`/`provider_id`/escrow-role combination. Insert
+   a bad row by hand and show the constraint firing — an application-level check alone does not
+   satisfy the criterion.
+2. A client-supplied `provider_id` in the request body cannot influence the stored value.
+3. The migration **aborts** when ambiguous rows exist. Insert one deliberately and show it stopping
+   with a clear error. Production was confirmed empty on 2026-08-27, so this path will not trigger
+   on deploy — which is exactly why it needs a test, or nobody will ever find out it is broken.
+
+If you cannot run part of this, say so in the PR and list what you did and did not verify. Do not
+claim you tested something you did not.
+
 ## Dependencies and prior work
 
 No technical dependency. This is new model work, but it unlocks regression fixes for closed issues

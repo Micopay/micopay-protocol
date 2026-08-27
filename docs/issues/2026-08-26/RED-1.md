@@ -72,8 +72,64 @@ Do not edit the flow-specific provider check inside `assertCanCreateTrade`
 - [ ] Availability updates keep the canonical enum and any compatibility boolean consistent.
 - [ ] Automatic/admin pause and unpause use the same canonical availability write as the user
       endpoint.
-- [ ] Migration defaults existing non-demo users to not enrolled; no heuristic auto-enrollment.
+- [ ] The migration enrolls nobody automatically: every existing row defaults to not enrolled.
+      Production was confirmed to hold no real users on 2026-08-27, so this is a safe default
+      rather than a data-interpretation problem. Demo/seed rows may be made active explicitly.
 - [ ] Tests cover enrollment states, activation gates, discovery and availability authorization.
+
+## Test notes
+
+Backend only. Nothing in `micopay/frontend` changes here.
+
+**There is no `npm test` in `micopay/backend`.** Each suite is its own script, and some carry the
+environment inline while others do not. The two that matter for this issue:
+
+```bash
+cd micopay/backend
+npm install
+
+# discovery — the query this issue changes. Env is already inline in the script.
+npm run test:discovery
+
+# abuse/pause paths — this one has NO inline env, so pass it yourself:
+ALLOW_IN_MEMORY_DB=true MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 npm run test:abuse
+```
+
+`SECRET_ENCRYPTION_KEY` must be exactly 64 hex characters — `validateConfig` rejects anything else
+in every environment, not just production. `MOCK_STELLAR=true` avoids needing a real
+`PLATFORM_SECRET_KEY`. Locally `NODE_ENV` is unset, so the in-memory store is used automatically
+and **you do not need Postgres to run these tests**; `ALLOW_IN_MEMORY_DB` only becomes mandatory in
+production.
+
+**On Windows, `npm run test:*` fails.** Several of these scripts set the environment inline with
+POSIX syntax (`VAR=value node ...`), and npm runs scripts through `cmd.exe`, which reports
+`"ALLOW_IN_MEMORY_DB" no se reconoce como un comando`. Run them from Git Bash or WSL, or invoke
+node directly with the variables, as shown above. Both forms were verified working.
+
+Expect five `PostgreSQL connect attempt N/5 failed` lines followed by
+`PostgreSQL unavailable — using in-memory store` before the assertions run. That is the normal
+local path, not a failure.
+
+`src/tests/merchant.discovery.test.ts` already covers coordinate rounding and the discovery rate
+limiter. **Extend that file** for the new eligibility rules rather than starting a new one, and
+keep its existing cases passing.
+
+For the schema change:
+
+```bash
+DATABASE_URL=<your postgres> npm run migrate   # applies init.sql, then sql/migrations/ in order
+```
+
+Run the down migration too and confirm the schema returns to its previous shape. A migration that
+only works forward is not finished.
+
+**What to prove, not just assert:** the point of this issue is that discovery fails closed. Show a
+suspended, banned, paused or offline provider being absent from `GET /merchants/available` — not
+merely rejected later at trade creation. A test that only checks the happy path does not catch the
+bug this issue exists to fix.
+
+If you cannot run part of this, say so in the PR and list what you did and did not verify. Do not
+claim you tested something you did not.
 
 ## Dependencies and prior work
 
