@@ -15,14 +15,23 @@ export interface CreateTradeInput {
   sellerId: string;
   buyerId: string;
   amountMxn: number;
+  flow: 'deposit' | 'cash_out';
 }
 
 export async function createTrade(input: CreateTradeInput) {
-  const { sellerId, buyerId, amountMxn } = input;
+  const { sellerId, buyerId, amountMxn, flow } = input;
 
   if (amountMxn < 100 || amountMxn > 50000) {
     throw new BadRequestError('amount_mxn must be between 100 and 50,000');
   }
+
+  // Validate flow parameter
+  if (!flow || !['deposit', 'cash_out'].includes(flow)) {
+    throw new BadRequestError('flow must be either "deposit" or "cash_out"');
+  }
+
+  // Derive provider_id based on flow (server-side only, never accept from client)
+  const providerId = flow === 'deposit' ? sellerId : buyerId;
 
   // Verify seller exists
   const seller = await db.getOne('SELECT id, stellar_address FROM users WHERE id = $1', [sellerId]);
@@ -55,8 +64,8 @@ export async function createTrade(input: CreateTradeInput) {
   const result = await db.getOne(
     `INSERT INTO trades
       (seller_id, buyer_id, amount_mxn, amount_stroops, platform_fee_mxn,
-       secret_hash, secret_enc, secret_nonce, status, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9)
+       secret_hash, secret_enc, secret_nonce, status, expires_at, flow, provider_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, $11)
      RETURNING *`,
     [
       sellerId,
@@ -68,6 +77,8 @@ export async function createTrade(input: CreateTradeInput) {
       encrypted,
       nonce,
       expiresAt,
+      flow,
+      providerId,
     ],
   );
 
@@ -99,7 +110,7 @@ export async function getActiveTrades(userId: string) {
 export async function getTradeHistory(userId: string) {
   return db.getMany(
     `SELECT id, status, amount_mxn, platform_fee_mxn, lock_tx_hash, release_tx_hash,
-            created_at, completed_at, seller_id, buyer_id
+            created_at, completed_at, seller_id, buyer_id, flow, provider_id
      FROM trades
      WHERE (seller_id = $1 OR buyer_id = $1)
      ORDER BY created_at DESC

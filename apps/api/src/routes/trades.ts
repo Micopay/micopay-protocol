@@ -9,27 +9,37 @@ export async function tradeRoutes(app: FastifyInstance) {
   /**
    * POST /trades
    * Buyer creates a new trade. Generates HTLC secret and returns secret_hash.
+   * 
+   * SECURITY NOTE: provider_id is NEVER accepted from client - it's server-derived
    */
   app.post('/trades', {
     schema: {
       body: {
         type: 'object',
-        required: ['seller_id', 'amount_mxn'],
+        required: ['seller_id', 'amount_mxn', 'flow'],
         properties: {
           seller_id: { type: 'string', format: 'uuid' },
           amount_mxn: { type: 'integer', minimum: 100, maximum: 50000 },
+          flow: { type: 'string', enum: ['deposit', 'cash_out'] },
+          // provider_id is explicitly NOT allowed in the schema
         },
-        additionalProperties: false,
+        additionalProperties: false, // This rejects any extra fields including provider_id
       },
     },
   }, async (request, reply) => {
-    const { seller_id, amount_mxn } = request.body as { seller_id: string; amount_mxn: number };
+    const { seller_id, amount_mxn, flow } = request.body as { 
+      seller_id: string; 
+      amount_mxn: number; 
+      flow: 'deposit' | 'cash_out';
+    };
     const buyerId = request.user.id;
 
+    // Note: provider_id is derived in the service layer, never from client input
     const trade = await tradeService.createTrade({
       sellerId: seller_id,
       buyerId,
       amountMxn: amount_mxn,
+      flow,
     });
 
     // Don't expose encrypted secret fields in response
