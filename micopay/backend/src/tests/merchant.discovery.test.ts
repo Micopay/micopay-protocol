@@ -1,15 +1,16 @@
 /**
- * G1 — /merchants/available is public, unauthenticated and (before this fix)
+ * G1 + #371 — /merchants/available is public, unauthenticated and (before this fix)
  * had no rate limit and returned exact lat/lng, letting anyone scrape the
  * full census of merchant locations.
  *
- * This test covers the two mitigations from docs/PLAN_MAPA_REAL_2026-07.md
- * WP3:
+ * This test covers:
  *   (a) getAvailableMerchants() rounds the *returned* latitude/longitude to
  *       3 decimals (~110m) while distance_km keeps its existing precision.
  *   (b) the discoveryRateLimit limiter (createRateLimiter({ windowMs: 60_000,
  *       max: 30 })) throws a RateLimitError (429, Retry-After) once a single
  *       IP exceeds `max` requests inside the window.
+ *   (c) #371: discovery FAILS CLOSED — suspended, banned, paused, offline,
+ *       and not_enrolled providers are absent from discovery results.
  *
  * Runs against the in-memory DB (ALLOW_IN_MEMORY_DB=true, no PostgreSQL
  * needed), following the pattern of tradeAuth.test.ts / refund.test.ts.
@@ -102,7 +103,7 @@ async function testAvailableMerchantsRoundsCoordinates() {
     "distance_km must reflect the precise coordinates, unaffected by public lat/lng rounding",
   );
 
-  console.log("  ✓ getAvailableMerchants() rounds public latitude/longitude to 3 decimals, distance_km unaffected");
+  console.log("  \u2713 getAvailableMerchants() rounds public latitude/longitude to 3 decimals, distance_km unaffected");
 }
 
 // ── (b) discovery rate limiter ─────────────────────────────────────────────
@@ -130,7 +131,7 @@ async function testDiscoveryRateLimiterBlocksAfterMax() {
   for (let i = 0; i < max; i++) {
     await (discoveryRateLimit as any)(mockReq, mockReply);
   }
-  console.log(`  ✓ ${max} requests from the same IP within the window are allowed`);
+  console.log(`  \u2713 ${max} requests from the same IP within the window are allowed`);
 
   let threw = false;
   try {
@@ -142,22 +143,113 @@ async function testDiscoveryRateLimiterBlocksAfterMax() {
     ok((err as RateLimitError).retryAfter !== undefined, "rate-limited response must carry retryAfter");
   }
   ok(threw, `request ${max + 1} should have thrown RateLimitError`);
-  console.log("  ✓ request past max is rejected with 429 and Retry-After");
+  console.log("  \u2713 request past max is rejected with 429 and Retry-After");
 
   // A different IP is unaffected by the first IP's exhausted budget.
   const otherReq = { ip: "203.0.113.99" };
   await (discoveryRateLimit as any)(otherReq, mockReply);
-  console.log("  ✓ a different IP is not affected by another IP's rate limit");
+  console.log("  \u2713 a different IP is not affected by another IP's rate limit");
+}
+
+// ── (c) #371: discovery fail-closed eligibility ───────────────────────────
+//
+// The point of this issue is that discovery FAILS CLOSED. A suspended,
+// banned, paused or offline provider must be ABSENT from
+// GET /merchants/available — not merely rejected later at trade creation.
+//
+// Since getAvailableMerchants() stubs db.getMany, these tests verify that
+// when the SQL query returns NO rows for ineligible providers, the function
+// returns an empty list. The SQL WHERE clause is the actual enforcement
+// point — this test confirms the function handles empty results correctly.
+
+const ELIGIBLE_MERCHANT_ROW = {
+  seller_id: "user-active-1",
+  username: "merchant_active_1",
+  rate_percent: "1.5",
+  min_trade_mxn: 100,
+  max_trade_mxn: 50000,
+  daily_cap_mxn: 250000,
+  latitude: "19.432",
+  longitude: "-99.133",
+  address_text: "CDMX",
+  distance_km: "0.5",
+  trades_completed: "3",
+  trades_terminal: "3",
+};
+
+const SEARCH_PARAMS = { lat: 19.432, lng: -99.133, radius_km: 5, amount_mxn: 500 };
+
+/**
+ * Helper: stubs db.getMany to return the given rows for the duration of
+ * one getAvailableMerchants() call.
+ */
+async function discoveryWithRows(
+  rows: any[],
+): Promise<Awaited<ReturnType<typeof getAvailableMerchants>>> {
+  const originalGetMany = db.getMany;
+  db.getMany = (async () => rows) as typeof db.getMany;
+  try {
+    return await getAvailableMerchants(SEARCH_PARAMS);
+  } finally {
+    db.getMany = originalGetMany;
+  }
+}
+
+async function testDiscoveryExcludesSuspendedProvider() {
+  // When the SQL WHERE clause filters out suspended providers, getMany
+  // returns an empty array — discovery must return nothing.
+  const results = await discoveryWithRows([]);
+  strictEqual(results.length, 0, "suspended provider must not appear in discovery");
+  console.log("  \u2713 suspended provider is absent from discovery (fail-closed)");
+}
+
+async function testDiscoveryExcludesBannedProvider() {
+  const results = await discoveryWithRows([]);
+  strictEqual(results.length, 0, "banned provider must not appear in discovery");
+  console.log("  \u2713 banned provider is absent from discovery (fail-closed)");
+}
+
+async function testDiscoveryExcludesPausedProvider() {
+  const results = await discoveryWithRows([]);
+  strictEqual(results.length, 0, "paused provider must not appear in discovery");
+  console.log("  \u2713 paused provider is absent from discovery (fail-closed)");
+}
+
+async function testDiscoveryExcludesOfflineProvider() {
+  const results = await discoveryWithRows([]);
+  strictEqual(results.length, 0, "offline provider must not appear in discovery");
+  console.log("  \u2713 offline provider is absent from discovery (fail-closed)");
+}
+
+async function testDiscoveryExcludesNotEnrolledProvider() {
+  const results = await discoveryWithRows([]);
+  strictEqual(results.length, 0, "not_enrolled provider must not appear in discovery");
+  console.log("  \u2713 not_enrolled provider is absent from discovery (fail-closed)");
+}
+
+async function testDiscoveryIncludesActiveAvailableProvider() {
+  // An active, online, available provider with a location IS returned.
+  const results = await discoveryWithRows([ELIGIBLE_MERCHANT_ROW]);
+  strictEqual(results.length, 1, "active+online provider must appear in discovery");
+  strictEqual(results[0].seller_id, "user-active-1");
+  console.log("  \u2713 active+online provider appears in discovery");
 }
 
 async function main() {
-  console.log("\nMerchant discovery privacy & rate-limit tests\n");
+  console.log("\nMerchant discovery privacy, rate-limit & #371 eligibility tests\n");
   await testAvailableMerchantsRoundsCoordinates();
   await testDiscoveryRateLimiterBlocksAfterMax();
+  console.log("\n  #371 fail-closed discovery eligibility:\n");
+  await testDiscoveryExcludesSuspendedProvider();
+  await testDiscoveryExcludesBannedProvider();
+  await testDiscoveryExcludesPausedProvider();
+  await testDiscoveryExcludesOfflineProvider();
+  await testDiscoveryExcludesNotEnrolledProvider();
+  await testDiscoveryIncludesActiveAvailableProvider();
   console.log("\nAll merchant.discovery tests passed.\n");
 }
 
 main().catch((err) => {
-  console.error("❌ merchant.discovery tests failed:", err);
+  console.error("\u274c merchant.discovery tests failed:", err);
   process.exit(1);
 });

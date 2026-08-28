@@ -96,12 +96,69 @@ async function testRelatedAccountsBlocked() {
   console.log("Related accounts (shared phone_hash): blocked");
 }
 
+// ── #371: atomic pause/unpause consistency ─────────────────────────────────
+
+/**
+ * #371: When a provider is paused (by auto-pause or admin), both the
+ * canonical `availability` and the compatibility boolean `merchant_available`
+ * must be updated atomically so discovery cannot show a paused provider.
+ */
+async function testPauseWritesAtomicAvailability() {
+  const { sellerId } = await seedUsers();
+
+  // Verify initial state: online + available
+  const before = await db.getOne<{ availability: string; merchant_available: boolean }>(
+    `SELECT availability, merchant_available FROM users WHERE id = $1`,
+    [sellerId],
+  );
+  strictEqual(before?.availability, "online", "initial availability must be online");
+  strictEqual(before?.merchant_available, true, "initial merchant_available must be true");
+
+  // Pause the provider
+  await pauseUser(sellerId, "test_atomic_pause", null);
+
+  const after = await db.getOne<{ availability: string; merchant_available: boolean }>(
+    `SELECT availability, merchant_available FROM users WHERE id = $1`,
+    [sellerId],
+  );
+  strictEqual(after?.availability, "paused", "paused availability must be 'paused'");
+  strictEqual(after?.merchant_available, false, "paused merchant_available must be false");
+
+  console.log("  \u2713 pauseUser atomically sets availability='paused' + merchant_available=false");
+}
+
+/**
+ * #371: When a suspended provider is unpaused, both fields must be
+ * restored atomically.
+ */
+async function testUnpauseWritesAtomicAvailability() {
+  const { sellerId } = await seedUsers();
+
+  // Pause first
+  await pauseUser(sellerId, "test_atomic_unpause", null);
+
+  // Unpause
+  await unpauseUser(sellerId, null);
+
+  const after = await db.getOne<{ availability: string; merchant_available: boolean }>(
+    `SELECT availability, merchant_available FROM users WHERE id = $1`,
+    [sellerId],
+  );
+  strictEqual(after?.availability, "online", "unpaused availability must be 'online'");
+  strictEqual(after?.merchant_available, true, "unpaused merchant_available must be true");
+
+  console.log("  \u2713 unpauseUser atomically sets availability='online' + merchant_available=true");
+}
+
 async function run() {
   console.log("Running abuse.service tests...");
   await testSuspendedUserBlocked();
   await testRelatedAccountsBlocked();
   await testSelfTradeBlocked();
-  console.log("All abuse.service tests passed.");
+  console.log("\n  #371 atomic pause/unpause tests:\n");
+  await testPauseWritesAtomicAvailability();
+  await testUnpauseWritesAtomicAvailability();
+  console.log("\nAll abuse.service tests passed.");
 }
 
 run().catch((err) => {
