@@ -537,7 +537,7 @@ export async function unpauseUser(
     `UPDATE users
      SET is_suspended = false,
          availability = 'online',
-         merchant_available = true,
+         merchant_available = CASE WHEN provider_status = 'active' THEN true ELSE merchant_available END,
          suspended_at = NULL,
          suspension_reason = NULL
      WHERE id = $1`,

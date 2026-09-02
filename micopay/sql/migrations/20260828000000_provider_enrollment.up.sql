@@ -13,9 +13,19 @@
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS provider_status VARCHAR(20) NOT NULL DEFAULT 'not_enrolled';
 
-ALTER TABLE users
-  ADD CONSTRAINT chk_provider_status
-  CHECK (provider_status IN ('not_enrolled', 'pending_verification', 'active', 'suspended'));
+-- Set default for existing databases where the column was created before #371.
+ALTER TABLE users ALTER COLUMN merchant_available SET DEFAULT false;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_provider_status'
+  ) THEN
+    ALTER TABLE users
+      ADD CONSTRAINT chk_provider_status
+      CHECK (provider_status IN ('not_enrolled', 'pending_verification', 'active', 'suspended'));
+  END IF;
+END $$;
 
 -- ── Backfill existing users ───────────────────────────────────────────────
 -- Production was confirmed to hold no real users on 2026-08-27, so this is

@@ -7,7 +7,8 @@ import { getEffectiveKycLevel } from '../services/kyc-gate.service.js';
 /**
  * #371 — RED-1: Provider enrollment and readiness endpoints.
  *
- * POST /providers/enroll   — start or confirm enrollment (idempotent)
+ * POST /providers/enroll    — start or confirm enrollment (idempotent)
+ * POST /providers/activate  — activate after readiness checks pass
  * GET  /providers/readiness — report profile/location/limits/KYC completeness
  *
  * These are self-service, authenticated endpoints. They never create a second
@@ -75,6 +76,119 @@ export async function providerRoutes(app: FastifyInstance) {
       reply.status(200).send({
         provider_status: 'pending_verification',
         message: 'Enrolamiento iniciado. Completa tu perfil y verificacion para activar.',
+      });
+    },
+  );
+
+  /**
+   * POST /providers/activate
+   *
+   * Transitions pending_verification → active when all readiness checks pass.
+   * Idempotent: returns current status if already active.
+   * Re-checks readiness server-side so the client cannot skip requirements.
+   */
+  app.post(
+    '/providers/activate',
+    { preHandler: [authMiddleware] },
+    async (request, reply) => {
+      const userId = request.user.id;
+
+      const user = await db.getOne<{
+        provider_status: string;
+        username: string | null;
+        kyc_level: number | null;
+        kyc_provider: string | null;
+      }>(
+        `SELECT provider_status, username, kyc_level, kyc_provider
+         FROM users WHERE id = $1`,
+        [userId],
+      );
+
+      if (!user) {
+        reply.status(404).send({ code: 'USER_NOT_FOUND', message: 'Usuario no encontrado.' });
+        return;
+      }
+
+      if (user.provider_status === 'active') {
+        reply.status(200).send({
+          provider_status: 'active',
+          message: 'Ya eres un proveedor activo.',
+        });
+        return;
+      }
+
+      if (user.provider_status === 'suspended') {
+        reply.status(403).send({
+          code: 'PROVIDER_SUSPENDED',
+          message: 'Tu cuenta de proveedor esta suspendida. Contacta a soporte.',
+        });
+        return;
+      }
+
+      if (user.provider_status !== 'pending_verification') {
+        reply.status(409).send({
+          code: 'NOT_ENROLLED',
+          message: 'Debes completar el enrolamiento primero.',
+        });
+        return;
+      }
+
+      // Re-run readiness checks server-side
+      const merchantConfig = await db.getOne<{
+        latitude: number | null;
+        longitude: number | null;
+        min_trade_mxn: number | null;
+        max_trade_mxn: number | null;
+      }>(
+        `SELECT latitude, longitude, min_trade_mxn, max_trade_mxn
+         FROM merchant_configs WHERE user_id = $1`,
+        [userId],
+      );
+
+      const effectiveKycLevel = await getEffectiveKycLevel(userId);
+
+      const checks = {
+        profile_complete: Boolean(user.username && user.username.length >= 3),
+        location_set: Boolean(merchantConfig?.latitude != null && merchantConfig?.longitude != null),
+        limits_set: Boolean(
+          merchantConfig?.min_trade_mxn != null &&
+          merchantConfig?.max_trade_mxn != null &&
+          merchantConfig.max_trade_mxn >= merchantConfig.min_trade_mxn
+        ),
+        kyc_complete: effectiveKycLevel >= 1 && user.kyc_provider === 'didit',
+      };
+
+      const all_ready = Object.values(checks).every(Boolean);
+
+      if (!all_ready) {
+        const missing = Object.entries(checks)
+          .filter(([, v]) => !v)
+          .map(([k]) => k);
+        reply.status(422).send({
+          code: 'READINESS_INCOMPLETE',
+          message: 'Faltan requisitos para activar.',
+          missing,
+        });
+        return;
+      }
+
+      await db.execute(
+        `UPDATE users
+         SET provider_status = 'active',
+             merchant_available = true,
+             availability = 'online'
+         WHERE id = $1`,
+        [userId],
+      );
+
+      request.log.info(
+        { user_id: userId, category: 'provider' },
+        '[provider] Provider activated',
+      );
+
+      reply.status(200).send({
+        provider_status: 'active',
+        message: 'Proveedor activo. Ya puedes recibir operaciones.',
       });
     },
   );
