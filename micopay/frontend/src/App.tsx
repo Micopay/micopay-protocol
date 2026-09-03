@@ -45,6 +45,7 @@ import Register from "./pages/Register";
 import MerchantSettings from "./pages/MerchantSettings";
 import BottomNav from "./components/BottomNav";
 import DebugOverlay from "./components/DebugOverlay";
+import OfflineQueueStatus from "./components/OfflineQueueStatus";
 
 import {
   registerUser,
@@ -1081,6 +1082,8 @@ function App() {
         <AppContext.Provider value={ctx}>
           <HashRouter>
             <div className="flex flex-col min-h-screen bg-[#F4FAFF]">
+              {/* Se oculta solo cuando hay conexión y no hay nada pendiente. */}
+              <OfflineQueueStatus token={sellerUser?.token ?? null} />
               <Routes>
                 <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
                 <Route path="/register" element={<Register onLoginSuccess={handleLoginSuccess} />} />

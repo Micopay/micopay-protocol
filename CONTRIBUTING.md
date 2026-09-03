@@ -1,6 +1,6 @@
 # Contributing to MicoPay
 
-MicoPay is participating in **[Stellar Drips Wave 4](https://www.drips.network/wave/stellar)**. Contributions are scoped to the retail mobile app — not the whole monorepo.
+MicoPay is participating in **[Stellar Drips Wave 8](https://www.drips.network/wave/stellar)**. Contributions are scoped to the retail mobile app — not the whole monorepo.
 
 > **Two campaigns run in parallel.** This guide covers Stellar Drips issues (`wave:*` + `Stellar Wave` labels). Issues labeled `grantfox:*` belong to the **GrantFox** campaign — same code standards, different assignment and reward flow: see [`docs/GRANTFOX_GUIDE.md`](./docs/GRANTFOX_GUIDE.md). Every issue belongs to exactly one campaign.
 
@@ -12,7 +12,7 @@ MicoPay is participating in **[Stellar Drips Wave 4](https://www.drips.network/w
 
 One flow over many demos. The Wave is organized around making **Core Retail Flow** — trade creation, state, cancel, timeout, refund, receipt — work reliably end to end.
 
-Every other milestone (Backend Hardening, Merchant Operations, Frontend Quality, Store Readiness, Documentation) exists to make that flow trustworthy. If you are unsure where to start, pick an issue from [**Core Retail Flow**](https://github.com/ericmt-98/micopay-protocol/milestone/2) first.
+Every other milestone exists to make that flow trustworthy. If you are unsure where to start, pick an issue from [**Wave 8: Core Retail Flow (P0)**](https://github.com/Micopay/micopay-protocol/milestone/24) first.
 
 ---
 
@@ -50,13 +50,13 @@ PRs that touch out-of-scope paths will be asked to split or rescope.
    - [`docs/RETAIL_ROADMAP.md`](./docs/RETAIL_ROADMAP.md) — the phased execution plan
    - [`docs/UX_MANIFESTO.md`](./docs/UX_MANIFESTO.md) — the trust and UX bar every PR is reviewed against
    - [`docs/DRIPS_TEAM_GUIDE.md`](./docs/DRIPS_TEAM_GUIDE.md) — how issues, reviews, and merges work during the Wave
-5. Pick an issue from the [open milestones](https://github.com/ericmt-98/micopay-protocol/milestones).
+5. Pick an issue from the [open milestones](https://github.com/Micopay/micopay-protocol/milestones).
 
 ---
 
 ## Picking an issue
 
-- Look for issues labeled [`wave:good-first`](https://github.com/ericmt-98/micopay-protocol/labels/wave%3Agood-first) if it is your first PR.
+- Look for issues labeled [`wave:good-first`](https://github.com/Micopay/micopay-protocol/labels/wave%3Agood-first) if it is your first PR.
 - Comment on the issue asking to be assigned **before** you start work. We assign one contributor per issue to avoid duplicated effort.
 - If nobody responds within 48 hours, tag the maintainer on the issue.
 - Do not open PRs against issues labeled `wave:blocked` or `wave:needs-product` until the block is cleared.
@@ -72,14 +72,16 @@ PRs that touch out-of-scope paths will be asked to split or rescope.
 
 ## Milestones
 
+These are the milestones for the current Wave. Milestones from earlier Waves stay open for
+historical reference — pick from the Wave 8 ones.
+
 | Milestone | Focus |
 |---|---|
-| [Core Retail Flow](https://github.com/ericmt-98/micopay-protocol/milestone/2) | **Wave priority.** Trade creation, detail view, state machine UX, cancel / timeout / refund, receipts, history linked to real states |
-| [Backend Hardening](https://github.com/ericmt-98/micopay-protocol/milestone/7) | Auth persistence, audit log, error taxonomy, rate limiting, replay protection, structured logging |
-| [Merchant Operations](https://github.com/ericmt-98/micopay-protocol/milestone/3) | Merchant onboarding, profile, availability, limits, trade inbox |
-| [Frontend Quality](https://github.com/ericmt-98/micopay-protocol/milestone/4) | Empty states, a11y pass, loading skeletons — polish outside the core flow |
-| [Store Readiness](https://github.com/ericmt-98/micopay-protocol/milestone/6) | Account deletion, privacy, support path, reviewer mode, store compliance |
-| [Documentation](https://github.com/ericmt-98/micopay-protocol/milestone/8) | Per-folder READMEs, env docs, local setup |
+| [Wave 8: Core Retail Flow (P0)](https://github.com/Micopay/micopay-protocol/milestone/24) | **Wave priority.** Trade creation, detail view, state machine UX, cancel / timeout / refund, receipts, history linked to real states |
+| [Wave 8: UI Truth (P1)](https://github.com/Micopay/micopay-protocol/milestone/25) | Places where the UI misrepresents real data or offers controls that do nothing |
+| [Wave 8: Backend Hardening](https://github.com/Micopay/micopay-protocol/milestone/26) | Auth persistence, audit log, error taxonomy, rate limiting, replay protection, structured logging |
+| [Wave 8: Product & Release](https://github.com/Micopay/micopay-protocol/milestone/27) | Build config, test suite, store readiness, privacy and support paths |
+| [Wave 8: Market & User Validation](https://github.com/Micopay/micopay-protocol/milestone/28) | Research issues. Delivered by PR adding your section to `docs/VALIDATION_DRIPS.md`, first person, one assignee per issue |
 
 ---
 
@@ -104,7 +106,7 @@ Review SLA during the Wave: **first review within 24 hours**.
 
 ## Rewards
 
-Rewards are distributed by [Drips](https://www.drips.network/wave/stellar) — not by the MicoPay maintainers — as a proportional share of the Wave 4 reward pool funded by the Stellar Development Foundation.
+Rewards are distributed by [Drips](https://www.drips.network/wave/stellar) — not by the MicoPay maintainers — as a proportional share of the Wave 8 reward pool funded by the Stellar Development Foundation.
 
 Points per issue are fixed by Drips based on the `complexity` label set on the issue:
 
@@ -114,7 +116,13 @@ Points per issue are fixed by Drips based on the `complexity` label set on the i
 | `complexity: medium` | 150 | Self-contained screen, endpoint, state handling, validation |
 | `complexity: high` | 200 | Complex features, refactors, or new integrations |
 
-Your final payout = (your points ÷ total points earned across all contributors in the Wave) × Wave 4 reward pool. Only issues labeled `Stellar Wave` count. See [Drips' contributor guide](https://docs.drips.network/wave/contributors/solving-issues-and-earning-rewards/) for details on withdrawals and timing.
+Your final payout = (your points ÷ total points earned across all contributors in the Wave) × Wave 8 reward pool. Only issues labeled `Stellar Wave` count. See [Drips' contributor guide](https://docs.drips.network/wave/contributors/solving-issues-and-earning-rewards/) for details on withdrawals and timing.
+
+### Before you apply
+
+Drips requires **identity verification (KYC) through Sumsub before you can apply to any issue** — government ID, a selfie, and proof of address. This is Drips' requirement, not MicoPay's, and we have no say in it. Do it before you pick an issue so you are not blocked once you are ready to work.
+
+Two other limits set by Drips: you can have at most **15 pending applications** at a time, and points land only when the maintainer marks the issue resolved after your PR is merged — not when the issue is assigned to you.
 
 ---
 
