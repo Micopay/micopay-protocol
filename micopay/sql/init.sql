@@ -31,10 +31,8 @@ CREATE TABLE users (
 
 CREATE INDEX idx_users_stellar ON users (stellar_address);
 
--- #371: partial index for discovery eligibility — only active providers.
-CREATE INDEX idx_users_provider_active
-  ON users (provider_status, availability, merchant_available)
-  WHERE provider_status = 'active';
+-- #371: idx_users_provider_active is created by migration
+-- 20260828000000_provider_enrollment.up.sql AFTER availability exists.
 
 -- ================================================
 -- WALLETS

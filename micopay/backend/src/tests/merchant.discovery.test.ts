@@ -157,10 +157,10 @@ async function testDiscoveryRateLimiterBlocksAfterMax() {
 // banned, paused or offline provider must be ABSENT from
 // GET /merchants/available — not merely rejected later at trade creation.
 //
-// Since getAvailableMerchants() stubs db.getMany, these tests verify that
-// when the SQL query returns NO rows for ineligible providers, the function
-// returns an empty list. The SQL WHERE clause is the actual enforcement
-// point — this test confirms the function handles empty results correctly.
+// The in-memory SQL shim cannot evaluate the WHERE clause, so these tests
+// capture the raw SQL text passed to db.getMany and assert that the four
+// eligibility predicates are present. This fails if someone removes a filter,
+// which is the whole point.
 
 const ELIGIBLE_MERCHANT_ROW = {
   seller_id: "user-active-1",
@@ -180,56 +180,75 @@ const ELIGIBLE_MERCHANT_ROW = {
 const SEARCH_PARAMS = { lat: 19.432, lng: -99.133, radius_km: 5, amount_mxn: 500 };
 
 /**
- * Helper: stubs db.getMany to return the given rows for the duration of
- * one getAvailableMerchants() call.
+ * Helper: stubs db.getMany to return the given rows and captures the SQL
+ * text for assertion.
  */
-async function discoveryWithRows(
-  rows: any[],
-): Promise<Awaited<ReturnType<typeof getAvailableMerchants>>> {
+async function discoveryCaptureSql(): Promise<{
+  sql: string;
+  results: Awaited<ReturnType<typeof getAvailableMerchants>>;
+}> {
+  let capturedSql = "";
   const originalGetMany = db.getMany;
-  db.getMany = (async () => rows) as typeof db.getMany;
+  db.getMany = (async (text: string) => {
+    capturedSql = text;
+    return [ELIGIBLE_MERCHANT_ROW];
+  }) as typeof db.getMany;
   try {
-    return await getAvailableMerchants(SEARCH_PARAMS);
+    const results = await getAvailableMerchants(SEARCH_PARAMS);
+    return { sql: capturedSql, results };
   } finally {
     db.getMany = originalGetMany;
   }
 }
 
-async function testDiscoveryExcludesSuspendedProvider() {
-  // When the SQL WHERE clause filters out suspended providers, getMany
-  // returns an empty array — discovery must return nothing.
-  const results = await discoveryWithRows([]);
-  strictEqual(results.length, 0, "suspended provider must not appear in discovery");
-  console.log("  \u2713 suspended provider is absent from discovery (fail-closed)");
+/**
+ * Asserts that the WHERE clause contains all four eligibility predicates
+ * that RED-1 requires for fail-closed discovery.
+ */
+function assertDiscoverySqlHasEligibilityPredicates(sql: string) {
+  const lower = sql.toLowerCase();
+
+  // 1. provider_status = 'active'
+  ok(
+    lower.includes("provider_status") && lower.includes("active"),
+    "SQL must filter on provider_status = 'active'",
+  );
+
+  // 2. availability = 'online'
+  ok(
+    lower.includes("availability") && lower.includes("online"),
+    "SQL must filter on availability = 'online'",
+  );
+
+  // 3. NOT suspended
+  ok(
+    lower.includes("is_suspended"),
+    "SQL must filter out suspended users (is_suspended)",
+  );
+
+  // 4. NOT banned
+  ok(
+    lower.includes("is_banned"),
+    "SQL must filter out banned users (is_banned)",
+  );
+
+  // 5. merchant_available check (IS NULL or = false excludes unavailable)
+  ok(
+    lower.includes("merchant_available"),
+    "SQL must filter on merchant_available",
+  );
+
+  console.log("  \u2713 discovery SQL contains all fail-closed eligibility predicates");
 }
 
-async function testDiscoveryExcludesBannedProvider() {
-  const results = await discoveryWithRows([]);
-  strictEqual(results.length, 0, "banned provider must not appear in discovery");
-  console.log("  \u2713 banned provider is absent from discovery (fail-closed)");
-}
-
-async function testDiscoveryExcludesPausedProvider() {
-  const results = await discoveryWithRows([]);
-  strictEqual(results.length, 0, "paused provider must not appear in discovery");
-  console.log("  \u2713 paused provider is absent from discovery (fail-closed)");
-}
-
-async function testDiscoveryExcludesOfflineProvider() {
-  const results = await discoveryWithRows([]);
-  strictEqual(results.length, 0, "offline provider must not appear in discovery");
-  console.log("  \u2713 offline provider is absent from discovery (fail-closed)");
-}
-
-async function testDiscoveryExcludesNotEnrolledProvider() {
-  const results = await discoveryWithRows([]);
-  strictEqual(results.length, 0, "not_enrolled provider must not appear in discovery");
-  console.log("  \u2713 not_enrolled provider is absent from discovery (fail-closed)");
+async function testDiscoverySqlContainsEligibilityPredicates() {
+  const { sql } = await discoveryCaptureSql();
+  assertDiscoverySqlHasEligibilityPredicates(sql);
 }
 
 async function testDiscoveryIncludesActiveAvailableProvider() {
   // An active, online, available provider with a location IS returned.
-  const results = await discoveryWithRows([ELIGIBLE_MERCHANT_ROW]);
+  const { results } = await discoveryCaptureSql();
   strictEqual(results.length, 1, "active+online provider must appear in discovery");
   strictEqual(results[0].seller_id, "user-active-1");
   console.log("  \u2713 active+online provider appears in discovery");
@@ -240,11 +259,7 @@ async function main() {
   await testAvailableMerchantsRoundsCoordinates();
   await testDiscoveryRateLimiterBlocksAfterMax();
   console.log("\n  #371 fail-closed discovery eligibility:\n");
-  await testDiscoveryExcludesSuspendedProvider();
-  await testDiscoveryExcludesBannedProvider();
-  await testDiscoveryExcludesPausedProvider();
-  await testDiscoveryExcludesOfflineProvider();
-  await testDiscoveryExcludesNotEnrolledProvider();
+  await testDiscoverySqlContainsEligibilityPredicates();
   await testDiscoveryIncludesActiveAvailableProvider();
   console.log("\nAll merchant.discovery tests passed.\n");
 }
