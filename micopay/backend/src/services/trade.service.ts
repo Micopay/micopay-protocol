@@ -696,6 +696,28 @@ export async function prepareReleaseTrade(request: FastifyRequest, tradeId: stri
     throw new ConflictError(`Trade is ${trade.status}, expected revealing`);
   }
 
+  // CASH-4: este es el punto de aplicacion real, no `completeTrade`. Aqui el
+  // backend descifra el preimage HTLC y lo embebe en el XDR; quien obtiene
+  // ese XDR puede firmarlo y enviarlo a la red por su cuenta. Si la compuerta
+  // viviera solo en `completeTrade`, seria cosmetica.
+  if (trade.flow === 'cashout') {
+    const handoff = await getCashHandoff(tradeId);
+    if (!handoff) {
+      throw new ConflictError(
+        'CASH_HANDOFF_REQUIRED',
+        'Escanea el código del cliente antes de liberar los fondos',
+        `Trade ${tradeId} is a cashout with no confirmed cash handoff`,
+      );
+    }
+    if (handoff.provider_id !== userId) {
+      throw new ForbiddenError(
+        'HANDOFF_BELONGS_TO_ANOTHER_PROVIDER',
+        'Otro proveedor atendió este intercambio',
+        `Handoff for trade ${tradeId} belongs to ${handoff.provider_id}, not ${userId}`,
+      );
+    }
+  }
+
   if (config.mockStellar) {
     return { mock: true as const };
   }
@@ -728,8 +750,44 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
 
     fromState = trade.status;
     if (trade.buyer_id !== userId) throw new ForbiddenError('Only the buyer can complete');
+
+    // CASH-4: una liberacion ya confirmada se puede releer con seguridad. El
+    // proveedor puede perder la respuesta de red despues de que la operacion
+    // se completo; reintentar debe devolverle el hash existente, no un 409 ni
+    // una segunda liberacion on-chain.
+    if (trade.status === 'completed' && trade.release_tx_hash) {
+      request.log.info(
+        { trade_id: tradeId, user_id: userId, category: 'trade.lifecycle' },
+        '[trade] Completion replayed; returning the existing release',
+      );
+      return { status: 'completed' as const, release_tx_hash: trade.release_tx_hash };
+    }
+
     if (trade.status !== 'revealing') {
       throw new ConflictError(`Trade is ${trade.status}, expected revealing`);
+    }
+
+    // CASH-4: en cash-out el proveedor entrega efectivo ANTES de liberar el
+    // escrow. Exigir la constancia durable del escaneo impide liberar sin que
+    // esa entrega haya ocurrido. El deposito no la lleva: ahi el cliente es
+    // quien completa desde su propia pantalla y no hay efectivo que entregar
+    // contra el QR del agente.
+    if (trade.flow === 'cashout') {
+      const handoff = await getCashHandoff(tradeId);
+      if (!handoff) {
+        throw new ConflictError(
+          'CASH_HANDOFF_REQUIRED',
+          'Escanea el código del cliente antes de liberar los fondos',
+          `Trade ${tradeId} is a cashout with no confirmed cash handoff`,
+        );
+      }
+      if (handoff.provider_id !== userId) {
+        throw new ForbiddenError(
+          'HANDOFF_BELONGS_TO_ANOTHER_PROVIDER',
+          'Otro proveedor atendió este intercambio',
+          `Handoff for trade ${tradeId} belongs to ${handoff.provider_id}, not ${userId}`,
+        );
+      }
     }
 
     let releaseTxHash: string;
@@ -1138,37 +1196,70 @@ export async function getMerchantTrades(merchantId: string, state: string = 'all
  *
  * Called when the merchant scans a buyer's QR code. Validates:
  *   1. The trade exists
- *   2. The scanning user is a participant (seller) in the trade
+ *   2. The scanning user is the persisted `provider_id` for this trade
  *   3. The trade has not expired
  *   4. The trade is in the correct state for the scanned QR type
  *
- * Returns a summary suitable for a merchant confirmation screen.
+ * CASH-4 (#70 follow-up): antes autorizaba contra `seller_id`, que en un
+ * cash-out es el CLIENTE, no el proveedor. El proveedor real recibia 403 en
+ * el unico paso que le tocaba. Ahora se autoriza contra `provider_id`, la
+ * columna canonica que CASH-1 persiste, y el escaneo deja una constancia
+ * durable de la entrega de efectivo para poder reanudar.
  */
 export interface MerchantConfirmResult {
   trade_id: string;
   status: string;
+  /** CASH-4: flujo canonico, para que la UI no lo infiera de los roles. */
+  flow: TradeFlow;
   amount_mxn: number;
   platform_fee_mxn: number;
-  buyer_handle: string;
+  /**
+   * CASH-4: la CONTRAPARTE de quien escanea, es decir el cliente. Antes
+   * devolvia siempre el handle del comprador, y como en cash-out el
+   * proveedor ES el comprador, la pantalla le mostraba su propio nombre.
+   */
+  client_handle: string;
   expires_at: string;
   expired: boolean;
   created_at: string;
   lock_tx_hash: string | null;
   release_tx_hash: string | null;
+  /** CASH-4: true si esta llamada reanudo una entrega ya confirmada. */
+  resumed: boolean;
+  handoff_confirmed_at: string;
+}
+
+/** CASH-4: constancia durable de que el efectivo se entrego. */
+export interface CashHandoff {
+  trade_id: string;
+  provider_id: string;
+  confirmed_at: string;
+}
+
+/**
+ * Lee la constancia de entrega de una operacion, si existe.
+ * Es la pieza que hace reanudable el cierre del cash-out.
+ */
+export async function getCashHandoff(tradeId: string): Promise<CashHandoff | null> {
+  const row = await db.getOne<CashHandoff>(
+    'SELECT trade_id, provider_id, confirmed_at FROM trade_cash_handoffs WHERE trade_id = $1',
+    [tradeId],
+  );
+  return row ?? null;
 }
 
 export async function merchantConfirmScan(
   request: FastifyRequest,
   tradeId: string,
-  merchantId: string,
+  scannerId: string,
   claimToken: string,
 ): Promise<MerchantConfirmResult> {
   request.log.info(
-    { trade_id: tradeId, merchant_id: merchantId, category: 'trade.lifecycle' },
-    '[trade] Merchant QR scan confirmation',
+    { trade_id: tradeId, scanner_id: scannerId, category: 'trade.lifecycle' },
+    '[trade] Provider QR scan confirmation',
   );
 
-  // 1. Trade must exist
+  // 1. La operacion debe existir
   const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
   if (!trade) {
     throw new NotFoundError(
@@ -1178,24 +1269,18 @@ export async function merchantConfirmScan(
     );
   }
 
-  // 2. Scanning user must be the seller (merchant) for this trade
-  if (trade.seller_id !== merchantId) {
+  // 2. CASH-4: autoriza el PROVEEDOR persistido, no el vendedor del escrow.
+  //    En cash-out el vendedor es el cliente; comprobar seller_id le daba 403
+  //    justo a quien entrega el efectivo.
+  if (trade.provider_id !== scannerId) {
     throw new ForbiddenError(
-      'NOT_PARTICIPANT',
-      'No eres participante de este intercambio',
-      `User ${merchantId} is not the seller of trade ${tradeId}`,
+      'NOT_TRADE_PROVIDER',
+      'No eres el proveedor de este intercambio',
+      `User ${scannerId} is not the provider of trade ${tradeId}`,
     );
   }
 
-  // 3. Trade must not already be completed or cancelled
-  if (trade.status === 'completed') {
-    throw new ConflictError(
-      'TRADE_ALREADY_COMPLETED',
-      'Este intercambio ya fue completado',
-      `Trade ${tradeId} is already completed`,
-    );
-  }
-
+  // 3. Cancelada: no hay nada que entregar.
   if (trade.status === 'cancelled') {
     throw new ConflictError(
       'TRADE_CANCELLED',
@@ -1204,9 +1289,25 @@ export async function merchantConfirmScan(
     );
   }
 
-  // 4. Check expiry
-  const expired = new Date(trade.expires_at) < new Date();
-  if (expired) {
+  const existingHandoff = await getCashHandoff(tradeId);
+
+  // 4. Ya completada: se puede releer con seguridad, pero solo por quien
+  //    entrego el efectivo. No libera nada de nuevo.
+  if (trade.status === 'completed') {
+    if (!existingHandoff || existingHandoff.provider_id !== scannerId) {
+      throw new ConflictError(
+        'TRADE_ALREADY_COMPLETED',
+        'Este intercambio ya fue completado',
+        `Trade ${tradeId} is already completed`,
+      );
+    }
+    return buildConfirmResult(trade, existingHandoff, true);
+  }
+
+  // 5. Expirada. Se comprueba DESPUES de la reanudacion para no dejar
+  //    atrapado a un proveedor que ya entrego efectivo y cuya operacion
+  //    expiro mientras reintentaba la firma.
+  if (!existingHandoff && new Date(trade.expires_at) < new Date()) {
     throw new TradeStateError(
       'TRADE_EXPIRED',
       'Este intercambio ha expirado',
@@ -1214,26 +1315,94 @@ export async function merchantConfirmScan(
     );
   }
 
-  // 5. El QR debe traer un token vivo y sin usar (SEC-02). Se quema aquí, ya
-  //    validado el trade, para que un QR contra un trade inválido no lo gaste.
-  await consumeClaimToken(tradeId, claimToken, merchantId);
+  // 6. Reanudar: la entrega ya estaba confirmada por este mismo proveedor.
+  //    No se vuelve a quemar el QR ni se crea una segunda entrega.
+  if (existingHandoff) {
+    if (existingHandoff.provider_id !== scannerId) {
+      throw new ForbiddenError(
+        'HANDOFF_BELONGS_TO_ANOTHER_PROVIDER',
+        'Otro proveedor ya atendió este intercambio',
+        `Handoff for trade ${tradeId} belongs to ${existingHandoff.provider_id}`,
+      );
+    }
+    request.log.info(
+      { trade_id: tradeId, provider_id: scannerId, category: 'trade.lifecycle' },
+      '[trade] Resuming an already-confirmed cash handoff',
+    );
+    return buildConfirmResult(trade, existingHandoff, true);
+  }
 
-  // Fetch buyer info for display
-  const buyer = await db.getOne<{ username: string }>(
+  // 7. Primera vez: el QR debe traer un token vivo y sin usar (SEC-02). Se
+  //    quema aqui, ya validada la operacion, para que un QR contra un trade
+  //    invalido no lo gaste.
+  await consumeClaimToken(tradeId, claimToken, scannerId);
+
+  // 8. Constancia durable de la entrega. `trade_id` es la llave primaria, asi
+  //    que dos escaneos concurrentes no pueden crear dos entregas.
+  await db.execute(
+    `INSERT INTO trade_cash_handoffs (trade_id, provider_id, claim_token_hash)
+     VALUES ($1, $2, $3)`,
+    [tradeId, scannerId, hashClaimToken(claimToken)],
+  );
+
+  const handoff = await getCashHandoff(tradeId);
+  if (!handoff) {
+    throw new ConflictError(
+      'HANDOFF_NOT_RECORDED',
+      'No se pudo registrar la entrega. Intenta de nuevo.',
+      `Cash handoff for trade ${tradeId} could not be read back`,
+    );
+  }
+
+  await insertTradeAuditEvent({
+    tradeId,
+    fromState: trade.status,
+    toState: trade.status,
+    actor: scannerId,
+    requestId: getRequestId(request),
+    metadata: {
+      success: true,
+      event: 'cash_handoff_confirmed',
+      flow: trade.flow,
+      provider_id: scannerId,
+    },
+  });
+
+  return buildConfirmResult(trade, handoff, false);
+}
+
+/**
+ * Resumen para la pantalla del proveedor.
+ *
+ * CASH-4: la contraparte es el CLIENTE, que depende del flujo — en cash-out
+ * el cliente es el vendedor del escrow, en deposito el comprador. Antes se
+ * devolvia siempre el comprador, asi que en cash-out el proveedor veia su
+ * propio nombre como contraparte.
+ */
+async function buildConfirmResult(
+  trade: any,
+  handoff: CashHandoff,
+  resumed: boolean,
+): Promise<MerchantConfirmResult> {
+  const clientId = trade.flow === 'cashout' ? trade.seller_id : trade.buyer_id;
+  const client = await db.getOne<{ username: string }>(
     'SELECT username FROM users WHERE id = $1',
-    [trade.buyer_id],
+    [clientId],
   );
 
   return {
     trade_id: trade.id,
     status: trade.status,
+    flow: trade.flow,
     amount_mxn: Number(trade.amount_mxn),
     platform_fee_mxn: Number(trade.platform_fee_mxn ?? 0),
-    buyer_handle: buyer?.username ?? 'Usuario MicoPay',
+    client_handle: client?.username ?? 'Usuario MicoPay',
     expires_at: trade.expires_at,
-    expired: false,
+    expired: new Date(trade.expires_at) < new Date(),
     created_at: trade.created_at,
     lock_tx_hash: trade.lock_tx_hash ?? null,
     release_tx_hash: trade.release_tx_hash ?? null,
+    resumed,
+    handoff_confirmed_at: handoff.confirmed_at,
   };
 }

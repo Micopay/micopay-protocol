@@ -328,13 +328,13 @@ export interface CompleteTradeResponse {
  */
 export async function completeTrade(
     tradeId: string,
-    buyerToken: string,
+    token: string,
 ): Promise<CompleteTradeResponse> {
-  const prepareRes = await http.post(`/trades/${tradeId}/complete/prepare`, {}, authHeaders(buyerToken));
+  const prepareRes = await http.post(`/trades/${tradeId}/complete/prepare`, {}, authHeaders(token));
   const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
   const signedXdr = 'mock' in prepared ? undefined : await signTransactionXdr(prepared.xdr, prepared.network_passphrase);
 
-  const res = await http.post(`/trades/${tradeId}/complete`, signedXdr ? { signed_xdr: signedXdr } : {}, authHeaders(buyerToken));
+  const res = await http.post(`/trades/${tradeId}/complete`, signedXdr ? { signed_xdr: signedXdr } : {}, authHeaders(token));
   return res.data;
 }
 
@@ -711,14 +711,24 @@ export async function getMerchantsAvailable(
 export interface MerchantConfirmResult {
   trade_id: string;
   status: string;
+  /** CASH-4: flujo canónico; la UI no lo infiere de los roles del escrow. */
+  flow: TradeFlow;
   amount_mxn: number;
   platform_fee_mxn: number;
-  buyer_handle: string;
+  /**
+   * CASH-4: la contraparte de quien escanea, es decir el cliente. Antes era
+   * `buyer_handle` y en un cash-out el proveedor ES el comprador, así que la
+   * pantalla le mostraba su propio nombre.
+   */
+  client_handle: string;
   expires_at: string;
   expired: boolean;
   created_at: string;
   lock_tx_hash: string | null;
   release_tx_hash: string | null;
+  /** CASH-4: true si esta llamada reanudó una entrega ya confirmada. */
+  resumed: boolean;
+  handoff_confirmed_at: string;
 }
 
 /**
