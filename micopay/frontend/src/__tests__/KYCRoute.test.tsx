@@ -38,12 +38,11 @@ const mockWriteJSON = vi.mocked(secureStorage.writeJSON);
 
 function createMockAppCtx(overrides: Partial<AppCtx> = {}): AppCtx {
   return {
-    buyerUser: {
-      id: 'buyer-1',
-      token: 'mock-buyer-token',
-      username: 'testbuyer',
+    sessionUser: {
+      id: 'user-1',
+      token: 'mock-session-token',
+      username: 'testuser',
     } as any,
-    sellerUser: null,
     activeTrade: null,
     lockTxHash: null,
     releaseTxHash: null,

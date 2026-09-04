@@ -14,8 +14,8 @@ import { useCountdown } from '../hooks/useCountdown';
 
 interface QRRevealProps {
     activeTrade: TradeData | null;
-    sellerToken: string | null;
-    buyerToken: string | null;
+    /** CASH-7: un solo token de sesion; el rol se deriva del trade. */
+    token: string | null;
     amount: number;
     /** Counterparty shown in the header — who the seller is meeting. */
     counterpartyName?: string | null;
@@ -27,7 +27,7 @@ interface QRRevealProps {
     onSuccess: (releaseTxHash: string) => void;
 }
 
-const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyName, ownName, onBack, onChat, onSuccess }: QRRevealProps) => {
+const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBack, onChat, onSuccess }: QRRevealProps) => {
     const { t } = useTranslation();
     const [qrPayload, setQrPayload] = useState<string | null>(null);
     const [qrExpiresAt, setQrExpiresAt] = useState<string | null>(null);
@@ -39,7 +39,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
     const [tradeState, setTradeState] = useState<TradeState>('locked');
 
     const loadSecret = useCallback(async () => {
-        if (!activeTrade || !sellerToken) return;
+        if (!activeTrade || !token) return;
 
         setSecretLoading(true);
         setSecretError(null);
@@ -51,17 +51,17 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
             if (activeTrade.status === 'pending') {
                 const escrowAssetCode = import.meta.env.VITE_ESCROW_ASSET_CODE || 'USDC';
                 await ensureTrustline(escrowAssetCode);
-                await lockTrade(activeTrade.id, sellerToken);
+                await lockTrade(activeTrade.id, token);
             }
             // Swallow errors here: if the trade was already revealed (stale
             // local status), the reveal call 409s but getSecret still works.
-            await revealTrade(activeTrade.id, sellerToken).catch(() => {});
-            const { qr_payload, expires_at } = await getSecret(activeTrade.id, sellerToken);
+            await revealTrade(activeTrade.id, token).catch(() => {});
+            const { qr_payload, expires_at } = await getSecret(activeTrade.id, token);
             setQrPayload(qr_payload);
             setQrExpiresAt(expires_at);
             setSecretLoaded(true);
 
-            const fresh = await getTrade(activeTrade.id, sellerToken).catch(() => null);
+            const fresh = await getTrade(activeTrade.id, token).catch(() => null);
             if (fresh?.lock_tx_hash) setLockTxHash(fresh.lock_tx_hash);
         } catch (e) {
             if (IS_DEMO_MODE) {
@@ -76,7 +76,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
         } finally {
             setSecretLoading(false);
         }
-    }, [activeTrade, sellerToken]);
+    }, [activeTrade, token]);
 
     useEffect(() => {
         loadSecret();
@@ -85,11 +85,11 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
     // Only the buyer can call release() — this device is the seller, so poll
     // until the counterparty completes it instead of trying to do it here.
     useEffect(() => {
-        if (!activeTrade || !sellerToken || !secretLoaded) return;
+        if (!activeTrade || !token || !secretLoaded) return;
 
         const poll = async () => {
             try {
-                const fresh = await getTrade(activeTrade.id, sellerToken);
+                const fresh = await getTrade(activeTrade.id, token);
                 if (fresh.status === 'completed' && fresh.release_tx_hash) {
                     setCompletedTxHash(fresh.release_tx_hash);
                 }
@@ -101,7 +101,7 @@ const QRReveal = ({ activeTrade, sellerToken, buyerToken, amount, counterpartyNa
         poll();
         const interval = setInterval(poll, 4000);
         return () => clearInterval(interval);
-    }, [activeTrade, sellerToken, secretLoaded]);
+    }, [activeTrade, token, secretLoaded]);
 
     useEffect(() => {
         if (completedTxHash) {
