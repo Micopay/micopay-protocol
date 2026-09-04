@@ -34,13 +34,19 @@ async function seed() {
     }
 
     await db.execute(
+      // CASH-1: the demo alternates escrow direction, so the flow alternates
+      // with it. `sellerId` is the merchant and therefore the Red MicoPay
+      // provider in both directions — escrow seller on deposit, escrow buyer
+      // on cash-out.
       `INSERT INTO trades 
-       (seller_id, buyer_id, amount_mxn, amount_stroops, platform_fee_mxn, 
+       (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn, 
         secret_hash, status, created_at, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         i % 2 === 0 ? sellerId : userId, // alternate role
         i % 2 === 0 ? userId : sellerId,
+        i % 2 === 0 ? 'deposit' : 'cashout',
+        sellerId,
         amount,
         (amount * 10000000).toString(),
         Math.ceil(amount * 0.008),

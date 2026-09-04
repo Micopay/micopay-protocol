@@ -27,12 +27,14 @@ async function seedTrade(input: {
   completedAt?: string;
 }) {
   await db.execute(
-    `INSERT INTO trades (id, seller_id, buyer_id, amount_mxn, amount_stroops, secret_hash, status, created_at, completed_at, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    `INSERT INTO trades (id, seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, secret_hash, status, created_at, completed_at, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
     [
       input.id,
       input.sellerId,
       input.buyerId,
+      'deposit',
+      input.sellerId,
       input.amountMxn,
       (input.amountMxn * 10000000).toString(),
       `hash_${randomUUID()}`,

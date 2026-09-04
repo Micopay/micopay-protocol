@@ -282,13 +282,19 @@ async function seedData() {
     const expiresAt = new Date(createdAt.getTime() + 7200000);
     
     await db.execute(
+      // CASH-1: the demo alternates escrow direction, so the flow alternates
+      // with it. `sellerId` is the merchant and therefore the Red MicoPay
+      // provider in both directions — escrow seller on deposit, escrow buyer
+      // on cash-out.
       `INSERT INTO trades 
-       (seller_id, buyer_id, amount_mxn, amount_stroops, platform_fee_mxn, 
+       (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn, 
         secret_hash, status, created_at, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         i % 2 === 0 ? sellerId : userId,
         i % 2 === 0 ? userId : sellerId,
+        i % 2 === 0 ? 'deposit' : 'cashout',
+        sellerId,
         amount,
         (amount * 10000000).toString(),
         Math.ceil(amount * 0.008),
@@ -377,12 +383,16 @@ async function seedDemoMerchants(): Promise<void> {
       const amount = 200 + (i % 8) * 150;
       const createdAt = new Date(now - i * 86400000);
       await db.execute(
+        // CASH-1: map merchants seed deposit history — the merchant locks the
+        // crypto as escrow seller, so it is both seller_id and provider_id.
         `INSERT INTO trades
-           (seller_id, buyer_id, amount_mxn, amount_stroops, platform_fee_mxn, secret_hash, status, created_at, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+           (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn, secret_hash, status, created_at, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           user.id,
           buyer!.id,
+          'deposit',
+          user.id,
           amount,
           (amount * 10000000).toString(),
           Math.ceil(amount * 0.008),

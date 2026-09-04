@@ -159,16 +159,49 @@ async function validateAgainstMerchantLimits(sellerId: string, amountMxn: number
   }
 }
 
+/** CASH-1 (#372): canonical product flow, independent of the escrow roles. */
+export type TradeFlow = 'deposit' | 'cashout';
+
 export interface CreateTradeInput {
   request: FastifyRequest;
   sellerId: string;
   buyerId: string;
+  /**
+   * Product flow. Callers pass this explicitly — it must never be inferred
+   * from the escrow roles, which reverse between the two flows.
+   */
+  flow: TradeFlow;
   amountMxn: number;
 }
 
+/**
+ * The Red MicoPay liquidity provider for a flow, derived from the escrow roles.
+ * This is the single definition of that rule: 'deposit' means the provider
+ * locks the crypto (escrow seller), 'cashout' means the provider receives it
+ * and hands over cash (escrow buyer). The same rule is enforced by
+ * chk_trades_flow_provider at the database boundary.
+ */
+export function deriveProviderId(
+  flow: TradeFlow,
+  sellerId: string,
+  buyerId: string,
+): string {
+  return flow === 'cashout' ? buyerId : sellerId;
+}
+
 export async function createTrade(input: CreateTradeInput) {
-  const { request, sellerId, buyerId, amountMxn } = input;
-  request.log.info({ seller_id: sellerId, buyer_id: buyerId, amount_mxn: amountMxn, category: 'trade.lifecycle' }, '[trade] Creating trade');
+  const { request, sellerId, buyerId, flow, amountMxn } = input;
+
+  if (flow !== 'deposit' && flow !== 'cashout') {
+    throw new ValidationError(
+      'INVALID_FLOW',
+      'Tipo de operacion invalido',
+      `flow must be 'deposit' or 'cashout'`,
+    );
+  }
+
+  const providerId = deriveProviderId(flow, sellerId, buyerId);
+  request.log.info({ seller_id: sellerId, buyer_id: buyerId, flow, provider_id: providerId, amount_mxn: amountMxn, category: 'trade.lifecycle' }, '[trade] Creating trade');
 
   if (amountMxn < 100 || amountMxn > 50000) {
     throw new ValidationError(
@@ -224,13 +257,15 @@ export async function createTrade(input: CreateTradeInput) {
 
   const result = await db.getOne(
     `INSERT INTO trades
-      (seller_id, buyer_id, amount_mxn, amount_stroops, platform_fee_mxn,
+      (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn,
        secret_hash, secret_enc, secret_nonce, status, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', $11)
      RETURNING *`,
     [
       sellerId,
       buyerId,
+      flow,
+      providerId,
       amountMxn,
       amountStroops.toString(),
       platformFeeMxn,
@@ -252,6 +287,8 @@ export async function createTrade(input: CreateTradeInput) {
       amount_mxn: amountMxn,
       seller_id: sellerId,
       buyer_id: buyerId,
+      flow,
+      provider_id: providerId,
     },
   });
 
@@ -312,7 +349,7 @@ export async function getActiveTrades(userId: string) {
 export async function getTradeHistory(userId: string, status?: string, page = 1, limit = 20) {
   const trades = await db.getMany(
     `SELECT id, status, amount_mxn, platform_fee_mxn, lock_tx_hash, release_tx_hash,
-            created_at, completed_at, seller_id, buyer_id, expires_at
+            created_at, completed_at, seller_id, buyer_id, flow, provider_id, expires_at
      FROM trades
      WHERE (seller_id = $1 OR buyer_id = $1)
      ORDER BY created_at DESC`,

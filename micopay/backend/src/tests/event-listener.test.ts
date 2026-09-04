@@ -380,17 +380,24 @@ async function insertTestTrade(overrides: {
   status: string;
   contractTradeId: string;
 }): Promise<void> {
+  // CASH-1: fixtures model a deposit, so the escrow seller is also the
+  // provider. Hoisted because provider_id must equal seller_id — two separate
+  // randomUUID() calls would violate chk_trades_flow_provider.
+  const sellerId = randomUUID();
+
   await db.execute(
     `INSERT INTO trades
-       (id, status, contract_trade_id, seller_id, buyer_id,
+       (id, status, contract_trade_id, seller_id, buyer_id, flow, provider_id,
         amount_mxn, amount_stroops, platform_fee_mxn, secret_hash)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [
       overrides.id,
       overrides.status,
       overrides.contractTradeId,
-      randomUUID(),   // seller_id
+      sellerId,       // seller_id
       randomUUID(),   // buyer_id
+      'deposit',      // flow
+      sellerId,       // provider_id
       100,            // amount_mxn
       '1000000000',   // amount_stroops
       1,              // platform_fee_mxn

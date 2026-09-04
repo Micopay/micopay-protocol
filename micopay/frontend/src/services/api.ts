@@ -71,6 +71,9 @@ export interface CurrentUserProfile {
   reputation_tier?: string;
 }
 
+/** CASH-1 (#372): canonical product flow, independent of the escrow roles. */
+export type TradeFlow = 'deposit' | 'cashout';
+
 export interface TradeData {
   id: string;
   status: string;
@@ -87,6 +90,8 @@ export interface TradeDetailResponse {
     platform_fee_mxn?: number;
     seller_id?: string;
     buyer_id?: string;
+    flow?: TradeFlow;
+    provider_id?: string;
     created_at?: string;
     completed_at?: string | null;
     expires_at?: string;
@@ -196,21 +201,25 @@ export async function getAuthToken(username: string): Promise<string> {
 
 /**
  * Creates a trade between the caller and a counterparty.
- * `role` is the caller's role in the escrow: 'buyer' (default — the caller
- * receives crypto, e.g. depositing cash for crypto) or 'seller' (the caller
- * gives up crypto, e.g. cashing out — the escrow contract requires the
- * seller to be the one who locks funds and reveals the HTLC secret).
+ *
+ * CASH-1 (#372): the payload carries the *product* flow, not the caller's
+ * escrow role. 'deposit' means the caller buys crypto with cash (the
+ * counterparty locks funds as escrow seller); 'cashout' means the caller sells
+ * crypto for cash and is therefore the escrow seller, because only the seller
+ * can lock funds and reveal the HTLC secret. The backend derives the escrow
+ * roles and the Red MicoPay provider from this flow — the client never sends a
+ * provider id, and the API rejects the request if it tries.
  */
 export async function createTrade(
     counterpartyId: string,
     amountMxn: number,
     callerToken: string,
-    role: 'buyer' | 'seller' = 'buyer',
+    flow: TradeFlow = 'deposit',
 ): Promise<TradeData> {
   try {
     const res = await http.post(
         '/trades',
-        { counterparty_id: counterpartyId, amount_mxn: amountMxn, role },
+        { counterparty_id: counterpartyId, amount_mxn: amountMxn, flow },
         authHeaders(callerToken),
     );
     return res.data.trade;
@@ -326,6 +335,8 @@ export interface TradeHistoryItem {
   completed_at: string | null;
   seller_id: string;
   buyer_id: string;
+  flow: TradeFlow;
+  provider_id: string;
 }
 
 export interface MerchantTrade {

@@ -63,13 +63,15 @@ async function insertRevealingTrade(sellerId: string, buyerId: string) {
 
   const row = await db.getOne<{ id: string }>(
     `INSERT INTO trades
-       (seller_id, buyer_id, amount_mxn, amount_stroops, platform_fee_mxn,
+       (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn,
         secret_hash, secret_enc, secret_nonce, status, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING id`,
     [
       sellerId,
       buyerId,
+      "deposit",
+      sellerId,
       500,
       "5000000000",
       4,

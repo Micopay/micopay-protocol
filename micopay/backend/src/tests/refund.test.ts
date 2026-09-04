@@ -60,11 +60,11 @@ async function insertLockedTrade(
 
   const row = await db.getOne<{ id: string }>(
     `INSERT INTO trades
-       (seller_id, buyer_id, amount_mxn, amount_stroops, platform_fee_mxn,
+       (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn,
         secret_hash, secret_enc, secret_nonce, status, expires_at, lock_tx_hash, locked_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'locked', $9, $10, NOW())
+     VALUES ($1, $2, 'deposit', $3, $4, $5, $6, $7, $8, $9, 'locked', $10, $11, NOW())
      RETURNING id`,
-    [sellerId, buyerId, 500, "5000000000", 4, secretHash, encrypted, nonce, expiresAt, lockTxHash],
+    [sellerId, buyerId, sellerId, 500, "5000000000", 4, secretHash, encrypted, nonce, expiresAt, lockTxHash],
   );
   if (!row?.id) throw new Error("Failed to insert trade");
   return row.id;

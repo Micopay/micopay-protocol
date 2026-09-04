@@ -16,42 +16,54 @@ export async function tradeRoutes(app: FastifyInstance) {
 
   /**
    * POST /trades
-   * Creates a trade between the caller and a counterparty. The caller is the
-   * buyer by default (matches "buy crypto with cash" / deposit flow, where the
-   * counterparty-merchant locks funds as seller). Pass `role: 'seller'` for
-   * the reverse direction ("convert crypto to cash" / cashout flow), where the
-   * caller is the one giving up crypto — the escrow contract only lets the
-   * seller side lock funds and reveal the HTLC secret, so the caller must be
-   * seller_id there, not buyer_id.
+   * Creates a trade between the caller and a counterparty.
+   *
+   * CASH-1 (#372): the request carries the *product* flow, not the escrow role.
+   * The two are not the same thing and they reverse relative to each other:
+   *
+   *   flow 'deposit'  — the caller buys crypto with cash. The counterparty is
+   *                     the Red MicoPay provider and must be the escrow seller,
+   *                     because only the seller can lock funds and reveal the
+   *                     HTLC secret.
+   *   flow 'cashout'  — the caller sells crypto for cash. The caller gives up
+   *                     the crypto, so the caller is the escrow seller and the
+   *                     provider is the escrow buyer.
+   *
+   * In both directions the Red MicoPay liquidity provider is the counterparty,
+   * never the caller. provider_id is derived here from the authenticated caller
+   * and that rule; it is never read from the request body. `additionalProperties:
+   * false` means a client that tries to send provider_id is rejected outright
+   * rather than silently ignored.
    */
   app.post('/trades', {
     preHandler: [tradeRateLimit],
     schema: {
       body: {
         type: 'object',
-        required: ['counterparty_id', 'amount_mxn'],
+        required: ['counterparty_id', 'amount_mxn', 'flow'],
         properties: {
           counterparty_id: { type: 'string', format: 'uuid' },
           amount_mxn: { type: 'integer', minimum: 100, maximum: 50000 },
-          role: { type: 'string', enum: ['buyer', 'seller'], default: 'buyer' },
+          flow: { type: 'string', enum: ['deposit', 'cashout'] },
         },
         additionalProperties: false,
       },
     },
   }, async (request, reply) => {
-    const { counterparty_id, amount_mxn, role = 'buyer' } = request.body as {
+    const { counterparty_id, amount_mxn, flow } = request.body as {
       counterparty_id: string;
       amount_mxn: number;
-      role?: 'buyer' | 'seller';
+      flow: 'deposit' | 'cashout';
     };
     const callerId = request.user.id;
-    const sellerId = role === 'seller' ? callerId : counterparty_id;
-    const buyerId = role === 'seller' ? counterparty_id : callerId;
+    const sellerId = flow === 'cashout' ? callerId : counterparty_id;
+    const buyerId = flow === 'cashout' ? counterparty_id : callerId;
 
     const trade = await tradeService.createTrade({
       request,
       sellerId,
       buyerId,
+      flow,
       amountMxn: amount_mxn,
     });
 

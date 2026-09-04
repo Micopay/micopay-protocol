@@ -58,24 +58,24 @@ async function runDisputeTests() {
 
   // 2. Create test trades
   const trade1 = await db.getOne<{ id: string }>(
-    `INSERT INTO trades (seller_id, buyer_id, amount_mxn, amount_stroops, platform_fee_mxn, secret_hash, status, expires_at)
-     VALUES ($1, $2, 1000, 10000000000, 8, 'hash_test_1', 'locked', NOW() + INTERVAL '1 hour')
+    `INSERT INTO trades (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn, secret_hash, status, expires_at)
+     VALUES ($1, $2, 'deposit', $3, 1000, 10000000000, 8, 'hash_test_1', 'locked', NOW() + INTERVAL '1 hour')
      RETURNING id`,
-    [seller.id, buyer.id],
+    [seller.id, buyer.id, seller.id],
   );
 
   const trade2 = await db.getOne<{ id: string }>(
-    `INSERT INTO trades (seller_id, buyer_id, amount_mxn, amount_stroops, platform_fee_mxn, secret_hash, status, expires_at)
-     VALUES ($1, $2, 500, 5000000000, 4, 'hash_test_2', 'revealing', NOW() + INTERVAL '1 hour')
+    `INSERT INTO trades (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn, secret_hash, status, expires_at)
+     VALUES ($1, $2, 'deposit', $3, 500, 5000000000, 4, 'hash_test_2', 'revealing', NOW() + INTERVAL '1 hour')
      RETURNING id`,
-    [seller.id, buyer.id],
+    [seller.id, buyer.id, seller.id],
   );
 
   const trade3 = await db.getOne<{ id: string }>(
-    `INSERT INTO trades (seller_id, buyer_id, amount_mxn, amount_stroops, platform_fee_mxn, secret_hash, status, expires_at)
-     VALUES ($1, $2, 2000, 20000000000, 16, 'hash_test_3', 'locked', NOW() + INTERVAL '1 hour')
+    `INSERT INTO trades (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn, secret_hash, status, expires_at)
+     VALUES ($1, $2, 'deposit', $3, 2000, 20000000000, 16, 'hash_test_3', 'locked', NOW() + INTERVAL '1 hour')
      RETURNING id`,
-    [seller.id, buyer.id],
+    [seller.id, buyer.id, seller.id],
   );
 
   ok(trade1 && trade2 && trade3, 'Test trades created');
