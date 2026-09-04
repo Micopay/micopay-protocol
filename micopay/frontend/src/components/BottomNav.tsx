@@ -20,10 +20,15 @@ import { useTranslation } from 'react-i18next';
 interface BottomNavProps {
   currentPage: string;
   onNavigate: (page: string) => void;
-  isMerchant?: boolean;
+  /**
+   * CASH-7: contrato neutral. Antes se llamaba `isMerchant` y lo alimentaba
+   * un `sellerUser` con valor, o sea "hay sesion" disfrazado de "es
+   * comercio". RED-2 lo atara al estado de inscripcion en Red MicoPay.
+   */
+  showProviderTab?: boolean;
 }
 
-const BottomNav = ({ currentPage, onNavigate, isMerchant = false }: BottomNavProps) => {
+const BottomNav = ({ currentPage, onNavigate, showProviderTab = false }: BottomNavProps) => {
   const { t } = useTranslation();
 
   const btn = (page: string, icon: string, label: string) => {
@@ -55,7 +60,7 @@ const BottomNav = ({ currentPage, onNavigate, isMerchant = false }: BottomNavPro
     <nav className="fixed bottom-0 left-0 z-50 flex w-full items-stretch gap-1 border-t-2 border-tinta bg-papel px-2 pt-2 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       {btn('home', 'home', t('nav.home'))}
       {btn('pay', 'swap_horiz', t('nav.pay'))}
-      {isMerchant
+      {showProviderTab
         ? btn('inbox', 'inbox', t('nav.inbox'))
         : btn('cetes', 'savings', t('nav.invest'))}
       {btn('explore', 'explore', t('nav.explore'))}

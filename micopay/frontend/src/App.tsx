@@ -91,8 +91,17 @@ async function recoverSession(username: string): Promise<UserData> {
 type Flow = "cashout" | "deposit" | null;
 
 export interface AppCtx {
-  buyerUser: UserData | null;
-  sellerUser: UserData | null;
+  /**
+   * CASH-7 (#160 follow-up): una persona, una sesion. Antes habia dos campos
+   * con nombre de rol y todos los caminos de alta, login y recuperacion les
+   * asignaban EL MISMO objeto. Esos nombres conservaban el modelo viejo de
+   * "un telefono, dos roles" y hacian que el campo del vendedor, por el mero
+   * hecho de tener valor, significara "esta persona es proveedora".
+   *
+   * El rol es por operacion, no por sesion: se deriva del trade cargado
+   * comparando `sessionUser.id` con `seller_id`/`buyer_id`.
+   */
+  sessionUser: UserData | null;
   activeTrade: TradeData | null;
   lockTxHash: string | null;
   releaseTxHash: string | null;
@@ -130,39 +139,38 @@ function useAppCtx(): AppCtx {
 
 function HomeRoute() {
   const navigate = useNavigate();
-  const { buyerUser, sellerUser, setFlow } = useAppCtx();
+  const { sessionUser, setFlow } = useAppCtx();
   return (
       <Home
           onNavigateCashout={() => { setFlow('cashout'); navigate('/cashout'); }}
           onNavigateDeposit={() => { setFlow('deposit'); navigate('/deposit'); }}
           onNavigateHistory={() => navigate('/history')}
-          token={buyerUser?.token ?? null}
-          merchantToken={sellerUser?.token ?? null}
+          token={sessionUser?.token ?? null}
+          merchantToken={sessionUser?.token ?? null}
           onNavigateInbox={() => navigate('/inbox')}
-          username={buyerUser?.username ?? sellerUser?.username ?? null}
+          username={sessionUser?.username ?? null}
       />
   );
 }
 
 function HistoryRoute() {
   const navigate = useNavigate();
-  const { buyerUser } = useAppCtx();
+  const { sessionUser } = useAppCtx();
   return (
       <History
           onBack={() => navigate('/')}
           onSelectTrade={(trade) => navigate(`/trade/${trade.id}`)}
-          token={buyerUser?.token ?? null}
+          token={sessionUser?.token ?? null}
       />
   );
 }
 
 function TradeDetailRoute() {
   const navigate = useNavigate();
-  const { buyerUser, sellerUser } = useAppCtx();
+  const { sessionUser } = useAppCtx();
   return (
     <TradeDetail
-      buyerToken={buyerUser?.token ?? null}
-      sellerToken={sellerUser?.token ?? null}
+      token={sessionUser?.token ?? null}
       onBack={() => navigate('/history')}
     />
   );
@@ -170,10 +178,10 @@ function TradeDetailRoute() {
 
 function InboxRoute() {
   const navigate = useNavigate();
-  const { sellerUser } = useAppCtx();
+  const { sessionUser } = useAppCtx();
   return (
       <MerchantInbox
-          token={sellerUser?.token ?? null}
+          token={sessionUser?.token ?? null}
           onBack={() => navigate('/')}
       />
   );
@@ -336,35 +344,35 @@ function ConfirmRoute() {
 }
 
 /** Counterparty display name and cash-out role for ChatRoom banners. */
-function useTradeParticipantInfo(activeTrade: TradeData | null, buyerUser: UserData | null) {
+function useTradeParticipantInfo(activeTrade: TradeData | null, sessionUser: UserData | null) {
   const [counterpartyName, setCounterpartyName] = useState<string | null>(null);
   const [isProvider, setIsProvider] = useState(false);
 
   useEffect(() => {
-    if (!activeTrade || !buyerUser?.token) return;
-    fetchTradeDetail(activeTrade.id, buyerUser.token)
+    if (!activeTrade || !sessionUser?.token) return;
+    fetchTradeDetail(activeTrade.id, sessionUser.token)
       .then(({ trade, seller_username, buyer_username }) => {
-        const isMeTheEscrowSeller = trade.seller_id === buyerUser.id;
+        const isMeTheEscrowSeller = trade.seller_id === sessionUser.id;
         setCounterpartyName(isMeTheEscrowSeller ? buyer_username : seller_username);
         // Cash-out (/chat): the client locks crypto (escrow seller); the agent
         // hands over cash (escrow buyer). isProvider marks the agent view.
         setIsProvider(!isMeTheEscrowSeller);
       })
       .catch(() => {});
-  }, [activeTrade, buyerUser?.token, buyerUser?.id]);
+  }, [activeTrade, sessionUser?.token, sessionUser?.id]);
 
   return { counterpartyName, isProvider };
 }
 
 function ChatRoute() {
   const navigate = useNavigate();
-  const { lockTxHash, activeTrade, buyerUser } = useAppCtx();
-  const { counterpartyName, isProvider } = useTradeParticipantInfo(activeTrade, buyerUser);
+  const { lockTxHash, activeTrade, sessionUser } = useAppCtx();
+  const { counterpartyName, isProvider } = useTradeParticipantInfo(activeTrade, sessionUser);
   return (
       <ChatRoom
           tradeId={activeTrade?.id ?? ''}
-          userId={buyerUser?.id ?? ''}
-          token={buyerUser?.token}
+          userId={sessionUser?.id ?? ''}
+          token={sessionUser?.token}
           apiBaseUrl={import.meta.env.VITE_API_URL}
           lockTxHash={lockTxHash}
           counterpartyName={counterpartyName}
@@ -377,13 +385,13 @@ function ChatRoute() {
 
 function ChatDepositRoute() {
   const navigate = useNavigate();
-  const { lockTxHash, activeTrade, buyerUser } = useAppCtx();
-  const { counterpartyName } = useTradeParticipantInfo(activeTrade, buyerUser);
+  const { lockTxHash, activeTrade, sessionUser } = useAppCtx();
+  const { counterpartyName } = useTradeParticipantInfo(activeTrade, sessionUser);
   return (
       <DepositChat
           tradeId={activeTrade?.id ?? ''}
-          userId={buyerUser?.id ?? ''}
-          token={buyerUser?.token}
+          userId={sessionUser?.id ?? ''}
+          token={sessionUser?.token}
           apiBaseUrl={import.meta.env.VITE_API_URL}
           lockTxHash={lockTxHash}
           counterpartyName={counterpartyName}
@@ -395,17 +403,16 @@ function ChatDepositRoute() {
 
 function QRRevealRoute() {
   const navigate = useNavigate();
-  const { activeTrade, sellerUser, buyerUser, activeAmount, setReleaseTxHash } = useAppCtx();
-  const { counterpartyName } = useTradeParticipantInfo(activeTrade, buyerUser);
+  const { activeTrade, sessionUser, activeAmount, setReleaseTxHash } = useAppCtx();
+  const { counterpartyName } = useTradeParticipantInfo(activeTrade, sessionUser);
 
   return (
       <QRReveal
           activeTrade={activeTrade}
-          sellerToken={sellerUser?.token ?? null}
-          buyerToken={buyerUser?.token ?? null}
+          token={sessionUser?.token ?? null}
           amount={activeAmount}
           counterpartyName={counterpartyName}
-          ownName={buyerUser?.username ?? null}
+          ownName={sessionUser?.username ?? null}
           onBack={() => navigate('/chat')}
           onChat={() => navigate('/chat')}
           onSuccess={() => navigate('/success')}
@@ -415,11 +422,11 @@ function QRRevealRoute() {
 
 function QRDepositRoute() {
   const navigate = useNavigate();
-  const { activeTrade, buyerUser } = useAppCtx();
+  const { activeTrade, sessionUser } = useAppCtx();
   return (
       <DepositQR
           activeTrade={activeTrade}
-          buyerToken={buyerUser?.token ?? null}
+          buyerToken={sessionUser?.token ?? null}
           onBack={() => navigate('/chat-deposit')}
           onChat={() => navigate('/chat-deposit')}
           onSuccess={() => navigate('/success')}
@@ -429,7 +436,7 @@ function QRDepositRoute() {
 
 function SuccessRoute() {
   const navigate = useNavigate();
-  const { flow, activeTrade, lockTxHash, releaseTxHash, buyerUser, sellerUser, activeAmount, resetTradeFlow } = useAppCtx();
+  const { flow, activeTrade, lockTxHash, releaseTxHash, sessionUser, activeAmount, resetTradeFlow } = useAppCtx();
   const [tradeDetail, setTradeDetail] = useState<TradeHistoryItem | null>(null);
   const [sellerUsername, setSellerUsername] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -442,8 +449,8 @@ function SuccessRoute() {
     }
 
     // Fetch real trade data from backend
-    if (buyerUser?.token) {
-      fetchTradeDetail(activeTrade.id, buyerUser.token)
+    if (sessionUser?.token) {
+      fetchTradeDetail(activeTrade.id, sessionUser.token)
         .then(({ trade, seller_username }) => {
           setTradeDetail({
             id: trade.id,
@@ -470,7 +477,7 @@ function SuccessRoute() {
     } else {
       setLoading(false);
     }
-  }, [activeTrade, buyerUser?.token, lockTxHash, releaseTxHash, navigate]);
+  }, [activeTrade, sessionUser?.token, lockTxHash, releaseTxHash, navigate]);
 
   if (!activeTrade) return null;
 
@@ -510,12 +517,16 @@ function SuccessRoute() {
             release_tx_hash: null,
             created_at: new Date().toISOString(),
             completed_at: new Date().toISOString(),
-            seller_id: sellerUser?.id ?? '',
-            buyer_id: buyerUser?.id ?? '',
-            // CASH-1: on a cash-out the provider is the escrow buyer, on a
-            // deposit the escrow seller — the same rule the backend enforces.
+            // CASH-7: este recibo es el respaldo local que se pinta mientras
+            // el detalle real no ha cargado. Con una sola sesion se ve que el
+            // codigo anterior ponia el mismo id en los dos lados del escrow y
+            // no decia nada. Lo honesto: la persona ocupa el lado que le toca
+            // segun el flujo — vendedora en cash-out, compradora en deposito —
+            // y la contraparte no se conoce aqui, asi que tampoco el proveedor.
+            seller_id: flow === 'cashout' ? (sessionUser?.id ?? '') : '',
+            buyer_id: flow === 'cashout' ? '' : (sessionUser?.id ?? ''),
             flow: flow ?? 'deposit',
-            provider_id: (flow === 'cashout' ? buyerUser?.id : sellerUser?.id) ?? '',
+            provider_id: '',
           }}
           agentName={sellerUsername ?? (flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe')}
           onHome={() => {
@@ -558,7 +569,7 @@ function ExploreRoute() {
 
 function CetesRoute() {
   const navigate = useNavigate();
-  const { buyerUser } = useAppCtx();
+  const { sessionUser } = useAppCtx();
   return (
       <CETESScreen
           onBack={() => navigate('/explore')}
@@ -567,7 +578,7 @@ function CetesRoute() {
           // the P2P cash-agent flow at /deposit — that CTA used to send users
           // there by mistake.
           onBanco={() => navigate('/kyc')}
-          userToken={buyerUser?.token}
+          userToken={sessionUser?.token}
           showDefi={import.meta.env.VITE_ENABLE_DEFI_TRADING === 'true'}
           showSpeiRamp={import.meta.env.VITE_ENABLE_SPEI_RAMP === 'true'}
       />
@@ -576,10 +587,10 @@ function CetesRoute() {
 
 export function KYCRoute() {
   const navigate = useNavigate();
-  const { buyerUser } = useAppCtx();
+  const { sessionUser } = useAppCtx();
   return (
       <KYCScreen
-          token={buyerUser?.token ?? null}
+          token={sessionUser?.token ?? null}
           onApproved={() => {
             navigate('/cetes');
           }}
@@ -599,11 +610,11 @@ function KYCApprovedNextRoute() {
 
 function BlendRoute() {
   const navigate = useNavigate();
-  const { buyerUser } = useAppCtx();
+  const { sessionUser } = useAppCtx();
   return (
       <BlendScreen
           onBack={() => navigate('/explore')}
-          userToken={buyerUser?.token}
+          userToken={sessionUser?.token}
       />
   );
 }
@@ -612,11 +623,11 @@ function ProfileRoute() {
   const navigate = useNavigate();
   // devicePublicKey must be destructured here — referencing it from outer
   // scope would silently be undefined inside this component
-  const { buyerUser, handleAccountDeleted, devicePublicKey } = useAppCtx();
+  const { sessionUser, handleAccountDeleted, devicePublicKey } = useAppCtx();
   return (
       <Profile
-          token={buyerUser?.token ?? null}
-          username={buyerUser?.username ?? null}
+          token={sessionUser?.token ?? null}
+          username={sessionUser?.username ?? null}
           devicePublicKey={devicePublicKey}
           onBack={() => navigate('/')}
           onDeleted={() => {
@@ -635,10 +646,10 @@ function ProfileRoute() {
 
 function MerchantSettingsRoute() {
   const navigate = useNavigate();
-  const { sellerUser } = useAppCtx();
+  const { sessionUser } = useAppCtx();
   return (
     <MerchantSettings
-      token={sellerUser?.token ?? null}
+      token={sessionUser?.token ?? null}
       onBack={() => navigate('/')}
     />
   );
@@ -658,14 +669,14 @@ function SignatureApprovalRoute() {
   const navigate = useNavigate();
   const { id } = useParams<{ id?: string }>();
   const location = useLocation();
-  const { buyerUser } = useAppCtx();
+  const { sessionUser } = useAppCtx();
   const searchParams = new URLSearchParams(location.search);
   const requestId = id || searchParams.get('id') || undefined;
 
   return (
     <SignatureApproval
       requestId={requestId}
-      token={buyerUser?.token}
+      token={sessionUser?.token}
       onBack={() => navigate('/')}
       onResolved={() => {
         setTimeout(() => navigate('/'), 2000);
@@ -677,10 +688,10 @@ function SignatureApprovalRoute() {
 // ── Route wrappers (auth) ───────────────────────────────────────────────────
 
 function ProtectedRoute({ children }: { children: React.ReactElement }) {
-  const { buyerUser } = useAppCtx();
+  const { sessionUser } = useAppCtx();
   const location = useLocation();
 
-  if (!buyerUser) {
+  if (!sessionUser) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
@@ -723,7 +734,7 @@ const HIDE_BOTTOMNAV_PREFIX = ['/claim/', '/sign-request/'];
 function BottomNavAdapter() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { sellerUser } = useAppCtx();
+  const { sessionUser } = useAppCtx();
 
   if (HIDE_BOTTOMNAV_ROUTES.has(location.pathname)) return null;
 
@@ -740,7 +751,11 @@ function BottomNavAdapter() {
       <BottomNav
           currentPage={ROUTE_TO_PAGE[location.pathname] ?? location.pathname.slice(1)}
           onNavigate={(page) => navigate(navMap[page] ?? '/')}
-          isMerchant={!!sellerUser}
+          // CASH-7: la barra ya no infiere "es proveedora" de que exista
+          // sesion. El nombre del prop es neutral y hoy se alimenta de la
+          // sesion para NO cambiar la navegacion actual; RED-2 lo atara al
+          // estado de inscripcion real en Red MicoPay.
+          showProviderTab={!!sessionUser}
       />
   );
 }
@@ -772,8 +787,7 @@ function ConnectionBannerHost() {
 
 function App() {
   const [flow, setFlow] = useState<Flow>(null);
-  const [buyerUser, setBuyerUser] = useState<UserData | null>(null);
-  const [sellerUser, setSellerUser] = useState<UserData | null>(null);
+  const [sessionUser, setSessionUser] = useState<UserData | null>(null);
   const [activeTrade, setActiveTrade] = useState<TradeData | null>(null);
   const [lockTxHash, setLockTxHash] = useState<string | null>(null);
   const [releaseTxHash, setReleaseTxHash] = useState<string | null>(null);
@@ -892,22 +906,19 @@ function App() {
             // stored the username as `id` instead of the real backend user id).
             const fresh: UserData = { id: profile.id, username: profile.username, token: stored.token };
             if (fresh.id !== stored.id) await writeJSON(USERS_STORAGE_KEY, fresh);
-            setBuyerUser(fresh);
-            setSellerUser(fresh);
+            setSessionUser(fresh);
             return;
           } catch (err: any) {
             const status = err?.response?.status;
             if (status !== 401 && status !== 403) {
               // Transient/network error — keep the cached session optimistically.
-              setBuyerUser(stored);
-              setSellerUser(stored);
+              setSessionUser(stored);
               return;
             }
             try {
               const recovered = await recoverSession(stored.username);
               await writeJSON(USERS_STORAGE_KEY, recovered);
-              setBuyerUser(recovered);
-              setSellerUser(recovered);
+              setSessionUser(recovered);
               return;
             } catch (re) {
               console.warn("Session recovery failed; clearing stale session", re);
@@ -923,8 +934,7 @@ function App() {
           const ts = Date.now() % 100000;
           const user = await registerUser(`demo_${ts}`);
           await writeJSON(USERS_STORAGE_KEY, user);
-          setBuyerUser(user);
-          setSellerUser(user);
+          setSessionUser(user);
         }
       } catch (e) {
         console.warn("Backend unavailable for registration, using local stub", e);
@@ -936,15 +946,13 @@ function App() {
     initUsers();
   }, []);
 
-  const handleLoginSuccess = (user: UserData, _seller: UserData | null = null) => {
-    setBuyerUser(user);
-    setSellerUser(user);
+  const handleLoginSuccess = (user: UserData) => {
+    setSessionUser(user);
     writeJSON(USERS_STORAGE_KEY, user);
   };
 
   const handleAccountDeleted = () => {
-    setBuyerUser(null);
-    setSellerUser(null);
+    setSessionUser(null);
     setActiveTrade(null);
     setLockTxHash(null);
     setReleaseTxHash(null);
@@ -962,13 +970,13 @@ function App() {
   const clearTradeError = () => setTradeError(null);
 
   const runTradeFlow = async (counterpartyId: string, tradeFlow: TradeFlow = 'deposit'): Promise<boolean> => {
-    if (!buyerUser) return false;
+    if (!sessionUser) return false;
     setPendingSellerId(counterpartyId);
     setPendingFlow(tradeFlow);
     setTradeLoading(true);
     setTradeError(null);
     try {
-      const trade = await createTrade(counterpartyId, activeAmount, buyerUser.token, tradeFlow);
+      const trade = await createTrade(counterpartyId, activeAmount, sessionUser.token, tradeFlow);
       setActiveTrade(trade);
       return true;
     } catch (e) {
@@ -1047,8 +1055,7 @@ function App() {
   };
 
   const ctx: AppCtx = {
-    buyerUser,
-    sellerUser,
+    sessionUser,
     activeTrade,
     lockTxHash,
     releaseTxHash,
@@ -1121,7 +1128,7 @@ function App() {
             <div className="flex flex-col min-h-screen bg-fondo">
               <ConnectionBannerHost />
               {/* Se oculta solo cuando hay conexión y no hay nada pendiente. */}
-              <OfflineQueueStatus token={sellerUser?.token ?? null} />
+              <OfflineQueueStatus token={sessionUser?.token ?? null} />
               <Routes>
                 <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
                 <Route path="/register" element={<Register onLoginSuccess={handleLoginSuccess} />} />

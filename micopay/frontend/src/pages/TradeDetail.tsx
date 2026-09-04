@@ -24,8 +24,13 @@ type TradeDetailData = TradeDetailResponse['trade'] & {
 };
 
 interface TradeDetailProps {
-  buyerToken: string | null;
-  sellerToken: string | null;
+  /**
+   * CASH-7: un solo token de la sesion autenticada. Antes llegaban
+   * `buyerToken` y `sellerToken`, siempre el mismo valor, y cada handler
+   * hacia `buyerToken ?? sellerToken`. El rol en la operacion se deriva del
+   * trade cargado, no del nombre del prop.
+   */
+  token: string | null;
   onBack: () => void;
 }
 
@@ -669,7 +674,7 @@ function RefundConfirmDialog({
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProps) {
+function TradeDetailContent({ token, onBack }: TradeDetailProps) {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -696,7 +701,7 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
   const fetchTrade = useCallback(async () => {
     if (!id) return;
 
-    const effectiveToken = (buyerToken ?? sellerToken) ?? (await getStoredToken());
+    const effectiveToken = token ?? (await getStoredToken());
     if (!effectiveToken) {
       navigate('/');
       return;
@@ -718,7 +723,7 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
     } finally {
       setLoading(false);
     }
-  }, [id, navigate, buyerToken, sellerToken]);
+  }, [id, navigate, token]);
 
   // Fetch on mount
   useEffect(() => {
@@ -737,7 +742,7 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
   const handleCancel = async () => {
     if (!trade) return;
 
-    const effectiveToken = (buyerToken ?? sellerToken) ?? (await getStoredToken());
+    const effectiveToken = token ?? (await getStoredToken());
     if (!effectiveToken) return;
 
     try {
@@ -756,7 +761,7 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
   // Handle lock (seller signs lock() with their own device key)
   const handleLock = async () => {
     if (!trade || isLocking) return;
-    const effectiveToken = (buyerToken ?? sellerToken) ?? (await getStoredToken());
+    const effectiveToken = token ?? (await getStoredToken());
     if (!effectiveToken) return;
 
     setIsLocking(true);
@@ -782,7 +787,7 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
   // Handle refund
   const handleRefundConfirm = async () => {
     if (!trade) return;
-    const token = buyerToken ?? sellerToken ?? await getStoredToken();
+    const effectiveToken = token ?? await getStoredToken();
     if (!token) return;
 
     setIsRefunding(true);
@@ -870,7 +875,7 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
       case 'revealing':
         return <RevealingView trade={trade} />;
       case 'revealed':
-        return <RevealedView trade={trade} onComplete={handleComplete} token={buyerToken ?? sellerToken} />;
+        return <RevealedView trade={trade} onComplete={handleComplete} token={token} />;
       case 'completed':
         return <CompletedView trade={trade} />;
       case 'cancelled':
