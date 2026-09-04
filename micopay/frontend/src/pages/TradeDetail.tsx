@@ -17,6 +17,7 @@ import { useCountdown } from '../hooks/useCountdown';
 import { buildTxUrl } from '../utils/stellarExplorer';
 import { mapApiError } from '../utils/apiError';
 import { parseTradeState, type TradeState } from '../components/TradeStateBadge';
+import { resolveTradeActor, type TradeActor } from '../utils/tradeActor';
 
 type TradeDetailData = TradeDetailResponse['trade'] & {
   platform_fee_mxn?: number;
@@ -32,6 +33,11 @@ interface TradeDetailProps {
    * trade cargado, no del nombre del prop.
    */
   token: string | null;
+  /**
+   * CASH-5B: id de la sesion autenticada. Hace falta para derivar el papel en
+   * ESTA operacion; no es un rol global (CASH-7).
+   */
+  userId: string | null;
   onBack: () => void;
 }
 
@@ -240,31 +246,145 @@ function LockedView({ trade }: { trade: TradeDetailData }) {
   );
 }
 
-function RevealingView({ trade }: { trade: TradeDetailData }) {
+/**
+ * CASH-5B · `revealing` para las cuatro combinaciones de flujo y actor.
+ *
+ * Antes esta vista tenia dos botones sin onClick y un texto unico ("El
+ * vendedor confirmo el pago") que no era cierto para nadie: en cash-out quien
+ * espera es el cliente, y en deposito es el proveedor. Toda la logica de
+ * liberar vivia en una vista atada a `revealed`, un estado que ningun backend
+ * emite, asi que en produccion nadie podia completar desde esta pantalla.
+ *
+ * La regla: **libera siempre el comprador del escrow**, porque el contrato
+ * exige su firma y la cripto se le entrega a el. Eso es el proveedor en
+ * cash-out y el cliente en deposito.
+ */
+function RevealingView({
+  trade,
+  actor,
+  onComplete,
+  token,
+  onShowQR,
+  onOpenChat,
+  onGoToScanner,
+}: {
+  trade: TradeDetailData;
+  actor: TradeActor;
+  onComplete: () => void;
+  token: string | null;
+  onShowQR: () => void;
+  onOpenChat: () => void;
+  onGoToScanner: () => void;
+}) {
+  // Quien libera: proveedor en cash-out, cliente en deposito.
+  if (actor.canRelease) {
+    // En cash-out el proveedor NO puede liberar sin haber escaneado el codigo
+    // del cliente: CASH-4 exige la constancia durable de la entrega. Mandarlo
+    // al escaner es la accion honesta; ofrecerle "liberar" aqui produciria un
+    // 409 CASH_HANDOFF_REQUIRED.
+    if (actor.flow === 'cashout') {
+      return (
+        <ActionView
+          icon="qr_code_scanner"
+          tone="bg-naranja-suave"
+          iconTone="text-naranja"
+          title="Escanea el código del cliente"
+          body="Entrega el efectivo y escanea el código que te muestra. Los fondos se liberan a tu cuenta al confirmar la entrega."
+          primary={{ label: 'Ir a escanear', onClick: onGoToScanner }}
+          secondary={{ label: 'Abrir chat', onClick: onOpenChat }}
+        />
+      );
+    }
+    // Deposito: el cliente entrega efectivo y libera para recibir la cripto.
+    return (
+      <ConfirmReleaseView trade={trade} onComplete={onComplete} token={token} onOpenChat={onOpenChat} />
+    );
+  }
+
+  // Quien espera. El texto dice quien tiene la siguiente accion, no una
+  // generalidad.
+  if (actor.flow === 'cashout') {
+    return (
+      <ActionView
+        icon="qr_code_2"
+        tone="bg-verde-suave"
+        iconTone="text-verde"
+        title="Muestra tu código"
+        body="Tu cripto está en garantía. Muestra el código al agente; cuando te entregue el efectivo y lo escanee, la operación se cierra."
+        primary={{ label: 'Ver mi código', onClick: onShowQR }}
+        secondary={{ label: 'Abrir chat', onClick: onOpenChat }}
+      />
+    );
+  }
+
+  return (
+    <ActionView
+      icon="hourglass_top"
+      tone="bg-fondo"
+      iconTone="text-gris"
+      title="Esperando al cliente"
+      body="Tu cripto está en garantía. El cliente confirmará cuando te haya entregado el efectivo; entonces los fondos pasan a su cuenta."
+      secondary={{ label: 'Abrir chat', onClick: onOpenChat }}
+    />
+  );
+}
+
+/** Presentación común de las vistas de `revealing`. */
+function ActionView({
+  icon,
+  tone,
+  iconTone,
+  title,
+  body,
+  primary,
+  secondary,
+}: {
+  icon: string;
+  tone: string;
+  iconTone: string;
+  title: string;
+  body: string;
+  primary?: { label: string; onClick: () => void };
+  secondary?: { label: string; onClick: () => void };
+}) {
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-sm bg-purple-100 flex items-center justify-center mb-6">
-        <span className="material-symbols-outlined text-purple-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
-          qr_code
+      <div className={`w-16 h-16 rounded-sm ${tone} border-2 border-tinta flex items-center justify-center mb-6`}>
+        <span aria-hidden="true" className={`material-symbols-outlined ${iconTone} text-3xl`} style={{ fontVariationSettings: '"FILL" 1' }}>
+          {icon}
         </span>
       </div>
-      <h2 className="text-2xl font-bold text-on-surface mb-2">Mostrar tu QR</h2>
-      <p className="text-on-surface-variant mb-6">
-        El vendedor confirmó el pago. Muestra tu código QR para completar la operación.
-      </p>
+      <h2 className="text-2xl font-bold text-on-surface mb-2">{title}</h2>
+      <p className="text-on-surface-variant mb-6">{body}</p>
 
-      <button className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity mb-4">
-        Ver mi QR de intercambio
-      </button>
-
-      <button className="w-full py-3 rounded-sm border border-primary text-primary font-semibold hover:bg-primary/5 transition-colors">
-        Abrir chat
-      </button>
+      {primary && (
+        <button
+          onClick={primary.onClick}
+          className="w-full min-h-12 py-3 rounded-sm bg-naranja text-papel border-2 border-tinta shadow-solida font-bold transition-all active:translate-x-[3px] active:translate-y-[3px] active:shadow-solida-xs mb-4"
+        >
+          {primary.label}
+        </button>
+      )}
+      {secondary && (
+        <button
+          onClick={secondary.onClick}
+          className="w-full min-h-12 py-3 rounded-sm border-2 border-tinta text-tinta font-bold hover:bg-surface-container-low transition-colors"
+        >
+          {secondary.label}
+        </button>
+      )}
     </div>
   );
 }
 
-function RevealedView({ trade, onComplete, token }: { trade: TradeDetailData; onComplete: () => void; token: string | null }) {
+
+/**
+ * CASH-5B: era `RevealedView`, atada al estado inventado `revealed` que
+ * CASH-5A elimino, asi que en produccion era inalcanzable: el guard contra
+ * declarar liberados unos fondos que siguen en garantia estaba escrito y
+ * nadie podia llegar a el. Ahora la usa el comprador del escrow en deposito.
+ */
+function ConfirmReleaseView({ trade, onComplete, token, onOpenChat }: { trade: TradeDetailData; onComplete: () => void; token: string | null; onOpenChat: () => void }) {
   const [isConfirming, setIsConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
 
@@ -300,9 +420,13 @@ function RevealedView({ trade, onComplete, token }: { trade: TradeDetailData; on
           visibility
         </span>
       </div>
-      <h2 className="text-2xl font-bold text-on-surface mb-2">Confirmar recepción</h2>
+      <h2 className="text-2xl font-bold text-on-surface mb-2">Confirmar la entrega</h2>
       <p className="text-on-surface-variant mb-6">
-        ¿Ya recibiste el efectivo? Confirma para liberar los fondos al vendedor.
+        {/* CASH-5B: el texto anterior decia "confirma para liberar los fondos
+            al vendedor", y es al reves: liberar entrega la cripto a quien
+            confirma, porque el contrato exige la firma del comprador. */}
+        ¿Ya entregaste el efectivo al agente? Al confirmar, la cripto en garantía
+        pasa a tu cuenta.
       </p>
 
       {confirmError && (
@@ -320,7 +444,7 @@ function RevealedView({ trade, onComplete, token }: { trade: TradeDetailData; on
           <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>
             {confirmError ? 'refresh' : 'check_circle'}
           </span>
-          {confirmError ? 'Reintentar' : 'Ya recibí el efectivo'}
+          {confirmError ? 'Reintentar' : 'Ya entregué el efectivo'}
         </button>
       ) : (
         <div className="flex flex-col items-center gap-3 py-4">
@@ -331,6 +455,15 @@ function RevealedView({ trade, onComplete, token }: { trade: TradeDetailData; on
           <p className="text-sm font-medium text-gris">Confirmando intercambio…</p>
         </div>
       )}
+
+      {/* CASH-5B: el chat es la unica accion segura en cualquier momento, y
+          las cuatro vistas de `revealing` la ofrecen. */}
+      <button
+        onClick={onOpenChat}
+        className="mt-4 w-full min-h-12 py-3 rounded-sm border-2 border-tinta text-tinta font-bold hover:bg-surface-container-low transition-colors"
+      >
+        Abrir chat
+      </button>
     </div>
   );
 }
@@ -686,7 +819,7 @@ function RefundConfirmDialog({
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-function TradeDetailContent({ token, onBack }: TradeDetailProps) {
+function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -869,6 +1002,9 @@ function TradeDetailContent({ token, onBack }: TradeDetailProps) {
   }
 
   // Render state-specific view
+  // CASH-5B: el papel se deriva de ESTA operación, no de la sesión.
+  const actor = resolveTradeActor(userId, trade);
+
   const renderStateView = () => {
     switch (trade.status) {
       case 'pending':
@@ -885,11 +1021,20 @@ function TradeDetailContent({ token, onBack }: TradeDetailProps) {
       case 'locked':
         return <LockedView trade={trade} />;
       case 'revealing':
-        return <RevealingView trade={trade} />;
-      // CASH-5A: se elimina `case 'revealed'`. Ese estado no existe en
-      // `trades.status`, así que la rama era inalcanzable. `RevealedView` se
-      // deja en su sitio: CASH-5B es dueño de las vistas y decidirá si
-      // `RevealingView` la absorbe.
+        // CASH-5A eliminó `case 'revealed'`, un estado que ningún backend
+        // emite. CASH-5B trae aquí la acción real, repartida por flujo y
+        // actor: la vista de confirmación ya no queda inalcanzable.
+        return (
+          <RevealingView
+            trade={trade}
+            actor={actor}
+            onComplete={handleComplete}
+            token={token}
+            onShowQR={() => navigate('/qr-reveal')}
+            onOpenChat={() => navigate('/chat')}
+            onGoToScanner={() => navigate('/inbox')}
+          />
+        );
       case 'completed':
         return <CompletedView trade={trade} />;
       case 'cancelled':

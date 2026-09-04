@@ -140,40 +140,28 @@ describe('TradeDetail', () => {
       });
     });
 
-    it('should render revealing state with QR button', async () => {
+    /**
+     * CASH-5B: `revealing` ya no tiene una vista unica. El paso siguiente
+     * depende del flujo y de quien mira, asi que este caso solo comprueba
+     * que la pantalla identifica el estado; las cuatro combinaciones y sus
+     * acciones viven en `revealingActions.test.tsx`.
+     *
+     * Este trade de prueba no trae `flow` ni `provider_id` y se renderiza sin
+     * sesion, asi que el actor es un observador: la vista correcta es la de
+     * espera, sin ninguna accion de liberar. Que sea justamente esa es la
+     * comprobacion valiosa aqui.
+     */
+    it('should render revealing state without exposing an action to an observer', async () => {
       mockGetTrade.mockResolvedValue(createMockTrade('revealing'));
 
       renderWithRouter();
 
       await waitFor(() => {
         expect(screen.getByText('Revelando')).toBeInTheDocument();
-        expect(screen.getByText(/mostrar tu qr/i)).toBeInTheDocument();
-        expect(screen.getByText(/ver mi qr de intercambio/i)).toBeInTheDocument();
       });
+      expect(screen.queryByRole('button', { name: /ya entregué|escanear|ver mi código/i })).toBeNull();
     });
 
-    /**
-     * CASH-5A: este test montaba el estado `revealed`, que ningun backend
-     * emite. Al quitar ese estado inventado quedo a la vista un defecto que
-     * llevaba tiempo tapado: la logica real de "confirmar recepcion" vive en
-     * `RevealedView`, inalcanzable en produccion, mientras que `RevealingView`
-     * —el estado que si ocurre— tiene dos botones sin onClick. Es la H5 de la
-     * auditoria y su reparacion pertenece a CASH-5B, que es dueño de las
-     * acciones por flujo y actor.
-     *
-     * Se deja marcado en vez de borrado para que la deuda no desaparezca.
-     */
-    it.skip('CASH-5B: revealing debe ofrecer confirmar recepcion', async () => {
-      mockGetTrade.mockResolvedValue(createMockTrade('revealing'));
-
-      renderWithRouter();
-
-      await waitFor(() => {
-        expect(screen.getByText('Revelado')).toBeInTheDocument();
-        expect(screen.getByText(/confirmar recepción/i)).toBeInTheDocument();
-        expect(screen.getByText(/ya recibí el efectivo/i)).toBeInTheDocument();
-      });
-    });
 
     it('should render completed state with summary', async () => {
       mockGetTrade.mockResolvedValue(createMockTrade('completed'));
@@ -234,51 +222,12 @@ describe('TradeDetail', () => {
   // docs/AUDIT_MOBILE_MAINNET.md §4: "RevealedView muestra éxito aunque
   // completeTrade falle". La pantalla no debe declarar liberados unos fondos
   // que siguen en el contrato.
-  describe('Confirmación de recepción', () => {
-    // CASH-5A: ver la nota de arriba. La proteccion que este caso fija —no
-    // declarar liberados unos fondos que siguen en el contrato— es real y
-    // esta implementada en RevealedView; lo que falta es que `revealing`
-    // llegue a ella. CASH-5B.
-    it.skip('CASH-5B: does not report success when the release fails', async () => {
-      mockGetTrade.mockResolvedValue(createMockTrade('revealing'));
-      mockCompleteTrade.mockRejectedValue(new Error('on-chain release failed'));
+  // CASH-5B: aqui vivia `describe('Confirmación de recepción')`. Sus casos
+  // montaban el estado inventado `revealed`, asi que probaban una vista
+  // inalcanzable en produccion. La accion existe y ahora se prueba con el
+  // actor correcto en `revealingActions.test.tsx`, para las cuatro
+  // combinaciones de flujo y participante.
 
-      renderWithRouter();
-
-      await waitFor(() => {
-        expect(screen.getByText(/ya recibí el efectivo/i)).toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByText(/ya recibí el efectivo/i));
-
-      await waitFor(() => {
-        expect(screen.getByText(/no se pudo confirmar/i)).toBeInTheDocument();
-      });
-
-      // Sigue diciendo dónde está el dinero y deja reintentar.
-      expect(screen.getByText(/sigue retenido en la garantía/i)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /reintentar/i })).toBeInTheDocument();
-      expect(screen.queryByText(/operación completada/i)).not.toBeInTheDocument();
-    });
-
-    it.skip('CASH-5B: confirms when the release succeeds', async () => {
-      mockGetTrade.mockResolvedValue(createMockTrade('revealing'));
-      mockCompleteTrade.mockResolvedValue({ status: 'completed', release_tx_hash: 'hash' });
-
-      renderWithRouter();
-
-      await waitFor(() => {
-        expect(screen.getByText(/ya recibí el efectivo/i)).toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByText(/ya recibí el efectivo/i));
-
-      await waitFor(() => {
-        expect(mockCompleteTrade).toHaveBeenCalledWith('trade-123', 'mock-token');
-      });
-      expect(screen.queryByText(/no se pudo confirmar/i)).not.toBeInTheDocument();
-    });
-  });
 
   describe('Error handling', () => {
     it('should show 404 screen when trade is not found', async () => {
