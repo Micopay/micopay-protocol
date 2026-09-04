@@ -82,17 +82,17 @@ const DepositChat = ({
     return (
         <div className="bg-surface font-body text-on-surface min-h-screen flex flex-col">
             {/* TopAppBar */}
-            <header className="flex items-center justify-between px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] w-full sticky top-0 z-50 bg-[#F4FAFF] border-b border-[#E7F6FF]">
+            <header className="flex items-center justify-between px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] w-full sticky top-0 z-50 bg-fondo border-b border-[#E7F6FF]">
                 <div className="flex items-center gap-4">
                     <button 
                         onClick={onBack}
-                        className="flex items-center justify-center p-2 text-[#00694C] hover:bg-[#E7F6FF] transition-colors rounded-full active:scale-95 duration-150"
+                        className="min-h-12 min-w-12 flex items-center justify-center p-2 text-verde hover:bg-[#E7F6FF] transition-colors rounded-sm active:translate-x-[2px] active:translate-y-[2px] duration-150"
                     >
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
                     <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                            <h1 className="font-headline font-bold text-lg tracking-tight text-[#0B1E26]">{counterpartyName ?? '—'}</h1>
+                            <h1 className="font-headline font-bold text-lg tracking-tight text-tinta">{counterpartyName ?? '—'}</h1>
                             <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-primary/20">
                                 <span className="material-symbols-outlined !text-[12px]" style={{ fontVariationSettings: '"FILL" 1' }}>verified</span>
                                 {t('chatRoom.verified').toUpperCase()}
@@ -106,8 +106,8 @@ const DepositChat = ({
             <main className="flex-1 max-w-2xl mx-auto flex flex-col w-full bg-[radial-gradient(circle_at_2px_2px,rgba(0,105,76,0.03)_1px,transparent_0)] bg-[length:24px_24px]">
                 {/* Status Banner */}
                 <section className="px-6 py-4">
-                    <div className="bg-white border border-primary/10 shadow-sm rounded-2xl p-4 flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                    <div className="bg-papel border border-primary/10 rounded-sm p-4 flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-sm bg-primary/10 flex items-center justify-center text-primary shrink-0">
                             <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>task_alt</span>
                         </div>
                         <div className="flex flex-col gap-1 min-w-0">
@@ -141,14 +141,14 @@ const DepositChat = ({
                 {/* Error State with Retry */}
                 {error && !isLoading && (
                     <div className="px-6 py-4">
-                        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
+                        <div className="bg-red-50 border border-red-200 rounded-sm p-4 flex items-start gap-3">
                             <span className="material-symbols-outlined text-red-600 text-lg">error</span>
                             <div className="flex flex-col gap-2 flex-1">
                                 <p className="text-sm font-semibold text-red-700">{t('chatRoom.couldntLoadMessages')}</p>
                                 <p className="text-xs text-red-600">{error.message}</p>
                                 <button
                                     onClick={retryLoad}
-                                    className="text-xs font-semibold text-red-700 hover:underline"
+                                    className="inline-flex min-h-12 items-center text-xs font-bold text-rojo underline"
                                 >
                                     {t('chatRoom.retry')}
                                 </button>
@@ -167,7 +167,7 @@ const DepositChat = ({
 
                     {!isLoading && !error && messages.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-12 text-center">
-                            <span className="material-symbols-outlined text-[48px] text-outline/40 mb-3">chat_bubble</span>
+                            <span className="material-symbols-outlined text-[48px] text-gris/40 mb-3">chat_bubble</span>
                             <p className="text-sm text-on-surface/60 font-medium">{t('chatRoom.noMessagesYet')}</p>
                             <p className="text-xs text-on-surface/40 mt-1">{t('chatRoom.startConversation')}</p>
                         </div>
@@ -178,10 +178,10 @@ const DepositChat = ({
                             key={msg.id}
                             className={`flex flex-col gap-2 ${msg.isOwn ? 'max-w-[85%] self-end' : 'max-w-[85%] self-start'}`}
                         >
-                            <div className={`p-4 shadow-sm border ${
+                            <div className={`p-4 border ${
                                 msg.isOwn
-                                    ? 'bg-primary text-white rounded-tl-2xl rounded-bl-2xl rounded-br-2xl border-primary shadow-md' 
-                                    : 'bg-white text-on-surface rounded-tr-2xl rounded-bl-2xl rounded-br-2xl border-surface-container-high'
+                                    ? 'bg-primary text-papel rounded-tl-2xl rounded-bl-2xl rounded-br-2xl border-primary ' 
+                                    : 'bg-papel text-on-surface rounded-tr-2xl rounded-bl-2xl rounded-br-2xl border-surface-container-high'
                             }`}>
                                 <p className="text-[15px] leading-relaxed">{msg.body}</p>
                             </div>
@@ -190,7 +190,7 @@ const DepositChat = ({
                                     {new Date(msg.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true })}
                                 </span>
                                 {msg.isOwn && (
-                                    <span className="material-symbols-outlined !text-[12px] text-[#5DCAA5]" style={{ fontVariationSettings: msg.readAt ? '"FILL" 1' : '"FILL" 0' }}>done_all</span>
+                                    <span className="material-symbols-outlined !text-[12px] text-naranja" style={{ fontVariationSettings: msg.readAt ? '"FILL" 1' : '"FILL" 0' }}>done_all</span>
                                 )}
                             </div>
                         </div>
@@ -199,11 +199,11 @@ const DepositChat = ({
                 </div>
 
                 {/* Footer / Input */}
-                <footer className="sticky bottom-0 bg-white/80 backdrop-blur-xl px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 flex flex-col gap-4 border-t border-[#E7F6FF]">
+                <footer className="sticky bottom-0 bg-papel px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 flex flex-col gap-4 border-t border-[#E7F6FF]">
                     <div className="grid grid-cols-1 gap-3">
                         <button
                             onClick={onViewQR}
-                            className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-primary to-primary-container text-white font-bold text-sm shadow-lg shadow-primary/20 hover:brightness-110 transition-all active:scale-95 disabled:opacity-50"
+                            className="flex items-center justify-center gap-2 py-3 px-4 rounded-sm bg-naranja text-papel border-2 border-tinta shadow-solida font-bold text-sm hover:brightness-110 transition-all active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50"
                             disabled={isSending}
                         >
                             <span className="material-symbols-outlined !text-[20px]">qr_code_2</span>
@@ -211,11 +211,11 @@ const DepositChat = ({
                         </button>
                     </div>
                     {sendError && (
-                        <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+                        <div className="text-xs text-red-600 bg-red-50 min-h-12 px-3 rounded-sm">
                             {t('chatRoom.sendFailed', { error: sendError.message })}
                         </div>
                     )}
-                    <div className="flex items-center gap-3 bg-white border-b border-outline-variant/20 py-2">
+                    <div className="flex items-center gap-3 bg-papel border-b border-linea py-2">
                         <div className="flex-grow">
                             <input 
                                 value={inputValue}
@@ -230,7 +230,7 @@ const DepositChat = ({
                         <button 
                             onClick={handleSendMessage}
                             disabled={isSending || !inputValue.trim()}
-                            className="w-10 h-10 rounded-full bg-surface-container-low flex items-center justify-center text-primary hover:bg-primary hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="min-h-12 min-w-12 rounded-sm bg-fondo border-2 border-tinta flex items-center justify-center text-primary hover:bg-primary hover:text-papel transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isSending ? (
                                 <div className="animate-spin rounded-full h-4 w-4 border-b border-current"></div>

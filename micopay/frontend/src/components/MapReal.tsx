@@ -19,7 +19,6 @@ interface MapRealProps {
     onPickerPositionChange?: (position: { lat: number; lng: number }) => void;
 }
 
-const mushroomImages = ['/mushroom_red.png', '/mushroom_green.png', '/mushroom_gold.png'];
 
 // OpenFreeMap: OSM completo a nivel calle, sin API key, uso en producción permitido.
 // demotiles.maplibre.org NO sirve como fallback: solo tiene fronteras de países,
@@ -28,7 +27,6 @@ const FALLBACK_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 
 function buildMerchantMarkerElement(
     merchant: AvailableMerchant,
-    image: string,
     isSelected: boolean,
     onSelectMerchant?: (merchantId: string) => void,
 ): HTMLElement {
@@ -41,21 +39,34 @@ function buildMerchantMarkerElement(
     wrapper.style.padding = '0';
     wrapper.style.cursor = onSelectMerchant ? 'pointer' : 'default';
 
+    /* El hongo va como SVG inline: este DOM se construye fuera de React, asi
+       que no puede usar el componente Hongo. Es el mismo dibujo (mismo
+       viewBox y trazos) que src/components/ui/Hongo.tsx.
+
+       Sin glow ni pulso: eran blur + animate-pulse + bg-primary/40, tres
+       prohibiciones del sistema de una vez. La jerarquia la da el tamaño y
+       la inversion del rotulo, no la luz.
+
+       Los colores van por var(): funcionan aqui porque index.css declara
+       @theme static, que obliga a emitir todas las variables. Sin eso, este
+       marcador saldria sin color en produccion y bien en dev (R-4 del plan). */
     const pinWrap = document.createElement('span');
-    pinWrap.className = `relative w-14 h-14 block transition-transform ${isSelected ? 'scale-125' : ''}`;
-
-    const glow = document.createElement('span');
-    glow.className = `absolute inset-0 rounded-full blur-md animate-pulse ${isSelected ? 'bg-primary/40' : 'bg-primary/20'}`;
-    pinWrap.appendChild(glow);
-
-    const img = document.createElement('img');
-    img.src = image;
-    img.alt = '';
-    img.className = 'w-full h-full object-contain relative z-10 drop-shadow-lg';
-    pinWrap.appendChild(img);
+    pinWrap.className = 'block transition-transform';
+    pinWrap.style.width = isSelected ? '52px' : '44px';
+    pinWrap.innerHTML = `
+      <svg viewBox="0 0 64 64" fill="none" width="100%" height="100%" aria-hidden="true">
+        <path d="M23 30v17a9 7 0 0 0 18 0V30Z" fill="var(--color-fondo)" stroke="var(--color-tinta)" stroke-width="2"/>
+        <path d="M4 33C4 16 17 5 32 5s28 11 28 28Z" fill="${isSelected ? 'var(--color-tinta)' : 'var(--color-naranja)'}" stroke="var(--color-tinta)" stroke-width="2"/>
+        <circle cx="20" cy="21" r="3.4" fill="${isSelected ? 'var(--color-papel)' : 'var(--color-tinta)'}"/>
+        <circle cx="41" cy="16" r="4.2" fill="${isSelected ? 'var(--color-papel)' : 'var(--color-tinta)'}"/>
+      </svg>`;
 
     const label = document.createElement('span');
-    label.className = `backdrop-blur-sm px-3 py-1 rounded-full mt-1 shadow-md border text-[9px] font-bold whitespace-nowrap block ${isSelected ? 'bg-primary text-white border-primary' : 'bg-white/95 text-on-surface border-outline-variant/20'}`;
+    label.className = 'mt-1 block whitespace-nowrap rounded-sm border-2 px-2 py-0.5 text-[10px] font-bold';
+    label.style.borderColor = 'var(--color-tinta)';
+    label.style.background = isSelected ? 'var(--color-tinta)' : 'var(--color-papel)';
+    label.style.color = isSelected ? 'var(--color-papel)' : 'var(--color-tinta)';
+    label.style.boxShadow = '2px 2px 0 var(--color-tinta)';
     label.textContent = merchant.username;
 
     wrapper.appendChild(pinWrap);
@@ -72,14 +83,14 @@ function buildPickerMarkerElement(): HTMLElement {
     container.style.width = '48px';
     container.style.cursor = 'grab';
 
-    const glow = document.createElement('span');
-    glow.className = 'absolute -top-1 w-12 h-12 rounded-full bg-primary/30 blur-md animate-pulse';
-    container.appendChild(glow);
-
     const pin = document.createElement('div');
-    pin.className = 'relative z-10 w-9 h-9 rounded-full bg-primary border-4 border-white shadow-[0_0_15px_rgba(0,105,76,0.5)] flex items-center justify-center';
+    /* Circulo: es el unico sitio, con el punto del usuario, donde el radio
+       completo sigue siendo correcto — es un punto de verdad, no una caja. */
+    pin.className = 'relative z-10 w-11 h-11 rounded-full border-2 flex items-center justify-center';
+    pin.style.background = 'var(--color-naranja)';
+    pin.style.borderColor = 'var(--color-tinta)';
     const dot = document.createElement('span');
-    dot.className = 'w-2.5 h-2.5 rounded-full bg-white';
+    dot.className = 'w-3 h-3 rounded-full bg-papel';
     pin.appendChild(dot);
     container.appendChild(pin);
 
@@ -92,12 +103,10 @@ function buildUserMarkerElement(): HTMLElement {
     container.style.width = '64px';
     container.style.height = '64px';
 
-    const pulse = document.createElement('div');
-    pulse.className = 'w-16 h-16 bg-primary/20 rounded-full animate-ping absolute';
-    container.appendChild(pulse);
-
     const dot = document.createElement('div');
-    dot.className = 'w-6 h-6 bg-primary rounded-full border-2 border-white shadow-[0_0_15px_rgba(0,105,76,0.5)] relative z-10';
+    dot.className = 'w-6 h-6 rounded-full border-2 relative z-10';
+    dot.style.background = 'var(--color-verde)';
+    dot.style.borderColor = 'var(--color-tinta)';
     container.appendChild(dot);
 
     return container;
@@ -214,8 +223,7 @@ const MapReal = ({
 
             validMerchants.forEach((merchant, index) => {
                 const isSelected = selectedMerchantId === merchant.seller_id;
-                const image = type === 'deposit' ? '/mushroom_green.png' : mushroomImages[index % mushroomImages.length];
-                const element = buildMerchantMarkerElement(merchant, image, isSelected, onSelectMerchant);
+                const element = buildMerchantMarkerElement(merchant, isSelected, onSelectMerchant);
 
                 const marker = new maplibregl.Marker({ element })
                     .setLngLat([merchant.longitude, merchant.latitude])
@@ -259,14 +267,14 @@ const MapReal = ({
     }, [merchants, selectedMerchantId, userPosition, type, onSelectMerchant, pickerMode]);
 
     return (
-        <div className="relative w-full h-64 bg-surface-container-low rounded-[32px] overflow-hidden border border-outline-variant/30 shadow-inner group">
+        <div className="relative w-full h-64 bg-surface-container-low rounded-sm overflow-hidden border-2 border-tinta shadow-inner group">
             {/* w-full/h-full explícitos: maplibre-gl.css fuerza position:relative sobre
                 .maplibregl-map y anula el `absolute` de Tailwind, colapsando el alto a 0. */}
             <div ref={containerRef} className="absolute inset-0 w-full h-full" />
 
             {merchants.length > 0 && (
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full border border-outline-variant/10 flex items-center gap-2 shadow-lg z-20 pointer-events-none">
-                    <span className="material-symbols-outlined text-primary text-sm font-bold">location_on</span>
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-papel/90 px-4 py-1.5 rounded-full border-2 border-tinta flex items-center gap-2 z-20 pointer-events-none">
+                    <span className="material-symbols-outlined text-verde text-sm font-bold">location_on</span>
                     <p className="text-[10px] font-bold text-on-surface uppercase tracking-widest">
                         {t('map.agentsNearby', { count: merchants.length })}
                     </p>

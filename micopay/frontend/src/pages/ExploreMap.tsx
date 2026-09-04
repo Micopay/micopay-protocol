@@ -100,7 +100,7 @@ function EffectiveFeeNote({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-bold text-outline uppercase tracking-wider">
+        <span className="text-[11px] font-bold text-gris uppercase tracking-wider">
           {t('map.totalEffectiveCost')}
         </span>
         <span
@@ -109,13 +109,13 @@ function EffectiveFeeNote({
           {totalPct.toFixed(1)}%
         </span>
       </div>
-      <p className="text-[11px] text-outline font-medium">
+      <p className="text-[11px] text-gris font-medium">
         {t('map.feeBreakdown', { platformPct: platformFeePct, providerPct: commissionPct })}
       </p>
       {exceeds && (
         <div
           role="alert"
-          className="flex items-start gap-2 rounded-xl border border-error/30 bg-error/5 px-3 py-2"
+          className="flex items-start gap-2 rounded-sm border border-error/30 bg-error/5 px-3 py-2"
         >
           <span className="material-symbols-outlined text-error text-base leading-none">warning</span>
           <p className="text-[12px] font-medium text-error leading-snug">
@@ -170,15 +170,15 @@ const ExploreMap = ({
   return (
     <div className="bg-surface-container-lowest text-on-surface font-body min-h-screen pb-24">
       {/* Top Navigation */}
-      <header className="fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-white/80 backdrop-blur-md shadow-sm">
+      <header className="border-b-2 border-tinta fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel ">
         <button
           onClick={onBack}
-          className="flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
-          aria-label={t('a11y.back')}
+          className="min-h-12 min-w-12 flex items-center justify-center p-2 rounded-sm hover:bg-surface-container-low transition-colors duration-200"
+          aria-label="Volver"
         >
-          <span className="material-symbols-outlined text-primary">arrow_back</span>
+          <span className="material-symbols-outlined text-verde">arrow_back</span>
         </button>
-        <h1 className="ml-4 font-headline font-bold text-xl text-primary tracking-tight">
+        <h1 className="ml-4 font-headline font-bold text-xl text-tinta tracking-tight">
           {t('map.title')}
         </h1>
       </header>
@@ -215,8 +215,8 @@ const ExploreMap = ({
                 {offers.length} {offers.length === 1 ? t('map.offer') : t('map.offers')} {t('map.for', { amount })}
               </h2>
               <div className="flex items-center gap-1 mt-1">
-                <span className="material-symbols-outlined text-primary text-sm">location_on</span>
-                <p className="text-sm text-outline font-medium">{t('map.nearYou')}</p>
+                <span className="material-symbols-outlined text-verde text-sm">location_on</span>
+                <p className="text-sm text-gris font-medium">{t('map.nearYou')}</p>
               </div>
             </div>
 
@@ -230,63 +230,63 @@ const ExploreMap = ({
                     <article
                       key={offer.id}
                       ref={isSelected ? selectedOfferRef : null}
-                      className={`relative bg-surface p-6 rounded-[24px] border shadow-[0_4px_24px_rgba(0,133,96,0.06)] overflow-hidden transition-all ${isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-primary-container/10'}`}
+                      className={`relative bg-surface p-6 rounded-sm border overflow-hidden transition-all ${isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-primary-container/10'}`}
                     >
                       <div className="flex gap-2 mb-4">
-                        <span className="px-3 py-1 bg-primary text-white text-[11px] font-bold rounded-full uppercase tracking-wider">
+                        <span className="px-3 py-1 bg-verde text-papel text-[11px] font-bold rounded-full uppercase tracking-wider">
                           {t('map.bestOffer')}
                         </span>
                         {isSelected && (
-                          <span className="px-3 py-1 bg-primary/10 text-primary text-[11px] font-bold rounded-full uppercase tracking-wider">
+                          <span className="px-3 py-1 bg-primary/10 text-verde text-[11px] font-bold rounded-full uppercase tracking-wider">
                             {t('map.selectedOnMap')}
                           </span>
                         )}
                         {offer.badge && (
-                          <span className="px-3 py-1 bg-surface-container-high text-primary text-[11px] font-bold rounded-full uppercase tracking-wider">
+                          <span className="px-3 py-1 bg-surface-container-high text-verde text-[11px] font-bold rounded-full uppercase tracking-wider">
                             {offer.badge}
                           </span>
                         )}
                       </div>
                       <div className="flex items-start justify-between mb-6">
                         <div className="flex gap-4 min-w-0">
-                          <div className="w-14 h-14 bg-primary-container/10 rounded-2xl flex items-center justify-center flex-shrink-0">
-                            <span className="material-symbols-outlined text-primary text-3xl">{offer.icon}</span>
+                          <div className="w-14 h-14 bg-verde-suave rounded-sm flex items-center justify-center flex-shrink-0">
+                            <span className="material-symbols-outlined text-verde text-3xl">{offer.icon}</span>
                           </div>
                           <div className="min-w-0">
                             <h3 className="font-headline font-bold text-lg text-on-surface truncate">{offer.name}</h3>
-                            <p className="text-sm text-outline font-medium flex items-center gap-1">
+                            <p className="text-sm text-gris font-medium flex items-center gap-1">
                               <span className="material-symbols-outlined text-sm">directions_walk</span>
                               {offer.distance} · {offer.walkMinutes} min
                             </p>
                             <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                              <span className="text-[12px] text-on-surface-variant">{offer.completionRate ? t('map.completion', { pct: Math.round(offer.completionRate) }) : t('map.noHistory')}</span>
+                              <span className="num text-[12px] text-on-surface-variant">{offer.completionRate ? t('map.completion', { pct: Math.round(offer.completionRate) }) : t('map.noHistory')}</span>
                               <span className="text-[12px] text-on-surface-variant">·</span>
                               <span className="text-[12px] text-on-surface-variant">{offer.tradesCompleted ?? 0} {t('map.ops')}</span>
                               {offer.tier && (
-                                <span className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-surface-container-high text-primary">{offer.tier}</span>
+                                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.1em] rounded-sm border-[1.5px] border-tinta bg-verde-suave text-verde">{offer.tier}</span>
                               )}
-                              <span className={`px-2 py-0.5 text-[11px] font-bold rounded-md ${offer.isBusiness ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                              <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.1em] rounded-sm border-[1.5px] border-tinta ${offer.isBusiness ? 'bg-tinta text-papel' : 'bg-papel text-tinta'}`}>
                                 {offer.isBusiness ? t('map.business') : t('map.individual')}
                               </span>
                             </div>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between mb-6 p-4 bg-white/50 rounded-2xl">
+                      <div className="flex items-center justify-between mb-6 p-4 bg-papel rounded-sm">
                         <div>
-                          <p className="text-[11px] font-bold text-outline uppercase tracking-wider mb-1">{t('map.youReceive')}</p>
-                          <p className="text-2xl font-headline font-extrabold text-[#5DCAA5]">
+                          <p className="text-[11px] font-bold text-gris uppercase tracking-wider mb-1">{t('map.youReceive')}</p>
+                          <p className="text-2xl font-headline font-extrabold text-naranja">
                             ${offer.receiveMxn.toFixed(2)} MXN
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-[11px] font-bold text-outline uppercase tracking-wider mb-1">{t('map.commission')}</p>
+                          <p className="text-[11px] font-bold text-gris uppercase tracking-wider mb-1">{t('map.commission')}</p>
                           <p className="text-sm font-bold text-on-surface">
                             ${(amount - offer.receiveMxn).toFixed(2)} ({offer.commissionPct}%)
                           </p>
                         </div>
                       </div>
-                      <div className="mb-6 p-4 bg-white/50 rounded-2xl">
+                      <div className="mb-6 p-4 bg-papel rounded-sm">
                         <EffectiveFeeNote
                           commissionPct={offer.commissionPct}
                           platformFeePct={offer.platformFeePct}
@@ -308,7 +308,7 @@ const ExploreMap = ({
                           }
                         }}
                         disabled={loading}
-                        className="w-full h-[52px] bg-gradient-to-r from-primary to-primary-container text-white font-headline font-bold rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+                        className="w-full h-[52px] bg-naranja text-papel border-2 border-tinta shadow-solida font-headline font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-70 flex items-center justify-center gap-2"
                       >
                         {loading ? (
                           <>
@@ -327,17 +327,17 @@ const ExploreMap = ({
                   <article
                     key={offer.id}
                     ref={isSelected ? selectedOfferRef : null}
-                    className={`bg-surface-container-low/30 p-5 rounded-[24px] border transition-all ${isSelected ? 'border-primary ring-2 ring-primary/30 bg-primary/5' : 'border-transparent hover:border-surface-container-high'}`}
+                    className={`bg-surface-container-low/30 p-5 rounded-sm border transition-all ${isSelected ? 'border-primary ring-2 ring-primary/30 bg-primary/5' : 'border-transparent hover:border-surface-container-high'}`}
                   >
                     <div className="flex items-start justify-between gap-3 mb-4">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-11 h-11 bg-white rounded-full flex items-center justify-center border border-surface-container-high flex-shrink-0">
-                          <span className="material-symbols-outlined text-outline">{offer.icon}</span>
+                        <div className="w-11 h-11 bg-papel rounded-sm flex items-center justify-center border-2 border-tinta flex-shrink-0">
+                          <span className="material-symbols-outlined text-gris">{offer.icon}</span>
                         </div>
                         <div className="min-w-0">
                           <h3 className="font-headline font-bold text-on-surface truncate">{offer.name}</h3>
                             {offer.badge && (
-                            <span className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                            <span className="text-[11px] font-bold text-verde bg-primary/10 px-2 py-0.5 rounded-sm">
                               {offer.badge}
                             </span>
                           )}
@@ -345,20 +345,20 @@ const ExploreMap = ({
                               <span>{offer.completionRate ? `${Math.round(offer.completionRate)}%` : t('map.noHistory')}</span>
                               <span>·</span>
                               <span>{offer.tradesCompleted ?? 0} {t('map.ops')}</span>
-                              {offer.tier && <span className="px-2 py-0.5 text-[10px] rounded-md bg-surface-container-high text-primary">{offer.tier}</span>}
-                              <span className={`px-2 py-0.5 text-[10px] rounded-md ${offer.isBusiness ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                              {offer.tier && <span className="px-2 py-0.5 text-[10px] rounded-sm bg-surface-container-high text-verde">{offer.tier}</span>}
+                              <span className={`px-2 py-0.5 text-[10px] rounded-sm ${offer.isBusiness ? 'bg-tinta text-papel' : 'bg-papel text-tinta'}`}>
                                 {offer.isBusiness ? t('map.business') : t('map.individual')}
                               </span>
                             </div>
                           {isSelected && (
-                            <span className="inline-block mt-1 text-[11px] font-bold text-primary bg-white px-2 py-0.5 rounded-md">
+                            <span className="inline-block mt-1 text-[11px] font-bold text-verde bg-papel px-2 py-0.5 rounded-sm">
                               {t('map.selectedOnMap')}
                             </span>
                           )}
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <p className="text-[10px] font-bold text-outline uppercase tracking-wider">{t('map.offer')}</p>
+                        <p className="text-[10px] font-bold text-gris uppercase tracking-wider">{t('map.offer')}</p>
                         <p className="text-lg font-headline font-bold text-on-surface whitespace-nowrap">
                           ${offer.receiveMxn.toFixed(2)} MXN
                         </p>
@@ -386,7 +386,7 @@ const ExploreMap = ({
                         }
                       }}
                       disabled={loading}
-                      className="w-full py-3 border border-primary text-primary font-bold rounded-xl active:scale-95 transition-all disabled:opacity-70"
+                      className="w-full py-3 border border-primary text-verde font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-70"
                     >
                       {t('map.viewOffer')}
                     </button>
@@ -397,7 +397,7 @@ const ExploreMap = ({
 
             {/* Footer Note */}
             <footer className="mt-10 mb-8 p-6 text-center">
-              <p className="text-[12px] leading-relaxed text-outline font-medium">
+              <p className="text-[12px] leading-relaxed text-gris font-medium">
                 {t('map.footerNote')}
               </p>
             </footer>
@@ -413,15 +413,15 @@ const ExploreMap = ({
 function StateHeader({ onBack }: { onBack: () => void }) {
   const { t } = useTranslation();
   return (
-    <header className="fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-white/80 backdrop-blur-md shadow-sm">
+    <header className="border-b-2 border-tinta fixed top-0 left-0 w-full z-50 flex items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel ">
       <button
         onClick={onBack}
-        className="flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
-        aria-label={t('a11y.back')}
+        className="min-h-12 min-w-12 flex items-center justify-center p-2 rounded-sm hover:bg-surface-container-low transition-colors duration-200"
+        aria-label="Volver"
       >
-        <span className="material-symbols-outlined text-primary">arrow_back</span>
+        <span className="material-symbols-outlined text-verde">arrow_back</span>
       </button>
-      <h1 className="ml-4 font-headline font-bold text-xl text-primary tracking-tight">
+      <h1 className="ml-4 font-headline font-bold text-xl text-tinta tracking-tight">
         {t('map.title')}
       </h1>
     </header>
@@ -445,8 +445,8 @@ function StateShell({
     <div className="bg-surface-container-lowest text-on-surface font-body min-h-screen pb-24">
       <StateHeader onBack={onBack} />
       <main className="pt-[calc(6rem+env(safe-area-inset-top))] px-6 max-w-2xl mx-auto flex flex-col items-center text-center">
-        <div className="w-16 h-16 bg-primary-container/10 rounded-2xl flex items-center justify-center mt-16 mb-6">
-          <span className={`material-symbols-outlined text-primary text-4xl ${spin ? 'animate-spin' : ''}`}>
+        <div className="w-16 h-16 bg-verde-suave rounded-sm flex items-center justify-center mt-16 mb-6">
+          <span className={`material-symbols-outlined text-verde text-4xl ${spin ? 'animate-spin' : ''}`}>
             {icon}
           </span>
         </div>
@@ -461,7 +461,7 @@ function LoadingSkeleton({ onBack }: { onBack: () => void }) {
   const { t } = useTranslation();
   return (
     <StateShell onBack={onBack} icon="progress_activity" title={t('map.searchingOffers')} spin>
-      <p className="text-sm text-outline font-medium max-w-xs">
+      <p className="text-sm text-gris font-medium max-w-xs">
         {t('map.locatingAgents')}
       </p>
     </StateShell>
@@ -472,12 +472,12 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
   const { t } = useTranslation();
   return (
     <StateShell onBack={onBack} icon="location_off" title={t('map.needLocation')}>
-      <p className="text-sm text-outline font-medium max-w-xs mb-6">
+      <p className="text-sm text-gris font-medium max-w-xs mb-6">
         {t('map.enableLocation')}
       </p>
       <button
         onClick={onBack}
-        className="px-6 py-3 border border-primary text-primary font-bold rounded-xl active:scale-95 transition-all"
+        className="px-6 py-3 border border-primary text-verde font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
       >
         {t('map.back')}
       </button>
@@ -489,12 +489,12 @@ function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => vo
   const { t } = useTranslation();
   return (
     <StateShell onBack={onBack} icon="cloud_off" title={t('map.couldNotLoad')}>
-      <p className="text-sm text-outline font-medium max-w-xs mb-6">
+      <p className="text-sm text-gris font-medium max-w-xs mb-6">
         {t('map.checkConnection')}
       </p>
       <button
         onClick={onRetry}
-        className="px-6 py-3 bg-primary text-white font-bold rounded-xl active:scale-95 transition-all"
+        className="px-6 py-3 bg-verde text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
       >
         {t('map.retry')}
       </button>
@@ -506,12 +506,12 @@ function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) 
   const { t } = useTranslation();
   return (
     <StateShell onBack={onBack} icon="search_off" title={t('map.noAgentsAvailable')}>
-      <p className="text-sm text-outline font-medium max-w-xs mb-6">
+      <p className="text-sm text-gris font-medium max-w-xs mb-6">
         {t('map.noAgentsDesc', { amount })}
       </p>
       <button
         onClick={onBack}
-        className="px-6 py-3 border border-primary text-primary font-bold rounded-xl active:scale-95 transition-all"
+        className="px-6 py-3 border border-primary text-verde font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
       >
         {t('map.changeAmount')}
       </button>

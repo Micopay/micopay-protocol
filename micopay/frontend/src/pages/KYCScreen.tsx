@@ -24,8 +24,8 @@ function StatusLine({ status }: { status: KYCStatus }) {
   const { t } = useTranslation();
   if (status === 'pending') {
     return (
-      <div className="flex items-center gap-3 bg-primary/5 border border-primary/10 rounded-2xl px-4 py-3">
-        <span className="material-symbols-outlined text-primary">hourglass_top</span>
+      <div className="flex items-center gap-3 bg-primary/5 border border-primary/10 rounded-sm px-4 py-3">
+        <span className="material-symbols-outlined text-verde">hourglass_top</span>
         <div>
           <p className="font-bold text-on-surface">{t('kyc.verifyingIdentity')}</p>
           <p className="text-xs text-on-surface-variant">{t('kyc.verifyingDesc')}</p>
@@ -35,8 +35,8 @@ function StatusLine({ status }: { status: KYCStatus }) {
   }
   if (status === 'approved') {
     return (
-      <div className="flex items-center gap-3 bg-[#1D9E75]/10 border border-[#1D9E75]/20 rounded-2xl px-4 py-3">
-        <span className="material-symbols-outlined text-[#1D9E75]">check_circle</span>
+      <div className="flex items-center gap-3 bg-verde-claro/10 border-2 border-tinta rounded-sm px-4 py-3">
+        <span className="material-symbols-outlined text-verde-claro">check_circle</span>
         <div>
           <p className="font-bold text-on-surface">{t('kyc.identityVerified')}</p>
           <p className="text-xs text-on-surface-variant">{t('kyc.identityVerifiedDesc')}</p>
@@ -45,7 +45,7 @@ function StatusLine({ status }: { status: KYCStatus }) {
     );
   }
   return (
-    <div className="flex items-center gap-3 bg-error/10 border border-error/20 rounded-2xl px-4 py-3">
+    <div className="flex items-center gap-3 bg-error/10 border border-error/20 rounded-sm px-4 py-3">
       <span className="material-symbols-outlined text-error">error</span>
       <div>
         <p className="font-bold text-on-surface">{t('kyc.couldNotVerify')}</p>
@@ -224,11 +224,11 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
 
   return (
     <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col">
-      <header className="sticky top-0 z-50 bg-surface-container-lowest/80 backdrop-blur-md border-b border-surface-container p-4">
+      <header className="sticky top-0 z-50 bg-surface-container-lowest/80 border-b-2 border-tinta p-4">
         <div className="flex items-center gap-3">
           <button
             onClick={onApproved}
-            className="p-2 hover:bg-surface-container-low rounded-full transition-colors text-primary"
+            className="min-h-12 min-w-12 flex items-center justify-center rounded-sm transition-colors text-verde"
             aria-label={t('kyc.continue')}
           >
             <span className="material-symbols-outlined">verified</span>
@@ -242,7 +242,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
 
       <main className="flex-1 px-6 pb-8 pt-6">
         <section className="space-y-4">
-          <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-[24px] p-5 border border-primary/10">
+          <div className="rounded-sm p-5 border border-primary/10">
             <h2 className="font-headline font-extrabold text-xl">{t('kyc.identityVerifiedWith', { provider: providerName })}</h2>
             <p className="text-sm text-on-surface-variant mt-2 leading-relaxed">
               {t('kyc.oneTimeProcess', { provider: providerName })}
@@ -252,14 +252,14 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
           <StatusLine status={status} />
 
           {status === 'rejected' && reason && (
-            <div className="bg-error/10 border border-error/20 rounded-2xl px-4 py-3">
+            <div className="bg-error/10 border border-error/20 rounded-sm px-4 py-3">
               <p className="text-sm font-bold text-error">{t('kyc.reason')}</p>
               <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">{reason}</p>
             </div>
           )}
 
           {statusPollingError && (
-            <div className="bg-error/10 border border-error/20 rounded-2xl px-4 py-3">
+            <div className="bg-error/10 border border-error/20 rounded-sm px-4 py-3">
               <p className="text-sm font-bold text-error">{t('kyc.couldNotQuery')}</p>
               <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">{statusPollingError}</p>
             </div>
@@ -268,7 +268,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
 
         <div className="mt-6 space-y-4">
           {needsEmail ? (
-            <div className="bg-white border border-outline-variant/20 rounded-[24px] p-5 space-y-3">
+            <div className="bg-papel border-2 border-tinta rounded-sm p-5 space-y-3">
               <div>
                 <p className="font-bold text-on-surface text-sm">{t('kyc.emailRequiredTitle')}</p>
                 <p className="text-xs text-on-surface-variant mt-1">{t('kyc.emailRequiredDesc', { provider: providerName })}</p>
@@ -281,13 +281,13 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); setEmailError(null); }}
                 placeholder={t('kyc.emailPlaceholder')}
-                className="w-full rounded-xl border border-outline-variant/30 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                className="w-full rounded-sm border-2 border-tinta px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
               />
               {emailError && <p className="text-xs text-error">{emailError}</p>}
               <button
                 onClick={handleSubmitEmail}
                 disabled={loading || !email.trim()}
-                className="w-full bg-primary text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+                className="w-full bg-verde text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
               >
                 {loading ? (
                   <>
@@ -306,7 +306,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
             <button
               onClick={() => void handleOpenHostedFlow()}
               disabled={loading}
-              className="w-full bg-primary text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+              className="w-full bg-verde text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
             >
               {loading ? (
                 <>
@@ -326,14 +326,14 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
             <button
               onClick={() => void handleOpenHostedFlow()}
               disabled={loading}
-              className="w-full bg-white border border-error/30 text-error font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+              className="w-full bg-papel border border-error/30 text-error font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
             >
               <span className="material-symbols-outlined">refresh</span>
               {t('kyc.retryVerification')}
             </button>
           )}
 
-          <p className="text-center text-xs text-outline pt-2">
+          <p className="text-center text-xs text-gris pt-2">
             {t('kyc.sessionExpires')}
           </p>
         </div>

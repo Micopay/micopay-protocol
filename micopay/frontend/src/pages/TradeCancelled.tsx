@@ -29,12 +29,15 @@ export default function TradeCancelled({
     : null;
 
   return (
-    <div className="min-h-screen bg-[#F4FAFF] text-on-surface font-body flex flex-col">
-      <header className="px-4 pt-14 pb-4 text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-800">
+    <div className="min-h-screen bg-fondo text-on-surface font-body flex flex-col">
+      <header className="border-b-2 border-tinta px-4 pt-14 pb-4 text-center">
+        {/* `cancelled` es un estado NEUTRO (§4.4): fondo, linea y gris.
+            Estaba en `bg-amber-100 text-amber-800`, que ni es del sistema ni
+            corresponde — el ambar es advertencia, no cancelacion. */}
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-sm border-2 border-linea bg-fondo text-gris">
           <span className="material-symbols-outlined text-3xl">undo</span>
         </div>
-        <h1 className="font-headline text-2xl font-bold text-primary">Operación cancelada</h1>
+        <h1 className="font-headline text-2xl font-bold text-tinta">Operación cancelada</h1>
         <p className="mt-2 text-sm text-on-surface-variant max-w-sm mx-auto">
           La operación <span className="font-mono text-xs">{tradeId.slice(0, 8)}…</span> quedó en estado{' '}
           <strong>cancelada</strong>. Monto referido: <strong>${amountMxn} MXN</strong>.
@@ -42,7 +45,7 @@ export default function TradeCancelled({
       </header>
 
       <main className="flex-1 px-4 max-w-md mx-auto w-full space-y-4 pb-28">
-        <section className="rounded-2xl bg-white border border-outline-variant/20 p-5 shadow-sm space-y-3">
+        <section className="rounded-sm bg-papel border-2 border-tinta p-5 space-y-3">
           <h2 className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">
             Qué pasó con tu USDC
           </h2>
@@ -83,7 +86,7 @@ export default function TradeCancelled({
         <button
           type="button"
           onClick={onContinue}
-          className="w-full rounded-xl bg-primary py-3.5 text-sm font-semibold text-on-primary shadow-md"
+          className="w-full rounded-sm bg-primary py-3.5 text-sm font-semibold text-on-primary "
         >
           Volver al inicio
         </button>

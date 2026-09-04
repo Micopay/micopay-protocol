@@ -76,8 +76,8 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
                     </div>
                 )}
 
-                <div className="bg-[#E1F5EE] w-[72px] h-[72px] rounded-full flex items-center justify-center mb-8 shadow-sm">
-                    <span className="material-symbols-outlined text-[#1D9E75] text-[40px]" style={{ fontVariationSettings: '"wght" 600' }}>
+                <div className="bg-[#E1F5EE] w-[72px] h-[72px] rounded-full flex items-center justify-center mb-8 ">
+                    <span className="material-symbols-outlined text-verde-claro text-[40px]" style={{ fontVariationSettings: '"wght" 600' }}>
                         {type === 'cashout' ? 'check' : 'check_circle'}
                     </span>
                 </div>
@@ -90,13 +90,13 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
             </section>
 
             {/* Summary Card */}
-            <section className="w-full bg-[#f6f7f8] rounded-[24px] p-6 my-8 space-y-5 shadow-sm">
+            <section className="w-full bg-[#f6f7f8] rounded-sm p-6 my-8 space-y-5 ">
                 <div className="space-y-4">
                     <div className="flex justify-between items-center">
                         <span className="text-on-surface-variant font-medium text-sm">
                             {type === 'cashout' ? t('success.mxnSent') : t('success.cashDelivered')}
                         </span>
-                        <span className="font-bold text-on-surface">${amount}</span>
+                        <span className="num font-bold text-on-surface">${amount}</span>
                     </div>
                     <div className="flex justify-between items-center">
                         <span className="text-on-surface-variant font-medium text-sm">
@@ -133,8 +133,8 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
             </section>
 
             {/* Receipt — trade evidence */}
-            <section className="w-full bg-white border border-outline-variant/15 rounded-2xl p-5 mb-6 space-y-3">
-                <h3 className="text-[11px] font-bold text-outline-variant uppercase tracking-[0.15em] mb-3">{t('success.receiptTitle')}</h3>
+            <section className="w-full bg-papel border-2 border-tinta rounded-sm p-5 mb-6 space-y-3">
+                <h3 className="text-[11px] font-bold text-gris uppercase tracking-[0.15em] mb-3">{t('success.receiptTitle')}</h3>
 
                 <div className="flex justify-between items-center">
                     <span className="text-on-surface-variant text-xs">{t('success.tradeId')}</span>
@@ -239,7 +239,7 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
                 <section>
                     <button
                         onClick={handleShare}
-                        className="text-primary font-bold text-sm hover:opacity-80 transition-opacity flex items-center justify-center gap-2 mx-auto bg-primary/10 px-4 py-2 rounded-lg"
+                        className="text-primary font-bold text-sm hover:opacity-80 transition-opacity flex items-center justify-center gap-2 mx-auto bg-primary/10 px-4 py-2 rounded-sm"
                     >
                         {t('success.shareReceipt')}
                         <span className="material-symbols-outlined text-[18px]">share</span>
@@ -253,7 +253,7 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
                         {[1, 2, 3, 4, 5].map((star) => (
                             <span
                                 key={star}
-                                className="material-symbols-outlined text-outline-variant text-[32px] cursor-pointer hover:text-primary transition-colors"
+                                className="material-symbols-outlined text-gris text-[32px] cursor-pointer hover:text-primary transition-colors"
                             >
                                 star
                             </span>
@@ -266,7 +266,7 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
             <div className="w-full pt-8">
                 <button
                     onClick={onHome}
-                    className="w-full h-[54px] bg-gradient-to-r from-primary to-primary-container text-white font-bold rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                    className="w-full h-[54px] bg-naranja text-papel border-2 border-tinta shadow-solida font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all flex items-center justify-center gap-2"
                 >
                     {t('success.backToHome')}
                     <span className="material-symbols-outlined">arrow_forward</span>

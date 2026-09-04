@@ -32,7 +32,7 @@ export default function OfflineQueueStatus({
           </>
         ) : offlineQueue.hasPending ? (
           <>
-            <span className="material-symbols-outlined text-sm animate-pulse">pending</span>
+            <span className="material-symbols-outlined text-sm">pending</span>
             Pendiente de sincronizar
           </>
         ) : null}
@@ -43,7 +43,7 @@ export default function OfflineQueueStatus({
   // Full version with more details
   if (!offlineQueue.isOnline) {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+      <div className="bg-amber-50 border border-amber-200 rounded-sm p-4">
         <div className="flex items-center gap-3">
           <span className="material-symbols-outlined text-amber-600 text-xl">wifi_off</span>
           <div className="flex-1">
@@ -59,7 +59,7 @@ export default function OfflineQueueStatus({
 
   if (offlineQueue.hasPending) {
     return (
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-sm p-4">
         <div className="flex items-center gap-3">
           <span className="material-symbols-outlined text-blue-600 text-xl animate-spin">
             progress_activity
@@ -72,7 +72,7 @@ export default function OfflineQueueStatus({
           </div>
           <button
             onClick={() => offlineQueue.retryAsync(token)}
-            className="ml-auto px-3 py-1 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
+            className="ml-auto px-3 py-1 bg-blue-600 text-papel rounded text-sm font-medium hover:bg-blue-700"
           >
             Reintentar
           </button>

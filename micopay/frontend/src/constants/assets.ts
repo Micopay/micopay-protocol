@@ -1,6 +1,9 @@
 // Central registry of the assets the wallet can hold / send / receive.
 // Issuers come from env so testnet/mainnet swap without code changes.
 
+/* Sin campo `color`: en el sistema "Mercado / Rótulo" el color significa
+   digital-vs-efectivo, no "qué token". El activo se distingue por su CÓDIGO.
+   Ver §4.3 y D-5 de docs/PLAN_REDISENO_VISUAL_APK_2026-08.md. */
 export interface AssetDef {
   /** Asset code as it appears on-chain (e.g. 'XLM', 'MXNe', 'USDC', 'CETES'). */
   code: string;
@@ -12,8 +15,6 @@ export interface AssetDef {
   issuer?: string;
   /** Display decimals. */
   decimals: number;
-  /** Accent colour for chips/avatars. */
-  color: string;
   /** Short note shown on the receive screen. */
   note?: string;
 }
@@ -23,10 +24,10 @@ const USDC_ISSUER = import.meta.env.VITE_USDC_ISSUER as string | undefined;
 const CETES_ISSUER = import.meta.env.VITE_CETES_ISSUER as string | undefined;
 
 export const ASSETS: AssetDef[] = [
-  { code: 'MXNe', label: 'Peso Digital', native: false, issuer: MXNE_ISSUER, decimals: 2, color: '#00694C', note: 'Peso mexicano digital 1:1' },
-  { code: 'USDC', label: 'USD Coin', native: false, issuer: USDC_ISSUER, decimals: 2, color: '#2775CA', note: 'Dólar digital' },
-  { code: 'CETES', label: 'CETES tokenizados', native: false, issuer: CETES_ISSUER, decimals: 2, color: '#B8860B', note: 'Bono del Gobierno de México' },
-  { code: 'XLM', label: 'Stellar Lumens', native: true, decimals: 4, color: '#7B61FF', note: 'Token de red (gas)' },
+  { code: 'MXNe', label: 'Peso Digital', native: false, issuer: MXNE_ISSUER, decimals: 2, note: 'Peso mexicano digital 1:1' },
+  { code: 'USDC', label: 'USD Coin', native: false, issuer: USDC_ISSUER, decimals: 2, note: 'Dólar digital' },
+  { code: 'CETES', label: 'CETES tokenizados', native: false, issuer: CETES_ISSUER, decimals: 2, note: 'Bono del Gobierno de México' },
+  { code: 'XLM', label: 'Stellar Lumens', native: true, decimals: 4, note: 'Token de red (gas)' },
 ];
 
 export function getAsset(code: string): AssetDef | undefined {

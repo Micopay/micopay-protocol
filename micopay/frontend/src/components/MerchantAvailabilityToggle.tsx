@@ -72,7 +72,7 @@ export default function MerchantAvailabilityToggle({
         onClick={handleToggle}
         disabled={disabled || loading || !token}
         className={`
-          relative inline-flex items-center h-8 rounded-full transition-colors
+          relative inline-flex items-center h-8 rounded-sm transition-colors
           ${available ? 'bg-green-500' : 'bg-gray-300'}
           ${disabled || loading || !token ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}
         `}
@@ -80,7 +80,7 @@ export default function MerchantAvailabilityToggle({
       >
         <span
           className={`
-            inline-block h-6 w-6 rounded-full bg-white shadow-lg transform transition-transform
+            inline-block h-6 w-6 rounded-full bg-papel transform transition-transform
             ${available ? 'translate-x-5' : 'translate-x-1'}
           `}
         />

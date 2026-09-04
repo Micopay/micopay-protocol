@@ -173,7 +173,7 @@ export default function MerchantSettings({
 
   return (
     <div className="bg-surface text-on-surface min-h-screen px-6 pt-10 pb-32 max-w-xl mx-auto">
-      <button className="mb-6 text-sm font-semibold text-primary" onClick={onBack}>← Volver</button>
+      <button className="mb-6 text-sm font-semibold text-verde" onClick={onBack}>← Volver</button>
       <h1 className="text-2xl font-bold mb-2">Ajustes del comerciante</h1>
       <p className="text-sm text-on-surface-variant mb-8">Configura tu tasa y límites de operación.</p>
 
@@ -181,7 +181,7 @@ export default function MerchantSettings({
         <p>Cargando…</p>
       ) : (
         <div className="space-y-5">
-          <section className="bg-white rounded-[24px] p-5 border border-slate-100 shadow-sm mb-8">
+          <section className="bg-papel rounded-sm p-5 border border-slate-100 mb-8">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="font-bold text-on-surface">
@@ -198,8 +198,8 @@ export default function MerchantSettings({
                 disabled={saving}
                 className={`px-6 py-2 rounded-full font-bold text-xs transition-all ${
                   availability === "paused"
-                    ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
-                    : "bg-error text-white shadow-lg shadow-error/20"
+                    ? "bg-emerald-500 text-papel shadow-emerald-500/20"
+                    : "bg-error text-papel shadow-error/20"
                 }`}
               >
                 {availability === "paused" ? "Reanudar" : "Pausar"}
@@ -237,7 +237,7 @@ export default function MerchantSettings({
             }
           />
 
-          <section className="bg-white rounded-[24px] p-5 border border-slate-100 shadow-sm mb-8">
+          <section className="bg-papel rounded-sm p-5 border border-slate-100 mb-8">
             <p className="font-bold text-on-surface mb-1">{t('merchantSettings.location.title')}</p>
 
             {!editingLocation && location.latitude != null && location.longitude != null ? (
@@ -252,7 +252,7 @@ export default function MerchantSettings({
                 )}
                 <button
                   type="button"
-                  className="w-full rounded-xl border border-primary text-primary font-semibold py-2.5"
+                  className="w-full rounded-sm border border-primary text-verde font-semibold py-2.5"
                   onClick={startLocationEdit}
                 >
                   {t('merchantSettings.location.change')}
@@ -265,7 +265,7 @@ export default function MerchantSettings({
                     <p className="text-xs text-on-surface-variant">{t('merchantSettings.location.notSet')}</p>
                     <button
                       type="button"
-                      className="w-full rounded-xl bg-primary text-white font-semibold py-2.5 disabled:opacity-60"
+                      className="w-full rounded-sm bg-verde text-papel font-semibold py-2.5 disabled:opacity-60"
                       disabled={geo.loading}
                       onClick={() => geo.requestPermission()}
                     >
@@ -295,7 +295,7 @@ export default function MerchantSettings({
                         value={addressText}
                         placeholder={t('merchantSettings.location.addressPlaceholder')}
                         onChange={(e) => setAddressText(e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3"
+                        className="w-full rounded-sm border border-slate-200 px-4 py-3"
                       />
                     </label>
 
@@ -303,7 +303,7 @@ export default function MerchantSettings({
                       {editingLocation && (
                         <button
                           type="button"
-                          className="flex-1 rounded-xl border border-slate-200 text-on-surface-variant font-semibold py-2.5"
+                          className="flex-1 rounded-sm border border-slate-200 text-on-surface-variant font-semibold py-2.5"
                           onClick={() => setEditingLocation(false)}
                         >
                           {t('merchantSettings.location.cancel')}
@@ -311,7 +311,7 @@ export default function MerchantSettings({
                       )}
                       <button
                         type="button"
-                        className="flex-1 rounded-xl bg-primary text-white font-semibold py-2.5 disabled:opacity-60"
+                        className="flex-1 rounded-sm bg-verde text-papel font-semibold py-2.5 disabled:opacity-60"
                         disabled={savingLocation}
                         onClick={saveLocation}
                       >
@@ -325,7 +325,7 @@ export default function MerchantSettings({
           </section>
 
           <button
-            className="w-full rounded-xl bg-primary text-white font-semibold py-3 disabled:opacity-60"
+            className="w-full rounded-sm bg-verde text-papel font-semibold py-3 disabled:opacity-60"
             disabled={saving || !token || offlineQueue.isSyncing}
             onClick={save}
           >
@@ -362,11 +362,12 @@ function Field({
     <label className="block">
       <span className="block text-sm font-medium mb-2">{label}</span>
       <input
-        type="number"
+        type="text"
+                  inputMode="decimal"
         step={step}
         value={Number.isFinite(value) ? value : 0}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-slate-200 px-4 py-3"
+        className="w-full rounded-sm border border-slate-200 px-4 py-3"
       />
     </label>
   );

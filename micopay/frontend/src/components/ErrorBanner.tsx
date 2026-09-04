@@ -46,7 +46,7 @@ export default function ErrorBanner({
         <button
           type="button"
           onClick={onDismiss}
-          className="text-xs font-semibold text-outline underline hover:no-underline"
+          className="text-xs font-semibold text-gris underline hover:no-underline"
         >
           Ocultar
         </button>
@@ -61,7 +61,7 @@ export default function ErrorBanner({
         role="alert"
         aria-live="assertive"
       >
-        <div className="w-16 h-16 rounded-full bg-error/10 flex items-center justify-center">
+        <div className="w-16 h-16 rounded-sm bg-error/10 flex items-center justify-center">
           <span
             aria-hidden="true"
             className="material-symbols-outlined text-error text-3xl"
@@ -78,7 +78,7 @@ export default function ErrorBanner({
 
   return (
     <div
-      className={`rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 flex flex-col gap-2 ${className}`}
+      className={`rounded-sm border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 flex flex-col gap-2 ${className}`}
       role="alert"
       aria-live="assertive"
     >

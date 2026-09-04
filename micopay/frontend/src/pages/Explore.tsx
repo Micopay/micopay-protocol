@@ -16,10 +16,15 @@ const Explore = ({ onBack, onNavigate, showDefi = true, showSpeiRamp = false }: 
     return (
         <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col pb-32">
             {/* Header */}
-            <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-md bg-white/90 border-b border-outline-variant/10">
+            <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
                 <Logo />
-                    <div className="w-10 h-10 rounded-full border-2 border-primary-container overflow-hidden">
-                    <AvatarPlaceholder />
+                    {/* Era una foto de stock servida desde lh3.googleusercontent.com.
+                        En un APK con cola offline eso es una dependencia de red para
+                        pintar el encabezado: sin senal se veia como imagen rota.
+                        Glifo local, cero peticiones. */}
+                    <div className="w-10 h-10 rounded-sm border-2 border-tinta bg-papel flex items-center justify-center">
+                        <span aria-hidden="true" className="material-symbols-outlined text-verde text-xl">person</span>
+                        <span className="sr-only">Perfil de usuario</span>
                 </div>
             </header>
 
@@ -36,14 +41,14 @@ const Explore = ({ onBack, onNavigate, showDefi = true, showSpeiRamp = false }: 
                 <div className="space-y-6">
                     {/* CETES tokenizados — shown if either DeFi or SPEI ramp is enabled */}
                     {(showDefi || showSpeiRamp) && (
-                        <article className="bg-gradient-to-br from-primary/10 to-primary/5 p-6 rounded-[32px] border border-primary/10 shadow-sm relative overflow-hidden group active:scale-[0.98] transition-all">
+                        <article className="p-6 rounded-sm border border-primary/10 relative overflow-hidden group active:translate-x-[2px] active:translate-y-[2px] transition-all">
                             <div className="flex items-center gap-4 mb-4">
-                                <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-md">
+                                <div className="w-12 h-12 bg-papel rounded-sm flex items-center justify-center ">
                                     <span className="material-symbols-outlined text-primary text-3xl">trending_up</span>
                                 </div>
                                 <div>
                                     <h2 className="font-headline font-bold text-xl text-on-surface">{t('exploreScreen.investCetes')}</h2>
-                                    <p className="text-[10px] font-bold text-primary uppercase tracking-widest">{t('exploreScreen.cetesRateBadge', { rate: 5.6 })}</p>
+                                    <p className="num text-[10px] font-bold text-primary uppercase tracking-widest">{t('exploreScreen.cetesRateBadge', { rate: 5.6 })}</p>
                                 </div>
                             </div>
                             <p className="text-sm text-on-surface-variant leading-relaxed mb-6">
@@ -51,7 +56,7 @@ const Explore = ({ onBack, onNavigate, showDefi = true, showSpeiRamp = false }: 
                             </p>
                             <button
                                 onClick={() => onNavigate?.('cetes')}
-                                className="w-full bg-primary text-white font-bold py-3 px-6 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-primary/20">
+                                className="w-full bg-primary text-papel font-bold py-3 px-6 rounded-sm flex items-center justify-center gap-2 ">
                                 {t('exploreScreen.viewCetes')}
                                 <span className="material-symbols-outlined text-sm">arrow_forward</span>
                             </button>
@@ -60,9 +65,9 @@ const Explore = ({ onBack, onNavigate, showDefi = true, showSpeiRamp = false }: 
 
                     {/* Blend DeFi — feature-gated */}
                     {showDefi && (
-                        <article className="bg-white/40 backdrop-blur-sm p-6 rounded-[32px] border border-outline-variant/10 shadow-sm relative overflow-hidden group active:scale-[0.98] transition-all">
+                        <article className="bg-papel p-6 rounded-sm border-2 border-tinta relative overflow-hidden group active:translate-x-[2px] active:translate-y-[2px] transition-all">
                             <div className="flex items-center gap-4 mb-4">
-                                <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-md border border-outline-variant/10">
+                                <div className="w-12 h-12 bg-papel rounded-sm flex items-center justify-center border-2 border-tinta">
                                     <span className="material-symbols-outlined text-on-surface text-3xl">account_balance</span>
                                 </div>
                                 <div>
@@ -75,7 +80,7 @@ const Explore = ({ onBack, onNavigate, showDefi = true, showSpeiRamp = false }: 
                             </p>
                             <button
                                 onClick={() => onNavigate?.('blend')}
-                                className="w-full border-2 border-primary text-primary font-bold py-3 px-6 rounded-2xl flex items-center justify-center gap-2">
+                                className="w-full border-2 border-primary text-primary font-bold py-3 px-6 rounded-sm flex items-center justify-center gap-2">
                                 {t('exploreScreen.viewHowMuch')}
                                 <span className="material-symbols-outlined text-sm">info</span>
                             </button>
@@ -85,7 +90,7 @@ const Explore = ({ onBack, onNavigate, showDefi = true, showSpeiRamp = false }: 
 
                 {/* Footer Section */}
                 <footer className="mt-12 text-center">
-                    <p className="text-xs text-outline font-medium">{t('exploreScreen.poweredBy')}</p>
+                    <p className="text-xs text-gris font-medium">{t('exploreScreen.poweredBy')}</p>
                 </footer>
             </main>
         </div>

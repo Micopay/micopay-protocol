@@ -107,13 +107,13 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
 
   return (
     <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col">
-      <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-md bg-white/90 border-b border-outline-variant/10">
+      <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
         <button
           onClick={step === 'review' ? () => setStep('form') : onBack}
           aria-label="Volver"
-          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors"
+          className="min-h-12 min-w-12 flex items-center justify-center rounded-sm hover:bg-surface-container-low transition-colors"
         >
-          <span className="material-symbols-outlined text-primary">arrow_back</span>
+          <span className="material-symbols-outlined text-verde">arrow_back</span>
         </button>
         <h1 className="font-headline font-bold text-lg">{step === 'review' ? t('send.confirmTitle') : t('send.title')}</h1>
       </header>
@@ -123,29 +123,29 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
           <>
             {/* Asset selector */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">{t('send.asset')}</label>
+              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-gris mb-2">{t('send.asset')}</label>
               <div className="grid grid-cols-4 gap-2">
                 {SENDABLE_ASSETS.map((a) => (
                   <button
                     key={a.code}
                     onClick={() => setAssetCode(a.code)}
-                    className={`py-2.5 rounded-xl font-bold text-sm border transition-all ${
-                      assetCode === a.code ? 'text-white border-transparent' : 'bg-white text-on-surface-variant border-outline-variant/30'
+                    aria-pressed={assetCode === a.code}
+                    className={`min-h-12 rounded-sm border-2 border-tinta font-bold text-sm transition-colors ${
+                      assetCode === a.code ? 'bg-tinta text-papel' : 'bg-papel text-tinta'
                     }`}
-                    style={assetCode === a.code ? { backgroundColor: a.color } : undefined}
                   >
                     {a.code}
                   </button>
                 ))}
               </div>
-              <p className="text-[11px] text-outline mt-2">
+              <p className="text-[11px] text-gris mt-2">
                 {t('send.available')} <span className="font-bold text-on-surface">{balLoading ? '…' : available.toLocaleString('es-MX', { maximumFractionDigits: asset.decimals })} {asset.code}</span>
               </p>
             </div>
 
             {/* Destination */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">{t('send.recipient')}</label>
+              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-gris mb-2">{t('send.recipient')}</label>
               <div className="flex gap-2">
                 <input
                   value={destination}
@@ -153,56 +153,58 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
                   placeholder={t('send.recipientPlaceholder')}
                   spellCheck={false}
                   autoCapitalize="none"
-                  className="flex-1 min-w-0 bg-surface-container-low border border-outline-variant/20 rounded-2xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-primary transition-colors"
+                  className="flex-1 min-w-0 bg-surface-container-low border-2 border-tinta rounded-sm px-4 py-3 text-sm font-mono focus:outline-none focus:border-primary transition-colors"
                 />
-                <button onClick={handleScan} aria-label="Escanear QR" className="w-12 flex-shrink-0 bg-primary/10 text-primary rounded-2xl flex items-center justify-center active:scale-95 transition-all">
+                <button onClick={handleScan} aria-label="Escanear QR" className="w-12 flex-shrink-0 bg-primary/10 text-primary rounded-sm flex items-center justify-center active:translate-x-[2px] active:translate-y-[2px] transition-all">
                   <span className="material-symbols-outlined">qr_code_scanner</span>
                 </button>
               </div>
               {destination && !destValid && <p className="text-[11px] text-error mt-1">{t('send.invalidAddress')}</p>}
-              {scanMsg && <p className="text-[11px] text-outline mt-1">{scanMsg}</p>}
+              {scanMsg && <p className="text-[11px] text-gris mt-1">{scanMsg}</p>}
             </div>
 
             {/* Amount */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">{t('send.amount')}</label>
-              <div className="relative">
+              <label className="num block text-[11px] font-bold uppercase tracking-[0.15em] text-gris mb-2">{t('send.amount')}</label>
+              {/* No usa AmountField porque lleva el boton MÁX dentro del
+                  campo; se aplica el mismo lenguaje a mano. type="text" con
+                  inputMode decimal: el teclado numerico de algunos
+                  fabricantes Android no trae punto decimal. */}
+              <div className="relative flex min-h-14 items-center rounded-sm border-2 border-tinta bg-fondo pr-2">
                 <input
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  type="number"
+                  type="text"
                   inputMode="decimal"
-                  min="0"
-                  step="any"
                   placeholder="0.00"
-                  className="w-full bg-surface-container-low border border-outline-variant/20 rounded-2xl px-4 py-3 text-2xl font-bold focus:outline-none focus:border-primary transition-colors"
+                  className="num min-w-0 flex-1 border-none bg-transparent px-4 py-3 font-display text-[26px] font-bold text-tinta outline-none placeholder:text-gris-3"
                 />
                 <button
                   onClick={() => setAmount(String(available))}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full"
+                  className="min-h-12 shrink-0 rounded-sm border-2 border-tinta bg-papel px-3 text-xs font-bold text-tinta active:translate-x-[2px] active:translate-y-[2px]"
                 >
                   MÁX
                 </button>
               </div>
-              {overBalance && <p className="text-[11px] text-error mt-1">{t('send.insufficientBalance')}</p>}
+              {overBalance && <p className="num text-[11px] text-error mt-1">{t('send.insufficientBalance')}</p>}
             </div>
 
             {/* Memo */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant mb-2">{t('send.memo')}</label>
+              <label className="block text-[11px] font-bold uppercase tracking-[0.15em] text-gris mb-2">{t('send.memo')}</label>
               <input
                 value={memo}
                 onChange={(e) => setMemo(e.target.value)}
                 maxLength={28}
                 placeholder={t('send.memoPlaceholder')}
-                className="w-full bg-surface-container-low border border-outline-variant/20 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                className="w-full bg-surface-container-low border-2 border-tinta rounded-sm px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
               />
             </div>
 
             <button
               onClick={() => setStep('review')}
               disabled={!canContinue}
-              className="w-full h-[52px] bg-primary text-white font-bold rounded-2xl active:scale-[0.98] transition-all disabled:opacity-40"
+              className="w-full h-[52px] bg-primary text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-40"
             >
               {t('send.continue')}
             </button>
@@ -210,26 +212,26 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
         ) : (
           // ── Review step ───────────────────────────────────────────────────────
           <>
-            <div className="bg-white rounded-[24px] border border-outline-variant/10 shadow-sm p-6 space-y-4">
+            <div className="bg-papel rounded-sm border-2 border-tinta p-6 space-y-4">
               <div className="text-center pb-2">
-                <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-outline-variant">{t('send.youWillSend')}</p>
-                <p className="text-3xl font-headline font-extrabold mt-1" style={{ color: asset.color }}>
+                <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-gris">{t('send.youWillSend')}</p>
+                <p className="num text-3xl font-display font-extrabold mt-1 text-verde">
                   {amountNum.toLocaleString('es-MX', { maximumFractionDigits: asset.decimals })} {asset.code}
                 </p>
               </div>
-              <div className="h-px bg-outline-variant/10" />
+              <div className="h-0.5 bg-linea" />
               <Row label={t('send.to')} value={`${destination.slice(0, 8)}…${destination.slice(-6)}`} mono />
               {memo.trim() && <Row label={t('send.note')} value={memo.trim()} />}
               <Row label={t('send.network')} value={t('send.networkName')} />
               <Row label={t('send.fee')} value={t('send.feeValue')} />
             </div>
-            <p className="text-[11px] text-outline text-center px-4">
+            <p className="text-[11px] text-gris text-center px-4">
               {t('send.warning')}
             </p>
             <button
               onClick={handleSend}
               disabled={step === 'sending'}
-              className="w-full h-[52px] bg-primary text-white font-bold rounded-2xl active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+              className="w-full h-[52px] bg-primary text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {step === 'sending' ? (
                 <>
@@ -280,7 +282,7 @@ function ResultScreen({
   return (
     <div className="bg-surface min-h-screen flex flex-col items-center justify-center px-8 text-center font-body">
       <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 ${ok ? 'bg-[#E1F5EE]' : 'bg-error/10'}`}>
-        <span className={`material-symbols-outlined text-4xl ${ok ? 'text-[#1D9E75]' : 'text-error'}`} style={{ fontVariationSettings: '"FILL" 1' }}>
+        <span className={`material-symbols-outlined text-4xl ${ok ? 'text-verde-claro' : 'text-error'}`} style={{ fontVariationSettings: '"FILL" 1' }}>
           {ok ? 'check_circle' : 'error'}
         </span>
       </div>
@@ -291,11 +293,11 @@ function ResultScreen({
           {explorerLabel ?? 'Ver en el explorador'} <span className="material-symbols-outlined text-[18px]">open_in_new</span>
         </a>
       )}
-      <button onClick={onPrimary} className="w-full max-w-xs h-[52px] bg-primary text-white font-bold rounded-2xl active:scale-[0.98] transition-all">
+      <button onClick={onPrimary} className="w-full max-w-xs h-[52px] bg-primary text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all">
         {primaryLabel}
       </button>
       {onSecondary && secondaryLabel && (
-        <button onClick={onSecondary} className="mt-3 w-full max-w-xs h-[52px] text-on-surface-variant font-bold rounded-2xl">
+        <button onClick={onSecondary} className="mt-3 w-full max-w-xs h-[52px] text-on-surface-variant font-bold rounded-sm">
           {secondaryLabel}
         </button>
       )}

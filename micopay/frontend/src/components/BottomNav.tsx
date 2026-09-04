@@ -1,5 +1,22 @@
 import { useTranslation } from 'react-i18next';
 
+/* Barra de navegación — F2 del rediseño "Mercado / Rótulo".
+
+   La versión anterior concentraba cinco prohibiciones del sistema en una
+   sola línea: radio superior de 32 px, blur de fondo, fondo translúcido,
+   sombra difuminada y píldoras redondas. Ahora es un cintillo opaco con una
+   regla de 2 px arriba, y la pestaña activa se marca invirtiendo el color
+   —tinta sobre papel— igual que .pill[data-on="true"] en el sitio.
+
+   Se conserva a propósito, porque es convención de plataforma y no estética:
+     - el padding inferior con env(safe-area-inset-bottom) para el gesto
+     - aria-current="page" y aria-label en cada botón
+     - anillo de foco visible
+     - el eje FILL del icono, que refuerza el estado activo sin depender
+       solo del color
+
+   Área táctil: 56 dp por botón, por encima del mínimo de 48. */
+
 interface BottomNavProps {
   currentPage: string;
   onNavigate: (page: string) => void;
@@ -9,30 +26,38 @@ interface BottomNavProps {
 const BottomNav = ({ currentPage, onNavigate, isMerchant = false }: BottomNavProps) => {
   const { t } = useTranslation();
 
-  const btn = (page: string, icon: string, label: string) => (
-    <button
-      onClick={() => onNavigate(page)}
-      aria-label={label}
-      aria-current={currentPage === page ? 'page' : undefined}
-      className={`flex flex-col items-center justify-center rounded-full px-5 py-2 transition-all active:scale-90 duration-150 focus:outline-none focus:ring-2 focus:ring-primary ${
-        currentPage === page
-          ? 'bg-[#E1F5EE] dark:bg-[#00694C]/30 text-[#00694C] dark:text-[#5DCAA5]'
-          : 'text-[#0B1E26] dark:text-slate-400 opacity-70 hover:opacity-100'
-      }`}
-    >
-      <span aria-hidden="true" className="material-symbols-outlined" style={{ fontVariationSettings: currentPage === page ? '"FILL" 1' : '"FILL" 0' }}>{icon}</span>
-      <span className="font-['Manrope'] font-medium text-[10px] tracking-wide">{label}</span>
-    </button>
-  );
+  const btn = (page: string, icon: string, label: string) => {
+    const activa = currentPage === page;
+    return (
+      <button
+        onClick={() => onNavigate(page)}
+        aria-label={label}
+        aria-current={activa ? 'page' : undefined}
+        className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-sm px-1 py-1.5 transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-tinta ${
+          activa ? 'bg-tinta text-papel' : 'text-gris'
+        }`}
+      >
+        <span
+          aria-hidden="true"
+          className="material-symbols-outlined text-[22px]"
+          style={{ fontVariationSettings: activa ? '"FILL" 1' : '"FILL" 0' }}
+        >
+          {icon}
+        </span>
+        <span className="text-[10px] font-bold uppercase tracking-[.06em] leading-none">
+          {label}
+        </span>
+      </button>
+    );
+  };
 
   return (
-    <nav className="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3 bg-[#F4FAFF]/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-[0_-8px_32px_rgba(11,30,38,0.04)] rounded-t-[32px]">
+    <nav className="fixed bottom-0 left-0 z-50 flex w-full items-stretch gap-1 border-t-2 border-tinta bg-papel px-2 pt-2 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       {btn('home', 'home', t('nav.home'))}
       {btn('pay', 'swap_horiz', t('nav.pay'))}
       {isMerchant
         ? btn('inbox', 'inbox', t('nav.inbox'))
-        : btn('cetes', 'savings', t('nav.invest'))
-      }
+        : btn('cetes', 'savings', t('nav.invest'))}
       {btn('explore', 'explore', t('nav.explore'))}
       {btn('profile', 'person', t('nav.profile'))}
     </nav>

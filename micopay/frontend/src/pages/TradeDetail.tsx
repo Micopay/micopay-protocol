@@ -124,7 +124,7 @@ function PendingView({
 
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-amber-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-amber-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           hourglass_top
         </span>
@@ -138,14 +138,14 @@ function PendingView({
           : 'El vendedor aún no ha bloqueado los fondos. Tu operación está segura en garantía.'}
       </p>
 
-      <div className="bg-surface-container-low rounded-xl p-4 w-full mb-6">
+      <div className="bg-surface-container-low rounded-sm p-4 w-full mb-6">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm text-on-surface-variant">Monto</span>
-          <span className="font-bold text-on-surface">${trade.amount_mxn} MXN</span>
+          <span className="num font-bold text-on-surface">${trade.amount_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm text-on-surface-variant">Comisión</span>
-          <span className="text-sm text-on-surface">${trade.platform_fee_mxn} MXN</span>
+          <span className="num text-sm text-on-surface">${trade.platform_fee_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-sm text-on-surface-variant">Expira en</span>
@@ -154,7 +154,7 @@ function PendingView({
       </div>
 
       {lockError && (
-        <div className="mb-4 w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+        <div className="mb-4 w-full rounded-sm border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
           {lockError}
         </div>
       )}
@@ -163,7 +163,7 @@ function PendingView({
         <button
           onClick={onLock}
           disabled={locking}
-          className="w-full py-3 mb-4 rounded-xl bg-primary text-white font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50"
+          className="w-full py-3 mb-4 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {locking ? (
             <>
@@ -182,7 +182,7 @@ function PendingView({
       <button
         onClick={onCancel}
         disabled={locking}
-        className="w-full py-3 rounded-xl border border-error text-error font-semibold hover:bg-error/5 transition-colors disabled:opacity-50"
+        className="w-full py-3 rounded-sm border border-error text-error font-semibold hover:bg-error/5 transition-colors disabled:opacity-50"
       >
         Cancelar operación
       </button>
@@ -194,7 +194,7 @@ function LockedView({ trade }: { trade: TradeDetailData }) {
 
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-blue-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-blue-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           lock
         </span>
@@ -216,7 +216,7 @@ function LockedView({ trade }: { trade: TradeDetailData }) {
         </a>
       )}
 
-      <button className="w-full py-3 rounded-xl bg-primary text-white font-semibold hover:opacity-90 transition-opacity">
+      <button className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity">
         Abrir chat con el vendedor
       </button>
     </div>
@@ -226,7 +226,7 @@ function LockedView({ trade }: { trade: TradeDetailData }) {
 function RevealingView({ trade }: { trade: TradeDetailData }) {
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-purple-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-purple-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           qr_code
         </span>
@@ -236,11 +236,11 @@ function RevealingView({ trade }: { trade: TradeDetailData }) {
         El vendedor confirmó el pago. Muestra tu código QR para completar la operación.
       </p>
 
-      <button className="w-full py-3 rounded-xl bg-primary text-white font-semibold hover:opacity-90 transition-opacity mb-4">
+      <button className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity mb-4">
         Ver mi QR de intercambio
       </button>
 
-      <button className="w-full py-3 rounded-xl border border-primary text-primary font-semibold hover:bg-primary/5 transition-colors">
+      <button className="w-full py-3 rounded-sm border border-primary text-primary font-semibold hover:bg-primary/5 transition-colors">
         Abrir chat
       </button>
     </div>
@@ -278,7 +278,7 @@ function RevealedView({ trade, onComplete, token }: { trade: TradeDetailData; on
 
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-cyan-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-cyan-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-cyan-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           visibility
         </span>
@@ -298,7 +298,7 @@ function RevealedView({ trade, onComplete, token }: { trade: TradeDetailData; on
       {!isConfirming ? (
         <button
           onClick={handleConfirm}
-          className="w-full py-3 rounded-xl bg-primary text-white font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+          className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
         >
           <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>
             {confirmError ? 'refresh' : 'check_circle'}
@@ -311,7 +311,7 @@ function RevealedView({ trade, onComplete, token }: { trade: TradeDetailData; on
             <div className="absolute inset-0 border-4 border-surface-container-high rounded-full"></div>
             <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
           </div>
-          <p className="text-sm font-medium text-outline">Confirmando intercambio…</p>
+          <p className="text-sm font-medium text-gris">Confirmando intercambio…</p>
         </div>
       )}
     </div>
@@ -322,7 +322,7 @@ function CompletedView({ trade }: { trade: TradeDetailData }) {
 
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-green-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-green-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           check_circle
         </span>
@@ -330,10 +330,10 @@ function CompletedView({ trade }: { trade: TradeDetailData }) {
       <h2 className="text-2xl font-bold text-on-surface mb-2">¡Operación completada!</h2>
       <p className="text-on-surface-variant mb-6">Tu intercambio fue exitoso.</p>
 
-      <div className="bg-surface-container-low rounded-xl p-4 w-full mb-6">
+      <div className="bg-surface-container-low rounded-sm p-4 w-full mb-6">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm text-on-surface-variant">Monto</span>
-          <span className="font-bold text-on-surface">${trade.amount_mxn} MXN</span>
+          <span className="num font-bold text-on-surface">${trade.amount_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-sm text-on-surface-variant">Fecha</span>
@@ -357,7 +357,7 @@ function CompletedView({ trade }: { trade: TradeDetailData }) {
 
       <Link
         to="/"
-        className="w-full py-3 rounded-xl bg-primary text-white font-semibold hover:opacity-90 transition-opacity text-center"
+        className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity text-center"
       >
         Volver al inicio
       </Link>
@@ -368,7 +368,7 @@ function CompletedView({ trade }: { trade: TradeDetailData }) {
 function CancelledView() {
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-red-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-red-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           cancel
         </span>
@@ -380,7 +380,7 @@ function CancelledView() {
 
       <Link
         to="/"
-        className="w-full py-3 rounded-xl bg-primary text-white font-semibold hover:opacity-90 transition-opacity text-center"
+        className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity text-center"
       >
         Volver al inicio
       </Link>
@@ -404,7 +404,7 @@ function ExpiredView({ canRefund, onRefund, refunding, trade, title, description
 }) {
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-gray-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-gray-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           schedule
         </span>
@@ -412,14 +412,14 @@ function ExpiredView({ canRefund, onRefund, refunding, trade, title, description
       <h2 className="text-2xl font-bold text-on-surface mb-2">{title}</h2>
       <p className="text-on-surface-variant mb-6">{description}</p>
 
-      <div className="bg-surface-container-low rounded-xl p-4 w-full mb-6">
+      <div className="bg-surface-container-low rounded-sm p-4 w-full mb-6">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm text-on-surface-variant">Monto</span>
-          <span className="font-bold text-on-surface">${trade.amount_mxn} MXN</span>
+          <span className="num font-bold text-on-surface">${trade.amount_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-sm text-on-surface-variant">Comisión</span>
-          <span className="text-sm text-on-surface">${trade.platform_fee_mxn} MXN</span>
+          <span className="num text-sm text-on-surface">${trade.platform_fee_mxn} MXN</span>
         </div>
       </div>
 
@@ -429,7 +429,7 @@ function ExpiredView({ canRefund, onRefund, refunding, trade, title, description
         <button
           onClick={onRefund}
           disabled={refunding}
-          className="w-full py-3 rounded-xl bg-primary text-white font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50"
+          className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {refunding ? (
             <>
@@ -446,7 +446,7 @@ function ExpiredView({ canRefund, onRefund, refunding, trade, title, description
       ) : (
         <Link
           to="/"
-          className="w-full py-3 rounded-xl bg-primary text-white font-semibold hover:opacity-90 transition-opacity text-center"
+          className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity text-center"
         >
           Volver al inicio
         </Link>
@@ -460,7 +460,7 @@ function RefundedView({ trade }: { trade: TradeDetailData }) {
 
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-purple-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-purple-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           undo
         </span>
@@ -470,14 +470,14 @@ function RefundedView({ trade }: { trade: TradeDetailData }) {
         Los fondos fueron devueltos exitosamente. El tiempo para completar la operación había expirado.
       </p>
 
-      <div className="bg-surface-container-low rounded-xl p-4 w-full mb-6">
+      <div className="bg-surface-container-low rounded-sm p-4 w-full mb-6">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm text-on-surface-variant">Monto</span>
-          <span className="font-bold text-on-surface">${trade.amount_mxn} MXN</span>
+          <span className="num font-bold text-on-surface">${trade.amount_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-sm text-on-surface-variant">Comisión</span>
-          <span className="text-sm text-on-surface">${trade.platform_fee_mxn} MXN</span>
+          <span className="num text-sm text-on-surface">${trade.platform_fee_mxn} MXN</span>
         </div>
       </div>
 
@@ -495,7 +495,7 @@ function RefundedView({ trade }: { trade: TradeDetailData }) {
 
       <Link
         to="/"
-        className="w-full py-3 rounded-xl bg-primary text-white font-semibold hover:opacity-90 transition-opacity text-center"
+        className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity text-center"
       >
         Volver al inicio
       </Link>
@@ -508,7 +508,7 @@ function RefundedView({ trade }: { trade: TradeDetailData }) {
 function NotFoundError() {
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-red-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-red-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           search_off
         </span>
@@ -519,7 +519,7 @@ function NotFoundError() {
 
       <Link
         to="/"
-        className="w-full py-3 rounded-xl bg-primary text-white font-semibold hover:opacity-90 transition-opacity text-center"
+        className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity text-center"
       >
         Volver al inicio
       </Link>
@@ -532,7 +532,7 @@ function NotFoundError() {
 function ForbiddenError() {
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-red-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-red-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           lock_person
         </span>
@@ -543,7 +543,7 @@ function ForbiddenError() {
 
       <Link
         to="/"
-        className="w-full py-3 rounded-xl bg-primary text-white font-semibold hover:opacity-90 transition-opacity text-center"
+        className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity text-center"
       >
         Volver al inicio
       </Link>
@@ -556,7 +556,7 @@ function ForbiddenError() {
 function NetworkError({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="flex flex-col items-center text-center">
-      <div className="w-16 h-16 rounded-full bg-orange-100 flex items-center justify-center mb-6">
+      <div className="w-16 h-16 rounded-sm bg-orange-100 flex items-center justify-center mb-6">
         <span className="material-symbols-outlined text-orange-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
           wifi_off
         </span>
@@ -567,7 +567,7 @@ function NetworkError({ onRetry }: { onRetry: () => void }) {
 
       <button
         onClick={onRetry}
-        className="w-full py-3 rounded-xl bg-primary text-white font-semibold hover:opacity-90 transition-opacity mb-4"
+        className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity mb-4"
       >
         Reintentar
       </button>
@@ -605,7 +605,7 @@ function RefundConfirmDialog({
       aria-modal="true"
       aria-labelledby="refund-title"
     >
-      <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl border border-outline-variant/20">
+      <div className="w-full max-w-md rounded-sm bg-surface p-6 border-2 border-tinta">
         <h2 id="refund-title" className="font-headline text-lg font-bold text-on-surface">
           Recuperar fondos
         </h2>
@@ -614,18 +614,18 @@ function RefundConfirmDialog({
           blockchain de Stellar. Esta operación tiene un costo de gas fee en XLM.
         </p>
 
-        <div className="mt-4 bg-surface-container-low rounded-xl p-4">
+        <div className="mt-4 bg-surface-container-low rounded-sm p-4">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm text-on-surface-variant">Monto a recuperar</span>
-            <span className="font-bold text-on-surface">${amount} MXN</span>
+            <span className="num font-bold text-on-surface">${amount} MXN</span>
           </div>
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm text-on-surface-variant">Comisión de la operación</span>
-            <span className="text-sm text-on-surface">${fee} MXN</span>
+            <span className="num text-sm text-on-surface">${fee} MXN</span>
           </div>
-          <div className="flex justify-between items-center pt-2 border-t border-outline-variant/20">
+          <div className="flex justify-between items-center pt-2 border-t border-linea">
             <span className="text-sm font-semibold text-on-surface-variant">Total devuelto</span>
-            <span className="font-bold text-primary">${amount} MXN</span>
+            <span className="num font-bold text-primary">${amount} MXN</span>
           </div>
           <p className="mt-3 text-xs text-on-surface-variant">
             * Se aplicará un gas fee en XLM por la transacción en Stellar. Los fondos en MXN
@@ -634,7 +634,7 @@ function RefundConfirmDialog({
         </div>
 
         {error && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+          <div className="mt-4 rounded-sm border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
             <p>{error}</p>
             <p className="mt-2 text-xs">
               <a href="mailto:soporte@micopay.app" className="font-semibold underline">
@@ -647,7 +647,7 @@ function RefundConfirmDialog({
         <div className="mt-6 flex gap-2 justify-end">
           <button
             type="button"
-            className="rounded-lg px-4 py-2 text-sm font-semibold text-primary hover:bg-surface-container-low"
+            className="rounded-sm px-4 py-2 text-sm font-semibold text-primary hover:bg-surface-container-low"
             onClick={onClose}
             disabled={submitting}
           >
@@ -656,7 +656,7 @@ function RefundConfirmDialog({
           <button
             type="button"
             disabled={submitting}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            className="rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-papel disabled:opacity-50"
             onClick={onConfirm}
           >
             {submitting ? 'Procesando…' : 'Sí, recuperar fondos'}
@@ -923,12 +923,12 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
   return (
     <div className="min-h-screen bg-surface-container-lowest font-body text-on-surface">
       {/* TopAppBar */}
-      <header className="sticky top-0 z-50 bg-surface-container-lowest/80 backdrop-blur-md border-b border-surface-container pt-[max(0px,env(safe-area-inset-top))]">
+      <header className="sticky top-0 z-50 bg-surface-container-lowest/80 border-b-2 border-tinta pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
             <button aria-label={t('a11y.back')}
               onClick={onBack}
-              className="p-2 hover:bg-surface-container-low rounded-full transition-colors text-primary"
+              className="min-h-12 min-w-12 min-h-12 min-w-12 flex items-center justify-center rounded-sm transition-colors text-primary"
             >
               <span className="material-symbols-outlined">arrow_back</span>
             </button>

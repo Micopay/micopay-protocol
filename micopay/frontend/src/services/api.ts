@@ -176,15 +176,27 @@ export async function registerUser(username: string, phoneHash?: string): Promis
 
   const signature = await signChallenge(challenge);
 
-  const body: Record<string, string> = { username, stellar_address, challenge, signature };
-  if (phoneHash) {
-    body.phone_hash = phoneHash;
+  try {
+    const body: Record<string, string> = { username, stellar_address, challenge, signature };
+    if (phoneHash) {
+      body.phone_hash = phoneHash;
+    }
+    const res = await http.post("/users/register", body);
+    return { ...res.data.user, token: res.data.token };
+  } catch (e: unknown) {
+    // Surface the backend's code (ADDRESS_ALREADY_REGISTERED / USERNAME_TAKEN)
+    // as an ApiError — the two 409s need very different UI, see Register.tsx.
+    throw toApiError(extractApiErrorPayload(e));
   }
-  const res = await http.post("/users/register", body);
-  return { ...res.data.user, token: res.data.token };
 }
 
-export async function getAuthToken(username: string): Promise<string> {
+/**
+ * Exchanges the device keypair for a JWT. Authentication is by Stellar address
+ * only: the server finds the account from the signed challenge, so there is no
+ * username to pass. (It used to take one, which was never sent anywhere — the
+ * login screen was asking for a value it then ignored.)
+ */
+export async function getAuthToken(): Promise<string> {
   const stellar_address = await getPublicKey();
   if (!stellar_address) {
     throw new Error('No device keypair found — generateAndStoreKeypair() must run before getAuthToken()');

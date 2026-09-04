@@ -10,6 +10,7 @@ import {
 } from '../services/api';
 import { parseQRPayload } from '../utils/qrPayload';
 import SupportLink from '../components/SupportLink';
+import { Pill } from '../components/ui';
 
 // ── Status display config ──────────────────────────────────────────────────
 
@@ -57,10 +58,10 @@ function TradeConfirmationCard({
   const statusIcon = STATUS_ICONS[data.status] || 'info';
 
   return (
-    <div className="bg-white rounded-2xl shadow-md border border-emerald-200 overflow-hidden">
+    <div className="bg-papel rounded-sm border border-emerald-200 overflow-hidden">
       {/* Header */}
       <div className="bg-emerald-50 px-5 py-4 flex items-center gap-3 border-b border-emerald-100">
-        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-sm bg-emerald-100 flex items-center justify-center">
           <span
             className="material-symbols-outlined text-emerald-600"
             style={{ fontVariationSettings: '"FILL" 1' }}
@@ -97,7 +98,7 @@ function TradeConfirmationCard({
         </div>
 
         {/* Details */}
-        <div className="bg-gray-50 rounded-xl p-4 space-y-3 text-sm">
+        <div className="bg-gray-50 rounded-sm p-4 space-y-3 text-sm">
           <div className="flex justify-between items-center">
             <span className="text-gray-500">{t('inbox.buyer')}</span>
             <span className="font-semibold text-on-surface">{data.buyer_handle}</span>
@@ -154,7 +155,7 @@ function TradeConfirmationCard({
         </div>
 
         {/* Security note */}
-        <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+        <div className="bg-blue-50 border border-blue-100 rounded-sm p-3">
           <p className="text-xs text-blue-800 leading-relaxed">
             <span className="font-bold">🔒 Verificado on-chain.</span> La información fue
             validada por el servidor. No muestra datos crudos del QR.
@@ -182,9 +183,9 @@ function ScanErrorCard({
   onDismiss: () => void;
 }) {
   return (
-    <div className="bg-white rounded-2xl shadow-md border border-red-200 overflow-hidden">
+    <div className="bg-papel rounded-sm border border-red-200 overflow-hidden">
       <div className="bg-red-50 px-5 py-4 flex items-center gap-3 border-b border-red-100">
-        <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-sm bg-red-100 flex items-center justify-center">
           <span
             className="material-symbols-outlined text-red-600"
             style={{ fontVariationSettings: '"FILL" 1' }}
@@ -208,7 +209,7 @@ function ScanErrorCard({
         {tradeId && (
           <p className="text-xs text-gray-400 font-mono">Trade ID: {tradeId.slice(0, 12)}…</p>
         )}
-        <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+        <div className="bg-amber-50 border border-amber-100 rounded-sm p-3">
           <p className="text-xs text-amber-800 leading-relaxed">
             Verifica que el código QR sea de MicoPay, que el intercambio no esté expirado y que
             seas participante del trade.
@@ -336,16 +337,16 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F4FAFF]">
-      <header className="fixed top-0 left-0 w-full z-50 bg-white/90 backdrop-blur-md px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] flex items-center gap-4">
-        <button onClick={onBack} className="material-symbols-outlined text-primary">
+    <div className="min-h-screen bg-fondo">
+      <header className="border-b-2 border-tinta fixed top-0 left-0 w-full z-50 bg-papel px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] flex items-center gap-4">
+        <button onClick={onBack} className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">
           arrow_back
         </button>
         <h1 className="font-headline font-bold text-lg flex-1">{t('inbox.title')}</h1>
         <button
           onClick={handleScan}
           aria-label="Escanear QR del cliente"
-          className="flex items-center gap-1 bg-primary text-white px-3 py-2 rounded-full text-xs font-bold shadow active:scale-95"
+          className="flex items-center gap-1 bg-primary text-papel min-h-12 px-3 rounded-sm text-xs font-bold active:translate-x-[2px] active:translate-y-[2px]"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-sm">
             qr_code_scanner
@@ -357,7 +358,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
       <main className="pt-[calc(6rem+env(safe-area-inset-top))] px-6 pb-32">
         {/* Push notification disabled banner with polling fallback */}
         {!pushEnabled && token && (
-          <div className="mb-4 rounded-2xl p-4 bg-amber-50 border border-amber-200">
+          <div className="mb-4 rounded-sm p-4 bg-amber-50 border border-amber-200">
             <div className="flex items-start gap-3">
               <span className="material-symbols-outlined text-amber-600">notifications_off</span>
               <div className="flex-1">
@@ -365,7 +366,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
                   {t('inbox.pollBanner')}
                 </p>
                 <p className="text-xs text-amber-800 mt-1">
-                  <a href="#" onClick={(e) => { e.preventDefault(); }} className="underline">
+                  <a href="#" onClick={(e) => { e.preventDefault(); }} className="underline inline-flex min-h-12 items-center font-bold">
                     {t('inbox.enableNotif')}
                   </a>
                 </p>
@@ -375,14 +376,14 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
         )}
 
         {scanView.type === 'loading' && (
-          <div className="mb-4 rounded-2xl p-4 bg-emerald-50 border border-emerald-200 flex items-center gap-3">
+          <div className="mb-4 rounded-sm p-4 bg-emerald-50 border border-emerald-200 flex items-center gap-3">
             <span className="material-symbols-outlined animate-spin text-emerald-600">progress_activity</span>
             <p className="text-sm text-emerald-900 font-medium">Verificando QR con el servidor…</p>
           </div>
         )}
 
         {scanView.type === 'parse_error' && (
-          <div className="mb-4 rounded-2xl p-4 bg-red-50 border border-red-200 flex items-start gap-3">
+          <div className="mb-4 rounded-sm p-4 bg-red-50 border border-red-200 flex items-start gap-3">
             <span className="material-symbols-outlined text-red-600">error</span>
             <p className="flex-1 text-sm text-red-800 font-medium">{scanView.message}</p>
             <button
@@ -396,7 +397,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
         )}
 
         {scanView.type === 'api_error' && (
-          <div className="mb-4 rounded-2xl p-4 bg-red-50 border border-red-200">
+          <div className="mb-4 rounded-sm p-4 bg-red-50 border border-red-200">
             <div className="flex items-start gap-3">
               <span className="material-symbols-outlined text-red-600">error</span>
               <p className="flex-1 text-sm text-red-800 font-medium">{scanView.message}</p>
@@ -421,19 +422,19 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
         )}
 
         {/* ── Filters ───────────────────────────────────────────────────── */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+        {/* Estos filtros eran chips propios: activo en verde y borde de 1 px.
+            El estado activo del sistema es el cintillo de TINTA invertido
+            (.pill[data-on]), no un relleno de color — es lo mismo que hace la
+            pestaña activa de BottomNav. Ahora usan la primitiva. */}
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2 -mx-6 px-6">
           {filters.map((f) => (
-            <button
+            <Pill
               key={f.key}
+              activa={activeFilter === f.key}
               onClick={() => setActiveFilter(f.key)}
-              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-                activeFilter === f.key
-                  ? 'bg-primary text-white'
-                  : 'bg-white text-primary border border-primary'
-              }`}
             >
               {f.label}
-            </button>
+            </Pill>
           ))}
         </div>
 
@@ -443,14 +444,18 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
           </div>
         ) : trades.length === 0 ? (
-          <div className="text-center py-12">
-            <span className="material-symbols-outlined text-6xl text-gray-300 mb-4">inbox</span>
-            <p className="text-gray-500">{t('inbox.noTrades')}{activeFilter !== 'all' ? t('inbox.withStatus', { status: t(`home.status.${activeFilter}`) }) : ''}</p>
+          /* §4.6: sin ilustración y sin icono gigante en gris de Tailwind, que
+             además no era un gris del sistema. Queda la línea en --gris, que es
+             la que dice qué falta. El cintillo se omite a propósito: el único
+             texto disponible sería "Bandeja de entrada", que ya está en el
+             encabezado, y el copy no se toca aquí (§7). */
+          <div className="py-12">
+            <p className="text-gris">{t('inbox.noTrades')}{activeFilter !== 'all' ? t('inbox.withStatus', { status: t(`home.status.${activeFilter}`) }) : ''}</p>
           </div>
         ) : (
           <div className="space-y-4">
             {trades.map((trade) => (
-              <div key={trade.id} className="bg-white rounded-2xl p-4 shadow-sm">
+              <div key={trade.id} className="bg-papel rounded-sm p-4 ">
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <p className="font-medium text-on-surface">{trade.buyer_handle}</p>
@@ -466,11 +471,11 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
                     {t(`home.status.${trade.status}`, { defaultValue: trade.status })}
                   </span>
                 </div>
-                <p className="font-bold text-lg">${trade.amount_mxn} MXN</p>
+                <p className="num font-bold text-lg">${trade.amount_mxn} MXN</p>
                 {trade.status === 'locked' && (
                   <div className="mt-2 flex items-center gap-1.5 text-sm text-emerald-600">
                     <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: '"FILL" 1' }}>lock</span>
-                    <span className="font-medium">{t('inbox.locked', { amount: trade.amount_mxn.toLocaleString('es-MX') })}</span>
+                    <span className="num font-medium">{t('inbox.locked', { amount: trade.amount_mxn.toLocaleString('es-MX') })}</span>
                   </div>
                 )}
                 {trade.status === 'pending' && (

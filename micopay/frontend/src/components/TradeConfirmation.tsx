@@ -50,53 +50,53 @@ export default function TradeConfirmation({
 
   return (
     <div className="min-h-screen bg-surface-container-lowest text-on-surface font-body pb-28">
-      <header className="sticky top-0 z-40 border-b border-outline-variant/20 bg-surface/90 backdrop-blur-md px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center gap-3">
+      <header className="sticky top-0 z-40 border-b-2 border-tinta bg-surface/90 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center gap-3">
         <button
           type="button"
           onClick={onBack}
-          className="p-2 rounded-full hover:bg-surface-container-low text-primary transition-colors"
+          className="min-h-12 min-w-12 p-2 rounded-sm hover:bg-surface-container-low text-primary transition-colors"
           aria-label="Volver sin perder el monto"
         >
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
-        <h1 className="font-headline font-bold text-lg text-primary truncate">{title}</h1>
+        <h1 className="font-headline font-bold text-lg text-tinta truncate">{title}</h1>
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-6 space-y-5">
         {errorMessage ? (
           <div
-            className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+            className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
             role="alert"
           >
             {errorMessage}
           </div>
         ) : null}
 
-        <section className="rounded-2xl border border-outline-variant/20 bg-surface p-5 space-y-4 shadow-sm">
+        <section className="rounded-sm border-2 border-tinta bg-surface p-5 space-y-4 ">
           <h2 className="text-xs font-bold tracking-widest text-on-surface-variant uppercase">Resumen</h2>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between gap-4">
               <dt className="text-on-surface-variant">Monto de la operación (MXN)</dt>
-              <dd className="font-semibold tabular-nums">${amountMxn.toLocaleString('es-MX')} MXN</dd>
+              <dd className="num font-semibold tabular-nums">${amountMxn.toLocaleString('es-MX')} MXN</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-on-surface-variant">Comisión plataforma ({PLATFORM_FEE_PERCENT}%)</dt>
-              <dd className="font-semibold tabular-nums text-primary">${platformFeeMxn.toLocaleString('es-MX')} MXN</dd>
+              <dd className="num font-semibold tabular-nums text-primary">${platformFeeMxn.toLocaleString('es-MX')} MXN</dd>
             </div>
-            <div className="flex justify-between gap-4 border-t border-outline-variant/15 pt-3">
+            <div className="flex justify-between gap-4 border-t border-linea pt-3">
               <dt className="text-on-surface-variant">Comerciante / agente (ejemplo)</dt>
               <dd className="font-medium text-right">{merchantDisplayName}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-on-surface-variant">Tipo de cambio (referencial)</dt>
-              <dd className="text-right text-on-surface/80">{exchangeRateLabel}</dd>
+              <dd className="num text-right text-on-surface/80">{exchangeRateLabel}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-on-surface-variant">Tiempo máximo de la operación</dt>
               <dd className="font-medium">{TRADE_DEFAULT_TIMEOUT_MINUTES} minutos</dd>
             </div>
           </dl>
-          <p className="text-xs text-on-surface-variant leading-relaxed border-t border-outline-variant/15 pt-3">
+          <p className="text-xs text-on-surface-variant leading-relaxed border-t border-linea pt-3">
             La comisión del <strong>{PLATFORM_FEE_PERCENT}%</strong> es la misma que calcula el backend; no hay cargos
             ocultos en esta pantalla.
           </p>
@@ -108,7 +108,7 @@ export default function TradeConfirmation({
           type="button"
           disabled={loading}
           onClick={onConfirm}
-          className="w-full rounded-xl bg-primary py-3.5 text-sm font-semibold text-on-primary shadow-md hover:opacity-95 disabled:opacity-50 transition-opacity"
+          className="w-full rounded-sm bg-primary py-3.5 text-sm font-semibold text-on-primary hover:opacity-95 disabled:opacity-50 transition-opacity"
         >
           {loading ? 'Procesando…' : 'Buscar en el mapa'}
         </button>

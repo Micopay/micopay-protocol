@@ -17,7 +17,7 @@ export default function SupportLink({ tradeId, state }: Props) {
   return (
     <a
       href={href}
-      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline font-medium transition-colors"
+      className="inline-flex min-h-12 items-center gap-1.5 text-sm text-verde font-bold underline hover:underline font-medium transition-colors"
     >
       <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: '"FILL" 1' }}>
         support_agent
