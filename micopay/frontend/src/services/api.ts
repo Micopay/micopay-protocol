@@ -1,6 +1,10 @@
 import axios from 'axios';
 import { extractApiErrorPayload, toApiError } from '../utils/apiError';
 import { signChallenge, getPublicKey, signTransactionXdr } from '../lib/keystore';
+// CASH-5A: el conjunto canónico de estados vive en TradeStateBadge, que es su
+// dueño según el issue. Import de solo tipo: se borra al compilar, así que no
+// crea dependencia en runtime de services -> components.
+import type { TradeState } from '../components/TradeStateBadge';
 import { removeKey } from './secureStorage';
 import { PLATFORM_FEE_PERCENT } from '../constants/trade';
 import type { MutationType, MutationPayloadMap } from './offlineQueue';
@@ -77,7 +81,9 @@ export type TradeFlow = 'deposit' | 'cashout';
 
 export interface TradeData {
   id: string;
-  status: string;
+  /** CASH-5A: estado canónico. El tipo documenta el contrato; la realidad
+   *  en runtime se valida con parseTradeState antes de usarla. */
+  status: TradeState;
   secret_hash: string;
   amount_mxn: number;
   lock_tx_hash?: string | null;
@@ -317,7 +323,9 @@ export async function getSecret(
 }
 
 export interface CompleteTradeResponse {
-  status: string;
+  /** CASH-5A: estado canónico. El tipo documenta el contrato; la realidad
+   *  en runtime se valida con parseTradeState antes de usarla. */
+  status: TradeState;
   release_tx_hash: string;
 }
 
@@ -355,7 +363,9 @@ export async function refundTradeRequest(tradeId: string, token: string): Promis
 
 export interface TradeHistoryItem {
   id: string;
-  status: string;
+  /** CASH-5A: estado canónico. El tipo documenta el contrato; la realidad
+   *  en runtime se valida con parseTradeState antes de usarla. */
+  status: TradeState;
   amount_mxn: number;
   platform_fee_mxn: number;
   lock_tx_hash: string | null;
@@ -372,7 +382,9 @@ export interface MerchantTrade {
   id: string;
   buyer_handle: string;
   amount_mxn: number;
-  status: string;
+  /** CASH-5A: estado canónico. El tipo documenta el contrato; la realidad
+   *  en runtime se valida con parseTradeState antes de usarla. */
+  status: TradeState;
   created_at: string;
 }
 
@@ -710,7 +722,9 @@ export async function getMerchantsAvailable(
 
 export interface MerchantConfirmResult {
   trade_id: string;
-  status: string;
+  /** CASH-5A: estado canónico. El tipo documenta el contrato; la realidad
+   *  en runtime se valida con parseTradeState antes de usarla. */
+  status: TradeState;
   /** CASH-4: flujo canónico; la UI no lo infiere de los roles del escrow. */
   flow: TradeFlow;
   amount_mxn: number;

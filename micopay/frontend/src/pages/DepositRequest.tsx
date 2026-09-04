@@ -11,7 +11,7 @@ export interface DepositRequestProps {
 const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
   const { t } = useTranslation();
   const [amount, setAmount] = useState('500');
-  const state: TradeState = getTradeStateDebugOverride('pending_cash');
+  const state: TradeState = getTradeStateDebugOverride('pending');
 
   return (
     <div className="bg-fondo min-h-screen text-on-surface font-body">

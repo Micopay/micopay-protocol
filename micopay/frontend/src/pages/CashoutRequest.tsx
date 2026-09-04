@@ -11,7 +11,7 @@ export interface CashoutRequestProps {
 const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
   const { t } = useTranslation();
   const [amount, setAmount] = useState('500');
-  const state: TradeState = getTradeStateDebugOverride('pending_cash');
+  const state: TradeState = getTradeStateDebugOverride('pending');
 
   return (
     <div className="text-on-surface antialiased overflow-x-hidden min-h-screen bg-surface-container-low">
