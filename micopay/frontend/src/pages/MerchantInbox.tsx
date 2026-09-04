@@ -5,6 +5,7 @@ import { useCountdown } from '../hooks/useCountdown';
 import {
   getMerchantTrades,
   merchantConfirmScan,
+  completeTrade,
   type MerchantTrade,
   type MerchantConfirmResult,
 } from '../services/api';
@@ -45,12 +46,47 @@ type ScanView =
 
 function TradeConfirmationCard({
   data,
+  token,
+  onReleased,
   onDismiss,
 }: {
   data: MerchantConfirmResult;
+  token: string | null;
+  onReleased: (result: MerchantConfirmResult) => void;
   onDismiss: () => void;
 }) {
   const { t } = useTranslation();
+  // CASH-4: el escaneo dejaba la operación a medias — confirmaba la entrega y
+  // ahí terminaba, sin liberar el escrow. El proveedor entregaba efectivo y no
+  // tenía cómo cobrarlo. Este estado gobierna ese último paso.
+  const [releasing, setReleasing] = useState(false);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+
+  const yaLiberado = data.status === 'completed' && !!data.release_tx_hash;
+  // Solo el cash-out se cierra desde aquí: en depósito quien completa es el
+  // cliente desde su propia pantalla.
+  const puedeLiberar = data.flow === 'cashout' && !yaLiberado && !!token;
+
+  const liberar = async () => {
+    if (!token) return;
+    setReleasing(true);
+    setReleaseError(null);
+    try {
+      const { release_tx_hash } = await completeTrade(data.trade_id, token);
+      // Éxito solo con un hash real persistido, nunca antes (criterio de #70).
+      if (!release_tx_hash) {
+        setReleaseError('La liberación no devolvió un comprobante. Vuelve a intentarlo.');
+        return;
+      }
+      onReleased({ ...data, status: 'completed', release_tx_hash });
+    } catch (e) {
+      // La entrega quedó registrada en el servidor, así que reintentar retoma
+      // desde ahí: no hace falta volver a escanear ni entregar efectivo otra vez.
+      setReleaseError(e instanceof Error ? e.message : 'No se pudo liberar. Reintenta.');
+    } finally {
+      setReleasing(false);
+    }
+  };
   const { label: countdownLabel, expired } = useCountdown(data.expires_at);
   const countdown = expired ? 'Expirado' : countdownLabel;
   const statusColor = STATUS_COLORS[data.status] || 'bg-gray-100 text-gray-800';
@@ -101,7 +137,7 @@ function TradeConfirmationCard({
         <div className="bg-gray-50 rounded-sm p-4 space-y-3 text-sm">
           <div className="flex justify-between items-center">
             <span className="text-gray-500">{t('inbox.buyer')}</span>
-            <span className="font-semibold text-on-surface">{data.buyer_handle}</span>
+            <span className="font-semibold text-on-surface">{data.client_handle}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-gray-500">{t('inbox.status')}</span>
@@ -162,6 +198,38 @@ function TradeConfirmationCard({
           </p>
         </div>
       </div>
+
+      {/* CASH-4: cierre del cash-out */}
+      {puedeLiberar && (
+        <div className="px-5 pb-4 space-y-2">
+          {data.resumed && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-sm px-3 py-2">
+              Ya habías confirmado la entrega de este intercambio. Puedes continuar
+              donde te quedaste sin volver a entregar efectivo.
+            </p>
+          )}
+          {releaseError && (
+            <p role="alert" className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-sm px-3 py-2">
+              {releaseError}
+            </p>
+          )}
+          <button
+            onClick={liberar}
+            disabled={releasing}
+            className="w-full min-h-12 bg-naranja text-papel border-2 border-tinta shadow-solida font-bold py-3 rounded-sm transition-all active:translate-x-[3px] active:translate-y-[3px] active:shadow-solida-xs disabled:opacity-60"
+          >
+            {releasing ? 'Liberando…' : 'Entregué el efectivo · liberar fondos'}
+          </button>
+        </div>
+      )}
+
+      {yaLiberado && (
+        <div className="px-5 pb-4">
+          <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-sm px-3 py-2">
+            Fondos liberados. El comprobante on-chain está arriba.
+          </p>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="px-5 py-3 border-t border-gray-100 flex justify-center">
@@ -417,7 +485,12 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
 
         {scanView.type === 'confirmation' && (
           <div className="mb-4">
-            <TradeConfirmationCard data={scanView.data} onDismiss={dismissScan} />
+            <TradeConfirmationCard
+              data={scanView.data}
+              token={token}
+              onReleased={(updated) => setScanView({ type: 'confirmation', data: updated })}
+              onDismiss={dismissScan}
+            />
           </div>
         )}
 

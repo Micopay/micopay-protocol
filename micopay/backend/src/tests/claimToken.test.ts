@@ -194,13 +194,55 @@ async function testTokenIsSingleUse() {
 
   const first = await merchantConfirmScan(fakeRequest, tradeId, sellerId, token);
   strictEqual(first.trade_id, tradeId, "first scan should succeed");
+  strictEqual(first.resumed, false, "the first scan is not a resume");
+
+  // CASH-4 cambió qué significa "un solo uso" aquí, y conviene ser explícito
+  // sobre por qué NO debilita SEC-02.
+  //
+  // Antes, un segundo escaneo del mismo proveedor lanzaba CLAIM_TOKEN_USED.
+  // Eso dejaba atrapado a quien ya había entregado el efectivo si la firma o
+  // el envío a la red fallaban después: el QR estaba quemado y no había forma
+  // de reanudar.
+  //
+  // Ahora el QR sigue quemándose UNA sola vez —lo que se registra es una
+  // entrega durable en `trade_cash_handoffs`, con `trade_id` como llave
+  // primaria— y un segundo escaneo del MISMO proveedor reanuda esa misma
+  // entrega en vez de crear otra. Lo que SEC-02 protege sigue en pie: el
+  // preimage nunca viaja en el QR, el token no se persiste en claro, y ningún
+  // otro actor puede usarlo (ver testForeignScannerCannotResume abajo).
+  const second = await merchantConfirmScan(fakeRequest, tradeId, sellerId, token);
+  strictEqual(second.resumed, true, "the same provider resumes the same handoff");
+  strictEqual(
+    second.handoff_confirmed_at,
+    first.handoff_confirmed_at,
+    "resuming returns the SAME handoff, it does not create a second one",
+  );
+  console.log("  ✓ claim token: se quema una vez; el mismo proveedor reanuda, no duplica");
+}
+
+/** El token quemado no sirve para nadie más: la garantía de SEC-02 intacta. */
+async function testForeignScannerCannotResume() {
+  const sellerId = await createUser("s5");
+  const buyerId = await createUser("b5");
+  const strangerId = await createUser("x5");
+  const { tradeId } = await insertRevealingTrade(sellerId, buyerId);
+
+  const { qr_payload } = await getTradeSecret(
+    fakeRequest,
+    tradeId,
+    sellerId,
+    "127.0.0.1",
+    "test",
+  );
+  const token = claimTokenFrom(qr_payload);
+  await merchantConfirmScan(fakeRequest, tradeId, sellerId, token);
 
   await assertAppError(
-    () => merchantConfirmScan(fakeRequest, tradeId, sellerId, token),
-    "CLAIM_TOKEN_USED",
-    "second scan of the same token",
+    () => merchantConfirmScan(fakeRequest, tradeId, strangerId, token),
+    "NOT_TRADE_PROVIDER",
+    "a stranger replaying a burned token",
   );
-  console.log("  ✓ claim token: the second scan of the same QR is rejected");
+  console.log("  ✓ claim token: un tercero no puede reusar el token quemado");
 }
 
 async function testForeignTokenIsRejected() {
@@ -229,6 +271,7 @@ async function run() {
   await testSecretNeverLeavesTheBackend();
   await testTokenIsStoredHashedAndBoundedByTheTrade();
   await testTokenIsSingleUse();
+  await testForeignScannerCannotResume();
   await testForeignTokenIsRejected();
 
   console.log("\nAll SEC-02 claim-token tests passed.\n");
