@@ -98,14 +98,32 @@ export async function providerRoutes(app: FastifyInstance) {
         username: string | null;
         kyc_level: number | null;
         kyc_provider: string | null;
+        is_suspended: boolean;
+        is_banned: boolean;
       }>(
-        `SELECT provider_status, username, kyc_level, kyc_provider
+        `SELECT provider_status, username, kyc_level, kyc_provider, is_suspended, is_banned
          FROM users WHERE id = $1`,
         [userId],
       );
 
       if (!user) {
         reply.status(404).send({ code: 'USER_NOT_FOUND', message: 'Usuario no encontrado.' });
+        return;
+      }
+
+      if (user.is_banned) {
+        reply.status(403).send({
+          code: 'ACCOUNT_BANNED',
+          message: 'Tu cuenta ha sido baneada.',
+        });
+        return;
+      }
+
+      if (user.is_suspended) {
+        reply.status(403).send({
+          code: 'ACCOUNT_SUSPENDED',
+          message: 'Tu cuenta esta suspendida. Contacta a soporte.',
+        });
         return;
       }
 

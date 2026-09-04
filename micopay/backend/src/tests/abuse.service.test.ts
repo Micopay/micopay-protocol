@@ -7,6 +7,9 @@ import {
 } from "../services/abuse.service.js";
 import { RiskBlockedError } from "../utils/errors.js";
 
+// ── SQL capture helper ───────────────────────────────────────────────────────
+let capturedSqls: string[] = [];
+
 async function seedUsers() {
   const seller = await db.getOne<{ id: string }>(
     `INSERT INTO users (stellar_address, username, phone_hash, merchant_available, availability, is_suspended, provider_status)
@@ -129,7 +132,8 @@ async function testPauseWritesAtomicAvailability() {
 
 /**
  * #371: When a suspended provider is unpaused, both fields must be
- * restored atomically.
+ * restored atomically.  Capture the SQL text and assert the CASE WHEN
+ * guard is present, then verify the real row state afterward.
  */
 async function testUnpauseWritesAtomicAvailability() {
   const { sellerId } = await seedUsers();
@@ -137,25 +141,51 @@ async function testUnpauseWritesAtomicAvailability() {
   // Pause first
   await pauseUser(sellerId, "test_atomic_unpause", null);
 
-  // Unpause
-  await unpauseUser(sellerId, null);
+  // Stub db.execute to capture the SQL text
+  const originalExecute = db.execute;
+  capturedSqls = [];
+  db.execute = (async (text: string, params?: any[]) => {
+    capturedSqls.push(text);
+    return originalExecute(text, params);
+  }) as typeof db.execute;
 
+  try {
+    await unpauseUser(sellerId, null);
+  } finally {
+    db.execute = originalExecute;
+  }
+
+  // Assert the SQL contains the CASE WHEN provider_status guard
+  const allSql = capturedSqls.join("\n").toLowerCase();
+  ok(
+    allSql.includes("case when") && allSql.includes("provider_status") && allSql.includes("active"),
+    "unpause SQL must contain CASE WHEN provider_status='active' guard",
+  );
+  ok(
+    allSql.includes("availability") && allSql.includes("online"),
+    "unpause SQL must set availability='online'",
+  );
+  ok(
+    allSql.includes("merchant_available"),
+    "unpause SQL must update merchant_available",
+  );
+
+  // Verify the real row state
   const after = await db.getOne<{ availability: string; merchant_available: boolean }>(
     `SELECT availability, merchant_available FROM users WHERE id = $1`,
     [sellerId],
   );
   strictEqual(after?.availability, "online", "unpaused availability must be 'online'");
-  // NOTE: the in-memory SQL shim does not evaluate CASE WHEN expressions,
-  // so merchant_available may still show the pre-unpause value.  The real
-  // PostgreSQL query uses CASE WHEN provider_status='active' THEN true ELSE
-  // merchant_available END, which is tested by testUnpauseNotEnrolledStaysFalse
-  // against real PostgreSQL or by manual SQL review.
-  console.log("  \u2713 unpauseUser sets availability='online' (merchant_available verified against PostgreSQL)");
+  // The in-memory shim does not evaluate CASE WHEN, but the SQL has been
+  // verified above to contain the correct guard.
+  console.log("  \u2713 unpauseUser SQL contains CASE WHEN guard + availability='online'");
 }
 
 /**
  * #371: When a not_enrolled user is unpaused, merchant_available must stay
  * false — only active providers should have merchant_available restored.
+ * We leave `availability` out of the assertion because unpauseUser
+ * unconditionally sets it to 'online' (a separate concern from this guard).
  */
 async function testUnpauseNotEnrolledStaysFalse() {
   // Seed a not_enrolled user explicitly
@@ -174,23 +204,39 @@ async function testUnpauseNotEnrolledStaysFalse() {
   // Unpause
   await unpauseUser(sellerId, null);
 
-  const after = await db.getOne<{ availability: string; merchant_available: boolean; provider_status: string }>(
-    `SELECT availability, merchant_available, provider_status FROM users WHERE id = $1`,
+  const after = await db.getOne<{ merchant_available: boolean; provider_status: string }>(
+    `SELECT merchant_available, provider_status FROM users WHERE id = $1`,
     [sellerId],
   );
   strictEqual(after?.provider_status, "not_enrolled", "provider_status must remain not_enrolled");
-  strictEqual(after?.availability, "online", "unpaused availability must be 'online'");
-  // NOTE: the in-memory SQL shim does not evaluate CASE WHEN expressions.
-  // The real PostgreSQL query uses CASE WHEN provider_status='active' THEN true
-  // ELSE merchant_available END, so a not_enrolled user stays false.  Verified
-  // against real PostgreSQL or by SQL review; the shim stores the raw expression.
+  // The in-memory shim does not evaluate CASE WHEN, but the SQL has been
+  // verified to contain CASE WHEN provider_status='active' THEN true ELSE
+  // merchant_available END.  The not_enrolled user stays false in PostgreSQL.
+  // Assert directly where possible; log the shim limitation otherwise.
   if (after?.merchant_available === false) {
-    console.log("    ✓ merchant_available stayed false (PostgreSQL)");
+    console.log("  \u2713 not_enrolled user: merchant_available stayed false (PostgreSQL)");
   } else {
-    console.log("    ⚠ merchant_available is CASE WHEN string (in-memory shim limitation, SQL reviewed)");
+    // Shim stored the raw CASE WHEN expression — verify SQL structure instead
+    const originalExecute = db.execute;
+    capturedSqls = [];
+    db.execute = (async (text: string, params?: any[]) => {
+      capturedSqls.push(text);
+      return originalExecute(text, params);
+    }) as typeof db.execute;
+    try {
+      await unpauseUser(sellerId, null);
+    } finally {
+      db.execute = originalExecute;
+    }
+    const allSql = capturedSqls.join("\n").toLowerCase();
+    ok(
+      allSql.includes("case when") &&
+      allSql.includes("provider_status") &&
+      allSql.includes("active"),
+      "unpause SQL CASE WHEN guard must check provider_status='active' (shim path)",
+    );
+    console.log("  \u2713 not_enrolled user: SQL CASE WHEN guard verified (in-memory shim)");
   }
-
-  console.log("  ✓ not_enrolled user keeps provider_status + CASE guard (SQL reviewed)");
 }
 
 async function run() {
