@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   getBlendPools,
   blendSupply,
   blendBorrow,
   BlendPool,
   BlendTxResult,
+  getUsdcMxnRate,
 } from '../services/api';
 import { extractApiErrorPayload } from '../utils/apiError';
 
@@ -16,6 +18,7 @@ interface BlendScreenProps {
 type MainTab = 'loan' | 'yield';
 
 const BlendScreen = ({ onBack }: BlendScreenProps) => {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<MainTab>('loan');
   const [pools, setPools] = useState<BlendPool[]>([]);
   const [poolsLoading, setPoolsLoading] = useState(true);
@@ -37,11 +40,17 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
 
   const [error, setError] = useState<string | null>(null);
 
+  const [usdcMxnRate, setUsdcMxnRate] = useState<number | null>(null);
+
   useEffect(() => {
     getBlendPools()
       .then((data) => setPools(data.pools))
       .catch(() => {})
       .finally(() => setPoolsLoading(false));
+
+    getUsdcMxnRate()
+      .then(({ rate }) => setUsdcMxnRate(rate))
+      .catch(() => setUsdcMxnRate(null));
   }, []);
 
   const mainPool = pools[0] ?? null;
@@ -49,7 +58,9 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
   // Health factor mock: if no collateral deposited, show 0
   const xlmCollateral = collateralResult ? parseFloat(collateralResult.amount) : 0;
   const maxBorrow = xlmCollateral * 0.7 * 0.058; // 70% LTV, ~$0.058 per XLM in USDC
-  const maxBorrowMxn = maxBorrow * 17.5;
+  // FX del backend; sin cotización el máximo en pesos no se muestra
+  // (docs/AUDIT_MOBILE_MAINNET.md §3: nada de FX literal en el frontend).
+  const maxBorrowMxn = usdcMxnRate != null ? maxBorrow * usdcMxnRate : null;
   const healthFactor = borrowResult
     ? (xlmCollateral * 0.058 * 1.1) / (parseFloat(borrowResult.amount) * (borrowAsset === 'MXNe' ? 0.057 : 1))
     : 999;
@@ -130,6 +141,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
       <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-md bg-white/90 border-b border-outline-variant/10">
         <button
           onClick={onBack}
+          aria-label={t('a11y.back')}
           className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors"
         >
           <span className="material-symbols-outlined">arrow_back</span>
@@ -251,7 +263,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
                   <p className="font-bold text-on-surface">Pedir prestado</p>
                   <p className="text-xs text-on-surface-variant">
                     {collateralResult
-                      ? `Máx ~${borrowAsset === 'MXNe' ? maxBorrowMxn.toFixed(0) : maxBorrow.toFixed(2)} ${borrowAsset}`
+                      ? `Máx ~${borrowAsset === 'MXNe' ? (maxBorrowMxn?.toFixed(0) ?? '—') : maxBorrow.toFixed(2)} ${borrowAsset}`
                       : 'Deposita garantía primero'}
                   </p>
                 </div>

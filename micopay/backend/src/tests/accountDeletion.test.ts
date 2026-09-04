@@ -49,9 +49,9 @@ async function testAccountDeletion() {
   // Insert a trade. Let's make it 'completed' so it doesn't block deletion.
   const tradeId = '33333333-3333-3333-3333-333333333333';
   await db.execute(
-    `INSERT INTO trades (id, seller_id, buyer_id, amount_mxn, amount_stroops, secret_hash, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [tradeId, userId, buyerId, 1500, 150000000n, 'mock_secret_hash', 'completed']
+    `INSERT INTO trades (id, seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, secret_hash, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [tradeId, userId, buyerId, 'deposit', userId, 1500, 150000000n, 'mock_secret_hash', 'completed']
   );
 
   // Insert chat messages

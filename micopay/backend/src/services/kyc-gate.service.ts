@@ -1,7 +1,8 @@
 import db from '../db/schema.js';
 import { config, type KycOperationType } from '../config.js';
 import { logAuditEvent } from './audit.service.js';
-import { KycTierInsufficientError } from '../utils/errors.js';
+import { KycTierInsufficientError, KycMonthlyCapExceededError } from '../utils/errors.js';
+import { withKeyedLock } from '../lib/keyedMutex.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -69,6 +70,10 @@ export interface AssertKycTierInput {
  * and throws only when the decision is 'block' AND config.kycGateEnabled is
  * true. Enforcement defaults to off — thresholds are pending legal counsel
  * review (LFPIORPI reform) — see docs/GRANTFOX_KYC_QUEUE_2026-07.md.
+ *
+ * #316 extends this same gate with a monthly cumulative volume check, run
+ * after the tier check passes (or after a would-block tier decision that
+ * enforcement is currently ignoring) — see assertKycMonthlyVolumeWithinCap.
  */
 export async function assertKycTierSufficient(input: AssertKycTierInput): Promise<void> {
   const { userId, operationType, amountMxn } = input;
@@ -83,6 +88,7 @@ export async function assertKycTierSufficient(input: AssertKycTierInput): Promis
     entityType: 'kyc_gate',
     entityId: operationType,
     details: {
+      check_type: 'tier',
       operation_type: operationType,
       amount_mxn: amountMxn ?? null,
       tier_at_time: currentLevel,
@@ -95,12 +101,163 @@ export async function assertKycTierSufficient(input: AssertKycTierInput): Promis
   if (decision === 'block' && config.kycGateEnabled) {
     throw new KycTierInsufficientError(requiredLevel, currentLevel, operationType);
   }
+
+  if (amountMxn !== undefined) {
+    await assertKycMonthlyVolumeWithinCap({ userId, operationType, amountMxn, currentLevel });
+  }
 }
+
+function currentMonthWindow(now: Date = new Date()): { monthKey: string; resetAt: string } {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth(); // 0-indexed
+  const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const resetAt = new Date(Date.UTC(year, month + 1, 1, 0, 0, 0, 0)).toISOString();
+  return { monthKey, resetAt };
+}
+
+/** Monthly cumulative volume ceiling for a KYC level, MXN. null = no ceiling. */
+export function getMonthlyVolumeCeiling(level: number): number | null {
+  const ceiling = config.kycMonthlyVolumeCeilingsMxn[level];
+  return ceiling === undefined ? null : ceiling;
+}
+
+interface MonthlyVolumeRow {
+  amount_mxn: number | string;
+}
+
+export interface MonthlyVolumeCheckResult {
+  allowed: boolean;
+  newTotalMxn: number;
+  ceilingMxn: number | null;
+  remainingMxn: number | null;
+  resetAt: string;
+}
+
+/**
+ * Atomic check-and-increment for a user's monthly cumulative volume. The
+ * entire read -> decide -> write sequence runs inside withKeyedLock(userId),
+ * so two concurrent calls for the SAME user are fully serialized — the
+ * second call always sees the first call's write before making its own
+ * decision, so they cannot jointly exceed `ceilingMxn` (#316's "race-safe"
+ * acceptance criterion). Calls for different users never block each other.
+ *
+ * When `enforce` is false (audit-only gate), the amount is still recorded —
+ * the real operation proceeds either way in that mode, so the tracked total
+ * should reflect real volume — but `allowed` only ever reports false while
+ * `enforce` is true, mirroring assertKycTierSufficient's own enforcement
+ * toggle immediately above.
+ */
+async function recordMonthlyVolumeAndCheckCap(
+  userId: string,
+  amountMxn: number,
+  ceilingMxn: number | null,
+  enforce: boolean,
+): Promise<MonthlyVolumeCheckResult> {
+  return withKeyedLock(`kyc-monthly-volume:${userId}`, async () => {
+    const { monthKey, resetAt } = currentMonthWindow();
+
+    const row = await db.getOne<MonthlyVolumeRow>(
+      `SELECT amount_mxn FROM user_monthly_volume WHERE user_id = $1 AND month_key = $2`,
+      [userId, monthKey],
+    );
+    const currentTotal = row ? Number(row.amount_mxn) : 0;
+    const prospectiveTotal = currentTotal + amountMxn;
+    const withinCap = ceilingMxn === null || prospectiveTotal <= ceilingMxn;
+
+    if (!enforce || withinCap) {
+      if (row) {
+        await db.execute(
+          `UPDATE user_monthly_volume SET amount_mxn = $1, updated_at = NOW() WHERE user_id = $2 AND month_key = $3`,
+          [prospectiveTotal, userId, monthKey],
+        );
+      } else {
+        await db.execute(
+          `INSERT INTO user_monthly_volume (user_id, month_key, amount_mxn) VALUES ($1, $2, $3)`,
+          [userId, monthKey, prospectiveTotal],
+        );
+      }
+      return {
+        allowed: withinCap,
+        newTotalMxn: prospectiveTotal,
+        ceilingMxn,
+        remainingMxn: ceilingMxn === null ? null : Math.max(ceilingMxn - prospectiveTotal, 0),
+        resetAt,
+      };
+    }
+
+    // Enforced and over cap: no mutation — the operation did not proceed,
+    // so recorded volume must not change (mirrors #314's "failed op does not
+    // mutate balance" invariant).
+    return {
+      allowed: false,
+      newTotalMxn: currentTotal,
+      ceilingMxn,
+      remainingMxn: ceilingMxn === null ? null : Math.max(ceilingMxn - currentTotal, 0),
+      resetAt,
+    };
+  });
+}
+
+export interface AssertKycMonthlyVolumeInput {
+  userId: string;
+  operationType: KycOperationType;
+  amountMxn: number;
+  currentLevel: number;
+}
+
+/**
+ * #316: verifies `amountMxn` plus the user's already-accumulated volume this
+ * calendar month stays within their KYC level's monthly ceiling. Ceilings
+ * are keyed by the user's actual current level (not the level required for
+ * this specific operation) — a Level 2 user's monthly allowance is Level 2's
+ * ceiling regardless of what any single operation needs.
+ */
+export async function assertKycMonthlyVolumeWithinCap(input: AssertKycMonthlyVolumeInput): Promise<void> {
+  const { userId, operationType, amountMxn, currentLevel } = input;
+  const ceilingMxn = getMonthlyVolumeCeiling(currentLevel);
+
+  const result = await recordMonthlyVolumeAndCheckCap(userId, amountMxn, ceilingMxn, config.kycGateEnabled);
+
+  await logAuditEvent({
+    action: 'kyc_gate.decision',
+    actorUserId: userId,
+    entityType: 'kyc_gate',
+    entityId: operationType,
+    details: {
+      check_type: 'monthly_volume',
+      operation_type: operationType,
+      amount_mxn: amountMxn,
+      kyc_level: currentLevel,
+      monthly_ceiling_mxn: ceilingMxn,
+      monthly_total_mxn: result.newTotalMxn,
+      gate_decision: result.allowed ? 'pass' : 'block',
+      enforcement_enabled: config.kycGateEnabled,
+      reset_at: result.resetAt,
+    },
+  });
+
+  // Mirrors assertKycTierSufficient immediately above: the decision is always
+  // computed and logged, but only enforced (throws) once config.kycGateEnabled
+  // is explicitly turned on.
+  if (!result.allowed && config.kycGateEnabled) {
+    throw new KycMonthlyCapExceededError(result.remainingMxn ?? 0, ceilingMxn ?? 0, result.resetAt, currentLevel);
+  }
+}
+
+export type KycGateCheckType = 'tier' | 'monthly_volume';
 
 export interface KycAuditFilters {
   userId?: string;
   operationType?: KycOperationType;
   gateDecision?: GateDecision;
+  /**
+   * #316 records the monthly-volume decision as its own event alongside
+   * #314's tier decision (same action, same table — "no parallel logging
+   * path" — just two rows per gated operation instead of one). Filter here
+   * to look at just one check's decisions. Rows written before #316 have no
+   * check_type recorded and are treated as 'tier' (that's all that existed).
+   */
+  checkType?: KycGateCheckType;
   fromDate?: string;
   toDate?: string;
   limit?: number;
@@ -125,7 +282,7 @@ const AUDIT_FETCH_CAP = 500;
  * in-memory test fallback (which doesn't parse JSONB operators or `>=`).
  */
 export async function getKycAuditTrail(filters: KycAuditFilters = {}): Promise<KycAuditEvent[]> {
-  const { userId, operationType, gateDecision, fromDate, toDate, limit = 50 } = filters;
+  const { userId, operationType, gateDecision, checkType, fromDate, toDate, limit = 50 } = filters;
 
   const rows = userId
     ? await db.getMany<KycAuditEvent>(
@@ -151,6 +308,7 @@ export async function getKycAuditTrail(filters: KycAuditFilters = {}): Promise<K
   const filtered = rows.filter((row) => {
     if (operationType && row.details?.operation_type !== operationType) return false;
     if (gateDecision && row.details?.gate_decision !== gateDecision) return false;
+    if (checkType && (row.details?.check_type ?? 'tier') !== checkType) return false;
     const createdMs = new Date(row.created_at).getTime();
     if (fromMs !== null && createdMs < fromMs) return false;
     if (toMs !== null && createdMs > toMs) return false;

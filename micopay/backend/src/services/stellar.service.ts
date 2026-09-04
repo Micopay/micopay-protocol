@@ -103,7 +103,7 @@ async function assertInvocationMatches(
  * Shared by every prepare/submit pair below.
  */
 async function pollForConfirmation(
-  request: Pick<FastifyRequest, 'log'>,
+  request: { log: { info: (...args: any[]) => void; error?: (...args: any[]) => void; [key: string]: any } },
   txHash: string,
   label: string,
   failedCode: string,
@@ -336,7 +336,7 @@ export async function submitReleaseTx(params: {
  * has no HTTP request, can call this with a plain `{ log: app.log }` shim.
  */
 export async function callRefundOnChain(params: {
-  request: Pick<FastifyRequest, 'log'>;
+  request: { log: { info: (...args: any[]) => void; error: (...args: any[]) => void; [key: string]: any } };
   tradeIdBytes: Buffer;
 }): Promise<{ txHash: string }> {
   const {

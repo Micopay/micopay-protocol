@@ -38,11 +38,15 @@ import ReceivePayment from "./pages/ReceivePayment";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Profile from "./pages/Profile";
+import { SignatureApproval } from "./pages/SignatureApproval";
+import ClaimQR from "./pages/ClaimQR";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import MerchantSettings from "./pages/MerchantSettings";
 import BottomNav from "./components/BottomNav";
 import { ConnectionBanner } from "./components/ConnectionBanner";
+import DebugOverlay from "./components/DebugOverlay";
+import OfflineQueueStatus from "./components/OfflineQueueStatus";
 
 import {
   registerUser,
@@ -52,6 +56,7 @@ import {
   fetchTradeDetail,
   UserData,
   TradeData,
+  TradeFlow,
   TradeHistoryItem,
 } from "./services/api";
 import { readJSON, writeJSON, removeKey, isBackupConfirmed, setBackupConfirmed } from "./services/secureStorage";
@@ -82,7 +87,7 @@ async function recoverSession(username: string): Promise<UserData> {
 
 type Flow = "cashout" | "deposit" | null;
 
-interface AppCtx {
+export interface AppCtx {
   buyerUser: UserData | null;
   sellerUser: UserData | null;
   activeTrade: TradeData | null;
@@ -327,27 +332,31 @@ function ConfirmRoute() {
   );
 }
 
-/** Whichever participant isn't this device — the real counterparty name to show in the UI. */
-function useCounterpartyName(activeTrade: TradeData | null, buyerUser: UserData | null) {
+/** Counterparty display name and cash-out role for ChatRoom banners. */
+function useTradeParticipantInfo(activeTrade: TradeData | null, buyerUser: UserData | null) {
   const [counterpartyName, setCounterpartyName] = useState<string | null>(null);
+  const [isProvider, setIsProvider] = useState(false);
 
   useEffect(() => {
     if (!activeTrade || !buyerUser?.token) return;
     fetchTradeDetail(activeTrade.id, buyerUser.token)
       .then(({ trade, seller_username, buyer_username }) => {
-        const isMeTheSeller = trade.seller_id === buyerUser.id;
-        setCounterpartyName(isMeTheSeller ? buyer_username : seller_username);
+        const isMeTheEscrowSeller = trade.seller_id === buyerUser.id;
+        setCounterpartyName(isMeTheEscrowSeller ? buyer_username : seller_username);
+        // Cash-out (/chat): the client locks crypto (escrow seller); the agent
+        // hands over cash (escrow buyer). isProvider marks the agent view.
+        setIsProvider(!isMeTheEscrowSeller);
       })
       .catch(() => {});
   }, [activeTrade, buyerUser?.token, buyerUser?.id]);
 
-  return counterpartyName;
+  return { counterpartyName, isProvider };
 }
 
 function ChatRoute() {
   const navigate = useNavigate();
   const { lockTxHash, activeTrade, buyerUser } = useAppCtx();
-  const counterpartyName = useCounterpartyName(activeTrade, buyerUser);
+  const { counterpartyName, isProvider } = useTradeParticipantInfo(activeTrade, buyerUser);
   return (
       <ChatRoom
           tradeId={activeTrade?.id ?? ''}
@@ -356,6 +365,7 @@ function ChatRoute() {
           apiBaseUrl={import.meta.env.VITE_API_URL}
           lockTxHash={lockTxHash}
           counterpartyName={counterpartyName}
+          isProvider={isProvider}
           onBack={() => navigate('/map')}
           onViewQR={() => navigate('/qr-reveal')}
       />
@@ -365,7 +375,7 @@ function ChatRoute() {
 function ChatDepositRoute() {
   const navigate = useNavigate();
   const { lockTxHash, activeTrade, buyerUser } = useAppCtx();
-  const counterpartyName = useCounterpartyName(activeTrade, buyerUser);
+  const { counterpartyName } = useTradeParticipantInfo(activeTrade, buyerUser);
   return (
       <DepositChat
           tradeId={activeTrade?.id ?? ''}
@@ -383,7 +393,7 @@ function ChatDepositRoute() {
 function QRRevealRoute() {
   const navigate = useNavigate();
   const { activeTrade, sellerUser, buyerUser, activeAmount, setReleaseTxHash } = useAppCtx();
-  const counterpartyName = useCounterpartyName(activeTrade, buyerUser);
+  const { counterpartyName } = useTradeParticipantInfo(activeTrade, buyerUser);
 
   return (
       <QRReveal
@@ -443,6 +453,10 @@ function SuccessRoute() {
             completed_at: trade.completed_at ?? null,
             seller_id: trade.seller_id ?? '',
             buyer_id: trade.buyer_id ?? '',
+            // CASH-1: prefer the canonical flow the backend persisted; fall
+            // back to the UI flow only while the detail is still loading.
+            flow: trade.flow ?? (flow ?? 'deposit'),
+            provider_id: trade.provider_id ?? '',
           });
           setSellerUsername(seller_username);
         })
@@ -477,6 +491,8 @@ function SuccessRoute() {
     completed_at: new Date().toISOString(),
     seller_id: '',
     buyer_id: '',
+    flow: flow ?? 'deposit',
+    provider_id: '',
   };
 
   return (
@@ -493,6 +509,10 @@ function SuccessRoute() {
             completed_at: new Date().toISOString(),
             seller_id: sellerUser?.id ?? '',
             buyer_id: buyerUser?.id ?? '',
+            // CASH-1: on a cash-out the provider is the escrow buyer, on a
+            // deposit the escrow seller — the same rule the backend enforces.
+            flow: flow ?? 'deposit',
+            provider_id: (flow === 'cashout' ? buyerUser?.id : sellerUser?.id) ?? '',
           }}
           agentName={sellerUsername ?? (flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe')}
           onHome={() => {
@@ -551,14 +571,14 @@ function CetesRoute() {
   );
 }
 
-function KYCRoute() {
+export function KYCRoute() {
+  const navigate = useNavigate();
   const { buyerUser } = useAppCtx();
   return (
       <KYCScreen
           token={buyerUser?.token ?? null}
           onApproved={() => {
-            // Cache hit will redirect into CETES screen; this matches the acceptance criteria.
-            window.location.hash = '/#/cetes';
+            navigate('/cetes');
           }}
       />
   );
@@ -631,6 +651,26 @@ function TermsRoute() {
   return <Terms onBack={() => navigate("/profile")} />;
 }
 
+function SignatureApprovalRoute() {
+  const navigate = useNavigate();
+  const { id } = useParams<{ id?: string }>();
+  const location = useLocation();
+  const { buyerUser } = useAppCtx();
+  const searchParams = new URLSearchParams(location.search);
+  const requestId = id || searchParams.get('id') || undefined;
+
+  return (
+    <SignatureApproval
+      requestId={requestId}
+      token={buyerUser?.token}
+      onBack={() => navigate('/')}
+      onResolved={() => {
+        setTimeout(() => navigate('/'), 2000);
+      }}
+    />
+  );
+}
+
 // ── Route wrappers (auth) ───────────────────────────────────────────────────
 
 function ProtectedRoute({ children }: { children: React.ReactElement }) {
@@ -671,7 +711,11 @@ const HIDE_BOTTOMNAV_ROUTES = new Set([
   "/blend",
   "/privacy",
   "/terms",
+  "/sign-request",
 ]);
+
+// Claim and sign-request screens also hide the bottom nav (standalone deep-link UI).
+const HIDE_BOTTOMNAV_PREFIX = ['/claim/', '/sign-request/'];
 
 function BottomNavAdapter() {
   const navigate = useNavigate();
@@ -734,7 +778,8 @@ function App() {
   const [tradeLoading, setTradeLoading] = useState(false);
   const [tradeError, setTradeError] = useState<MappedApiError | null>(null);
   const [pendingSellerId, setPendingSellerId] = useState<string | null>(null);
-  const [pendingRole, setPendingRole] = useState<'buyer' | 'seller'>('buyer');
+  // CASH-1 (#372): the retried value is the product flow, not the escrow role.
+  const [pendingFlow, setPendingFlow] = useState<TradeFlow>('deposit');
   const [authReady, setAuthReady] = useState(false);
   const [devicePublicKey, setDevicePublicKey] = useState<string | null>(null);
 
@@ -750,6 +795,8 @@ function App() {
   const [isMockStellar, setIsMockStellar] = useState(true);
   const [backendUrl, setBackendUrl] = useState("");
   const envName = import.meta.env.MODE;
+  /** Modos que operan contra dinero real: nunca deben caer a mocks. */
+  const STRICT_STARTUP_MODES = new Set(['production', 'mainnet']);
 
   useEffect(() => {
     const initUsers = async () => {
@@ -803,12 +850,11 @@ function App() {
         console.warn("Backend not reachable during startup:", err);
         setBackendConnected(false);
         
-        // Force-block if backend is down in any strict (non-demo) build —
-        // `build:mainnet` sets MODE to 'mainnet', not 'production', so both
-        // must be checked or a mainnet APK silently falls back to local
-        // demo mocks when the backend is unreachable (see
-        // docs/AUDIT_MOBILE_MAINNET.md, "guard de arranque no cubre modo mainnet").
-        if (envName === 'production' || envName === 'mainnet') {
+        // Bloquear si el backend está caído. `build:mainnet` compila con
+        // --mode mainnet, así que MODE es 'mainnet', no 'production': sin
+        // incluirlo, el APK de mainnet caía a mocks en silencio
+        // (docs/AUDIT_MOBILE_MAINNET.md §3).
+        if (STRICT_STARTUP_MODES.has(envName)) {
           setStartupError({
             title: "Servidor Inalcanzable",
             message: "No se pudo conectar al servidor de Micopay.",
@@ -912,14 +958,14 @@ function App() {
 
   const clearTradeError = () => setTradeError(null);
 
-  const runTradeFlow = async (counterpartyId: string, role: 'buyer' | 'seller' = 'buyer'): Promise<boolean> => {
+  const runTradeFlow = async (counterpartyId: string, tradeFlow: TradeFlow = 'deposit'): Promise<boolean> => {
     if (!buyerUser) return false;
     setPendingSellerId(counterpartyId);
-    setPendingRole(role);
+    setPendingFlow(tradeFlow);
     setTradeLoading(true);
     setTradeError(null);
     try {
-      const trade = await createTrade(counterpartyId, activeAmount, buyerUser.token, role);
+      const trade = await createTrade(counterpartyId, activeAmount, buyerUser.token, tradeFlow);
       setActiveTrade(trade);
       return true;
     } catch (e) {
@@ -944,7 +990,7 @@ function App() {
 
   const retryTradeFlow = async (): Promise<boolean> => {
     if (!pendingSellerId) return false;
-    return runTradeFlow(pendingSellerId, pendingRole);
+    return runTradeFlow(pendingSellerId, pendingFlow);
   };
 
   const checkBackupGate = async (execute: () => Promise<boolean>): Promise<boolean> => {
@@ -958,14 +1004,15 @@ function App() {
     });
   };
 
-  // Cashout ("convert crypto to cash"): the caller gives up crypto, so they
-  // must be the escrow seller — only sellers can lock funds and reveal the
-  // HTLC secret, which is what makes the merchant's cash handoff verifiable.
-  const handleOfferSelected = async (offerId: string) => checkBackupGate(() => runTradeFlow(offerId, 'seller'));
+  // Cashout ("convert crypto to cash"): the caller gives up crypto. CASH-1 —
+  // we now send the product flow and let the backend derive the escrow roles
+  // (caller as seller, since only sellers can lock funds and reveal the HTLC
+  // secret) and the Red MicoPay provider from it.
+  const handleOfferSelected = async (offerId: string) => checkBackupGate(() => runTradeFlow(offerId, 'cashout'));
 
-  // Deposit ("buy crypto with cash"): the caller receives crypto, so they
-  // stay the escrow buyer (the merchant locks funds as seller) — unchanged.
-  const handleDepositOfferSelected = async (offerId: string) => checkBackupGate(() => runTradeFlow(offerId, 'buyer'));
+  // Deposit ("buy crypto with cash"): the caller receives crypto and the
+  // merchant locks funds as escrow seller. Same behaviour as before.
+  const handleDepositOfferSelected = async (offerId: string) => checkBackupGate(() => runTradeFlow(offerId, 'deposit'));
 
   useEffect(() => {
     if (showBackupPrompt) {
@@ -1070,6 +1117,8 @@ function App() {
           <HashRouter>
             <div className="flex flex-col min-h-screen bg-[#F4FAFF]">
               <ConnectionBannerHost />
+              {/* Se oculta solo cuando hay conexión y no hay nada pendiente. */}
+              <OfflineQueueStatus token={sellerUser?.token ?? null} />
               <Routes>
                 <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
                 <Route path="/register" element={<Register onLoginSuccess={handleLoginSuccess} />} />
@@ -1100,6 +1149,8 @@ function App() {
                 <Route path="/profile" element={<ProtectedRoute><ProfileRoute /></ProtectedRoute>} />
                 <Route path="/privacy" element={<ProtectedRoute><PrivacyRoute /></ProtectedRoute>} />
                 <Route path="/terms" element={<ProtectedRoute><TermsRoute /></ProtectedRoute>} />
+                <Route path="/sign-request" element={<ProtectedRoute><SignatureApprovalRoute /></ProtectedRoute>} />
+                <Route path="/sign-request/:id" element={<ProtectedRoute><SignatureApprovalRoute /></ProtectedRoute>} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
               <BottomNavAdapter />

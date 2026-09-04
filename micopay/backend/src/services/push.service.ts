@@ -175,3 +175,91 @@ export async function sendTradeNotificationToMerchant(
     );
   }
 }
+
+export interface SignRequestNotificationPayload {
+  requestId: string;
+  instruction?: string;
+  deviceName?: string;
+}
+
+/**
+ * Send a push notification to a user when a delegated sign request arrives.
+ * Returns true if push notification was sent, false otherwise.
+ */
+export async function sendSignRequestNotification(
+  userId: string,
+  payload: SignRequestNotificationPayload
+): Promise<boolean> {
+  if (!initialized) {
+    initializeFirebase();
+  }
+
+  if (!messaging) {
+    logger.info(
+      { user_id: userId },
+      'Firebase messaging not available, skipping sign request push notification'
+    );
+    return false;
+  }
+
+  try {
+    const user = await db.getOne<{ push_token: string | null }>(
+      'SELECT push_token FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (!user || !user.push_token) {
+      logger.info(
+        { user_id: userId },
+        'User has no push token, skipping sign request push notification'
+      );
+      return false;
+    }
+
+    const message: admin.messaging.Message = {
+      notification: {
+        title: 'Solicitud de Firma Recibida 🔐',
+        body: payload.instruction || `Solicitud de firma desde ${payload.deviceName || 'dispositivo conectado'}`,
+      },
+      data: {
+        requestId: payload.requestId,
+        type: 'sign_request',
+        click_action: 'FLUTTER_NOTIFICATION_CLICK',
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'sign_alerts',
+          priority: 'max',
+          defaultSound: true,
+          sound: 'default',
+        },
+      },
+      token: user.push_token,
+    };
+
+    await messaging.send(message);
+    logger.info(
+      { user_id: userId, request_id: payload.requestId },
+      'Sign request push notification sent successfully'
+    );
+    return true;
+  } catch (err: any) {
+    if (
+      err.code === 'messaging/registration-token-not-registered' ||
+      err.code === 'messaging/invalid-registration-token'
+    ) {
+      try {
+        await db.execute('UPDATE users SET push_token = NULL WHERE id = $1', [userId]);
+      } catch {}
+      return false;
+    }
+
+    logger.error(
+      { err, user_id: userId, request_id: payload.requestId },
+      'Failed to send sign request push notification'
+    );
+    return false;
+  }
+}
+

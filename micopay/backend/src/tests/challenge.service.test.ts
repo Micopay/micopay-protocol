@@ -11,8 +11,17 @@
  */
 
 import { strictEqual, ok } from "assert";
-import { issueChallenge, verifyAndConsumeChallenge } from "../services/challenge.service.js";
 import { AuthError } from "../utils/errors.js";
+
+// El servicio consulta `config.mockStellar`, y `config` se construye en el
+// momento en que se importa. Con un import estático, ESM lo evalúa antes de
+// que este archivo pueda tocar el entorno, así que la firma se verificaría de
+// verdad y las direcciones sintéticas de abajo fallarían por checksum. De ahí
+// el import dinámico: fijar primero el entorno, importar después.
+process.env.MOCK_STELLAR = "true";
+const { issueChallenge, verifyAndConsumeChallenge } = await import(
+  "../services/challenge.service.js"
+);
 
 const ADDR_A = "G" + "A".repeat(55);
 const ADDR_B = "G" + "B".repeat(55);
@@ -79,6 +88,7 @@ async function testWrongChallengeStringIsRejected() {
   );
   console.log("  ✓ a mismatched challenge string is rejected even for the right address");
 }
+
 
 async function main() {
   console.log("\nChallenge/response registration security tests\n");

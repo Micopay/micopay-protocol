@@ -2,7 +2,7 @@ import db from '../db/schema.js';
 import { config } from '../config.js';
 import pino from 'pino';
 import { generateTradeSecret, encryptSecret, decryptSecret } from './secret.service.js';
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import type { FastifyRequest } from 'fastify';
 import { prepareLockTx, submitLockTx, prepareReleaseTx, submitReleaseTx, callRefundOnChain, verifyLockOnChain, assertNotReplayed } from './stellar.service.js';
 import {
@@ -61,6 +61,8 @@ const STROOPS_PER_MXN = 10_000_000; // 7 decimals
 const PLATFORM_FEE_PERCENT = 0.8; // 0.8% platform fee
 const DEFAULT_TIMEOUT_MINUTES = 120; // 2 hours
 const UNKNOWN_STATE = 'unknown';
+/** SEC-02: TTL corto del token del QR. Nunca sobrepasa `trades.expires_at`. */
+const CLAIM_TOKEN_TTL_MINUTES = 15;
 
 interface TransitionFailureContext {
   tradeId: string;
@@ -157,16 +159,49 @@ async function validateAgainstMerchantLimits(sellerId: string, amountMxn: number
   }
 }
 
+/** CASH-1 (#372): canonical product flow, independent of the escrow roles. */
+export type TradeFlow = 'deposit' | 'cashout';
+
 export interface CreateTradeInput {
   request: FastifyRequest;
   sellerId: string;
   buyerId: string;
+  /**
+   * Product flow. Callers pass this explicitly — it must never be inferred
+   * from the escrow roles, which reverse between the two flows.
+   */
+  flow: TradeFlow;
   amountMxn: number;
 }
 
+/**
+ * The Red MicoPay liquidity provider for a flow, derived from the escrow roles.
+ * This is the single definition of that rule: 'deposit' means the provider
+ * locks the crypto (escrow seller), 'cashout' means the provider receives it
+ * and hands over cash (escrow buyer). The same rule is enforced by
+ * chk_trades_flow_provider at the database boundary.
+ */
+export function deriveProviderId(
+  flow: TradeFlow,
+  sellerId: string,
+  buyerId: string,
+): string {
+  return flow === 'cashout' ? buyerId : sellerId;
+}
+
 export async function createTrade(input: CreateTradeInput) {
-  const { request, sellerId, buyerId, amountMxn } = input;
-  request.log.info({ seller_id: sellerId, buyer_id: buyerId, amount_mxn: amountMxn, category: 'trade.lifecycle' }, '[trade] Creating trade');
+  const { request, sellerId, buyerId, flow, amountMxn } = input;
+
+  if (flow !== 'deposit' && flow !== 'cashout') {
+    throw new ValidationError(
+      'INVALID_FLOW',
+      'Tipo de operacion invalido',
+      `flow must be 'deposit' or 'cashout'`,
+    );
+  }
+
+  const providerId = deriveProviderId(flow, sellerId, buyerId);
+  request.log.info({ seller_id: sellerId, buyer_id: buyerId, flow, provider_id: providerId, amount_mxn: amountMxn, category: 'trade.lifecycle' }, '[trade] Creating trade');
 
   if (amountMxn < 100 || amountMxn > 50000) {
     throw new ValidationError(
@@ -222,13 +257,15 @@ export async function createTrade(input: CreateTradeInput) {
 
   const result = await db.getOne(
     `INSERT INTO trades
-      (seller_id, buyer_id, amount_mxn, amount_stroops, platform_fee_mxn,
+      (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn,
        secret_hash, secret_enc, secret_nonce, status, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', $11)
      RETURNING *`,
     [
       sellerId,
       buyerId,
+      flow,
+      providerId,
       amountMxn,
       amountStroops.toString(),
       platformFeeMxn,
@@ -250,6 +287,8 @@ export async function createTrade(input: CreateTradeInput) {
       amount_mxn: amountMxn,
       seller_id: sellerId,
       buyer_id: buyerId,
+      flow,
+      provider_id: providerId,
     },
   });
 
@@ -328,11 +367,14 @@ export async function getTradeHistory(userId: string, status?: string, page = 1,
     id: string; status: string; amount_mxn: number; platform_fee_mxn: number;
     lock_tx_hash: string | null; release_tx_hash: string | null; created_at: string;
     completed_at: string | null; seller_id: string; buyer_id: string; expires_at: string;
+    // CASH-1 (#372): canonical product flow + Red MicoPay provider.
+    flow: string; provider_id: string;
     seller_username: string | null; buyer_username: string | null;
   }>(
     `SELECT
        t.id, t.status, t.amount_mxn, t.platform_fee_mxn, t.lock_tx_hash, t.release_tx_hash,
        t.created_at, t.completed_at, t.seller_id, t.buyer_id, t.expires_at,
+       t.flow, t.provider_id,
        su.username AS seller_username, bu.username AS buyer_username
      FROM trades t
      JOIN users su ON su.id = t.seller_id
@@ -545,8 +587,20 @@ export async function getTradeSecret(request: FastifyRequest, tradeId: string, u
     throw new TradeStateError('TRADE_EXPIRED', 'El intercambio ha expirado', 'Trade has expired');
   }
 
-  // Decrypt secret
-  const secret = decryptSecret(trade.secret_enc, trade.secret_nonce);
+  // SEC-02: el preimage ya no sale del backend. El QR lleva un token opaco de
+  // un solo uso; quien libera on-chain sigue siendo el backend, que descifra el
+  // secreto por su cuenta en prepareReleaseTrade/completeTrade.
+  const claimToken = randomBytes(32).toString('hex');
+  const tokenExpiresAt = new Date(Math.min(
+    Date.now() + CLAIM_TOKEN_TTL_MINUTES * 60 * 1000,
+    new Date(trade.expires_at).getTime(),
+  ));
+
+  await db.execute(
+    `INSERT INTO trade_claim_tokens (token_hash, trade_id, issued_to, expires_at)
+     VALUES ($1, $2, $3, $4)`,
+    [hashClaimToken(claimToken), tradeId, userId, tokenExpiresAt],
+  );
 
   // Log access
   await db.execute(
@@ -555,9 +609,79 @@ export async function getTradeSecret(request: FastifyRequest, tradeId: string, u
     [tradeId, userId, ip, userAgent],
   );
 
-  const qrPayload = `micopay://release?trade_id=${tradeId}&secret=${secret}`;
+  const qrPayload = `micopay://release?trade_id=${tradeId}&claim_token=${claimToken}`;
 
-  return { secret, qr_payload: qrPayload, expires_in: 120 };
+  return {
+    qr_payload: qrPayload,
+    expires_at: tokenExpiresAt.toISOString(),
+    expires_in: Math.max(0, Math.floor((tokenExpiresAt.getTime() - Date.now()) / 1000)),
+  };
+}
+
+/** El token en claro nunca se persiste — mismo principio que `trades.secret_hash`. */
+function hashClaimToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+/**
+ * Marca un token de QR como usado. El UPDATE filtra por `consumed_at IS NULL`,
+ * así que bajo concurrencia solo un escaneo puede ganarlo; el SELECT posterior
+ * confirma quién fue.
+ */
+async function consumeClaimToken(tradeId: string, claimToken: string, consumedBy: string) {
+  const tokenHash = hashClaimToken(claimToken);
+  const selectToken = `SELECT consumed_at, consumed_by, expires_at FROM trade_claim_tokens
+     WHERE token_hash = $1 AND trade_id = $2`;
+
+  const before = await db.getOne<{
+    consumed_at: string | null;
+    consumed_by: string | null;
+    expires_at: string;
+  }>(selectToken, [tokenHash, tradeId]);
+
+  if (!before) {
+    throw new NotFoundError(
+      'INVALID_CLAIM_TOKEN',
+      'Este código QR no es válido para esta operación',
+      `No claim token matching trade ${tradeId}`,
+    );
+  }
+
+  // `?? null`: el store in-memory omite las columnas que nunca se escribieron,
+  // así que un token virgen llega con `consumed_at` undefined, no null.
+  if ((before.consumed_at ?? null) !== null) {
+    throw new ConflictError(
+      'CLAIM_TOKEN_USED',
+      'Este código QR ya fue usado',
+      `Claim token for trade ${tradeId} was already consumed`,
+    );
+  }
+
+  if (new Date(before.expires_at) < new Date()) {
+    throw new TradeStateError(
+      'CLAIM_TOKEN_EXPIRED',
+      'Este código QR expiró. Pide al usuario que genere uno nuevo',
+      `Claim token for trade ${tradeId} expired at ${before.expires_at}`,
+    );
+  }
+
+  await db.execute(
+    `UPDATE trade_claim_tokens
+     SET consumed_at = NOW(), consumed_by = $3
+     WHERE token_hash = $1 AND trade_id = $2 AND consumed_at IS NULL`,
+    [tokenHash, tradeId, consumedBy],
+  );
+
+  // Dos escaneos simultáneos pasan los checks de arriba; solo uno gana el
+  // UPDATE (`consumed_at IS NULL`). Releer dice cuál fue.
+  const after = await db.getOne<{ consumed_by: string | null }>(selectToken, [tokenHash, tradeId]);
+  if (after?.consumed_by !== consumedBy) {
+    throw new ConflictError(
+      'CLAIM_TOKEN_USED',
+      'Este código QR ya fue usado',
+      `Claim token for trade ${tradeId} was consumed by another scan`,
+    );
+  }
 }
 
 /**
@@ -1037,6 +1161,7 @@ export async function merchantConfirmScan(
   request: FastifyRequest,
   tradeId: string,
   merchantId: string,
+  claimToken: string,
 ): Promise<MerchantConfirmResult> {
   request.log.info(
     { trade_id: tradeId, merchant_id: merchantId, category: 'trade.lifecycle' },
@@ -1088,6 +1213,10 @@ export async function merchantConfirmScan(
       `Trade ${tradeId} expired at ${trade.expires_at}`,
     );
   }
+
+  // 5. El QR debe traer un token vivo y sin usar (SEC-02). Se quema aquí, ya
+  //    validado el trade, para que un QR contra un trade inválido no lo gaste.
+  await consumeClaimToken(tradeId, claimToken, merchantId);
 
   // Fetch buyer info for display
   const buyer = await db.getOne<{ username: string }>(

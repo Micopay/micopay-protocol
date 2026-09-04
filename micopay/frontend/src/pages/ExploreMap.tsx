@@ -174,7 +174,7 @@ const ExploreMap = ({
         <button
           onClick={onBack}
           className="flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
-          aria-label="Volver"
+          aria-label={t('a11y.back')}
         >
           <span className="material-symbols-outlined text-primary">arrow_back</span>
         </button>
@@ -417,7 +417,7 @@ function StateHeader({ onBack }: { onBack: () => void }) {
       <button
         onClick={onBack}
         className="flex items-center justify-center p-2 rounded-full hover:bg-surface-container-low transition-colors duration-200"
-        aria-label="Volver"
+        aria-label={t('a11y.back')}
       >
         <span className="material-symbols-outlined text-primary">arrow_back</span>
       </button>

@@ -3,6 +3,7 @@ import { extractApiErrorPayload, toApiError } from '../utils/apiError';
 import { signChallenge, getPublicKey, signTransactionXdr } from '../lib/keystore';
 import { removeKey } from './secureStorage';
 import { PLATFORM_FEE_PERCENT } from '../constants/trade';
+import type { MutationType, MutationPayloadMap } from './offlineQueue';
 
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
@@ -71,6 +72,9 @@ export interface CurrentUserProfile {
   reputation_tier?: string;
 }
 
+/** CASH-1 (#372): canonical product flow, independent of the escrow roles. */
+export type TradeFlow = 'deposit' | 'cashout';
+
 export interface TradeData {
   id: string;
   status: string;
@@ -87,6 +91,8 @@ export interface TradeDetailResponse {
     platform_fee_mxn?: number;
     seller_id?: string;
     buyer_id?: string;
+    flow?: TradeFlow;
+    provider_id?: string;
     created_at?: string;
     completed_at?: string | null;
     expires_at?: string;
@@ -147,8 +153,13 @@ export async function updateMerchantLocation(
  * otherwise anyone could register someone else's public Stellar address
  * before they do. See docs/AUDIT_MOBILE_MAINNET.md, "Registro sin prueba de
  * posesión de llave".
+ *
+ * `phoneHash` stays optional and is forwarded untouched: it belongs to the
+ * anti-abuse controls added in #319 and is unrelated to key possession.
  */
-export async function registerUser(username: string): Promise<UserData> {
+export async function registerUser(username: string, phoneHash?: string): Promise<UserData> {
+  // No fallback address here: a synthetic address whose key we do not hold
+  // could never sign the challenge, so it would fail server-side anyway.
   const stellar_address = await getPublicKey();
   if (!stellar_address) {
     throw new Error('No device keypair found — generateAndStoreKeypair() must run before registerUser()');
@@ -165,7 +176,11 @@ export async function registerUser(username: string): Promise<UserData> {
 
   const signature = await signChallenge(challenge);
 
-  const res = await http.post("/users/register", { username, stellar_address, challenge, signature });
+  const body: Record<string, string> = { username, stellar_address, challenge, signature };
+  if (phoneHash) {
+    body.phone_hash = phoneHash;
+  }
+  const res = await http.post("/users/register", body);
   return { ...res.data.user, token: res.data.token };
 }
 
@@ -203,21 +218,25 @@ export async function getAuthToken(username: string): Promise<string> {
 
 /**
  * Creates a trade between the caller and a counterparty.
- * `role` is the caller's role in the escrow: 'buyer' (default — the caller
- * receives crypto, e.g. depositing cash for crypto) or 'seller' (the caller
- * gives up crypto, e.g. cashing out — the escrow contract requires the
- * seller to be the one who locks funds and reveals the HTLC secret).
+ *
+ * CASH-1 (#372): the payload carries the *product* flow, not the caller's
+ * escrow role. 'deposit' means the caller buys crypto with cash (the
+ * counterparty locks funds as escrow seller); 'cashout' means the caller sells
+ * crypto for cash and is therefore the escrow seller, because only the seller
+ * can lock funds and reveal the HTLC secret. The backend derives the escrow
+ * roles and the Red MicoPay provider from this flow — the client never sends a
+ * provider id, and the API rejects the request if it tries.
  */
 export async function createTrade(
     counterpartyId: string,
     amountMxn: number,
     callerToken: string,
-    role: 'buyer' | 'seller' = 'buyer',
+    flow: TradeFlow = 'deposit',
 ): Promise<TradeData> {
   try {
     const res = await http.post(
         '/trades',
-        { counterparty_id: counterpartyId, amount_mxn: amountMxn, role },
+        { counterparty_id: counterpartyId, amount_mxn: amountMxn, flow },
         authHeaders(callerToken),
     );
     return res.data.trade;
@@ -270,10 +289,14 @@ export async function revealTrade(
   );
 }
 
+/**
+ * Devuelve el QR de cobro del vendedor. El payload lleva un token opaco de un
+ * solo uso, no el preimage HTLC (SEC-02).
+ */
 export async function getSecret(
     tradeId: string,
     sellerToken: string,
-): Promise<{ secret: string; qr_payload: string }> {
+): Promise<{ qr_payload: string; expires_at: string; expires_in: number }> {
   const res = await http.get(
       `/trades/${tradeId}/secret`,
       authHeaders(sellerToken),
@@ -329,6 +352,8 @@ export interface TradeHistoryItem {
   completed_at: string | null;
   seller_id: string;
   buyer_id: string;
+  flow: TradeFlow;
+  provider_id: string;
 }
 
 export interface MerchantTrade {
@@ -414,10 +439,22 @@ export interface XlmMxnRate {
   rate: number;
   source: string;
   fetchedAt: string;
+  /** true cuando se sirvió la última cotización conocida porque las fuentes fallaron. */
+  stale?: boolean;
 }
 
 export async function getXlmMxnRate(): Promise<XlmMxnRate> {
   const res = await http.get('/rate/xlm-mxn');
+  return res.data;
+}
+
+/**
+ * USDC→MXN desde el backend (multi-fuente + caché). El frontend nunca debe
+ * llevar un FX literal: si esto falla, la UI muestra "—"
+ * (docs/AUDIT_MOBILE_MAINNET.md §3).
+ */
+export async function getUsdcMxnRate(): Promise<XlmMxnRate> {
+  const res = await http.get('/rate/usdc-mxn');
   return res.data;
 }
 
@@ -538,7 +575,12 @@ export async function updateMerchantConfig(token: string, config: MerchantConfig
   return res.data.config;
 }
 
-type QueueFn = (type: string, payload: unknown) => Promise<string>;
+// Genérico y no `(string, unknown)`: así TypeScript verifica que el payload
+// que se encola tiene la forma que el sincronizador espera leer.
+type QueueFn = <T extends MutationType>(
+  type: T,
+  payload: MutationPayloadMap[T],
+) => Promise<string>;
 
 export async function updateMerchantConfigWithOfflineSupport(
   token: string,
@@ -548,7 +590,12 @@ export async function updateMerchantConfigWithOfflineSupport(
   try {
     const updated = await updateMerchantConfig(token, config);
     return { config: updated, queued: false };
-  } catch {
+  } catch (err: any) {
+    // Solo se encola si NO hubo respuesta del servidor, es decir, si fue un
+    // fallo de red. Un 400 de validación o un 401 de sesión expirada se van a
+    // rechazar igual al reintentar: propagarlos deja que la UI muestre el
+    // error real en vez de fingir que quedó guardado para más tarde.
+    if (err?.response) throw err;
     await queueFn('config', { config });
     return { config, queued: true };
   }
@@ -562,8 +609,11 @@ export async function updateMerchantAvailabilityWithOfflineSupport(
   try {
     await patchMerchantAvailability(token, available);
     return { queued: false };
-  } catch {
-    await queueFn('availability', { available });
+  } catch (err: any) {
+    // Mismo criterio que en updateMerchantConfigWithOfflineSupport: encolar
+    // solo los fallos de red, nunca los errores que el servidor sí respondió.
+    if (err?.response) throw err;
+    await queueFn('availability', { merchant_available: available });
     return { queued: true };
   }
 }
@@ -665,12 +715,13 @@ export interface MerchantConfirmResult {
  */
 export async function merchantConfirmScan(
   tradeId: string,
+  claimToken: string,
   token: string,
 ): Promise<MerchantConfirmResult> {
   try {
     const res = await http.post(
       `/trades/${tradeId}/merchant-confirm`,
-      {},
+      { claim_token: claimToken },
       authHeaders(token),
     );
     return res.data as MerchantConfirmResult;

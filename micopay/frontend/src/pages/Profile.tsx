@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import DeleteAccountModal from "../components/DeleteAccountModal";
-import { exportSecretKey, importKeypair } from '../lib/keystore';
+import ExportSecretKeyModal from "../components/ExportSecretKeyModal";
+import { importKeypair } from '../lib/keystore';
 import {
   deleteAccount,
   getCurrentUser,
@@ -47,6 +48,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [importInput, setImportInput] = useState('');
   const [activeToken, setActiveToken] = useState<string | null>(token);
 
@@ -150,14 +152,8 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
     if (devicePublicKey) navigator.clipboard.writeText(devicePublicKey);
   };
 
-  const handleExport = async () => {
-    const confirmed = window.confirm(
-        'Tu clave secreta da control total de tu cuenta. Nunca la compartas. Cópiala en un lugar seguro sin conexión.'
-    );
-    if (!confirmed) return;
-    const secret = await exportSecretKey();
-    await navigator.clipboard.writeText(secret);
-    alert('Clave secreta copiada. Limpia tu portapapeles después de guardarla.');
+  const handleExport = () => {
+    setShowExportModal(true);
   };
 
   const handleImport = async () => {
@@ -174,7 +170,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
   return (
       <div className="bg-[#F4FAFF] text-[#0B1E26] min-h-screen flex flex-col pb-28">
         <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-md bg-white/90 border-b border-[#D7E3EA]/60">
-          <button
+          <button aria-label={t('a11y.back')}
               onClick={onBack}
               className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#EFF6FA] transition-colors"
           >
@@ -364,7 +360,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                         className="w-full flex items-center justify-between py-2.5 text-sm text-[#0B1E26] hover:text-[#00694C] transition-colors"
                     >
                       <span>{t('profile.privacy')}</span>
-                      <span className="material-symbols-outlined text-base text-[#67808C]">chevron_right</span>
+                      <span aria-hidden="true" className="material-symbols-outlined text-base text-[#67808C]">chevron_right</span>
                     </button>
                     <div className="border-t border-[#D7E3EA]/40" />
                     <button
@@ -372,7 +368,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                         className="w-full flex items-center justify-between py-2.5 text-sm text-[#0B1E26] hover:text-[#00694C] transition-colors"
                     >
                       <span>{t('profile.terms')}</span>
-                      <span className="material-symbols-outlined text-base text-[#67808C]">chevron_right</span>
+                      <span aria-hidden="true" className="material-symbols-outlined text-base text-[#67808C]">chevron_right</span>
                     </button>
                   </div>
                 </section>
@@ -401,7 +397,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                       onClick={openDeleteModal}
                       className="w-full bg-[#C62828] text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-[#C62828]/20 transition-all active:scale-[0.98]"
                   >
-                <span className="material-symbols-outlined text-lg">
+                <span aria-hidden="true" className="material-symbols-outlined text-lg">
                   delete_forever
                 </span>
                     {t('profile.deleteBtn')}
@@ -415,7 +411,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                       onClick={onLogout}
                       className="w-full bg-gray-200 text-gray-800 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
                   >
-                <span className="material-symbols-outlined text-lg">
+                <span aria-hidden="true" className="material-symbols-outlined text-lg">
                   logout
                 </span>
                     {t('profile.logout')}
@@ -479,6 +475,10 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                 </div>
               </div>
             </div>
+        )}
+
+        {showExportModal && (
+          <ExportSecretKeyModal onClose={() => setShowExportModal(false)} />
         )}
 
         {success && (

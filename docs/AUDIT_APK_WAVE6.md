@@ -216,7 +216,7 @@ lo demás.
 | P0-2 | Trade contra contraparte real | `wave:frontend`,`wave:backend` | `wave:retail` | high | ✅ | Depende de P0-1 |
 | ~~P0-4~~ | ~~Fix fetch relativo en APK~~ | — | — | — | — | ✅ **Resuelto** — issue #150 cerrado, PR #154 mergeado |
 | P0-3 | Saldo real de la wallet del usuario | `wave:frontend`,`wave:backend` | `wave:retail` | medium | ✅ | Depende de P0-1 |
-| P0-5 | Onboarding mínimo: alias + visibilidad de llave + respaldo escalonado | `wave:frontend` | `wave:trust` | medium | ✅ | 📝 **Borrador listo (§10)** · §9.3 decidido (escalonado) · 🔒 blocked-by #160 — publicar al mergear #160 |
+| ~~P0-5~~ | ~~Onboarding mínimo: alias + visibilidad de llave + respaldo escalonado~~ | — | — | — | — | ✅ **Cerrado sin publicar 2026-08-25** — el código ya cumple los criterios; ver §10 |
 | ~~P1-2~~ | ~~Mapa grafica comercios reales~~ | — | — | — | — | ✅ **Resuelto** — PR #156 · @Gozirimdev |
 | P1-1 | ExploreMap usa economía real | `wave:frontend` | `wave:retail` | medium | ✅ | Issue #151 publicado, abierto sin asignar |
 | P1-3 | Nombre real del agente en recibo | `wave:frontend` | `wave:retail` | low | ✅ | 📎 **Plegado a #160** — `seller_username` ya se fetchea, falta cablear `agentName`; mismo `App.tsx` que P0-1/P0-2 |
@@ -261,7 +261,7 @@ lo demás.
 3. **P0-1 + P0-2** (issue #160, asignado en Drips) — en curso.
 4. ~~**P0-4**~~ ✅ PR #154 · @josealfredo79.
 5. **P0-3** — espera a que P0-1 aterrice.
-6. **P0-5** — 📝 borrador listo (§10); §9.3 decidido (escalonado); espera a que #160 mergee para publicar.
+6. ~~**P0-5**~~ ✅ **Cerrado sin publicar 2026-08-25.** #160 mergeó, lo que lo desbloqueaba, pero para entonces el flujo ya estaba implementado. Ver §10.
 
 **Etapa 2 — "la UI deja de mentir" (P1):** 🔄 Parcialmente completa
 7. ~~**P1-2**~~ ✅ PR #156 · @Gozirimdev. **P1-1** (issue #151, abierto sin asignar).
@@ -406,14 +406,35 @@ datos personales ni detalles que identifiquen a participantes.
 
 ---
 
-## 10. Borrador de issue listo para publicar — P0-5 (onboarding + respaldo de clave)
+## 10. ~~Borrador de issue listo para publicar~~ — P0-5 (onboarding + respaldo de clave) · ✅ CERRADO
 
-> **Estado:** redactado 2026-06-27, **sin publicar todavía**. Bloqueado por #160 (necesita el modelo
-> de una sola identidad por dispositivo para tener "una llave" coherente que mostrar/respaldar).
-> Publicar como issue de Drips **cuando #160 mergee**. Copiar el bloque de abajo a un issue nuevo.
+> **Estado: ✅ CERRADO SIN PUBLICAR — 2026-08-25.**
 >
-> Decisión §9.3 incorporada: **respaldo escalonado** (opcional para explorar, obligatorio antes de
-> operar con fondos reales).
+> Redactado el 2026-06-27 y bloqueado por #160. #160 mergeó, pero para cuando se revisó este
+> borrador el flujo **ya estaba implementado en el código**, así que publicarlo como issue de Drips
+> habría mandado a un contribuidor a construir algo que existe.
+>
+> Verificado el 2026-08-25 contra `micopay/frontend/src/pages/Register.tsx`, `Profile.tsx` y
+> `App.tsx`. Los seis criterios de aceptación se cumplen:
+>
+> | Criterio | Dónde |
+> |---|---|
+> | Pantalla de onboarding explicando la wallet no-custodial | `Register.tsx` — "¡Tu Wallet está lista!" |
+> | Ver y copiar la llave pública `G…` | `Register.tsx:104` · `Profile.tsx` |
+> | Respaldo de la llave secreta con advertencia visible | `SecretKeyBackupModal.tsx` |
+> | Explorar sin respaldar, pero prompt bloqueante antes de operar con fondos | `App.tsx` — modal "Respaldo Requerido" |
+> | El estado "respaldo confirmado" persiste | `setBackupConfirmed()` en SecureStorage |
+> | La llave nunca sale del dispositivo por HTTP | `lib/keystore.ts` — firma local |
+>
+> **El cuarto criterio estaba roto hasta el 2026-08-24.** `finishOnboarding` llamaba a
+> `setBackupConfirmed()` de forma incondicional, así que una cuenta sin respaldo quedaba marcada
+> como respaldada y el prompt bloqueante nunca aparecía. Corregido en la remediación de la auditoría
+> del APK (T-13, `docs/PLAN_REMEDIACION_APK_2026-08-24.md`).
+>
+> El mecanismo de respaldo también cambió: ya no copia la llave al portapapeles, la revela con
+> `FLAG_SECURE` activo. Ver #348 / `SEC-33`.
+>
+> El texto original se conserva abajo como registro de la decisión §9.3 (respaldo escalonado).
 
 ---
 

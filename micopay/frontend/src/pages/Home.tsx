@@ -11,6 +11,7 @@ import {
 } from '../services/api';
 import { mapApiError, type MappedApiError } from '../utils/apiError';
 import { useWalletBalance } from '../hooks/useWalletBalance';
+import { getPendingSignatureRequests, SignatureRequest } from '../services/signRequestService';
 
 const EXPLORER = "https://stellar.expert/explorer/testnet/tx";
 
@@ -92,6 +93,15 @@ const Home = ({
       .catch((e) => setPendingError(mapApiError(e)));
   }, [merchantToken]);
 
+  const [pendingSignRequests, setPendingSignRequests] = useState<SignatureRequest[]>([]);
+
+  useEffect(() => {
+    if (!token) return;
+    getPendingSignatureRequests(token)
+      .then((requests) => setPendingSignRequests(requests))
+      .catch(() => setPendingSignRequests([]));
+  }, [token]);
+
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
@@ -121,25 +131,29 @@ const Home = ({
   }, []);
 
   const MXN_PEGGED = new Set(['MXNE', 'MXNe', 'CETES', 'GTOKEN', 'MXN']);
-  const xlmRate = xlmMxnRate ?? 2.5;
-  const usdRate = usdMxnRate ?? 17.5;
 
-  const totalMxn = tokens.reduce((sum, t) => {
-    if (t.code === 'XLM') return sum + t.balance * xlmRate;
-    if (t.code === 'USDC') return sum + t.balance * usdRate;
-    if (MXN_PEGGED.has(t.code)) return sum + t.balance;
-    return sum;
-  }, 0);
+  // Sin cotización no se muestra un monto: un FX inventado sobre dinero real da
+  // cifras equivocadas (docs/AUDIT_MOBILE_MAINNET.md §3).
+  const ratesReady = xlmMxnRate != null && usdMxnRate != null && !rateError;
 
-  const mxnBalance = balanceLoading || rateLoading
+  const totalMxn = ratesReady
+    ? tokens.reduce((sum, t) => {
+        if (t.code === 'XLM') return sum + t.balance * xlmMxnRate!;
+        if (t.code === 'USDC') return sum + t.balance * usdMxnRate!;
+        if (MXN_PEGGED.has(t.code)) return sum + t.balance;
+        return sum;
+      }, 0)
+    : null;
+
+  const mxnBalance = balanceLoading || rateLoading || totalMxn == null
     ? "—"
     : `$${totalMxn.toLocaleString("es-MX", { maximumFractionDigits: 2 })} MXN`;
 
   // Per-asset MXN value for the XLM row (its own value, not the grand total).
   const rawXlm = tokens.find((t) => t.code === 'XLM')?.balance ?? 0;
-  const xlmMxnValue = balanceLoading || rateLoading
+  const xlmMxnValue = balanceLoading || rateLoading || rateError || xlmMxnRate == null
     ? "—"
-    : `$${(rawXlm * xlmRate).toLocaleString("es-MX", { maximumFractionDigits: 2 })} MXN`;
+    : `$${(rawXlm * xlmMxnRate).toLocaleString("es-MX", { maximumFractionDigits: 2 })} MXN`;
 
   const today = new Date().toLocaleDateString("es-MX", {
     weekday: "long",
@@ -179,6 +193,11 @@ const Home = ({
         <div className="flex items-center gap-4">
           <button
             onClick={onNavigateInbox}
+            aria-label={
+              pendingCount > 0
+                ? t('a11y.notificationsPending', { count: pendingCount })
+                : t('a11y.notifications')
+            }
             className="relative p-2 rounded-full hover:bg-surface-container-low transition-colors"
           >
             <span
@@ -188,7 +207,10 @@ const Home = ({
               notifications
             </span>
             {pendingCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-error text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+              <span
+                aria-hidden="true"
+                className="absolute -top-1 -right-1 bg-error text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center"
+              >
                 {pendingCount}
               </span>
             )}
@@ -230,6 +252,31 @@ const Home = ({
             </div>
           </div>
         )}
+        {/* Pending Signature Requests Banner */}
+        {pendingSignRequests.length > 0 && (
+          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-700">
+                <span className="material-symbols-outlined text-xl">gavel</span>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-amber-900">
+                  {t('signatureApproval.externalRequestHeader')}
+                </p>
+                <p className="text-xs text-amber-700">
+                  {pendingSignRequests.length} {t('signatureApproval.requestSourceLabel').toLowerCase()}
+                </p>
+              </div>
+            </div>
+            <a
+              href={`/#/sign-request/${pendingSignRequests[0].id}`}
+              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors"
+            >
+              {t('signatureApproval.title')}
+            </a>
+          </div>
+        )}
+
         {/* Saludo */}
         <section className="mb-8">
           <h1 className="font-headline font-extrabold text-3xl text-on-surface leading-tight mb-1">
