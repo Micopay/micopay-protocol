@@ -46,6 +46,15 @@ CREATE TABLE trades (
   seller_id       UUID NOT NULL REFERENCES users(id),
   buyer_id        UUID NOT NULL REFERENCES users(id),
 
+  -- CASH-1 (#372): escrow roles reverse between deposit and cash-out, so they
+  -- cannot express the product flow. `flow` is the canonical product model and
+  -- `provider_id` names the Red MicoPay liquidity provider explicitly, instead
+  -- of consumers guessing that seller_id is always the provider (false for
+  -- cash-out). Both are NOT NULL: there is no legacy/ambiguous state.
+  flow            VARCHAR(16) NOT NULL
+                  CONSTRAINT chk_trades_flow CHECK (flow IN ('deposit', 'cashout')),
+  provider_id     UUID NOT NULL REFERENCES users(id),
+
   amount_mxn      INTEGER NOT NULL,
   amount_stroops  BIGINT NOT NULL,
   seller_fee_mxn  INTEGER NOT NULL DEFAULT 0,
@@ -74,11 +83,20 @@ CREATE TABLE trades (
   completed_at    TIMESTAMPTZ,
   expires_at      TIMESTAMPTZ,
 
-  created_at      TIMESTAMPTZ DEFAULT NOW()
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+
+  -- CASH-1: the database, not just the API, refuses an inconsistent
+  -- flow/provider/escrow-role combination.
+  CONSTRAINT chk_trades_flow_provider CHECK (
+    (flow = 'deposit' AND provider_id = seller_id) OR
+    (flow = 'cashout' AND provider_id = buyer_id)
+  )
 );
 
 CREATE INDEX idx_trades_seller ON trades (seller_id, status);
 CREATE INDEX idx_trades_buyer ON trades (buyer_id, status);
+-- CASH-1 (#372): provider inbox queries filter by provider, not escrow role.
+CREATE INDEX idx_trades_provider ON trades (provider_id, status);
 CREATE INDEX idx_trades_status ON trades (status, expires_at)
   WHERE status IN ('locked', 'revealing');
 

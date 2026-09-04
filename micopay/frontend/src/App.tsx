@@ -55,6 +55,7 @@ import {
   fetchTradeDetail,
   UserData,
   TradeData,
+  TradeFlow,
   TradeHistoryItem,
 } from "./services/api";
 import { readJSON, writeJSON, removeKey, isBackupConfirmed, setBackupConfirmed } from "./services/secureStorage";
@@ -455,6 +456,10 @@ function SuccessRoute() {
             completed_at: trade.completed_at ?? null,
             seller_id: trade.seller_id ?? '',
             buyer_id: trade.buyer_id ?? '',
+            // CASH-1: prefer the canonical flow the backend persisted; fall
+            // back to the UI flow only while the detail is still loading.
+            flow: trade.flow ?? (flow ?? 'deposit'),
+            provider_id: trade.provider_id ?? '',
           });
           setSellerUsername(seller_username);
         })
@@ -489,6 +494,8 @@ function SuccessRoute() {
     completed_at: new Date().toISOString(),
     seller_id: '',
     buyer_id: '',
+    flow: flow ?? 'deposit',
+    provider_id: '',
   };
 
   return (
@@ -505,6 +512,10 @@ function SuccessRoute() {
             completed_at: new Date().toISOString(),
             seller_id: sellerUser?.id ?? '',
             buyer_id: buyerUser?.id ?? '',
+            // CASH-1: on a cash-out the provider is the escrow buyer, on a
+            // deposit the escrow seller — the same rule the backend enforces.
+            flow: flow ?? 'deposit',
+            provider_id: (flow === 'cashout' ? buyerUser?.id : sellerUser?.id) ?? '',
           }}
           agentName={sellerUsername ?? (flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe')}
           onHome={() => {
@@ -744,7 +755,8 @@ function App() {
   const [tradeLoading, setTradeLoading] = useState(false);
   const [tradeError, setTradeError] = useState<MappedApiError | null>(null);
   const [pendingSellerId, setPendingSellerId] = useState<string | null>(null);
-  const [pendingRole, setPendingRole] = useState<'buyer' | 'seller'>('buyer');
+  // CASH-1 (#372): the retried value is the product flow, not the escrow role.
+  const [pendingFlow, setPendingFlow] = useState<TradeFlow>('deposit');
   const [authReady, setAuthReady] = useState(false);
   const [devicePublicKey, setDevicePublicKey] = useState<string | null>(null);
 
@@ -924,14 +936,14 @@ function App() {
 
   const clearTradeError = () => setTradeError(null);
 
-  const runTradeFlow = async (counterpartyId: string, role: 'buyer' | 'seller' = 'buyer'): Promise<boolean> => {
+  const runTradeFlow = async (counterpartyId: string, tradeFlow: TradeFlow = 'deposit'): Promise<boolean> => {
     if (!buyerUser) return false;
     setPendingSellerId(counterpartyId);
-    setPendingRole(role);
+    setPendingFlow(tradeFlow);
     setTradeLoading(true);
     setTradeError(null);
     try {
-      const trade = await createTrade(counterpartyId, activeAmount, buyerUser.token, role);
+      const trade = await createTrade(counterpartyId, activeAmount, buyerUser.token, tradeFlow);
       setActiveTrade(trade);
       return true;
     } catch (e) {
@@ -956,7 +968,7 @@ function App() {
 
   const retryTradeFlow = async (): Promise<boolean> => {
     if (!pendingSellerId) return false;
-    return runTradeFlow(pendingSellerId, pendingRole);
+    return runTradeFlow(pendingSellerId, pendingFlow);
   };
 
   const checkBackupGate = async (execute: () => Promise<boolean>): Promise<boolean> => {
@@ -970,14 +982,15 @@ function App() {
     });
   };
 
-  // Cashout ("convert crypto to cash"): the caller gives up crypto, so they
-  // must be the escrow seller — only sellers can lock funds and reveal the
-  // HTLC secret, which is what makes the merchant's cash handoff verifiable.
-  const handleOfferSelected = async (offerId: string) => checkBackupGate(() => runTradeFlow(offerId, 'seller'));
+  // Cashout ("convert crypto to cash"): the caller gives up crypto. CASH-1 —
+  // we now send the product flow and let the backend derive the escrow roles
+  // (caller as seller, since only sellers can lock funds and reveal the HTLC
+  // secret) and the Red MicoPay provider from it.
+  const handleOfferSelected = async (offerId: string) => checkBackupGate(() => runTradeFlow(offerId, 'cashout'));
 
-  // Deposit ("buy crypto with cash"): the caller receives crypto, so they
-  // stay the escrow buyer (the merchant locks funds as seller) — unchanged.
-  const handleDepositOfferSelected = async (offerId: string) => checkBackupGate(() => runTradeFlow(offerId, 'buyer'));
+  // Deposit ("buy crypto with cash"): the caller receives crypto and the
+  // merchant locks funds as escrow seller. Same behaviour as before.
+  const handleDepositOfferSelected = async (offerId: string) => checkBackupGate(() => runTradeFlow(offerId, 'deposit'));
 
   useEffect(() => {
     if (showBackupPrompt) {
