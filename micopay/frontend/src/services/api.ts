@@ -32,8 +32,9 @@ export interface KYCStatusResponse {
 export async function startKYC(
   token: string,
   provider: KYCProvider = 'etherfuse',
+  email?: string,
 ): Promise<{ onboardingUrl: string }> {
-  const res = await http.post('/defi/kyc/start', {}, { ...authHeaders(token), params: { provider } });
+  const res = await http.post('/defi/kyc/start', { email }, { ...authHeaders(token), params: { provider } });
   return res.data;
 }
 
@@ -128,6 +129,22 @@ export async function patchMerchantAvailability(
 ): Promise<{ merchant_available: boolean }> {
   const res = await http.patch('/users/me', { merchant_available }, authHeaders(token));
   return res.data.user;
+}
+
+/** Mirrors backend `MerchantLocation` after PATCH /merchants/me/location. */
+export interface MerchantLocation {
+  latitude: number;
+  longitude: number;
+  address_text: string | null;
+  updated_at: string;
+}
+
+export async function updateMerchantLocation(
+    input: { latitude: number; longitude: number; address_text?: string },
+    token: string,
+): Promise<MerchantLocation> {
+  const res = await http.patch('/merchants/me/location', input, authHeaders(token));
+  return res.data.location;
 }
 
 /**
@@ -525,6 +542,9 @@ export interface MerchantConfig {
   min_trade_mxn: number;
   max_trade_mxn: number;
   daily_cap_mxn: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  address_text?: string | null;
 }
 
 export interface UserProfile {

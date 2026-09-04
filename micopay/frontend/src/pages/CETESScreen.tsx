@@ -822,19 +822,33 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
           )}
         </div>
 
-        <button
-          onClick={onBanco}
-          className="w-full bg-white border border-outline-variant/20 rounded-[24px] p-5 flex items-center gap-4 shadow-sm active:scale-[0.98] transition-all text-left"
-        >
-          <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0">
-            <span className="material-symbols-outlined text-primary">account_balance_wallet</span>
-          </div>
-          <div className="flex-1">
-            <p className="font-bold text-on-surface text-sm">{t('cetes.noCrypto')}</p>
-            <p className="text-xs text-on-surface-variant">{t('cetes.connectBank')}</p>
-          </div>
-          <span className="material-symbols-outlined text-on-surface-variant">chevron_right</span>
-        </button>
+        {/* "¿Sin cripto?" — entry point to the real Etherfuse SPEI ramp built into
+            this screen (payMethod === 'spei' above), not the P2P cash-agent
+            network. If KYC is already approved, reveal that tab in place; if
+            not, KYC is the actual prerequisite for connecting a bank via SPEI,
+            so send the user there instead of the unrelated /deposit flow. */}
+        {!(tab === 'buy' && payMethod === 'spei') && (
+          <button
+            onClick={() => {
+              if (canDepositSpei) {
+                setTab('buy');
+                setPayMethod('spei');
+              } else {
+                onBanco?.();
+              }
+            }}
+            className="w-full bg-white border border-outline-variant/20 rounded-[24px] p-5 flex items-center gap-4 shadow-sm active:scale-[0.98] transition-all text-left"
+          >
+            <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0">
+              <span className="material-symbols-outlined text-primary">account_balance_wallet</span>
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-on-surface text-sm">{t('cetes.noCrypto')}</p>
+              <p className="text-xs text-on-surface-variant">{t('cetes.connectBank')}</p>
+            </div>
+            <span className="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+          </button>
+        )}
 
         <p className="text-center text-xs text-outline pb-4">
           {t('cetes.footer', { network: rate?.network ?? 'TESTNET' })}

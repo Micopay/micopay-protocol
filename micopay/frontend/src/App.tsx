@@ -44,6 +44,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import MerchantSettings from "./pages/MerchantSettings";
 import BottomNav from "./components/BottomNav";
+import { ConnectionBanner } from "./components/ConnectionBanner";
 import DebugOverlay from "./components/DebugOverlay";
 import OfflineQueueStatus from "./components/OfflineQueueStatus";
 
@@ -112,7 +113,6 @@ export interface AppCtx {
   isMockStellar: boolean;
   backendConnected: boolean;
   backendHealth: any;
-  setDebugOpen: (b: boolean) => void;
 }
 
 export const AppContext = createContext<AppCtx | null>(null);
@@ -275,7 +275,6 @@ function MapRoute() {
                 amountMxn: activeAmount,
                 flow: 'cashout',
                 nearbyCount: offer.nearbyCount,
-                merchantOnline: offer.online,
               },
             });
           }}
@@ -306,7 +305,6 @@ function ConfirmRoute() {
     amountMxn: number;
     flow: 'cashout' | 'deposit';
     nearbyCount: number;
-    merchantOnline?: boolean;
   } | null;
 
   if (!state?.merchantId) {
@@ -322,7 +320,6 @@ function ConfirmRoute() {
       amountMxn={state.amountMxn}
       flow={state.flow ?? 'cashout'}
       nearbyCount={state.nearbyCount}
-      merchantOnline={state.merchantOnline ?? true}
       loading={tradeLoading}
       errorMessage={tradeError?.message ?? null}
       onBack={() => navigate(-1)}
@@ -562,7 +559,11 @@ function CetesRoute() {
   return (
       <CETESScreen
           onBack={() => navigate('/explore')}
-          onBanco={() => navigate('/deposit')}
+          // "¿Sin cripto?" without approved KYC: KYC is the actual prerequisite
+          // for the Etherfuse SPEI ramp (see canDepositSpei in CETESScreen), not
+          // the P2P cash-agent flow at /deposit — that CTA used to send users
+          // there by mistake.
+          onBanco={() => navigate('/kyc')}
           userToken={buyerUser?.token}
           showDefi={import.meta.env.VITE_ENABLE_DEFI_TRADING === 'true'}
           showSpeiRamp={import.meta.env.VITE_ENABLE_SPEI_RAMP === 'true'}
@@ -722,7 +723,6 @@ function BottomNavAdapter() {
   const { sellerUser } = useAppCtx();
 
   if (HIDE_BOTTOMNAV_ROUTES.has(location.pathname)) return null;
-  if (HIDE_BOTTOMNAV_PREFIX.some((p) => location.pathname.startsWith(p))) return null;
 
   const navMap: Record<string, string> = {
     home: "/",
@@ -740,6 +740,29 @@ function BottomNavAdapter() {
           isMerchant={!!sellerUser}
       />
   );
+}
+
+// ── Connection banner host ───────────────────────────────────────────────────
+// Tracks browser/WebView online-offline state directly (navigator.onLine +
+// the online/offline events) — deliberately independent of the merchant
+// offline-mutation queue (services/offlineQueue*.ts), which is a different,
+// narrower concern (queueing merchant config writes) than "is this device
+// connected to the internet at all".
+function ConnectionBannerHost() {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  return <ConnectionBanner isVisible={!isOnline} message="Sin conexión a internet" />;
 }
 
 // ── Root App ─────────────────────────────────────────────────────────────────
@@ -771,7 +794,6 @@ function App() {
   const [isDemoMode, setIsDemoMode] = useState(true);
   const [isMockStellar, setIsMockStellar] = useState(true);
   const [backendUrl, setBackendUrl] = useState("");
-  const [debugOpen, setDebugOpen] = useState(false);
   const envName = import.meta.env.MODE;
   /** Modos que operan contra dinero real: nunca deben caer a mocks. */
   const STRICT_STARTUP_MODES = new Set(['production', 'mainnet']);
@@ -1047,7 +1069,6 @@ function App() {
     isMockStellar,
     backendConnected,
     backendHealth,
-    setDebugOpen,
   };
 
   if (startupError) {
@@ -1095,6 +1116,7 @@ function App() {
         <AppContext.Provider value={ctx}>
           <HashRouter>
             <div className="flex flex-col min-h-screen bg-[#F4FAFF]">
+              <ConnectionBannerHost />
               {/* Se oculta solo cuando hay conexión y no hay nada pendiente. */}
               <OfflineQueueStatus token={sellerUser?.token ?? null} />
               <Routes>

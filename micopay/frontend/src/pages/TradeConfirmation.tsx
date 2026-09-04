@@ -13,7 +13,6 @@ export interface TradeConfirmationPageProps {
   amountMxn: number;
   flow: 'cashout' | 'deposit';
   nearbyCount: number;
-  merchantOnline?: boolean;
   onBack: () => void;
   onConfirm: () => Promise<boolean>;
   loading?: boolean;
@@ -29,7 +28,6 @@ export default function TradeConfirmationPage({
   amountMxn,
   flow,
   nearbyCount,
-  merchantOnline = true,
   onBack,
   onConfirm,
   loading = false,
@@ -115,14 +113,6 @@ export default function TradeConfirmationPage({
                 className={`font-bold tabular-nums ${exceedsThreshold ? 'text-error' : 'text-on-surface'}`}
               >
                 {effectivePct.toFixed(1)}%
-              </dd>
-            </div>
-
-            <div className="flex justify-between gap-4 border-t border-outline-variant/15 pt-3">
-              <dt className="text-on-surface-variant">{t('confirm.agentStatus')}</dt>
-              <dd className={`flex items-center gap-1.5 font-medium ${merchantOnline ? 'text-green-700' : 'text-red-600'}`}>
-                <span className={`w-2 h-2 rounded-full inline-block ${merchantOnline ? 'bg-green-500' : 'bg-red-500'}`} />
-                {merchantOnline ? t('confirm.online') : t('confirm.offline')}
               </dd>
             </div>
 

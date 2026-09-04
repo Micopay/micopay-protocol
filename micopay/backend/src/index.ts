@@ -47,7 +47,7 @@ const LOG_REDACT_PATHS = [
 ];
 
 const app = Fastify({
-  trustProxy: true,
+  trustProxy: 1,
   logger: process.env.NODE_ENV === 'development' ? {
     level: 'info',
     redact: LOG_REDACT_PATHS,

@@ -1,17 +1,27 @@
 import { useEffect, useState } from 'react';
-import { getMerchantConfig, updateMerchantConfigWithOfflineSupport, getCurrentUser, setAvailability, MerchantConfig } from '../services/api';
+import { useTranslation } from 'react-i18next';
+import { getMerchantConfig, updateMerchantConfigWithOfflineSupport, updateMerchantLocation, getCurrentUser, setAvailability, MerchantConfig } from '../services/api';
 import { resolveErrorMessage } from '../constants/errorMap';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
+import { useGeolocation } from '../hooks/useGeolocation';
+import MapReal from '../components/MapReal';
 
 interface MerchantSettingsProps {
   token: string | null;
   onBack: () => void;
 }
 
+interface LocationState {
+  latitude: number | null;
+  longitude: number | null;
+  address_text: string | null;
+}
+
 export default function MerchantSettings({
   token,
   onBack,
 }: MerchantSettingsProps) {
+  const { t } = useTranslation();
   const [form, setForm] = useState({
     rate_percent: 1,
     min_trade_mxn: 100,
@@ -27,6 +37,15 @@ export default function MerchantSettings({
   const [messageType, setMessageType] = useState<'success' | 'error' | 'warning' | null>(null);
   const offlineQueue = useOfflineQueue(token);
 
+  // Location (WP2): loaded from the same GET /merchants/me/config call, kept separate
+  // from `form` because PUT /merchants/me/config rejects unknown properties.
+  const [location, setLocation] = useState<LocationState>({ latitude: null, longitude: null, address_text: null });
+  const [editingLocation, setEditingLocation] = useState(false);
+  const [pickerPosition, setPickerPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [addressText, setAddressText] = useState('');
+  const [savingLocation, setSavingLocation] = useState(false);
+  const geo = useGeolocation(false);
+
   useEffect(() => {
     if (!token) {
       setLoading(false);
@@ -40,6 +59,12 @@ export default function MerchantSettings({
           getCurrentUser(token),
         ]);
         setForm(config);
+        setLocation({
+          latitude: config.latitude ?? null,
+          longitude: config.longitude ?? null,
+          address_text: config.address_text ?? null,
+        });
+        setAddressText(config.address_text ?? '');
         const status = (user as any).verification_status;
         setAvailabilityState(
           status === "verified"
@@ -56,6 +81,50 @@ export default function MerchantSettings({
     };
     load();
   }, [token]);
+
+  // Once GPS coords arrive from the CTA, seed the picker with them.
+  useEffect(() => {
+    if (geo.lat != null && geo.lng != null) {
+      setPickerPosition({ lat: geo.lat, lng: geo.lng });
+    }
+  }, [geo.lat, geo.lng]);
+
+  const startLocationEdit = () => {
+    setEditingLocation(true);
+    if (location.latitude != null && location.longitude != null) {
+      setPickerPosition({ lat: location.latitude, lng: location.longitude });
+    }
+  };
+
+  const saveLocation = async () => {
+    if (!token || !pickerPosition) return;
+    setSavingLocation(true);
+    setMessage(null);
+    setMessageType(null);
+    try {
+      const result = await updateMerchantLocation(
+        {
+          latitude: pickerPosition.lat,
+          longitude: pickerPosition.lng,
+          address_text: addressText.trim() ? addressText.trim() : undefined,
+        },
+        token,
+      );
+      setLocation({
+        latitude: result.latitude,
+        longitude: result.longitude,
+        address_text: result.address_text,
+      });
+      setEditingLocation(false);
+      setMessage(t('merchantSettings.location.saveSuccess'));
+      setMessageType('success');
+    } catch (err: any) {
+      setMessage(resolveErrorMessage(err).message);
+      setMessageType('error');
+    } finally {
+      setSavingLocation(false);
+    }
+  };
 
   const togglePause = async () => {
     if (!token) return;
@@ -167,6 +236,93 @@ export default function MerchantSettings({
               setForm((f) => ({ ...f, daily_cap_mxn: Number(v) }))
             }
           />
+
+          <section className="bg-white rounded-[24px] p-5 border border-slate-100 shadow-sm mb-8">
+            <p className="font-bold text-on-surface mb-1">{t('merchantSettings.location.title')}</p>
+
+            {!editingLocation && location.latitude != null && location.longitude != null ? (
+              <div className="space-y-3">
+                <MapReal
+                  pickerMode
+                  pickerPosition={{ lat: location.latitude, lng: location.longitude }}
+                  userPosition={{ lat: location.latitude, lng: location.longitude }}
+                />
+                {location.address_text && (
+                  <p className="text-sm text-on-surface-variant">{location.address_text}</p>
+                )}
+                <button
+                  type="button"
+                  className="w-full rounded-xl border border-primary text-primary font-semibold py-2.5"
+                  onClick={startLocationEdit}
+                >
+                  {t('merchantSettings.location.change')}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {!pickerPosition && (
+                  <>
+                    <p className="text-xs text-on-surface-variant">{t('merchantSettings.location.notSet')}</p>
+                    <button
+                      type="button"
+                      className="w-full rounded-xl bg-primary text-white font-semibold py-2.5 disabled:opacity-60"
+                      disabled={geo.loading}
+                      onClick={() => geo.requestPermission()}
+                    >
+                      {geo.loading ? t('merchantSettings.location.gettingLocation') : t('merchantSettings.location.useCurrent')}
+                    </button>
+                    {geo.error && (
+                      <p className="text-xs text-error">{t('merchantSettings.location.locationError')}</p>
+                    )}
+                  </>
+                )}
+
+                {pickerPosition && (
+                  <div className="space-y-3">
+                    <MapReal
+                      pickerMode
+                      pickerPosition={pickerPosition}
+                      userPosition={pickerPosition}
+                      onPickerPositionChange={setPickerPosition}
+                    />
+                    <p className="text-xs text-on-surface-variant">{t('merchantSettings.location.dragHint')}</p>
+
+                    <label className="block">
+                      <span className="block text-sm font-medium mb-2">{t('merchantSettings.location.addressLabel')}</span>
+                      <input
+                        type="text"
+                        maxLength={200}
+                        value={addressText}
+                        placeholder={t('merchantSettings.location.addressPlaceholder')}
+                        onChange={(e) => setAddressText(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3"
+                      />
+                    </label>
+
+                    <div className="flex gap-3">
+                      {editingLocation && (
+                        <button
+                          type="button"
+                          className="flex-1 rounded-xl border border-slate-200 text-on-surface-variant font-semibold py-2.5"
+                          onClick={() => setEditingLocation(false)}
+                        >
+                          {t('merchantSettings.location.cancel')}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="flex-1 rounded-xl bg-primary text-white font-semibold py-2.5 disabled:opacity-60"
+                        disabled={savingLocation}
+                        onClick={saveLocation}
+                      >
+                        {savingLocation ? t('merchantSettings.location.saving') : t('merchantSettings.location.save')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
 
           <button
             className="w-full rounded-xl bg-primary text-white font-semibold py-3 disabled:opacity-60"
