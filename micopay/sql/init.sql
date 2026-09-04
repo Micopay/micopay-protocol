@@ -63,6 +63,10 @@ CREATE TABLE trades (
                     'completed', 'cancelled', 'expired', 'refunded'
                   )),
 
+  -- CASH-1: Product flow and provider identification
+  flow            VARCHAR(32) NOT NULL,
+  provider_id     UUID NOT NULL REFERENCES users(id),
+
   -- Stellar
   stellar_trade_id VARCHAR(64),
   lock_tx_hash    VARCHAR(64),
@@ -74,7 +78,14 @@ CREATE TABLE trades (
   completed_at    TIMESTAMPTZ,
   expires_at      TIMESTAMPTZ,
 
-  created_at      TIMESTAMPTZ DEFAULT NOW()
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+
+  -- CASH-1: Check constraints for flow/provider consistency
+  CONSTRAINT trades_flow_check CHECK (flow IN ('deposit', 'cash_out')),
+  CONSTRAINT trades_flow_provider_consistency CHECK (
+    (flow = 'deposit' AND provider_id = seller_id) OR
+    (flow = 'cash_out' AND provider_id = buyer_id)
+  )
 );
 
 CREATE INDEX idx_trades_seller ON trades (seller_id, status);
