@@ -111,7 +111,10 @@ const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBac
     }, [completedTxHash, onSuccess]);
 
     useEffect(() => {
-        const fallbackState: TradeState = secretLoaded ? 'revealed' : 'locked';
+        // CASH-5A: antes esto convertia el estado real `revealing` en un
+        // `revealed` que ningun backend emite. El estado en que queda un trade
+        // con el secreto ya cargado ES `revealing`; no hay nada que traducir.
+        const fallbackState: TradeState = secretLoaded ? 'revealing' : 'locked';
         const backendState = normalizeTradeState(activeTrade?.status, fallbackState);
         setTradeState(getTradeStateDebugOverride(backendState));
     }, [activeTrade?.status, secretLoaded]);

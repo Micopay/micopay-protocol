@@ -1,7 +1,19 @@
-const TRADE_STATES = [
+/**
+ * CASH-5A · Los estados canónicos, y solo esos.
+ *
+ * Esta lista es exactamente la de `trades.status` en `micopay/sql/init.sql`,
+ * que es la fuente autoritativa. Antes esta constante inventaba `pending_cash`
+ * y `revealed` —que ningún backend emite— y omitía `pending` y `revealing`,
+ * que sí ocurren. El resultado era que un estado real caía en la vista de
+ * respaldo y la pantalla mostraba una etiqueta que no correspondía.
+ *
+ * Las dos invenciones colapsan en `revealing`: era el mismo momento del flujo
+ * descrito dos veces, el secreto ya revelado esperando la entrega de efectivo.
+ */
+export const TRADE_STATES = [
+  'pending',
   'locked',
-  'pending_cash',
-  'revealed',
+  'revealing',
   'completed',
   'cancelled',
   'expired',
@@ -37,27 +49,27 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     },
     icon: 'lock',
   },
-  pending_cash: {
-    label: 'Esperando efectivo',
-    happened: 'La operación está activa y esperando confirmación de entrega.',
-    next: 'Cuando recibas el efectivo, confirma para liberar los fondos.',
-    safe: 'Si algo falla o se vence el tiempo, el flujo regresa tus fondos según estado.',
+  pending: {
+    label: 'Operación creada',
+    happened: 'La solicitud se registró, pero los fondos todavía no entran en garantía.',
+    next: 'Confirma la operación para bloquear los fondos en el contrato.',
+    safe: 'Aún no se movió tu saldo: nada queda comprometido hasta el bloqueo.',
+    tone: {
+      container: 'bg-fondo border-tinta',
+      iconBg: 'bg-gris',
+      icon: 'text-papel',
+    },
+    icon: 'hourglass_top',
+  },
+  revealing: {
+    label: 'Esperando la entrega',
+    happened: 'El código ya se reveló y la entrega de efectivo puede ocurrir.',
+    next: 'Muestra el código al agente; los fondos se liberan al confirmarse la entrega.',
+    safe: 'Tu saldo sigue en garantía hasta que la entrega quede confirmada.',
     tone: {
       container: 'bg-naranja-suave border-tinta',
       iconBg: 'bg-naranja',
       icon: 'text-papel',
-    },
-    icon: 'payments',
-  },
-  revealed: {
-    label: 'Código revelado',
-    happened: 'El secreto ya fue revelado y el cobro puede completarse.',
-    next: 'Muestra el QR al agente y confirma cuando recibas el efectivo.',
-    safe: 'El proceso queda trazado y sólo se libera cuando se completa correctamente.',
-    tone: {
-      container: 'bg-tinta border-tinta',
-      iconBg: 'bg-naranja-claro',
-      icon: 'text-tinta',
     },
     icon: 'qr_code_2',
   },
@@ -114,13 +126,22 @@ const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
   },
 };
 
-function isTradeState(value: string): value is TradeState {
+export function isTradeState(value: string): value is TradeState {
   return (TRADE_STATES as readonly string[]).includes(value);
 }
 
+/**
+ * CASH-5A: devuelve el estado canónico, o `null` si el backend mandó algo que
+ * no está en el contrato. Devolver `null` en vez de un respaldo silencioso es
+ * lo que permite que la pantalla lo muestre en vez de inventar una transición.
+ */
+export function parseTradeState(value: string | null | undefined): TradeState | null {
+  if (!value) return null;
+  return isTradeState(value) ? value : null;
+}
+
 export function normalizeTradeState(value: string | null | undefined, fallback: TradeState): TradeState {
-  if (!value) return fallback;
-  return isTradeState(value) ? value : fallback;
+  return parseTradeState(value) ?? fallback;
 }
 
 export function getTradeStateDebugOverride(fallback: TradeState): TradeState {
@@ -134,7 +155,12 @@ export function getTradeStateDebugOverride(fallback: TradeState): TradeState {
 }
 
 interface TradeStateBadgeProps {
-  state: TradeState;
+  /**
+   * CASH-5A: acepta `string` a propósito. Un backend que emita un estado
+   * fuera del contrato no puede quedar oculto tras un respaldo silencioso:
+   * se dibuja de forma visible y, sobre todo, no habilita ninguna acción.
+   */
+  state: TradeState | string;
   onRecover?: () => void;
   recoverLabel?: string;
   className?: string;
@@ -143,8 +169,38 @@ interface TradeStateBadgeProps {
 const RECOVERY_STATES: TradeState[] = ['expired', 'cancelled', 'refunded'];
 
 const TradeStateBadge = ({ state, onRecover, recoverLabel, className = '' }: TradeStateBadgeProps) => {
-  const copy = TRADE_STATE_COPY[state];
-  const showRecovery = RECOVERY_STATES.includes(state);
+  const canonical = parseTradeState(state);
+
+  // Estado fuera del contrato: se dice, no se disfraza. Sin acción de
+  // recuperación, para que un valor desconocido no pueda desbloquear nada.
+  if (!canonical) {
+    return (
+      <section
+        data-testid="trade-state-unknown"
+        className={`rounded-sm border-2 border-tinta bg-fondo p-4 ${className}`}
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-sm border-2 border-tinta bg-gris flex items-center justify-center">
+            <span aria-hidden="true" className="material-symbols-outlined text-base text-papel">help</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-sm text-tinta">Estado no reconocido</p>
+            <p className="mt-2 text-[13px] leading-relaxed text-gris">
+              La app no reconoce el estado <span className="font-mono">{String(state)}</span> que
+              reportó el servidor.
+            </p>
+            <p className="mt-1.5 text-[13px] leading-relaxed font-medium text-on-surface">
+              Tus fondos siguen protegidos por el contrato. Actualiza la app o escribe a soporte
+              antes de intentar cualquier acción.
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  const copy = TRADE_STATE_COPY[canonical];
+  const showRecovery = RECOVERY_STATES.includes(canonical);
   const buttonLabel = recoverLabel ?? copy.recoveryLabel ?? 'Volver a intentar';
 
   return (
@@ -154,7 +210,7 @@ const TradeStateBadge = ({ state, onRecover, recoverLabel, className = '' }: Tra
           <span className={`material-symbols-outlined text-base ${copy.tone.icon}`}>{copy.icon}</span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className={`font-bold text-sm ${state === "revealed" ? "text-papel" : "text-tinta"}`}>{copy.label}</p>
+          <p className={`font-bold text-sm text-tinta`}>{copy.label}</p>
           <p className="mt-2 text-[13px] leading-relaxed text-gris">{copy.happened}</p>
           <p className="mt-1.5 text-[13px] leading-relaxed text-gris">{copy.next}</p>
           <p className="mt-1.5 text-[13px] leading-relaxed font-medium text-on-surface">{copy.safe}</p>

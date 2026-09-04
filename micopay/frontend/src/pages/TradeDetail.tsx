@@ -16,6 +16,7 @@ import { readJSON } from '../services/secureStorage';
 import { useCountdown } from '../hooks/useCountdown';
 import { buildTxUrl } from '../utils/stellarExplorer';
 import { mapApiError } from '../utils/apiError';
+import { parseTradeState, type TradeState } from '../components/TradeStateBadge';
 
 type TradeDetailData = TradeDetailResponse['trade'] & {
   platform_fee_mxn?: number;
@@ -62,19 +63,30 @@ const SUPPORT_EMAIL = 'support@micopay.io';
 
 const ACTIVE_STATES = ['pending', 'locked', 'revealing'];
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
+/**
+ * CASH-5A: la píldora compacta del detalle. La presentación puede diferir de
+ * la tarjeta de `TradeStateBadge`, pero el CONJUNTO de estados no: este
+ * `Record<TradeState, ...>` obliga a cubrir todos los canónicos y solo esos.
+ * Antes incluía `revealed`, que ningún backend emite.
+ */
+const STATUS_CONFIG: Record<TradeState, { label: string; color: string; icon: string }> = {
   pending: { label: 'Pendiente', color: '#f59e0b', icon: 'hourglass_top' },
   locked: { label: 'Bloqueado', color: '#3b82f6', icon: 'lock' },
   revealing: { label: 'Revelando', color: '#8b5cf6', icon: 'qr_code' },
-  revealed: { label: 'Revelado', color: '#06b6d4', icon: 'visibility' },
   completed: { label: 'Completado', color: '#22c55e', icon: 'check_circle' },
   cancelled: { label: 'Cancelado', color: '#ef4444', icon: 'cancel' },
   expired: { label: 'Expirado', color: '#6b7280', icon: 'schedule' },
   refunded: { label: 'Reembolsado', color: '#8b5cf6', icon: 'undo' },
 };
 
-function TradeStateBadge({ status }: { status: string }) {
-  const config = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
+const UNKNOWN_STATUS_CONFIG = { label: 'Estado desconocido', color: '#6b7280', icon: 'help' };
+
+function TradeStatusPill({ status }: { status: string }) {
+  // CASH-5A: antes hacía `STATUS_CONFIG[status] || STATUS_CONFIG.pending`, así
+  // que un estado fuera del contrato se rotulaba "Pendiente" — un estado que
+  // sí habilita acciones. Ahora se dice que no se reconoce.
+  const canonical = parseTradeState(status);
+  const config = canonical ? STATUS_CONFIG[canonical] : UNKNOWN_STATUS_CONFIG;
 
   return (
     <div
@@ -874,8 +886,10 @@ function TradeDetailContent({ token, onBack }: TradeDetailProps) {
         return <LockedView trade={trade} />;
       case 'revealing':
         return <RevealingView trade={trade} />;
-      case 'revealed':
-        return <RevealedView trade={trade} onComplete={handleComplete} token={token} />;
+      // CASH-5A: se elimina `case 'revealed'`. Ese estado no existe en
+      // `trades.status`, así que la rama era inalcanzable. `RevealedView` se
+      // deja en su sitio: CASH-5B es dueño de las vistas y decidirá si
+      // `RevealingView` la absorbe.
       case 'completed':
         return <CompletedView trade={trade} />;
       case 'cancelled':
@@ -944,7 +958,7 @@ function TradeDetailContent({ token, onBack }: TradeDetailProps) {
               </p>
             </div>
           </div>
-          <TradeStateBadge status={trade.status} />
+          <TradeStatusPill status={trade.status} />
         </div>
       </header>
 
