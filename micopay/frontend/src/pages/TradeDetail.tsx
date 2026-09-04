@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 
 import {
@@ -12,7 +13,9 @@ import {
 import { ensureTrustline } from '../services/payment';
 import { errorMessages } from '../constants/errorMessages';
 import { readJSON } from '../services/secureStorage';
+import { useCountdown } from '../hooks/useCountdown';
 import { buildTxUrl } from '../utils/stellarExplorer';
+import { mapApiError } from '../utils/apiError';
 
 type TradeDetailData = TradeDetailResponse['trade'] & {
   platform_fee_mxn?: number;
@@ -53,32 +56,6 @@ const TRADE_POLL_INTERVAL = 5000;
 const SUPPORT_EMAIL = 'support@micopay.io';
 
 const ACTIVE_STATES = ['pending', 'locked', 'revealing'];
-
-function useCountdown(expiresAt: string | null) {
-  const [remaining, setRemaining] = useState('');
-
-  useEffect(() => {
-    if (!expiresAt) return;
-
-    const tick = () => {
-      const diff = new Date(expiresAt).getTime() - Date.now();
-      if (diff <= 0) {
-        setRemaining('Expirado');
-        return;
-      }
-      const h = Math.floor(diff / 3_600_000);
-      const m = Math.floor((diff % 3_600_000) / 60_000);
-      const s = Math.floor((diff % 60_000) / 1000);
-      setRemaining(h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`);
-    };
-
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [expiresAt]);
-
-  return remaining;
-}
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   pending: { label: 'Pendiente', color: '#f59e0b', icon: 'hourglass_top' },
@@ -142,7 +119,8 @@ function PendingView({
   locking: boolean;
   lockError: string | null;
 }) {
-  const countdown = useCountdown(trade.expires_at ?? null);
+  const { label: countdownLabel, expired: countdownExpired } = useCountdown(trade.expires_at ?? null);
+  const countdown = countdownExpired ? 'Expirado' : countdownLabel;
 
   return (
     <div className="flex flex-col items-center text-center">
@@ -213,6 +191,7 @@ function PendingView({
 }
 
 function LockedView({ trade }: { trade: TradeDetailData }) {
+
   return (
     <div className="flex flex-col items-center text-center">
       <div className="w-16 h-16 rounded-sm bg-blue-100 flex items-center justify-center mb-6">
@@ -270,19 +249,30 @@ function RevealingView({ trade }: { trade: TradeDetailData }) {
 
 function RevealedView({ trade, onComplete, token }: { trade: TradeDetailData; onComplete: () => void; token: string | null }) {
   const [isConfirming, setIsConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
+  // La pantalla sólo avanza a "completado" si el release confirmó de verdad.
+  // Antes el catch sólo logueaba y el finally transicionaba igual, así que un
+  // release fallido —o la falta de token— se mostraba como éxito
+  // (docs/AUDIT_MOBILE_MAINNET.md §4, "honestidad sobre fondos").
   const handleConfirm = async () => {
     if (isConfirming) return;
     setIsConfirming(true);
+    setConfirmError(null);
     try {
       const effectiveToken = token ?? (await getStoredToken());
-      if (effectiveToken) {
-        await completeTrade(trade.id, effectiveToken);
-      }
-    } catch (e) {
-      console.warn('Could not complete trade on backend', e);
-    } finally {
+      if (!effectiveToken) throw new Error('NO_TOKEN');
+      await completeTrade(trade.id, effectiveToken);
       setTimeout(() => onComplete(), 1500);
+    } catch (e) {
+      setIsConfirming(false);
+      // El motivo lo traduce mapApiError (el mapeo de errores del repo); lo
+      // único que se añade es dónde quedó el dinero, que UX_MANIFESTO exige
+      // decir en todo estado de error.
+      const reason = e instanceof Error && e.message === 'NO_TOKEN'
+        ? 'Tu sesión expiró. Vuelve a entrar para confirmar.'
+        : mapApiError(e).message;
+      setConfirmError(`${reason} El dinero sigue retenido en la garantía.`);
     }
   };
 
@@ -298,15 +288,22 @@ function RevealedView({ trade, onComplete, token }: { trade: TradeDetailData; on
         ¿Ya recibiste el efectivo? Confirma para liberar los fondos al vendedor.
       </p>
 
+      {confirmError && (
+        <div className="w-full mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-left">
+          <p className="text-sm font-semibold text-red-800">No se pudo confirmar</p>
+          <p className="mt-1 text-sm text-red-700">{confirmError}</p>
+        </div>
+      )}
+
       {!isConfirming ? (
         <button
           onClick={handleConfirm}
           className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
         >
           <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>
-            check_circle
+            {confirmError ? 'refresh' : 'check_circle'}
           </span>
-          Ya recibí el efectivo
+          {confirmError ? 'Reintentar' : 'Ya recibí el efectivo'}
         </button>
       ) : (
         <div className="flex flex-col items-center gap-3 py-4">
@@ -322,6 +319,7 @@ function RevealedView({ trade, onComplete, token }: { trade: TradeDetailData; on
 }
 
 function CompletedView({ trade }: { trade: TradeDetailData }) {
+
   return (
     <div className="flex flex-col items-center text-center">
       <div className="w-16 h-16 rounded-sm bg-green-100 flex items-center justify-center mb-6">
@@ -672,6 +670,7 @@ function RefundConfirmDialog({
 // ── Main component ──────────────────────────────────────────────────────────
 
 function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProps) {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [trade, setTrade] = useState<TradeDetailData | null>(null);
@@ -927,7 +926,7 @@ function TradeDetailContent({ buyerToken, sellerToken, onBack }: TradeDetailProp
       <header className="sticky top-0 z-50 bg-surface-container-lowest/80 border-b-2 border-tinta pt-[max(0px,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <button
+            <button aria-label={t('a11y.back')}
               onClick={onBack}
               className="min-h-12 min-w-12 min-h-12 min-w-12 flex items-center justify-center rounded-sm transition-colors text-primary"
             >

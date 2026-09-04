@@ -1,17 +1,21 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { registerUser, getAuthToken, getCurrentUser, UserData } from '../services/api';
 import { generateAndStoreKeypair, getPublicKey, exportSecretKey, keypairExists } from '../lib/keystore';
 import { setBackupConfirmed, writeJSON } from '../services/secureStorage';
 import { ApiError } from '../utils/apiError';
+import { hashPhone } from '../lib/phoneHash';
 
 interface RegisterProps {
   onLoginSuccess?: (user: UserData, seller: UserData | null) => void;
 }
 
 export default function Register({ onLoginSuccess }: RegisterProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
+  const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   /** El backend respondió que esta dirección ya tiene cuenta (ADDRESS_ALREADY_REGISTERED). */
@@ -44,7 +48,14 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
       const sec = await exportSecretKey();
       if (!pub || !sec) throw new Error('No se pudo generar tu identidad Stellar');
 
-      const userData = await registerUser(username.trim());
+      // Hash the phone number client-side (if provided) so the raw
+      // number is NEVER sent to the backend. The hash enables the
+      // assertNotRelatedAccounts abuse check without exposing PII.
+      const phoneHash: string | undefined = phone.trim()
+        ? await hashPhone(phone.trim())
+        : undefined;
+
+      const userData = await registerUser(username.trim(), phoneHash);
 
       // Persist session immediately so the user is logged in after onboarding.
       await writeJSON('micopay_user', userData);
@@ -133,7 +144,7 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
               </label>
               <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-sm px-4 py-3">
                 <span className="text-xs font-mono text-tinta truncate mr-2">{pubKey}</span>
-                <button onClick={copyPublicKey} className="text-verde flex-shrink-0">
+                <button aria-label={t('a11y.copyPublicKey')} onClick={copyPublicKey} className="text-verde flex-shrink-0">
                   <span className="material-symbols-outlined text-lg">{copiedPub ? 'check' : 'content_copy'}</span>
                 </button>
               </div>
@@ -215,6 +226,27 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
             maxLength={30}
           />
           <p className="text-[11px] text-gris mt-1 ml-1">Solo letras, números y guiones bajos</p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-gris uppercase tracking-wider mb-1">
+            Teléfono <span className="text-gris font-normal normal-case">(opcional)</span>
+          </label>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleRegister()}
+            placeholder="+52 55 1234 5678"
+            className="w-full px-4 py-3 rounded-sm border-2 border-tinta text-tinta text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            autoCapitalize="none"
+            autoCorrect="off"
+            maxLength={20}
+          />
+          <p className="text-[11px] text-gris mt-1 ml-1">
+            Opcional. Se hashea localmente (SHA-256) — el número nunca se envía al servidor.
+            Ayuda a prevenir el abuso de cuentas relacionadas.
+          </p>
         </div>
 
         <div className="bg-[#E8F5EE] rounded-sm p-4 flex items-start gap-3">

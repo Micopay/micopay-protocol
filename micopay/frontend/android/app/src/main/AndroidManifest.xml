@@ -51,20 +51,27 @@
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Firebase Cloud Messaging configuration for push notifications -->
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="trade_alerts" />
     </application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!--
+        Solo ubicación aproximada (~1-3 km), suficiente para el mapa de agentes
+        cercanos. ACCESS_FINE_LOCATION se retiró en la auditoría 2026-08
+        (ISSUE-08): todas las llamadas de geolocalización pasan
+        enableHighAccuracy:false, así que el permiso preciso no se usaba. Pedirlo
+        obliga además al diálogo de "ubicación precisa" de Android 12+, que
+        tiene peor tasa de aceptación, y exige justificación en Play Console.
+
+        POST_NOTIFICATIONS y la meta-data de Firebase Cloud Messaging también se
+        retiraron: no hay ningún plugin de push instalado, no existe
+        google-services.json, y el escaneo de cadenas del classes.dex del APK
+        compilado da 0 coincidencias para "messaging" y "PushNotification".
+        Ambos vuelven solos el día que se instale el plugin de notificaciones.
+    -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <!-- Required for Android 13+ to show push notification permission dialog -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.location" android:required="false" />

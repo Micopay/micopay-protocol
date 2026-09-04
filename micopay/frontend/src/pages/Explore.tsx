@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { AvatarPlaceholder } from '../components/AvatarPlaceholder';
 import { Logo } from '../components/Logo';
 
 interface ExploreProps {

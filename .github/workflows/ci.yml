@@ -49,6 +49,16 @@ jobs:
       # El lock se genera en Windows y omite los binarios opcionales de Linux
       # (rollup/lightningcss) — bug npm #4828. El fix documentado es borrar el
       # lock y reinstalar fresco para que npm resuelva el binario de la plataforma.
+      # npm 10.9.8 (el que trae Node 22) revienta resolviendo este árbol desde
+      # cero con "Cannot read properties of null (reading 'edgesOut')". Es un
+      # bug del propio npm, no del proyecto: con npm 10.8.2 (Node 20) y con
+      # npm >= 11 el mismo package.json resuelve bien. Como el paso de abajo
+      # necesita instalar SIN lock, subimos npm antes de instalar.
+      - name: Actualizar npm (evita el bug de resolución de 10.9.8)
+        run: npm i -g npm@11
+      # El lock se genera en Windows y omite los binarios opcionales de Linux
+      # (rollup/lightningcss) — bug npm #4828. El fix documentado es borrar el
+      # lock y reinstalar fresco para que npm resuelva el binario de la plataforma.
       - name: Install (regenera deps opcionales por plataforma — npm #4828)
         run: |
           rm -f package-lock.json

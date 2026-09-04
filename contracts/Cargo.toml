@@ -5,6 +5,7 @@ members = [
     "micopay-escrow",
     "micopay-badges",
     "zk-verifier",
+    "delegated-release-htlc",
 ]
 resolver = "2"
 

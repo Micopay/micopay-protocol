@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Pill } from '../components/ui';
+import { useTranslation } from 'react-i18next';
 import ErrorBanner from '../components/ErrorBanner';
 import { getTradeHistory, TradeHistoryItem } from '../services/api';
 import { mapApiError, type MappedApiError } from '../utils/apiError';
@@ -29,6 +30,7 @@ const FILTERS = [
 ];
 
 const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
+  const { t } = useTranslation();
   const [trades, setTrades] = useState<TradeHistoryItem[]>([]);
   const [status, setStatus] = useState('all');
   const [page, setPage] = useState(1);
@@ -63,7 +65,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
   return (
     <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col">
       <header className="fixed top-0 left-0 w-full z-50 flex items-center px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
-        <button onClick={onBack} className="min-h-12 min-w-12 min-h-12 min-w-12 flex items-center justify-center rounded-sm transition-colors">
+        <button aria-label={t('a11y.back')} onClick={onBack} className="min-h-12 min-w-12 min-h-12 min-w-12 flex items-center justify-center rounded-sm transition-colors">
           <span className="material-symbols-outlined text-on-surface">arrow_back</span>
         </button>
         <h1 className="flex-1 text-center font-headline font-bold text-lg mr-10">Historial de Transacciones</h1>
@@ -164,7 +166,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
               onClick={() => setPage(p => Math.max(1, p - 1))}
               className="flex items-center gap-2 px-4 py-2 rounded-sm border-2 border-tinta text-sm font-bold disabled:opacity-30 disabled:pointer-events-none hover:bg-surface-container-low transition-colors"
             >
-              <span className="material-symbols-outlined text-sm">chevron_left</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-sm">chevron_left</span>
               Anterior
             </button>
             <span className="text-xs font-bold text-gris">Página {page}</span>
@@ -174,7 +176,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
               className="flex items-center gap-2 px-4 py-2 rounded-sm border-2 border-tinta text-sm font-bold disabled:opacity-30 disabled:pointer-events-none hover:bg-surface-container-low transition-colors"
             >
               Siguiente
-              <span className="material-symbols-outlined text-sm">chevron_right</span>
+              <span aria-hidden="true" className="material-symbols-outlined text-sm">chevron_right</span>
             </button>
           </div>
         )}

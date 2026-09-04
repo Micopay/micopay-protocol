@@ -146,14 +146,17 @@ describe('Home — XLM→MXN rate', () => {
     });
   });
 
-  it('shows tilde prefix when rate fetch fails', async () => {
+  // Antes se mostraba un estimado con tilde (~ balance × 20). docs/AUDIT_MOBILE_MAINNET.md
+  // §3 lo prohíbe: sin cotización se muestra "—", nunca un FX inventado.
+  it('shows an em dash instead of an invented rate when the fetch fails', async () => {
     mockGetXlmMxnRate.mockRejectedValue(new Error('Network error'));
 
     render(<Home {...createProps()} />);
 
     await waitFor(() => {
-      expect(screen.getAllByText(/~5,000/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(1);
     });
+    expect(screen.queryByText(/~5,000/)).not.toBeInTheDocument();
   });
 });
 

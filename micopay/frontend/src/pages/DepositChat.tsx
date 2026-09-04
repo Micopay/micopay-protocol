@@ -101,9 +101,6 @@ const DepositChat = ({
                         <span className="text-xs text-on-surface/60 font-medium">{t('chatRoom.authorizedAgent')}</span>
                     </div>
                 </div>
-                <button className="p-2 text-tinta opacity-70 hover:bg-[#E7F6FF] transition-colors rounded-full">
-                    <span className="material-symbols-outlined">more_vert</span>
-                </button>
             </header>
 
             <main className="flex-1 max-w-2xl mx-auto flex flex-col w-full bg-[radial-gradient(circle_at_2px_2px,rgba(0,105,76,0.03)_1px,transparent_0)] bg-[length:24px_24px]">
@@ -203,11 +200,7 @@ const DepositChat = ({
 
                 {/* Footer / Input */}
                 <footer className="sticky bottom-0 bg-papel px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 flex flex-col gap-4 border-t border-[#E7F6FF]">
-                    <div className="grid grid-cols-2 gap-3">
-                        <button className="flex items-center justify-center gap-2 py-3 px-4 rounded-sm border border-primary/20 bg-papel text-primary font-bold text-sm hover:bg-surface-container-low transition-all active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50" disabled={isSending}>
-                            <span className="material-symbols-outlined !text-[20px]">location_on</span>
-                            {t('chatRoom.shareLocation')}
-                        </button>
+                    <div className="grid grid-cols-1 gap-3">
                         <button
                             onClick={onViewQR}
                             className="flex items-center justify-center gap-2 py-3 px-4 rounded-sm bg-naranja text-papel border-2 border-tinta shadow-solida font-bold text-sm hover:brightness-110 transition-all active:translate-x-[2px] active:translate-y-[2px] disabled:opacity-50"
@@ -223,9 +216,6 @@ const DepositChat = ({
                         </div>
                     )}
                     <div className="flex items-center gap-3 bg-papel border-b border-linea py-2">
-                        <button className="p-2 text-primary/60 hover:text-primary transition-colors disabled:opacity-50" disabled={isSending}>
-                            <span className="material-symbols-outlined">add_circle</span>
-                        </button>
                         <div className="flex-grow">
                             <input 
                                 value={inputValue}

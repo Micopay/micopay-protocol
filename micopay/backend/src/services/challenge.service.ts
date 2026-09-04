@@ -14,9 +14,45 @@ const challenges = new Map<string, { challenge: string; expiresAt: number }>();
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
+/**
+ * Maximum number of pending challenges kept in memory at once.
+ *
+ * Ported from the in-route store that used to live in routes/auth.ts, together
+ * with the pruning interval below. Both come from the memory-leak fix in #341
+ * (SEC-16): without them, an attacker rotating IPs can grow this Map without
+ * bound. They must stay here now that the store is shared by /auth/token and
+ * /users/register — moving the store without moving its bounds would have
+ * silently reintroduced the leak.
+ */
+const CHALLENGES_MAX_SIZE = 10_000;
+
+/**
+ * Prune expired challenges every 60 seconds so the Map stays bounded in
+ * long-running processes or under an IP-rotation attack.
+ */
+const _challengePruneInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [address, entry] of challenges) {
+    if (entry.expiresAt <= now) {
+      challenges.delete(address);
+    }
+  }
+}, 60_000);
+// Allow the Node.js process to exit cleanly even if this interval is running.
+_challengePruneInterval.unref();
+
 export function issueChallenge(stellarAddress: string): { challenge: string; expiresAt: number } {
   const challenge = `micopay-auth-${randomBytes(16).toString('hex')}-${Date.now()}`;
   const expiresAt = Date.now() + CHALLENGE_TTL_MS;
+
+  // Enforce maximum store size: evict the oldest entry when the cap is reached.
+  if (challenges.size >= CHALLENGES_MAX_SIZE) {
+    const oldestKey = challenges.keys().next().value;
+    if (oldestKey !== undefined) {
+      challenges.delete(oldestKey);
+    }
+  }
+
   challenges.set(stellarAddress, { challenge, expiresAt });
   return { challenge, expiresAt };
 }

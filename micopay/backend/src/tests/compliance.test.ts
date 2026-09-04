@@ -41,12 +41,14 @@ async function testAggregationThresholds() {
 
   // User 1: Under threshold (P2P Trade)
   await db.execute(
-    `INSERT INTO trades (id, seller_id, buyer_id, amount_mxn, amount_stroops, secret_hash, status, completed_at, created_at, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, 'completed', $7, $8, $9)`,
+    `INSERT INTO trades (id, seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, secret_hash, status, completed_at, created_at, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'completed', $9, $10, $11)`,
     [
       randomUUID(),
       sellerId,
       buyerId1,
+      'deposit',
+      sellerId,
       underAmount,
       (underAmount * 10000000).toString(),
       `hash_${randomUUID()}`,
@@ -58,12 +60,14 @@ async function testAggregationThresholds() {
 
   // User 2: Exactly at threshold (P2P Trade)
   await db.execute(
-    `INSERT INTO trades (id, seller_id, buyer_id, amount_mxn, amount_stroops, secret_hash, status, completed_at, created_at, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, 'completed', $7, $8, $9)`,
+    `INSERT INTO trades (id, seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, secret_hash, status, completed_at, created_at, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'completed', $9, $10, $11)`,
     [
       randomUUID(),
       sellerId,
       buyerId2,
+      'deposit',
+      sellerId,
       exactAmount,
       (exactAmount * 10000000).toString(),
       `hash_${randomUUID()}`,
