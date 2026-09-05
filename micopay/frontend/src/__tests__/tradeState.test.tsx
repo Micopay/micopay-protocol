@@ -20,6 +20,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import TradeStateBadge, {
+  TRADE_STATE_COPY,
   TRADE_STATES,
   parseTradeState,
   normalizeTradeState,
@@ -137,5 +138,34 @@ describe('CASH-5A · la UI no reintroduce estados inventados', () => {
   it('TradeDetail no rotula un estado desconocido como pendiente', () => {
     const src = read('../pages/TradeDetail.tsx');
     expect(src).not.toMatch(/STATUS_CONFIG\[status\]\s*\|\|\s*STATUS_CONFIG\.pending/);
+  });
+});
+
+/**
+ * El chat mostraba "Operación: revealing" —el identificador interno del
+ * sistema— porque solo tenía redacción para `locked` y `pending`, y todo lo
+ * demás caía a un texto plantilla con el estado crudo dentro.
+ *
+ * Los textos humanos YA existían en `TRADE_STATE_COPY` desde CASH-5A, pero solo
+ * los usaba la insignia. Dos listas paralelas garantizan que una se quede atrás,
+ * y la que se quedó atrás fue la que ve el usuario en mitad de una operación con
+ * su dinero dentro.
+ */
+describe('el chat no enseña identificadores internos', () => {
+  const source = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../pages/ChatRoom.tsx'), 'utf8');
+
+  it('usa el diccionario compartido en vez de la plantilla con el estado crudo', () => {
+    expect(source).toContain('TRADE_STATE_COPY');
+    // `chatRoom.tradeStatus` es la plantilla "Operación: {{status}}".
+    expect(source).not.toContain("t('chatRoom.tradeStatus'");
+  });
+
+  it('todos los estados canónicos tienen redacción humana', () => {
+    for (const state of TRADE_STATES) {
+      const copy = TRADE_STATE_COPY[state];
+      expect(copy?.label, `falta la etiqueta de "${state}"`).toBeTruthy();
+      // Ninguna debe ser el identificador tal cual.
+      expect(copy.label.toLowerCase()).not.toBe(state);
+    }
   });
 });
