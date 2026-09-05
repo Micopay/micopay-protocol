@@ -54,23 +54,29 @@ FONT_URL = (
 )
 OUT_FONT = "public/fonts/material-symbols-subset.woff2"
 OUT_MANIFEST = "public/fonts/ICONOS.txt"
-
-# Nombres que aparecen donde un icono, pero no lo son: valores de condicion en
-# los ternarios que ELIGEN el icono. Se listan aqui para que el test no los
-# reporte como rotos eternamente.
-NOT_ICONS = {"cashout", "locked", "icon"}
-
-SPAN = re.compile(r"material-symbols-outlined[^>]*>\s*\{?\s*([^<>{}]+?)\s*\}?\s*<")
-ICON_PROP = re.compile(r"\bicon=(?:\"([a-z0-9_]+)\"|\{\s*['\"]([a-z0-9_]+)['\"]\s*\})")
-# Varias pantallas pintan `{copy.icon}` / `{offer.icon}` / `{status.icon}`: el
-# nombre vive en un objeto, no en el JSX. Sin esto se empaquetaban de menos y
-# el icono salia como texto justo en los estados de error, donde mas duele.
-ICON_FIELD = re.compile(r"\bicon\s*:\s*['\"]([a-z][a-z0-9_]{2,})['\"]")
-LITERAL = re.compile(r"['\"]([a-z][a-z0-9_]{2,})['\"]")
+# Fuera de public/: es material del test, no del APK.
+OUT_ALL_NAMES = "scripts/material-symbols-names.txt"
 
 
-def icons_used_in_source(root="src"):
-    """Todos los nombres de icono que aparecen en el codigo de la app."""
+# Cualquier literal en minusculas y snake_case es CANDIDATO a icono. Se
+# empaqueta solo si existe de verdad en Material Symbols, asi que sobrar no
+# cuesta casi nada y faltar rompe la pantalla.
+#
+# Se intento primero reconocer las formas concretas en que el codigo escribe un
+# icono — literal dentro del span, prop `icon=`, campo `icon:` — y fue un error:
+# BottomNav los pasa como argumentos de una funcion, `btn('home', 'home', ...)`,
+# que no encajaba en ninguna. El resultado fue empaquetar de menos y dejar la
+# barra de navegacion mostrando HOME y EXPLORE como texto gigante. Adivinar la
+# forma sintactica es fragil; intersecar con la fuente real no lo es.
+CANDIDATE = re.compile(r"['\"`]([a-z][a-z0-9_]{2,40})['\"`]")
+# Los iconos escritos como texto JSX no llevan comillas:
+#     <span className="material-symbols-outlined">arrow_back</span>
+# asi que el patron de literales no los ve. Se recogen aparte.
+BARE = re.compile(r"material-symbols-outlined[^>]*>\s*([a-z][a-z0-9_]{2,40})\s*<")
+
+
+def icon_candidates(root="src"):
+    """Todo lo que PODRIA ser un nombre de icono; la fuente decide cual lo es."""
     found = set()
     for dirpath, _, files in os.walk(root):
         if "__tests__" in dirpath:
@@ -79,18 +85,9 @@ def icons_used_in_source(root="src"):
             if not name.endswith((".tsx", ".ts")):
                 continue
             src = open(os.path.join(dirpath, name), encoding="utf-8", errors="ignore").read()
-            for m in SPAN.finditer(src):
-                body = m.group(1)
-                if re.fullmatch(r"[a-z0-9_]+", body):
-                    found.add(body)
-                else:
-                    # Ternario: `{cond ? 'lock' : 'hourglass_top'}`
-                    found.update(x.group(1) for x in LITERAL.finditer(body))
-            for m in ICON_PROP.finditer(src):
-                found.add(m.group(1) or m.group(2))
-            for m in ICON_FIELD.finditer(src):
-                found.add(m.group(1))
-    return found - NOT_ICONS
+            found.update(m.group(1) for m in CANDIDATE.finditer(src))
+            found.update(m.group(1) for m in BARE.finditer(src))
+    return found
 
 
 def glyph_to_char(font):
@@ -112,8 +109,8 @@ def main():
     from fontTools import subset
     from fontTools.ttLib import TTFont
 
-    wanted = icons_used_in_source()
-    print(f"iconos usados en el codigo: {len(wanted)}")
+    wanted = icon_candidates()
+    print(f"literales candidatos en el codigo: {len(wanted)}")
 
     cache = os.path.join(os.environ.get("TEMP", "/tmp"), "material-symbols-full.ttf")
     if not os.path.exists(cache):
@@ -140,13 +137,10 @@ def main():
                 else:
                     del st.ligatures[first]
 
-    absent = sorted(wanted - found)
-    if absent:
-        print("\n  ✗ No existen en Material Symbols (nombre mal escrito o inventado):")
-        for a in absent:
-            print("     ", a)
-        print("\n  Corrigelos en el codigo; no se pueden empaquetar.\n")
-        return 1
+    # Los candidatos que resultan no ser iconos (palabras normales del codigo)
+    # se descartan solos al no existir en la fuente. Eso no es un error: la
+    # regla es que empaquetar de mas es barato y empaquetar de menos rompe la
+    # pantalla.
 
     order = set(font.getGlyphOrder())
     fills = {f"{g}.fill" for g in keep if f"{g}.fill" in order}
@@ -169,7 +163,25 @@ def main():
         )
         fh.write("\n".join(sorted(found)) + "\n")
 
+    # Lista completa de nombres validos de Material Symbols. La usa el test para
+    # distinguir un icono de una palabra cualquiera, y con ella detecta el caso
+    # que se escapo: `btn('home', 'home', ...)`, un icono pasado como argumento.
+    # Vive en scripts/ y NO en public/, para que no viaje dentro del APK.
+    all_names = set()
+    full = TTFont(cache)
+    fg2c = glyph_to_char(full)
+    for lookup in full["GSUB"].table.LookupList.Lookup:
+        for st in ligature_subtables(lookup):
+            if st.__class__.__name__ != "LigatureSubst":
+                continue
+            for first, ligs in st.ligatures.items():
+                for lig in ligs:
+                    all_names.add("".join(fg2c.get(g, "?") for g in [first] + list(lig.Component)))
+    with open(OUT_ALL_NAMES, "w", encoding="utf-8") as fh:
+        fh.write(chr(10).join(sorted(all_names)) + chr(10))
+
     print(f"iconos empaquetados: {len(found)}  ({os.path.getsize(OUT_FONT)} bytes)")
+    print(f"nombres validos de Material Symbols: {len(all_names)}")
     return 0
 
 
