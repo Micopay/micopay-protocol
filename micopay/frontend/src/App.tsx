@@ -171,6 +171,7 @@ function TradeDetailRoute() {
   return (
     <TradeDetail
       token={sessionUser?.token ?? null}
+      userId={sessionUser?.id ?? null}
       onBack={() => navigate('/history')}
     />
   );
