@@ -89,3 +89,28 @@ describe('el activo del escrow', () => {
     expect(read('.env.testnet')).toMatch(/VITE_ESCROW_ASSET_CODE=XLM/);
   });
 });
+
+describe('el estado local no se queda atrás tras bloquear', () => {
+  const api = read('src/services/api.ts');
+
+  /**
+   * `lockTrade` devolvia solo `{ lock_tx_hash }` y tiraba el `status` que el
+   * backend si manda. El estado local se quedaba en `pending` despues de un
+   * bloqueo EXITOSO, y la pantalla del QR volvia a intentar bloquear: el
+   * servidor respondia 409 y la app lo traducia a "otra persona movio esta
+   * operacion antes que tu" — hablando de un conflicto entre personas donde
+   * solo habia estado desactualizado.
+   */
+  it('`lockTrade` propaga el estado que devuelve el servidor', () => {
+    const fn = api.slice(api.indexOf('export async function lockTrade'), api.indexOf('export async function revealTrade'));
+    expect(fn).toContain('status: res.data.status');
+  });
+
+  it('la pantalla del QR pregunta al servidor antes de intentar bloquear', () => {
+    const qr = read('src/pages/QRReveal.tsx');
+    const load = qr.slice(qr.indexOf('const loadSecret'), qr.indexOf('const loadSecret') + 2000);
+    // Decidir con el estado local es lo que rompio: se consulta el real.
+    expect(load).toContain('await getTrade(');
+    expect(load.indexOf('await getTrade(')).toBeLessThan(load.indexOf('await lockTrade('));
+  });
+});

@@ -351,7 +351,7 @@ export async function getTrade(
 export async function lockTrade(
     tradeId: string,
     sellerToken: string,
-): Promise<{ lock_tx_hash: string }> {
+): Promise<{ status?: TradeState; lock_tx_hash: string }> {
   const prepareRes = await http.post(
       `/trades/${tradeId}/lock/prepare`,
       {},
@@ -368,7 +368,11 @@ export async function lockTrade(
       signedXdr ? { signed_xdr: signedXdr } : {},
       authHeaders(sellerToken),
   );
-  return { lock_tx_hash: res.data.lock_tx_hash };
+  // El `status` viaja tambien. Descartarlo dejaba el estado local en `pending`
+  // despues de un bloqueo exitoso, y la pantalla del QR volvia a intentar
+  // bloquear una operacion ya bloqueada: el servidor respondia 409 y la app lo
+  // traducia a "otra persona movio esta operacion antes que tu".
+  return { status: res.data.status as TradeState | undefined, lock_tx_hash: res.data.lock_tx_hash };
 }
 
 export async function revealTrade(

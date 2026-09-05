@@ -48,7 +48,18 @@ const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBac
             // This is the seller's own screen, so drive the whole
             // pending -> locked -> revealing chain here if needed — nothing
             // else in the app triggers the lock/reveal steps on its own.
-            if (activeTrade.status === 'pending') {
+            // El estado local puede venir viejo: desde que el bloqueo ocurre al
+            // confirmar, para cuando se llega aqui la operacion suele estar ya
+            // bloqueada. Se pregunta al servidor antes de decidir.
+            //
+            // Sin esto se intentaba bloquear una operacion ya bloqueada, el
+            // servidor respondia 409 y la app lo traducia a "otra persona movio
+            // esta operacion antes que tu" — un mensaje que hablaba de un
+            // conflicto entre personas donde solo habia estado desactualizado.
+            const current = await getTrade(activeTrade.id, token).catch(() => null);
+            const status = current?.status ?? activeTrade.status;
+
+            if (status === 'pending') {
                 // Default XLM, que es lo que el escrow desplegado bloquea de verdad. Decia
                 // 'USDC' y creaba la trustline de un activo que el escrow no usa; para
                 // XLM no hace falta trustline, asi que esto queda en nada.
