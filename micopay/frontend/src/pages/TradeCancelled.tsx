@@ -23,9 +23,13 @@ export default function TradeCancelled({
   lockTxHash,
   onContinue,
 }: TradeCancelledProps) {
-  // ETA copy: mock Stellar vs production could diverge — keep conservative, human-readable.
+  // CASH-2: este texto decia que el reembolso "suele reflejarse en minutos",
+  // lo que presenta la cancelacion como una liquidacion on-chain inmediata.
+  // No lo es: cancelar detiene el flujo de la app, no toca el contrato. Sin un
+  // `decline` —que producto decidio no implementar todavia— los fondos vuelven
+  // al vencer el plazo, y esa es la unica via.
   const refundEta = refundExpected
-    ? 'Los reembolsos de USDC en testnet suelen reflejarse en minutos; en producción puede tomar hasta 24 h según la red.'
+    ? 'Cancelar detiene la operación en la app, pero no libera el contrato. Tu USDC se devuelve cuando vence el plazo; a partir de ese momento puedes reclamarlo desde el detalle de la operación.'
     : null;
 
   return (
@@ -52,8 +56,8 @@ export default function TradeCancelled({
           {refundExpected ? (
             <>
               <p className="text-sm leading-relaxed">
-                Había un bloqueo en cadena asociado. <strong>Tu USDC será devuelto</strong> al flujo de reembolso de la
-                garantía (misma política que una cancelación posterior al bloqueo en el backend).
+                Había un bloqueo en cadena asociado. <strong>Tu USDC sigue en la garantía</strong> y se
+                devuelve al vencer el plazo, no en este momento.
               </p>
               {lockTxHash ? (
                 <a

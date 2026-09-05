@@ -116,7 +116,13 @@ export async function fetchTradeDetail(tradeId: string, buyerToken: string): Pro
 /** Mirrors backend `CancelTradeResult` after POST /trades/:id/cancel (#20). */
 export interface CancelTradeResponse {
   status: 'cancelled';
+  /**
+   * CASH-2: hay fondos que volverán a su dueño. NO significa que ya hayan
+   * vuelto: cancelar detiene el flujo de la app, no liquida la cadena.
+   */
   refund_expected: boolean;
+  /** CASH-2: desde cuándo se puede reclamar. `null` si no hay fondos. */
+  refund_available_at: string | null;
   lock_tx_hash: string | null;
 }
 
