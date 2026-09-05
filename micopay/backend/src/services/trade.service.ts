@@ -1,21 +1,13 @@
 import db, { pool as dbPool } from '../db/schema.js';
+import { computeTradeFees, PLATFORM_FEE_PERCENT } from './tradeFees.js';
+import { StrKey } from '@stellar/stellar-sdk';
 import { config } from '../config.js';
 import pino from 'pino';
 import { generateTradeSecret, encryptSecret, decryptSecret } from './secret.service.js';
 import { createHash, randomBytes } from 'crypto';
 import type { FastifyRequest } from 'fastify';
 import { prepareLockTx, submitLockTx, prepareReleaseTx, submitReleaseTx, callRefundOnChain, verifyLockOnChain, assertNotReplayed } from './stellar.service.js';
-import {
-  NotFoundError,
-  ForbiddenError,
-  ConflictError,
-  BadRequestError,
-  AuthError,
-  ValidationError,
-  TradeStateError,
-  MerchantLimitError,
-  KycMonthlyCapExceededError,
-} from '../utils/errors.js';
+import { AppError, NotFoundError, ForbiddenError, ConflictError, BadRequestError, AuthError, ValidationError, TradeStateError, MerchantLimitError, KycMonthlyCapExceededError } from '../utils/errors.js';
 import {
   getTradeAuditTrail as getTradeAuditTrailRows,
   getAuditEventsByRequestId,
@@ -70,7 +62,8 @@ function getRequestId(request: FastifyRequest): string | undefined {
 }
 
 const STROOPS_PER_MXN = 10_000_000; // 7 decimals
-const PLATFORM_FEE_PERCENT = 0.8; // 0.8% platform fee
+// El desglose vive en tradeFees.ts, un solo sitio: tenerlo en dos fue el
+// origen de que el agente cobrara menos de lo que configuraba.
 const DEFAULT_TIMEOUT_MINUTES = 120; // 2 hours
 const UNKNOWN_STATE = 'unknown';
 /** SEC-02: TTL corto del token del QR. Nunca sobrepasa `trades.expires_at`. */
@@ -271,7 +264,16 @@ export async function createTrade(input: CreateTradeInput) {
 
   // Calculate amounts
   const amountStroops = BigInt(amountMxn) * BigInt(STROOPS_PER_MXN);
-  const platformFeeMxn = Math.ceil(amountMxn * PLATFORM_FEE_PERCENT / 100);
+
+  // La tarifa del agente se congela AQUI. `merchant_configs.rate_percent` es
+  // configuracion mutable: si se leyera al liquidar, un agente podria cambiar
+  // retroactivamente lo que cobro por operaciones ya pactadas.
+  const providerConfig = await db.getOne<{ rate_percent: string | number }>(
+    'SELECT rate_percent FROM merchant_configs WHERE user_id = $1',
+    [providerId],
+  );
+  const fees = computeTradeFees(amountMxn, Number(providerConfig?.rate_percent ?? 0));
+  const { providerFeeMxn, platformFeeMxn, payoutMxn } = fees;
 
   // Encrypt and store secret immediately (Option A from spec)
   const { encrypted, nonce } = encryptSecret(secret);
@@ -284,8 +286,9 @@ export async function createTrade(input: CreateTradeInput) {
   // una persona por una operacion que nunca ocurrio.
   const insertTradeSql = `INSERT INTO trades
       (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn,
+       provider_fee_mxn, provider_rate_percent, payout_mxn,
        secret_hash, secret_enc, secret_nonce, status, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', $11)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $12, $13, $14, $8, $9, $10, 'pending', $11)
      RETURNING *`;
   const insertTradeParams = [
     sellerId,
@@ -299,6 +302,9 @@ export async function createTrade(input: CreateTradeInput) {
     encrypted,
     nonce,
     expiresAt,
+    providerFeeMxn,
+    fees.providerRatePercent,
+    payoutMxn,
   ];
 
   let result: any;
@@ -488,6 +494,24 @@ export async function getTradeHistory(userId: string, status?: string, page = 1,
  * Build the unsigned lock() transaction for the seller to sign with their own key.
  * Backend never holds or needs the seller's secret key.
  */
+
+/**
+ * Una direccion Stellar valida no es solo una cadena de 56 caracteres que
+ * empieza por G: lleva checksum. Los agentes sembrados por el seed tenian
+ * direcciones fabricadas a partir del nombre de usuario
+ * (`GABARROTESXLAXESQUINAXXX...`) que pasaban cualquier comprobacion superficial
+ * y reventaban dentro del SDK.
+ */
+function assertUsableStellarAddress(address: string | null | undefined, whose: string): void {
+  if (address && StrKey.isValidEd25519PublicKey(address)) return;
+  throw new AppError(
+    'INVALID_STELLAR_ADDRESS',
+    `No se puede bloquear el dinero: ${whose} no tiene una cuenta Stellar valida.`,
+    `Invalid Stellar address for ${whose}: ${address ?? 'null'}`,
+    422,
+  );
+}
+
 export async function prepareLockTrade(
   request: FastifyRequest,
   tradeId: string,
@@ -506,6 +530,13 @@ export async function prepareLockTrade(
   const buyer = await db.getOne('SELECT stellar_address FROM users WHERE id = $1', [trade.buyer_id]);
   if (!seller) throw new NotFoundError('Seller not found');
   if (!buyer) throw new NotFoundError('Buyer not found');
+
+  // Se comprueba ANTES de llamar a Soroban. Una direccion invalida hacia
+  // reventar el SDK con "Unsupported address type", que salia como 500 y la app
+  // mostraba "el servidor no responde": un mensaje que manda a buscar el fallo
+  // en el sitio equivocado. El problema no es la red, son los datos.
+  assertUsableStellarAddress(seller.stellar_address, 'tu cuenta');
+  assertUsableStellarAddress(buyer.stellar_address, 'la cuenta de la otra parte');
 
   const { xdr, networkPassphrase } = await prepareLockTx({
     request,

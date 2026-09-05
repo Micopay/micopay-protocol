@@ -725,6 +725,11 @@ export async function updateMerchantAvailabilityWithOfflineSupport(
 
 /** Mirrors backend `AvailableMerchant` from GET /merchants/available. */
 export interface AvailableMerchant {
+  /** Desglose de comisiones calculado por el servidor, en MXN. Llega entero
+   *  para que la app no tenga que deducir ninguna parte restando. */
+  provider_fee_mxn?: number;
+  platform_fee_mxn?: number;
+  effective_fee_percent?: number;
   seller_id: string;
   username: string;
   rate_percent: number;

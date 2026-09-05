@@ -35,6 +35,9 @@ interface Offer {
   commissionPct: number;
   /** Platform fee (%) — the other half of the effective cost. */
   platformFeePct: number;
+  /** Desglose en MXN, tal y como lo calcula el servidor. */
+  platformFeeMxn?: number;
+  providerFeeMxn?: number;
   badge?: string;
   isPrimary?: boolean;
   completionRate?: number;
@@ -53,6 +56,8 @@ function merchantToOffer(m: AvailableMerchant, index: number): Offer {
     receiveMxn: m.payout_mxn,
     commissionPct: m.rate_percent,
     platformFeePct: m.platform_fee_pct ?? PLATFORM_FEE_PERCENT,
+    platformFeeMxn: m.platform_fee_mxn,
+    providerFeeMxn: m.provider_fee_mxn,
     isPrimary: index === 0,
     completionRate: m.completion_rate ?? 0,
     tradesCompleted: m.trades_completed ?? 0,
@@ -66,6 +71,9 @@ export interface OfferConfirmData {
   name: string;
   receiveMxn: number;
   commissionPct: number;
+  /** Desglose del servidor, arrastrado hasta la confirmacion sin recalcular. */
+  platformFeeMxn?: number;
+  providerFeeMxn?: number;
   nearbyCount: number;
 }
 
@@ -301,6 +309,8 @@ const ExploreMap = ({
                               name: offer.name,
                               receiveMxn: offer.receiveMxn,
                               commissionPct: offer.commissionPct,
+                              platformFeeMxn: offer.platformFeeMxn,
+                              providerFeeMxn: offer.providerFeeMxn,
                               nearbyCount: offers.length,
                             });
                           } else {

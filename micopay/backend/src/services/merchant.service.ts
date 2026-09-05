@@ -1,5 +1,6 @@
 import db from '../db/schema.js';
 import { BadRequestError, NotFoundError } from '../utils/errors.js';
+import { computeTradeFees } from './tradeFees.js';
 
 export const GLOBAL_MIN_AMOUNT_MXN = 100;
 export const GLOBAL_MAX_AMOUNT_MXN = 50000;
@@ -38,8 +39,14 @@ export interface AvailableMerchant {
   /** RED-3: solo si el proveedor consintio publicar su local. */
   storefront_address: string | null;
   distance_km: number;
-  /** Payout the buyer receives for the requested amount */
+  /** Lo que el cliente recibe limpio, ya descontadas AMBAS comisiones. */
   payout_mxn: number;
+  /** Comision del agente en MXN, para este monto. */
+  provider_fee_mxn: number;
+  /** Comision de MicoPay en MXN, para este monto. */
+  platform_fee_mxn: number;
+  /** Coste total sobre el monto, en %. */
+  effective_fee_percent: number;
   /** Completed trades as seller — reputation signal */
   trades_completed: number;
   /** Completion rate (%) over terminal trades, null if no history */
@@ -237,9 +244,12 @@ export async function getAvailableMerchants(
   return rows.map((r) => {
     const ratePercent = parseFloat(r.rate_percent as unknown as string);
     const distanceKm = parseFloat(r.distance_km as unknown as string);
-    const payoutMxn = parseFloat(
-      (amount_mxn * (1 - ratePercent / 100)).toFixed(2),
-    );
+    // Antes esto anunciaba `monto * (1 - tarifa)`: ignoraba la comision de
+    // plataforma, asi que el mapa prometia un neto que la operacion no cumplia.
+    // Ahora sale del mismo modulo que usa `createTrade`, para que la cifra que
+    // se ve al elegir agente sea exactamente la que se cobra al aceptar.
+    const fees = computeTradeFees(amount_mxn, ratePercent);
+    const payoutMxn = fees.payoutMxn;
     const completed = parseInt(r.trades_completed as unknown as string, 10) || 0;
     const terminal = parseInt(r.trades_terminal as unknown as string, 10) || 0;
     const completionRate = terminal > 0 ? Math.round((completed / terminal) * 100) : null;
@@ -263,6 +273,11 @@ export async function getAvailableMerchants(
       storefront_address: r.storefront_address,
       distance_km: Math.round(distanceKm * 1000) / 1000,
       payout_mxn: payoutMxn,
+      // El desglose viaja completo para que la app no tenga que deducirlo
+      // restando, que es como se colo el error anterior.
+      provider_fee_mxn: fees.providerFeeMxn,
+      platform_fee_mxn: fees.platformFeeMxn,
+      effective_fee_percent: fees.effectivePercent,
       trades_completed: completed,
       completion_rate: completionRate,
       tier,

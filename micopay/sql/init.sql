@@ -67,7 +67,13 @@ CREATE TABLE trades (
   amount_mxn      INTEGER NOT NULL,
   amount_stroops  BIGINT NOT NULL,
   seller_fee_mxn  INTEGER NOT NULL DEFAULT 0,
+  -- Las tres cifras se congelan al crear la operacion: una comision pactada no
+  -- puede cambiar despues porque el agente edite su perfil. El cliente paga las
+  -- dos, y `payout_mxn` es lo que recibe limpio.
   platform_fee_mxn INTEGER NOT NULL DEFAULT 0,
+  provider_fee_mxn INTEGER NOT NULL DEFAULT 0,
+  provider_rate_percent NUMERIC(7, 4),
+  payout_mxn       INTEGER,
 
   -- HTLC
   secret_hash     VARCHAR(64) NOT NULL,

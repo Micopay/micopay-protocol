@@ -11,6 +11,13 @@ export interface TradeConfirmationPageProps {
   receiveMxn: number;
   commissionPct: number;
   amountMxn: number;
+  /**
+   * Desglose calculado por el servidor. Llega entero para que la pantalla no
+   * tenga que deducir ninguna parte restando, que es como se colo el error de
+   * que el agente cobrara menos de lo que configuraba.
+   */
+  platformFeeMxn?: number;
+  providerFeeMxn?: number;
   flow: 'cashout' | 'deposit';
   nearbyCount: number;
   onBack: () => void;
@@ -26,6 +33,8 @@ export default function TradeConfirmationPage({
   receiveMxn,
   commissionPct,
   amountMxn,
+  platformFeeMxn,
+  providerFeeMxn,
   flow,
   nearbyCount,
   onBack,
@@ -35,9 +44,17 @@ export default function TradeConfirmationPage({
   maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
 }: TradeConfirmationPageProps) {
   const { t } = useTranslation();
-  const totalFee = amountMxn - receiveMxn;
-  const platformFee = platformFeeMxnFromAmount(amountMxn);
-  const providerFee = totalFee - platformFee;
+  // Antes la parte del agente se DEDUCIA restando: `receiveMxn` venia del
+  // descubrimiento descontando solo la tarifa del agente, y a ese total se le
+  // restaba la comision de plataforma. Resultado: un agente al 1.5% aparecia
+  // cobrando 0.7%, y el cliente veia un neto que la operacion no cumplia.
+  //
+  // Ahora las tres cifras llegan del servidor, que es quien las congela en la
+  // operacion. Si no vinieran (build antiguo), se recalculan con la misma
+  // formula en vez de deducirlas restando.
+  const platformFee = platformFeeMxn ?? platformFeeMxnFromAmount(amountMxn);
+  const providerFee = providerFeeMxn ?? Math.ceil((amountMxn * commissionPct) / 100);
+  const totalFee = providerFee + platformFee;
   // Combined effective cost the user actually pays: provider commission + platform fee.
   const effectivePct = effectiveFeePercent(commissionPct);
   const exceedsThreshold = effectivePct > maxEffectiveFeePercent;

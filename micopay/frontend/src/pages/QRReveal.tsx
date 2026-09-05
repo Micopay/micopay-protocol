@@ -142,9 +142,11 @@ const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBac
                         </div>
                     </div>
                 </div>
-                <button aria-label="Más opciones" className="min-h-12 min-w-12 rounded-sm bg-fondo border-2 border-tinta flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary">
-                    <span aria-hidden="true" className="material-symbols-outlined text-verde">more_vert</span>
-                </button>
+                {/* Aqui habia un boton de "Mas opciones" recuadrado, sin ningun
+                    onClick: no hacia nada al pulsarlo y descuadraba la esquina
+                    superior derecha. Un boton muerto es peor que ninguno —
+                    promete una accion que no existe. Vuelve el dia que haya
+                    opciones que ofrecer. */}
             </header>
 
             <main className="pt-[calc(6rem+env(safe-area-inset-top))] pb-12 px-6 max-w-md mx-auto">

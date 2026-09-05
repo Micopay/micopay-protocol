@@ -313,7 +313,41 @@ async function seedData() {
  * during a testnet/demo run. Only runs on the ephemeral in-memory store
  * (ALLOW_IN_MEMORY_DB=true) and is idempotent.
  */
+
+/**
+ * Crea una cuenta Stellar REAL de testnet para un agente sembrado y la fondea
+ * con friendbot. Solo se usa en el seed de demostracion.
+ *
+ * Friendbot es de testnet y puede fallar o tardar; si no responde, se devuelve
+ * el par de llaves igualmente. La cuenta quedara sin fondear y el bloqueo
+ * fallara mas adelante con un mensaje claro, que es preferible a abortar el
+ * arranque del servidor entero por un seed de demo.
+ */
+async function createFundedTestnetAccount(
+  label: string,
+): Promise<{ stellar: string; secret: string }> {
+  const { Keypair } = await import('@stellar/stellar-sdk');
+  const kp = Keypair.random();
+  const stellar = kp.publicKey();
+
+  try {
+    const res = await fetch(`https://friendbot.stellar.org/?addr=${stellar}`, {
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) throw new Error(`friendbot ${res.status}`);
+    app.log.info({ category: 'seed', username: label, stellar }, '[seed] Demo agent funded');
+  } catch (err) {
+    app.log.warn(
+      { err, category: 'seed', username: label, stellar },
+      '[seed] Friendbot failed; demo agent created unfunded',
+    );
+  }
+
+  return { stellar, secret: kp.secret() };
+}
+
 async function seedDemoMerchants(): Promise<void> {
+  const { StrKey } = await import('@stellar/stellar-sdk');
   const db = (await import('./db/schema.js')).default;
 
   // Demo origin for seeded merchants. Override per-deployment with
@@ -347,6 +381,32 @@ async function seedDemoMerchants(): Promise<void> {
          WHERE user_id = (SELECT id FROM users WHERE username = $1)`,
         [m.username, center.lat + m.dlat, center.lng + m.dlng, m.area, m.addr],
       ).catch(() => {});
+      // Filas sembradas antes del 2026-09-05 tienen una direccion Stellar
+      // fabricada del nombre de usuario, sin checksum valido: el escrow no
+      // puede bloquear contra ellas. Se les da una cuenta real y fondeada.
+      const stale = await db.getOne<{ id: string; stellar_address: string }>(
+        `SELECT id, stellar_address FROM users WHERE username = $1`,
+        [m.username],
+      ).catch(() => null);
+      if (stale && !StrKey.isValidEd25519PublicKey(stale.stellar_address)) {
+        const { stellar, secret } = await createFundedTestnetAccount(m.username);
+        const { encryptSecret } = await import('./services/secret.service.js');
+        const { encrypted, nonce } = encryptSecret(secret);
+        await db.execute(
+          `UPDATE users SET stellar_address = $2, demo_secret_enc = $3, demo_secret_nonce = $4
+            WHERE id = $1`,
+          [stale.id, stellar, encrypted, nonce],
+        ).catch(() => {});
+        await db.execute(
+          `UPDATE wallets SET stellar_address = $2 WHERE user_id = $1`,
+          [stale.id, stellar],
+        ).catch(() => {});
+        app.log.info(
+          { category: 'seed', username: m.username, stellar },
+          '[seed] Demo agent address repaired (was not a valid Stellar key)',
+        );
+      }
+
       // Filas sembradas antes de RED-1 quedaron sin alta; sin esto desaparecen
       // del mapa al activarse el filtro de `provider_status`.
       await db.execute(
@@ -376,14 +436,27 @@ async function seedDemoMerchants(): Promise<void> {
   }
 
   for (const m of merchants) {
-    const stellar = ('G' + m.username.toUpperCase().replace(/[^A-Z0-9]/g, 'X')).padEnd(56, 'X').slice(0, 56);
+    // La direccion se fabricaba a partir del nombre de usuario:
+    //   'G' + 'ABARROTES_LA_ESQUINA' -> GABARROTESXLAXESQUINAXXX...
+    // 56 caracteres que empiezan por G, pero SIN checksum valido. Con
+    // MOCK_STELLAR=true daba igual porque no se tocaba la cadena; al pasar a
+    // false, el bloqueo del escrow revienta con "Unsupported address type" y
+    // la operacion se queda en `pending` para siempre.
+    //
+    // Ahora son cuentas reales de testnet, fondeadas, cuya llave se guarda
+    // cifrada para poder firmar la liberacion durante las pruebas. Ver la
+    // migracion 20260905190000: es custodia, y solo vale en testnet.
+    const { stellar, secret } = await createFundedTestnetAccount(m.username);
     // RED-1: el seed SI puede crear agentes activos, explicitamente. Lo que no
     // puede es que el registro normal lo haga por inferencia.
+    const { encryptSecret } = await import('./services/secret.service.js');
+    const { encrypted, nonce } = encryptSecret(secret);
     const user = await db.getOne(
       `INSERT INTO users (username, stellar_address, merchant_available, provider_status,
-                          provider_enrolled_at, provider_activated_at)
-       VALUES ($1, $2, true, 'active', NOW(), NOW()) RETURNING id`,
-      [m.username, stellar],
+                          provider_enrolled_at, provider_activated_at,
+                          demo_secret_enc, demo_secret_nonce)
+       VALUES ($1, $2, true, 'active', NOW(), NOW(), $3, $4) RETURNING id`,
+      [m.username, stellar, encrypted, nonce],
     );
     await db.execute(`INSERT INTO wallets (user_id, stellar_address) VALUES ($1, $2)`, [user.id, stellar]).catch(() => {});
     // RED-3: `area_label` es la zona publica; `meeting_point` es privado y solo

@@ -313,6 +313,8 @@ function MapRoute() {
                 receiveMxn: offer.receiveMxn,
                 commissionPct: offer.commissionPct,
                 amountMxn: activeAmount,
+                platformFeeMxn: offer.platformFeeMxn,
+                providerFeeMxn: offer.providerFeeMxn,
                 flow: 'cashout',
                 nearbyCount: offer.nearbyCount,
               },
@@ -343,6 +345,10 @@ function ConfirmRoute() {
     receiveMxn: number;
     commissionPct: number;
     amountMxn: number;
+    // Desglose que ya calculo el servidor en el descubrimiento: se arrastra
+    // hasta aqui para que la pantalla no vuelva a deducirlo restando.
+    platformFeeMxn?: number;
+    providerFeeMxn?: number;
     flow: 'cashout' | 'deposit';
     nearbyCount: number;
   } | null;
@@ -358,6 +364,8 @@ function ConfirmRoute() {
       receiveMxn={state.receiveMxn}
       commissionPct={state.commissionPct}
       amountMxn={state.amountMxn}
+      platformFeeMxn={state.platformFeeMxn}
+      providerFeeMxn={state.providerFeeMxn}
       flow={state.flow ?? 'cashout'}
       nearbyCount={state.nearbyCount}
       loading={tradeLoading}
