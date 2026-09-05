@@ -127,6 +127,44 @@ describe('permiso de ubicación del descubrimiento', () => {
     expect(opts.maximumAge).toBeGreaterThan(0);
   });
 
+  /**
+   * Tercer intento sobre lo mismo, y esta vez con el teléfono delante: una
+   * ventana de 5 minutos NO bastó. El aparato llevaba 22 sin moverse, su última
+   * posición quedaba fuera de la ventana, y la pantalla murió con
+   * "Could not obtain location in time".
+   */
+  it('si no llega un fix nuevo, usa el último conocido en vez de rendirse', async () => {
+    checkPermissions.mockResolvedValue(DEVICE_AFTER_T19);
+    getCurrentPosition.mockRejectedValueOnce(new Error('Could not obtain location in time'));
+    getCurrentPosition.mockResolvedValueOnce(POSITION);
+
+    const { result } = render();
+
+    await waitFor(() => expect(getMerchantsAvailable).toHaveBeenCalled());
+    expect(getCurrentPosition).toHaveBeenCalledTimes(2);
+
+    // La segunda pasada acepta una posición mucho más vieja: para un radio de
+    // kilómetros da igual, y enseñar agentes desactualizados es mejor que
+    // no enseñar ninguno.
+    const first = getCurrentPosition.mock.calls[0][0] as { maximumAge: number };
+    const second = getCurrentPosition.mock.calls[1][0] as { maximumAge: number };
+    expect(second.maximumAge).toBeGreaterThan(first.maximumAge);
+    await waitFor(() => expect(result.current.state.status).toBe('success'));
+  });
+
+  it('no enseña el mensaje crudo del plugin, que viene en inglés', async () => {
+    checkPermissions.mockResolvedValue(DEVICE_AFTER_T19);
+    getCurrentPosition.mockRejectedValue(new Error('Could not obtain location in time.'));
+
+    const { result } = render();
+
+    await waitFor(() => expect(result.current.state.status).toBe('error'));
+    const msg = (result.current.state as { error: string }).error;
+    // "Try with a higher timeout" no le dice nada a quien solo quiere ver agentes.
+    expect(msg).not.toMatch(/timeout|Could not obtain/i);
+    expect(msg).toMatch(/ubicar|ubicación/i);
+  });
+
   it('una negativa real sí se distingue de un fallo de red', async () => {
     checkPermissions.mockResolvedValue({ location: 'denied', coarseLocation: 'denied' });
     requestPermissions.mockResolvedValue({ location: 'denied', coarseLocation: 'denied' });

@@ -5,6 +5,8 @@ import { getMerchantsAvailable, type AvailableMerchant } from '../services/api';
 
 /** Una posición de hace unos minutos sirve igual para un radio de kilómetros. */
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
+/** Último recurso: para un radio de kilómetros, una posición de hace horas sirve. */
+const ANY_RECENT_ENOUGH_MS = 6 * 60 * 60 * 1000;
 
 export type MerchantsState =
   | { status: 'idle' }
@@ -30,6 +32,32 @@ interface Options {
  *  - Loading / empty / error / location-denied states
  *  - Re-fetch when amount or position changes
  */
+
+/**
+ * Pide la posición en dos pasadas: primero una reciente, y si no llega, la que
+ * el sistema tenga guardada aunque sea antigua.
+ *
+ * Fallar por completo deja al usuario sin ver un solo agente, que es peor
+ * resultado que usar una posición de hace un rato.
+ */
+async function getPositionWithFallback(): Promise<{ coords: { latitude: number; longitude: number } }> {
+  try {
+    return await Geolocation.getCurrentPosition({
+      enableHighAccuracy: false,
+      timeout: 10000,
+      maximumAge: FIVE_MINUTES_MS,
+    });
+  } catch {
+    // Segunda pasada: cualquier posición conocida sirve. `maximumAge` alto es
+    // lo que permite al sistema devolver su último fix sin ir a buscar otro.
+    return await Geolocation.getCurrentPosition({
+      enableHighAccuracy: false,
+      timeout: 20000,
+      maximumAge: ANY_RECENT_ENOUGH_MS,
+    });
+  }
+}
+
 export function useMerchantsAvailable(options: Options): {
   state: MerchantsState;
   refetch: () => void;
@@ -84,20 +112,22 @@ export function useMerchantsAvailable(options: Options): {
           }
         }
 
-        // `maximumAge` por defecto es 0: el plugin rechaza cualquier posición
-        // cacheada y se queda esperando un fix nuevo. En un teléfono con solo
-        // ubicación aproximada, bajo techo, ese fix puede no llegar nunca dentro
-        // del timeout — y la pantalla se queda en "Buscando ofertas" hasta que
-        // expira, aunque el sistema tenga una posición perfectamente buena de
-        // hace unos minutos.
+        // Dos intentos, y el segundo es el que de verdad importa.
         //
-        // Para buscar agentes en un radio de kilómetros, una posición de hace
-        // cinco minutos es indistinguible de una recién tomada.
-        const pos = await Geolocation.getCurrentPosition({
-          enableHighAccuracy: false,
-          timeout: 15000,
-          maximumAge: FIVE_MINUTES_MS,
-        });
+        // `maximumAge` vale 0 por defecto: el plugin descarta cualquier posición
+        // que el sistema ya tenga y espera un fix NUEVO. Bajo techo, con solo
+        // ubicación aproximada, ese fix puede no llegar dentro del timeout — y
+        // la pantalla muere con "Could not obtain location in time".
+        //
+        // Poner una ventana de 5 minutos no bastó: el teléfono llevaba 22 sin
+        // moverse y su última posición quedaba fuera. Así que si el intento
+        // fresco falla, se acepta la que haya, por vieja que sea.
+        //
+        // Es la decisión correcta para lo que se está haciendo: buscar agentes
+        // en un radio de kilómetros. Una posición de hace media hora encuentra
+        // prácticamente los mismos, y enseñar agentes ligeramente desactualizados
+        // es muchísimo mejor que no enseñar ninguno.
+        const pos = await getPositionWithFallback();
         lat = pos.coords.latitude;
         lng = pos.coords.longitude;
       } catch (geoErr: unknown) {
@@ -131,9 +161,12 @@ export function useMerchantsAvailable(options: Options): {
             return;
           }
         } else {
+          // Nunca el mensaje crudo del plugin: llegaba en inglés y hablando de
+          // "timeout", que no le dice nada a quien solo quiere ver agentes.
           setState({
             status: 'error',
-            error: geoErr instanceof Error ? geoErr.message : 'No se pudo obtener tu ubicación.',
+            error:
+              'No pudimos ubicarte. Sal un momento al exterior o revisa que la ubicación esté activada.',
           });
           return;
         }
