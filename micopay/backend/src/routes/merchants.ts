@@ -6,6 +6,11 @@ import {
   updateMerchantConfig,
   getAvailableMerchants,
 } from '../services/merchant.service.js';
+import {
+  enrollProvider,
+  getProviderReadiness,
+  activateProvider,
+} from '../services/providerEnrollment.service.js';
 import db from '../db/schema.js';
 
 // G1: /merchants/available is public and unauthenticated — without a rate
@@ -65,6 +70,48 @@ export async function merchantRoutes(app: FastifyInstance) {
   // ── Authenticated routes ──────────────────────────────────────────────────
   // Auth is applied per-route (NOT via a plugin-level addHook) so the public
   // /merchants/available discovery endpoint above stays unauthenticated.
+
+  // ── RED-1: alta explicita en Red MicoPay ──────────────────────────────────
+  //
+  // Tres endpoints, tres hechos distintos: unirse, ver que falta, y activarse.
+  // Ninguno los mezcla, porque mezclarlos fue el defecto original.
+
+  /**
+   * POST /merchants/me/enroll
+   * Inicia el alta como agente. Idempotente: llamarlo dos veces no crea nada
+   * nuevo ni degrada a quien ya esta activo.
+   */
+  app.post('/merchants/me/enroll', { preHandler: [authMiddleware] }, async (request) => {
+    const readiness = await enrollProvider(request.user.id);
+    request.log.info(
+      { user_id: request.user.id, status: readiness.status, category: 'merchant' },
+      '[merchant] Provider enrollment started',
+    );
+    return readiness;
+  });
+
+  /**
+   * GET /merchants/me/readiness
+   * Que le falta a esta persona para poder activarse. La verdad la dice el
+   * servidor: la app no debe deducir la elegibilidad por su cuenta.
+   */
+  app.get('/merchants/me/readiness', { preHandler: [authMiddleware] }, async (request) => {
+    return getProviderReadiness(request.user.id);
+  });
+
+  /**
+   * POST /merchants/me/activate
+   * Activa al agente. Falla cerrada: recalcula contra la base, no confia en lo
+   * que la app crea saber.
+   */
+  app.post('/merchants/me/activate', { preHandler: [authMiddleware] }, async (request) => {
+    const readiness = await activateProvider(request.user.id);
+    request.log.info(
+      { user_id: request.user.id, status: readiness.status, category: 'merchant' },
+      '[merchant] Provider activated',
+    );
+    return readiness;
+  });
 
   app.get('/merchants/me/config', { preHandler: [authMiddleware] }, async (request) => {
     const config = await getOrCreateMerchantConfig(request.user.id);

@@ -161,7 +161,7 @@ const ExploreMap = ({
   }
 
   if (state.status === 'error') {
-    return <FetchError onBack={onBack} onRetry={refetch} />;
+    return <FetchError onBack={onBack} onRetry={refetch} detail={state.error} />;
   }
 
   const merchants = state.status === 'success' ? state.merchants : [];
@@ -485,12 +485,26 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
   );
 }
 
-function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => void }) {
+function FetchError({
+  onBack,
+  onRetry,
+  detail,
+}: {
+  onBack: () => void;
+  onRetry: () => void;
+  detail?: string;
+}) {
   const { t } = useTranslation();
   return (
     <StateShell onBack={onBack} icon="cloud_off" title={t('map.couldNotLoad')}>
+      {/*
+        Este estado agrupa dos causas muy distintas: no se pudo obtener la
+        ubicación, o falló la petición al servidor. Culpar siempre a la
+        conexión mandó una investigación entera por el camino equivocado el
+        2026-09-05, así que cuando el hook sabe qué pasó, se dice.
+      */}
       <p className="text-sm text-gris font-medium max-w-xs mb-6">
-        {t('map.checkConnection')}
+        {detail || t('map.checkConnection')}
       </p>
       <button
         onClick={onRetry}

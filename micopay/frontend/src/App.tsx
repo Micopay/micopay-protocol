@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect, useCallback, createContext, useContext } from "react";
 import { generateAndStoreKeypair, keypairExists, getPublicKey, exportSecretKey } from './lib/keystore';
 import {
   HashRouter,
@@ -14,6 +14,8 @@ import { Capacitor } from "@capacitor/core";
 import ErrorBoundary from './components/ErrorBoundary';
 
 import Home from "./pages/Home";
+import Welcome from "./pages/Welcome";
+import ProviderOnboarding from "./pages/ProviderOnboarding";
 import CashoutRequest from "./pages/CashoutRequest";
 import DepositRequest from "./pages/DepositRequest";
 import ExploreMap from "./pages/ExploreMap";
@@ -52,6 +54,8 @@ import {
   registerUser,
   getAuthToken,
   getCurrentUser,
+  setAvailability,
+  type ProviderStatus,
   createTrade,
   fetchTradeDetail,
   UserData,
@@ -64,6 +68,12 @@ import { ApiError, mapApiError, type MappedApiError } from "./utils/apiError";
 import { IS_DEMO_MODE } from "./utils/demoMode";
 
 const USERS_STORAGE_KEY = "micopay_user";
+/**
+ * "Ya vio la explicacion del producto". Vive solo en el dispositivo: la
+ * incorporacion de persona no cambia nada en el servidor, asi que guardarla
+ * alli seria inventar un estado que no existe.
+ */
+const ONBOARDING_SEEN_KEY = 'micopay_onboarding_seen';
 
 /**
  * Re-authenticate using the device keypair when a stored session is orphaned
@@ -102,6 +112,19 @@ export interface AppCtx {
    * comparando `sessionUser.id` con `seller_id`/`buyer_id`.
    */
   sessionUser: UserData | null;
+  /**
+   * RED-1/RED-2: pertenencia a Red MicoPay, leida del servidor. Es un hecho
+   * aparte de tener sesion — que era justo lo que la barra inferior confundia.
+   * `null` mientras no se sabe; nunca se asume 'active'.
+   */
+  providerStatus: ProviderStatus | null;
+  /** Vuelve a preguntar al servidor por la pertenencia (tras activarse, p. ej.). */
+  refreshProviderStatus: () => Promise<void>;
+  /** Disponibilidad comercial actual; solo significa algo si eres agente activo. */
+  availability: string | null;
+  /** Si ya vio la explicacion del producto. null mientras se averigua. */
+  onboardingSeen: boolean | null;
+  markOnboardingSeen: () => void;
   activeTrade: TradeData | null;
   lockTxHash: string | null;
   releaseTxHash: string | null;
@@ -139,7 +162,12 @@ function useAppCtx(): AppCtx {
 
 function HomeRoute() {
   const navigate = useNavigate();
-  const { sessionUser, setFlow } = useAppCtx();
+  const { sessionUser, setFlow, onboardingSeen } = useAppCtx();
+
+  // Primera vez: se explica el producto antes de dejar tocar dinero. Solo
+  // cuando ya se sabe que no lo ha visto — null significa "aun no se sabe".
+  if (onboardingSeen === false) return <Navigate to="/welcome" replace />;
+
   return (
       <Home
           onNavigateCashout={() => { setFlow('cashout'); navigate('/cashout'); }}
@@ -620,11 +648,47 @@ function BlendRoute() {
   );
 }
 
+/**
+ * Incorporacion de persona. No toca el servidor: lo unico que persiste es el
+ * "ya visto", y en el dispositivo, porque es comprension y no un estado del
+ * sistema.
+ */
+function WelcomeRoute() {
+  const navigate = useNavigate();
+  const { sessionUser, markOnboardingSeen } = useAppCtx();
+  const done = () => {
+    markOnboardingSeen();
+    navigate('/', { replace: true });
+  };
+  return (
+      <Welcome
+          username={sessionUser?.username ?? null}
+          onDone={done}
+          onBackupKey={() => navigate('/profile')}
+      />
+  );
+}
+
+/** Incorporacion de agente. Esta SI cambia estado real en el servidor. */
+function ProviderOnboardingRoute() {
+  const navigate = useNavigate();
+  const { sessionUser, refreshProviderStatus } = useAppCtx();
+  return (
+      <ProviderOnboarding
+          token={sessionUser?.token ?? ''}
+          onExit={() => navigate('/profile')}
+          onOpenKyc={() => navigate('/kyc')}
+          onOpenSettings={() => navigate('/merchant-settings')}
+          onActivated={() => { void refreshProviderStatus(); }}
+      />
+  );
+}
+
 function ProfileRoute() {
   const navigate = useNavigate();
   // devicePublicKey must be destructured here — referencing it from outer
   // scope would silently be undefined inside this component
-  const { sessionUser, handleAccountDeleted, devicePublicKey } = useAppCtx();
+  const { sessionUser, handleAccountDeleted, devicePublicKey, providerStatus, availability, refreshProviderStatus } = useAppCtx();
   return (
       <Profile
           token={sessionUser?.token ?? null}
@@ -641,6 +705,16 @@ function ProfileRoute() {
           }}
           onNavigatePrivacy={() => navigate('/privacy')}
           onNavigateTerms={() => navigate('/terms')}
+          onNavigateJoinNetwork={() => navigate('/join-network')}
+          providerStatus={providerStatus}
+          availability={availability}
+          onToggleAvailability={async (next) => {
+            if (!sessionUser?.token) return;
+            // El servidor rechaza esto si no eres agente activo; la interfaz
+            // solo lo ofrece cuando lo eres, pero la verdad la aplica el.
+            await setAvailability(next, sessionUser.token).catch(() => {});
+            await refreshProviderStatus();
+          }}
       />
   );
 }
@@ -713,6 +787,8 @@ const ROUTE_TO_PAGE: Record<string, string> = {
 const HIDE_BOTTOMNAV_ROUTES = new Set([
   "/login",
   "/register",
+  "/welcome",
+  "/join-network",
   "/merchant-settings",
   "/confirm",
   "/chat",
@@ -735,7 +811,7 @@ const HIDE_BOTTOMNAV_PREFIX = ['/claim/', '/sign-request/'];
 function BottomNavAdapter() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { sessionUser } = useAppCtx();
+  const { providerStatus } = useAppCtx();
 
   if (HIDE_BOTTOMNAV_ROUTES.has(location.pathname)) return null;
 
@@ -752,11 +828,12 @@ function BottomNavAdapter() {
       <BottomNav
           currentPage={ROUTE_TO_PAGE[location.pathname] ?? location.pathname.slice(1)}
           onNavigate={(page) => navigate(navMap[page] ?? '/')}
-          // CASH-7: la barra ya no infiere "es proveedora" de que exista
-          // sesion. El nombre del prop es neutral y hoy se alimenta de la
-          // sesion para NO cambiar la navegacion actual; RED-2 lo atara al
-          // estado de inscripcion real en Red MicoPay.
-          showProviderTab={!!sessionUser}
+          // RED-2: atado al estado real de pertenencia. Antes esto era
+          // `!!sessionUser`, o sea "hay sesion" disfrazado de "es proveedora":
+          // toda cuenta autenticada veia la superficie de agente. Mientras el
+          // estado se desconoce (null) la pestana no se muestra, que es el lado
+          // seguro del error.
+          showProviderTab={providerStatus === 'active'}
       />
   );
 }
@@ -789,6 +866,44 @@ function ConnectionBannerHost() {
 function App() {
   const [flow, setFlow] = useState<Flow>(null);
   const [sessionUser, setSessionUser] = useState<UserData | null>(null);
+  const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
+  const [availability, setAvailabilityState] = useState<string | null>(null);
+  // null = todavia no se sabe. Mientras no se sepa NO se redirige a nada: hacerlo
+  // provocaria un parpadeo del onboarding a quien ya lo vio.
+  const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    readJSON<{ seen?: boolean }>(ONBOARDING_SEEN_KEY)
+      .then((v) => setOnboardingSeen(v?.seen === true))
+      .catch(() => setOnboardingSeen(true)); // ante la duda, no molestar
+  }, []);
+
+  /**
+   * RED-1: la pertenencia a Red MicoPay se lee del servidor, nunca se deduce.
+   * Si la consulta falla no se inventa un estado: se deja en null y la interfaz
+   * de agente permanece oculta, que es el lado seguro del error.
+   */
+  const refreshProviderStatus = useCallback(async () => {
+    const token = sessionUser?.token;
+    if (!token) {
+      setProviderStatus(null);
+      setAvailabilityState(null);
+      return;
+    }
+    try {
+      const profile = await getCurrentUser(token);
+      setProviderStatus((profile.provider_status as ProviderStatus | undefined) ?? 'not_enrolled');
+      setAvailabilityState(profile.availability ?? null);
+    } catch {
+      setProviderStatus(null);
+      setAvailabilityState(null);
+    }
+  }, [sessionUser?.token]);
+
+  // Cada vez que hay (o deja de haber) sesion, se vuelve a preguntar.
+  useEffect(() => {
+    void refreshProviderStatus();
+  }, [refreshProviderStatus]);
   const [activeTrade, setActiveTrade] = useState<TradeData | null>(null);
   const [lockTxHash, setLockTxHash] = useState<string | null>(null);
   const [releaseTxHash, setReleaseTxHash] = useState<string | null>(null);
@@ -1057,6 +1172,14 @@ function App() {
 
   const ctx: AppCtx = {
     sessionUser,
+    providerStatus,
+    refreshProviderStatus,
+    availability,
+    onboardingSeen,
+    markOnboardingSeen: () => {
+      setOnboardingSeen(true);
+      void writeJSON(ONBOARDING_SEEN_KEY, { seen: true });
+    },
     activeTrade,
     lockTxHash,
     releaseTxHash,
@@ -1157,6 +1280,8 @@ function App() {
                 <Route path="/kyc-approved" element={<ProtectedRoute><KYCApprovedNextRoute /></ProtectedRoute>} />
 
                 <Route path="/blend" element={<ProtectedRoute><BlendRoute /></ProtectedRoute>} />
+                <Route path="/welcome" element={<ProtectedRoute><WelcomeRoute /></ProtectedRoute>} />
+                <Route path="/join-network" element={<ProtectedRoute><ProviderOnboardingRoute /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><ProfileRoute /></ProtectedRoute>} />
                 <Route path="/privacy" element={<ProtectedRoute><PrivacyRoute /></ProtectedRoute>} />
                 <Route path="/terms" element={<ProtectedRoute><TermsRoute /></ProtectedRoute>} />

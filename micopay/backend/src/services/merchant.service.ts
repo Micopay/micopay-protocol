@@ -147,10 +147,15 @@ export async function updateMerchantConfig(userId: string, input: UpdateMerchant
          min_trade_mxn = $3,
          max_trade_mxn = $4,
          daily_cap_mxn = $5,
+         -- RED-1: guardar la configuracion ES el acto de aceptar tus terminos.
+         -- La lista de alta lo exige, porque tener numeros por defecto no
+         -- significa que la persona los haya visto.
+         terms_confirmed_at = NOW(),
          updated_at = NOW()
      WHERE user_id = $1
      RETURNING user_id, rate_percent, min_trade_mxn, max_trade_mxn, daily_cap_mxn,
-               latitude, longitude, area_label, meeting_point, publish_storefront, updated_at`,
+               latitude, longitude, area_label, meeting_point, publish_storefront,
+               terms_confirmed_at, updated_at`,
     [userId, input.ratePercent, input.minTradeMxn, input.maxTradeMxn, input.dailyCapMxn],
   );
 
@@ -161,6 +166,8 @@ export async function updateMerchantConfig(userId: string, input: UpdateMerchant
  * GET /merchants/available
  *
  * Returns merchants who:
+ *  - are enrolled and active in Red MicoPay (provider_status = 'active')
+ *  - are not suspended, banned or deleted
  *  - have merchant_available = true
  *  - have a location set (latitude/longitude NOT NULL)
  *  - are within radius_km of the caller's position
@@ -206,7 +213,17 @@ export async function getAvailableMerchants(
        COALESCE((SELECT COUNT(*) FROM trades t WHERE t.seller_id = u.id AND t.status IN ('completed','cancelled','refunded')), 0) AS trades_terminal
      FROM merchant_configs mc
      JOIN users u ON u.id = mc.user_id
-     WHERE u.merchant_available = true
+     -- RED-1: el mapa lista agentes, no cuentas. Pertenecer a la Red
+     -- (provider_status) es un hecho aparte de estar disponible ahora mismo
+     -- (merchant_available). Antes bastaba lo segundo, y como nacia en true,
+     -- cualquier persona registrada con ubicacion aparecia como proveedora.
+     -- Suspendidos y baneados salen aqui, no al crear la operacion: ofrecer a
+     -- alguien que va a rechazar es una promesa que la pantalla no puede cumplir.
+     WHERE u.provider_status = 'active'
+       AND u.merchant_available = true
+       AND u.is_suspended = false
+       AND COALESCE(u.is_banned, false) = false
+       AND u.deleted_at IS NULL
        AND mc.latitude  IS NOT NULL
        AND mc.longitude IS NOT NULL
        AND mc.min_trade_mxn <= $3

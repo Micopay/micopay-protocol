@@ -3,6 +3,9 @@ import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { getMerchantsAvailable, type AvailableMerchant } from '../services/api';
 
+/** Una posición de hace unos minutos sirve igual para un radio de kilómetros. */
+const FIVE_MINUTES_MS = 5 * 60 * 1000;
+
 export type MerchantsState =
   | { status: 'idle' }
   | { status: 'loading' }
@@ -51,10 +54,25 @@ export function useMerchantsAvailable(options: Options): {
 
       try {
         if (Capacitor.isNativePlatform()) {
+          // Pedimos el alias `coarseLocation`, NO `location`.
+          //
+          // El plugin define dos alias: `location` = ACCESS_COARSE_LOCATION +
+          // ACCESS_FINE_LOCATION, y `coarseLocation` = solo la aproximada.
+          // T-19 (faff4b2) retiró FINE del manifiesto porque el mapa de agentes
+          // no la necesita, pero esta verja siguió preguntando por `location`:
+          // un alias que incluye un permiso no declarado nunca puede concederse,
+          // así que el descubrimiento quedó muerto en el dispositivo aunque el
+          // usuario tuviera la ubicación aproximada concedida.
+          //
+          // `getCurrentPosition({ enableHighAccuracy: false })` ya elige por su
+          // cuenta el alias aproximado en Android 12+; esto solo alinea la
+          // comprobación previa con lo que la app realmente usa.
           const perm = await Geolocation.checkPermissions();
-          if (perm.location !== 'granted') {
-            const req = await Geolocation.requestPermissions();
-            if (req.location !== 'granted') {
+          if (perm.coarseLocation !== 'granted') {
+            const req = await Geolocation.requestPermissions({
+              permissions: ['coarseLocation'],
+            });
+            if (req.coarseLocation !== 'granted') {
               if (!cancelled) {
                 setState({
                   status: 'location_denied',
@@ -66,9 +84,19 @@ export function useMerchantsAvailable(options: Options): {
           }
         }
 
+        // `maximumAge` por defecto es 0: el plugin rechaza cualquier posición
+        // cacheada y se queda esperando un fix nuevo. En un teléfono con solo
+        // ubicación aproximada, bajo techo, ese fix puede no llegar nunca dentro
+        // del timeout — y la pantalla se queda en "Buscando ofertas" hasta que
+        // expira, aunque el sistema tenga una posición perfectamente buena de
+        // hace unos minutos.
+        //
+        // Para buscar agentes en un radio de kilómetros, una posición de hace
+        // cinco minutos es indistinguible de una recién tomada.
         const pos = await Geolocation.getCurrentPosition({
           enableHighAccuracy: false,
           timeout: 15000,
+          maximumAge: FIVE_MINUTES_MS,
         });
         lat = pos.coords.latitude;
         lng = pos.coords.longitude;
@@ -82,6 +110,7 @@ export function useMerchantsAvailable(options: Options): {
               navigator.geolocation.getCurrentPosition(resolve, reject, {
                 enableHighAccuracy: false,
                 timeout: 15000,
+                maximumAge: FIVE_MINUTES_MS,
               });
             });
             lat = pos.coords.latitude;
@@ -133,7 +162,9 @@ export function useMerchantsAvailable(options: Options): {
         if (!cancelled) {
           setState({
             status: 'error',
-            error: 'No pudimos cargar las ofertas. Revisa tu conexión e intenta de nuevo.',
+            // Distinto del fallo de ubicación a propósito: son dos causas que
+            // la pantalla mostraba igual, y confundirlas cuesta horas.
+            error: 'No se pudo contactar al servidor de ofertas. Revisa tu conexión.',
           });
         }
       }

@@ -74,6 +74,55 @@ export interface CurrentUserProfile {
   completion_rate?: number | null;
   /** Reputation tier: Nuevo | Bronce | Plata | Oro */
   reputation_tier?: string;
+  /**
+   * RED-1: pertenencia a Red MicoPay. Es un hecho aparte de tener sesión, de
+   * estar verificado y de estar disponible ahora mismo. Ausente = no inscrito;
+   * nunca se debe inferir de que haya sesión, que era el defecto anterior.
+   */
+  provider_status?: ProviderStatus | null;
+  /** Disponibilidad comercial actual. Solo significa algo si eres agente activo. */
+  availability?: string | null;
+  merchant_available?: boolean | null;
+}
+
+/** RED-1: los cuatro estados posibles de pertenencia a Red MicoPay. */
+export type ProviderStatus = 'not_enrolled' | 'pending_verification' | 'active' | 'suspended';
+
+export interface ProviderReadinessItem {
+  /** Identificador estable: la app no depende del texto del servidor. */
+  key: 'kyc' | 'location' | 'limits';
+  done: boolean;
+  detail: string | null;
+}
+
+export interface ProviderReadiness {
+  status: ProviderStatus;
+  /** La elegibilidad la decide el servidor. La app no la deduce sumando items. */
+  can_activate: boolean;
+  items: ProviderReadinessItem[];
+  availability: string | null;
+  merchant_available: boolean;
+  required_kyc_level: number;
+  kyc_level: number;
+  kyc_provider: string | null;
+}
+
+/** RED-1: inicia el alta como agente. Idempotente. */
+export async function enrollAsProvider(token: string): Promise<ProviderReadiness> {
+  const res = await http.post('/merchants/me/enroll', {}, authHeaders(token));
+  return res.data;
+}
+
+/** RED-1: qué falta para poder activarse. La verdad la dice el servidor. */
+export async function fetchProviderReadiness(token: string): Promise<ProviderReadiness> {
+  const res = await http.get('/merchants/me/readiness', authHeaders(token));
+  return res.data;
+}
+
+/** RED-1: activa al agente. Falla cerrada en el servidor si falta algo. */
+export async function activateProvider(token: string): Promise<ProviderReadiness> {
+  const res = await http.post('/merchants/me/activate', {}, authHeaders(token));
+  return res.data;
 }
 
 /** CASH-1 (#372): canonical product flow, independent of the escrow roles. */

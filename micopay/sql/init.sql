@@ -16,7 +16,15 @@ CREATE TABLE users (
   stellar_address          VARCHAR(56) UNIQUE,
   username                 VARCHAR(30) UNIQUE,
   phone_hash               VARCHAR(64) UNIQUE,
-  merchant_available       BOOLEAN NOT NULL DEFAULT true,
+  -- RED-1: nadie nace publicado en el mapa. Pertenecer a Red MicoPay es una
+  -- decision explicita (provider_status), y estar disponible ahora mismo es un
+  -- hecho aparte de pertenecer.
+  merchant_available       BOOLEAN NOT NULL DEFAULT false,
+  provider_status          VARCHAR(24) NOT NULL DEFAULT 'not_enrolled'
+                             CONSTRAINT chk_users_provider_status
+                             CHECK (provider_status IN ('not_enrolled', 'pending_verification', 'active', 'suspended')),
+  provider_enrolled_at     TIMESTAMPTZ,
+  provider_activated_at    TIMESTAMPTZ,
   deleted_at               TIMESTAMPTZ,
   deleted_username         VARCHAR(30),
   deleted_stellar_address  VARCHAR(56),
@@ -25,6 +33,7 @@ CREATE TABLE users (
 );
 
 CREATE INDEX idx_users_stellar ON users (stellar_address);
+CREATE INDEX idx_users_provider_status ON users (provider_status) WHERE provider_status = 'active';
 
 -- ================================================
 -- WALLETS

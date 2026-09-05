@@ -325,10 +325,10 @@ async function seedDemoMerchants(): Promise<void> {
   };
 
   const merchants = [
-    { username: 'farmacia_guadalupe',   rate: 1.0, dlat: 0.004,  dlng: 0.003,  addr: 'Av. Juárez 34, Centro',          completed: 12, cancelled: 0 },
-    { username: 'abarrotes_la_esquina', rate: 1.5, dlat: -0.005, dlng: 0.006,  addr: 'Calle 5 de Mayo 12, Centro',     completed: 8,  cancelled: 1 },
-    { username: 'tienda_don_chendo',    rate: 0.8, dlat: 0.007,  dlng: -0.004, addr: 'Madero 88, Centro Histórico',    completed: 21, cancelled: 1 },
-    { username: 'cafe_lopez',           rate: 2.0, dlat: -0.003, dlng: -0.007, addr: 'Regina 19, Col. Centro',         completed: 5,  cancelled: 0 },
+    { username: 'farmacia_guadalupe',   rate: 1.0, dlat: 0.004,  dlng: 0.003,  area: 'Centro',           addr: 'Av. Juárez 34, Centro',          completed: 12, cancelled: 0 },
+    { username: 'abarrotes_la_esquina', rate: 1.5, dlat: -0.005, dlng: 0.006,  area: 'Centro',           addr: 'Calle 5 de Mayo 12, Centro',     completed: 8,  cancelled: 1 },
+    { username: 'tienda_don_chendo',    rate: 0.8, dlat: 0.007,  dlng: -0.004, area: 'Centro Histórico', addr: 'Madero 88, Centro Histórico',    completed: 21, cancelled: 1 },
+    { username: 'cafe_lopez',           rate: 2.0, dlat: -0.003, dlng: -0.007, area: 'Col. Centro',      addr: 'Regina 19, Col. Centro',         completed: 5,  cancelled: 0 },
   ];
 
   // If already seeded, just reposition the configs to the current origin (the
@@ -339,9 +339,24 @@ async function seedDemoMerchants(): Promise<void> {
   if (already) {
     for (const m of merchants) {
       await db.execute(
-        `UPDATE merchant_configs SET latitude = $2, longitude = $3, updated_at = NOW()
+        `UPDATE merchant_configs
+            SET latitude = $2, longitude = $3,
+                area_label = COALESCE(area_label, $4),
+                meeting_point = COALESCE(meeting_point, $5),
+                updated_at = NOW()
          WHERE user_id = (SELECT id FROM users WHERE username = $1)`,
-        [m.username, center.lat + m.dlat, center.lng + m.dlng],
+        [m.username, center.lat + m.dlat, center.lng + m.dlng, m.area, m.addr],
+      ).catch(() => {});
+      // Filas sembradas antes de RED-1 quedaron sin alta; sin esto desaparecen
+      // del mapa al activarse el filtro de `provider_status`.
+      await db.execute(
+        `UPDATE users
+            SET provider_status = 'active',
+                provider_enrolled_at = COALESCE(provider_enrolled_at, NOW()),
+                provider_activated_at = COALESCE(provider_activated_at, NOW()),
+                merchant_available = true
+          WHERE username = $1 AND provider_status <> 'active'`,
+        [m.username],
       ).catch(() => {});
     }
     app.log.info({ category: 'seed' }, '📍 Demo merchants repositioned to current origin');
@@ -362,16 +377,25 @@ async function seedDemoMerchants(): Promise<void> {
 
   for (const m of merchants) {
     const stellar = ('G' + m.username.toUpperCase().replace(/[^A-Z0-9]/g, 'X')).padEnd(56, 'X').slice(0, 56);
+    // RED-1: el seed SI puede crear agentes activos, explicitamente. Lo que no
+    // puede es que el registro normal lo haga por inferencia.
     const user = await db.getOne(
-      `INSERT INTO users (username, stellar_address, merchant_available) VALUES ($1, $2, true) RETURNING id`,
+      `INSERT INTO users (username, stellar_address, merchant_available, provider_status,
+                          provider_enrolled_at, provider_activated_at)
+       VALUES ($1, $2, true, 'active', NOW(), NOW()) RETURNING id`,
       [m.username, stellar],
     );
     await db.execute(`INSERT INTO wallets (user_id, stellar_address) VALUES ($1, $2)`, [user.id, stellar]).catch(() => {});
+    // RED-3: `area_label` es la zona publica; `meeting_point` es privado y solo
+    // lo ven las dos partes de una operacion viva. El seed no publica la
+    // direccion exacta (publish_storefront queda en su default false), porque
+    // dar por hecho el consentimiento es justo lo que RED-3 prohibe.
     await db.execute(
       `INSERT INTO merchant_configs
-         (user_id, rate_percent, min_trade_mxn, max_trade_mxn, daily_cap_mxn, latitude, longitude, address_text, updated_at)
-       VALUES ($1, $2, 100, 50000, 250000, $3, $4, $5, NOW())`,
-      [user.id, m.rate, center.lat + m.dlat, center.lng + m.dlng, m.addr],
+         (user_id, rate_percent, min_trade_mxn, max_trade_mxn, daily_cap_mxn,
+          latitude, longitude, area_label, meeting_point, updated_at)
+       VALUES ($1, $2, 100, 50000, 250000, $3, $4, $5, $6, NOW())`,
+      [user.id, m.rate, center.lat + m.dlat, center.lng + m.dlng, m.area, m.addr],
     );
 
     const now = Date.now();
