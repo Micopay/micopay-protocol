@@ -17,6 +17,14 @@ import { getPendingSignatureRequests, SignatureRequest } from '../services/signR
 
 const EXPLORER = "https://stellar.expert/explorer/testnet/tx";
 
+/**
+ * Cuantas operaciones se ven en Inicio. El resto vive en /history.
+ *
+ * Sin tope, la lista crecia indefinidamente y empujaba hacia abajo lo que
+ * viniera despues — que era, precisamente, la accion principal del producto.
+ */
+const HOME_HISTORY_LIMIT = 4;
+
 const STATUS_COLOR: Record<string, string> = {
   completed: "text-verde-claro",
   locked: "text-primary",
@@ -319,6 +327,46 @@ const Home = ({
         />
 
         {/* Activos */}
+        {/* Red MicoPay · la accion principal del producto.
+            Estaba al FINAL de la pantalla, despues del historial. Con historial
+            cero ya quedaba fuera de la vista: habia que hacer scroll para
+            encontrar la accion principal en una cuenta recien creada, y cada
+            operacion nueva la empujaba mas abajo.
+            El saldo responde "cuanto tengo" y aqui, justo debajo, va "que hago".
+            Activos e historial son detalle y registro: van despues. */}
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <span className="num text-base" style={{ filter: 'grayscale(1) sepia(1) saturate(5) hue-rotate(-50deg) brightness(0.9)' }} aria-hidden="true">🍄</span>
+          <span className="text-xs font-semibold text-on-surface-variant tracking-wide">
+            Red Micopay
+          </span>
+        </div>
+
+        {/* CTAs */}
+        <div className="flex flex-col items-center gap-4 mb-8">
+          <button
+            onClick={onNavigateCashout}
+            aria-label={t('home.cashout')}
+            className="w-full h-[56px] bg-naranja text-papel border-2 border-tinta shadow-solida font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <span aria-hidden="true" className="material-symbols-outlined">
+              payments
+            </span>
+            {t('home.cashout')}
+          </button>
+          <button
+            onClick={onNavigateDeposit}
+            aria-label={t('home.deposit')}
+            className="w-full h-[56px] bg-papel text-tinta border-2 border-tinta shadow-solida font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <span aria-hidden="true" className="material-symbols-outlined">
+              add_circle
+            </span>
+            {t('home.deposit')}
+          </button>
+          <p className="text-sm text-on-surface-variant font-medium opacity-60">
+            {t('home.findNearby')}
+          </p>
+        </div>
         <section className="mb-8">
           <h2 className="mb-4"><Label>
             {t('home.assets')}
@@ -434,7 +482,7 @@ const Home = ({
             </div>
           ) : (
             <div className="bg-papel rounded-sm border-2 border-tinta divide-y divide-linea">
-              {trades.map((trade) => {
+              {trades.slice(0, HOME_HISTORY_LIMIT).map((trade) => {
                 const s = {
                   label: t(`home.status.${trade.status}`, { defaultValue: trade.status }),
                   color: STATUS_COLOR[trade.status] ?? "text-gris",
@@ -514,42 +562,21 @@ const Home = ({
               })}
             </div>
           )}
+
+          {/* El historial completo vive en su propia pantalla. Aqui era una lista
+              sin tope que crecia para siempre, empujando hacia abajo todo lo que
+              viniera despues y haciendo la pantalla mas lenta con cada operacion.
+              Inicio es para actuar; consultar el registro es otra intencion. */}
+          {trades.length > HOME_HISTORY_LIMIT && onNavigateHistory && (
+            <button
+              onClick={onNavigateHistory}
+              className="mt-4 w-full min-h-12 border-2 border-tinta text-tinta font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
+            >
+              {t('home.seeAllActivity', { defaultValue: 'Ver todo el historial' })}
+            </button>
+          )}
         </section>
 
-        {/* Network indicator */}
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <span className="num text-base" style={{ filter: 'grayscale(1) sepia(1) saturate(5) hue-rotate(-50deg) brightness(0.9)' }} aria-hidden="true">🍄</span>
-          <span className="text-xs font-semibold text-on-surface-variant tracking-wide">
-            Red Micopay
-          </span>
-        </div>
-
-        {/* CTAs */}
-        <div className="flex flex-col items-center gap-4">
-          <button
-            onClick={onNavigateCashout}
-            aria-label={t('home.cashout')}
-            className="w-full h-[56px] bg-naranja text-papel border-2 border-tinta shadow-solida font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            <span aria-hidden="true" className="material-symbols-outlined">
-              payments
-            </span>
-            {t('home.cashout')}
-          </button>
-          <button
-            onClick={onNavigateDeposit}
-            aria-label={t('home.deposit')}
-            className="w-full h-[56px] bg-papel text-tinta border-2 border-tinta shadow-solida font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            <span aria-hidden="true" className="material-symbols-outlined">
-              add_circle
-            </span>
-            {t('home.deposit')}
-          </button>
-          <p className="text-sm text-on-surface-variant font-medium opacity-60">
-            {t('home.findNearby')}
-          </p>
-        </div>
       </main>
     </div>
   );

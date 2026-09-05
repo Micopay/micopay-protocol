@@ -29,7 +29,8 @@
       "pending": "Pending",
       "cancelled": "Cancelled",
       "refunded": "Refunded"
-    }
+    },
+    "seeAllActivity": "See all activity"
   },
   "pay": {
     "title": "Pay",
@@ -433,42 +434,130 @@
   },
   "errors": {
     "network": {
-      "offline": { "title": "No connection", "message": "We couldn't connect. Check your signal and try again.", "action": "Try again once you have signal." },
-      "unavailable": { "title": "Service unavailable", "message": "The service is busy or under maintenance. Try again in a few minutes.", "action": "Wait a moment and try again." },
-      "timeout": { "title": "Timed out", "message": "The operation took too long and couldn't finish in time.", "action": "Try again. Your funds are still protected." }
+      "offline": {
+        "title": "No connection",
+        "message": "We couldn't connect. Check your signal and try again.",
+        "action": "Try again once you have signal."
+      },
+      "unavailable": {
+        "title": "Service unavailable",
+        "message": "The service is busy or under maintenance. Try again in a few minutes.",
+        "action": "Wait a moment and try again."
+      },
+      "timeout": {
+        "title": "Timed out",
+        "message": "The operation took too long and couldn't finish in time.",
+        "action": "Try again. Your funds are still protected."
+      }
     },
     "auth": {
-      "invalidCredentials": { "title": "Incorrect details", "message": "The username or key don't match.", "action": "Check your details and try again." },
-      "sessionExpired": { "title": "Session expired", "message": "Your session ended for security reasons.", "action": "Log back in to keep using the app." },
-      "unauthorized": { "title": "No access", "message": "You can't view this information with that account.", "action": "Log in with the correct account or request access." }
+      "invalidCredentials": {
+        "title": "Incorrect details",
+        "message": "The username or key don't match.",
+        "action": "Check your details and try again."
+      },
+      "sessionExpired": {
+        "title": "Session expired",
+        "message": "Your session ended for security reasons.",
+        "action": "Log back in to keep using the app."
+      },
+      "unauthorized": {
+        "title": "No access",
+        "message": "You can't view this information with that account.",
+        "action": "Log in with the correct account or request access."
+      }
     },
     "financial": {
-      "conflict": { "title": "The trade already changed", "message": "Someone else moved this trade before you.", "action": "Refresh the screen and check its status." },
-      "insufficientFunds": { "title": "Insufficient balance", "message": "You don't have enough balance to complete this trade.", "action": "Try a smaller amount or top up your balance." },
-      "failed": { "title": "Couldn't complete", "message": "The operation couldn't finish.", "action": "Try again. Your funds aren't lost." },
-      "cancelled": { "title": "Trade cancelled", "message": "The trade was cancelled before it finished.", "action": "You can start a new trade whenever you like." }
+      "conflict": {
+        "title": "The trade already changed",
+        "message": "Someone else moved this trade before you.",
+        "action": "Refresh the screen and check its status."
+      },
+      "insufficientFunds": {
+        "title": "Insufficient balance",
+        "message": "You don't have enough balance to complete this trade.",
+        "action": "Try a smaller amount or top up your balance."
+      },
+      "failed": {
+        "title": "Couldn't complete",
+        "message": "The operation couldn't finish.",
+        "action": "Try again. Your funds aren't lost."
+      },
+      "cancelled": {
+        "title": "Trade cancelled",
+        "message": "The trade was cancelled before it finished.",
+        "action": "You can start a new trade whenever you like."
+      }
     },
     "escrow": {
-      "unavailable": { "title": "Escrow unavailable", "message": "We couldn't prepare the escrow right now.", "action": "Try again. Your balance is still protected." },
-      "releasePending": { "title": "Release in progress", "message": "The escrow is still waiting for the next confirmation.", "action": "Wait a few minutes or check your history." }
+      "unavailable": {
+        "title": "Escrow unavailable",
+        "message": "We couldn't prepare the escrow right now.",
+        "action": "Try again. Your balance is still protected."
+      },
+      "releasePending": {
+        "title": "Release in progress",
+        "message": "The escrow is still waiting for the next confirmation.",
+        "action": "Wait a few minutes or check your history."
+      }
     },
     "qr": {
-      "invalid": { "title": "Invalid code", "message": "The code can't be read or is no longer valid.", "action": "Ask for a new code and scan it again." },
-      "cameraDenied": { "title": "Camera unavailable", "message": "Camera access wasn't allowed.", "action": "Enable the permission and try again." },
-      "scanFailed": { "title": "Couldn't finish scanning", "message": "We couldn't finish reading the QR.", "action": "Adjust the camera and try again." },
-      "expired": { "title": "Code expired", "message": "That code already expired.", "action": "Generate a new one to continue." },
-      "unreadable": { "title": "We couldn't read the code", "message": "The camera couldn't read the code.", "action": "Adjust the camera or try with more light." }
+      "invalid": {
+        "title": "Invalid code",
+        "message": "The code can't be read or is no longer valid.",
+        "action": "Ask for a new code and scan it again."
+      },
+      "cameraDenied": {
+        "title": "Camera unavailable",
+        "message": "Camera access wasn't allowed.",
+        "action": "Enable the permission and try again."
+      },
+      "scanFailed": {
+        "title": "Couldn't finish scanning",
+        "message": "We couldn't finish reading the QR.",
+        "action": "Adjust the camera and try again."
+      },
+      "expired": {
+        "title": "Code expired",
+        "message": "That code already expired.",
+        "action": "Generate a new one to continue."
+      },
+      "unreadable": {
+        "title": "We couldn't read the code",
+        "message": "The camera couldn't read the code.",
+        "action": "Adjust the camera or try with more light."
+      }
     },
     "dispute": {
-      "pending": { "title": "Dispute in progress", "message": "Your case is still under review.", "action": "Wait for a response from the support team." },
-      "resolved": { "title": "Dispute resolved", "message": "The dispute has already been closed.", "action": "Check your history to see the outcome." }
+      "pending": {
+        "title": "Dispute in progress",
+        "message": "Your case is still under review.",
+        "action": "Wait for a response from the support team."
+      },
+      "resolved": {
+        "title": "Dispute resolved",
+        "message": "The dispute has already been closed.",
+        "action": "Check your history to see the outcome."
+      }
     },
     "refund": {
-      "pending": { "title": "Refund in progress", "message": "The refund is still on its way.", "action": "Wait for the network to confirm the transfer." },
-      "failed": { "title": "Refund couldn't be processed", "message": "The refund couldn't be completed right now.", "action": "Try again later or contact support." }
+      "pending": {
+        "title": "Refund in progress",
+        "message": "The refund is still on its way.",
+        "action": "Wait for the network to confirm the transfer."
+      },
+      "failed": {
+        "title": "Refund couldn't be processed",
+        "message": "The refund couldn't be completed right now.",
+        "action": "Try again later or contact support."
+      }
     },
     "generic": {
-      "fallback": { "title": "Something went wrong", "message": "We couldn't finish this action. Try again.", "action": "If the problem continues, contact support." }
+      "fallback": {
+        "title": "Something went wrong",
+        "message": "We couldn't finish this action. Try again.",
+        "action": "If the problem continues, contact support."
+      }
     }
   },
   "merchantSettings": {
