@@ -34,6 +34,10 @@ async function testSelfTradeBlocked() {
         request: mockRequest,
         buyerId: sellerId,
         sellerId,
+        // CASH-9: la firma exige flujo y proveedor explicitos. Un deposito
+        // donde ambos lados son la misma persona sigue siendo invalido.
+        flow: "deposit",
+        providerId: sellerId,
         amountMxn: 500,
       }),
     (err: unknown) => {
@@ -56,6 +60,9 @@ async function testSuspendedUserBlocked() {
         request: mockRequest,
         buyerId,
         sellerId,
+        // Deposito: el proveedor es el vendedor del escrow.
+        flow: "deposit",
+        providerId: sellerId,
         amountMxn: 500,
       }),
     (err: unknown) =>
@@ -89,6 +96,8 @@ async function testRelatedAccountsBlocked() {
         request: mockRequest,
         buyerId: buyer!.id,
         sellerId: seller!.id,
+        flow: "deposit",
+        providerId: seller!.id,
         amountMxn: 500,
       }),
     (err: unknown) => err instanceof RiskBlockedError && err.code === "RELATED_ACCOUNTS",
