@@ -943,7 +943,16 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
 /** Response shape for POST /trades/:id/cancel — drives refund copy on the client (#20). */
 export interface CancelTradeResult {
   status: 'cancelled';
+  /**
+   * CASH-2: hay fondos en el contrato que volveran a su dueño. NO significa
+   * que ya hayan vuelto: cancelar detiene el flujo de la app, no liquida la
+   * cadena. Sin un `decline` en el contrato —fuera de alcance por decision de
+   * producto— la unica via on-chain tras el bloqueo es el reembolso por
+   * vencimiento.
+   */
   refund_expected: boolean;
+  /** CASH-2: a partir de cuando se puede reclamar. `null` si no hay fondos. */
+  refund_available_at: string | null;
   lock_tx_hash: string | null;
 }
 
@@ -958,6 +967,31 @@ async function finalizeTradeCancellation(tradeId: string) {
   );
 }
 
+/**
+ * CASH-2 · Quien puede cancelar, segun flujo y actor.
+ *
+ * La version anterior consultaba la disponibilidad comercial sobre
+ * `trade.seller_id`. En deposito ese es el proveedor, pero en cash-out es el
+ * CLIENTE: se preguntaba por la persona equivocada, asi que quien habia
+ * bloqueado su USDC se quedaba sin via de recuperacion en la app mientras el
+ * proveedor podia cancelar en casos donde debia mandar el cliente.
+ *
+ * La tabla aprobada, y la razon de cada fila:
+ *
+ *   pending     · cualquiera de los dos. No hay nada en cadena todavia.
+ *   locked      · el CLIENTE puede detener el flujo. El PROVEEDOR solo si el
+ *                 mismo esta marcado como no disponible: es su via de
+ *                 repliegue, no una forma de deshacer operaciones ajenas.
+ *   revealing   · igual, y ademas nadie puede cancelar si ya existe la
+ *                 constancia durable de entrega de efectivo (CASH-4). Ahi el
+ *                 dinero ya cambio de manos: las salidas son completar o
+ *                 soporte, no cancelar.
+ *   terminal    · nadie.
+ *
+ * En ningun caso cancelar devuelve fondos. Sin un `decline` en el contrato
+ * —que producto decidio no implementar todavia— la unica via on-chain tras el
+ * bloqueo sigue siendo el reembolso por vencimiento (CASH-6).
+ */
 export async function cancelTrade(
   request: FastifyRequest,
   tradeId: string,
@@ -994,8 +1028,20 @@ export async function cancelTrade(
     await assertCanCancelTrade(userId);
 
     const lockTx: string | null = trade.lock_tx_hash ?? null;
+    // CASH-2: el proveedor sale de la columna canonica, nunca del rol del
+    // escrow. Es el arreglo central de este issue.
+    const isProvider = trade.provider_id === userId;
 
-    const finishCancel = async (result: CancelTradeResult) => {
+    const buildResult = (): CancelTradeResult => ({
+      status: 'cancelled',
+      refund_expected: Boolean(lockTx),
+      refund_available_at: lockTx ? trade.expires_at : null,
+      lock_tx_hash: lockTx,
+    });
+
+    const finishCancel = async () => {
+      const result = buildResult();
+      await finalizeTradeCancellation(tradeId);
       await audit(result);
       await recordTradeCancelled({
         tradeId,
@@ -1006,56 +1052,45 @@ export async function cancelTrade(
     };
 
     if (trade.status === 'pending') {
-      await finalizeTradeCancellation(tradeId);
-      const result: CancelTradeResult = { status: 'cancelled', refund_expected: false, lock_tx_hash: lockTx };
-      return finishCancel(result);
+      // Nada en cadena: cancelar aqui solo suelta la reserva.
+      return finishCancel();
     }
 
-    if (trade.status === 'locked') {
-      if (trade.buyer_id === userId) {
-        await finalizeTradeCancellation(tradeId);
-        const result: CancelTradeResult = {
-          status: 'cancelled',
-          refund_expected: Boolean(lockTx),
-          lock_tx_hash: lockTx,
-        };
-        return finishCancel(result);
-      }
-      if (trade.seller_id === userId) {
-        const seller = await getSellerMerchantRow(trade.seller_id);
-        if (!isMerchantUnavailableForTrade(trade, seller)) {
-          throw new ForbiddenError(
-            'Only the buyer may cancel a locked trade before reveal. Pause merchant availability if you need to unwind as the agent.',
-          );
-        }
-        await finalizeTradeCancellation(tradeId);
-        const result: CancelTradeResult = {
-          status: 'cancelled',
-          refund_expected: Boolean(lockTx),
-          lock_tx_hash: lockTx,
-        };
-        return finishCancel(result);
-      }
-      throw new ForbiddenError('Not a participant of this trade');
-    }
-
-    if (trade.status === 'revealing') {
-      const seller = await getSellerMerchantRow(trade.seller_id);
-      if (!isMerchantUnavailableForTrade(trade, seller)) {
+    if (trade.status === 'locked' || trade.status === 'revealing') {
+      // Con la entrega ya confirmada, el efectivo cambio de manos. Cancelar
+      // dejaria al proveedor sin cripto y sin efectivo.
+      const handoff = await getCashHandoff(tradeId);
+      if (handoff) {
         throw new ConflictError(
-          'Cannot cancel while the trade is in handoff. Wait for completion, or cancel only if the merchant is temporarily unavailable.',
+          'CASH_HANDOFF_CONFIRMED',
+          'La entrega de efectivo ya fue confirmada. Completa la operación o abre soporte.',
+          `Trade ${tradeId} has a confirmed cash handoff by ${handoff.provider_id}`,
         );
       }
-      await finalizeTradeCancellation(tradeId);
-      const result: CancelTradeResult = {
-        status: 'cancelled',
-        refund_expected: Boolean(lockTx),
-        lock_tx_hash: lockTx,
-      };
-      return finishCancel(result);
+
+      if (isProvider) {
+        // Repliegue del proveedor: solo si el mismo esta no disponible.
+        const providerRow = await getSellerMerchantRow(trade.provider_id);
+        if (!isMerchantUnavailableForTrade(trade, providerRow)) {
+          throw new ForbiddenError(
+            'PROVIDER_MUST_PAUSE_FIRST',
+            'Pausa tu disponibilidad si necesitas dejar de atender esta operación.',
+            `Provider ${userId} cannot cancel an active trade while still available`,
+          );
+        }
+        return finishCancel();
+      }
+
+      // El cliente puede detener el flujo. No recupera los fondos aqui: eso
+      // ocurre con el reembolso por vencimiento.
+      return finishCancel();
     }
 
-    throw new ConflictError(`Cannot cancel trade in status ${trade.status}.`);
+    throw new ConflictError(
+      'TRADE_NOT_CANCELLABLE',
+      `No se puede cancelar una operación en estado ${trade.status}.`,
+      `Cannot cancel trade in status ${trade.status}.`,
+    );
   } catch (error) {
     await logTransitionFailure({
       tradeId,
