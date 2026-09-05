@@ -75,6 +75,18 @@ export async function tradeRoutes(app: FastifyInstance) {
   });
 
   /**
+   * GET /trades/:id/meeting-point
+   *
+   * RED-3: el punto exacto sale de aqui y nunca del discovery anonimo. Exige
+   * autenticacion y participacion en la operacion; un tercero recibe 403 sin
+   * que se llegue a leer el dato.
+   */
+  app.get('/trades/:id/meeting-point', async (request) => {
+    const { id } = request.params as { id: string };
+    return tradeService.getTradeMeetingPoint(id, request.user.id);
+  });
+
+  /**
    * GET /trades/active
    * List active trades for the authenticated user.
    */

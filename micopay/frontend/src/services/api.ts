@@ -137,16 +137,33 @@ export async function patchMerchantAvailability(
   return res.data.user;
 }
 
-/** Mirrors backend `MerchantLocation` after PATCH /merchants/me/location. */
+/**
+ * Mirrors backend `MerchantLocation` after PATCH /merchants/me/location.
+ *
+ * RED-3: `address_text` era un solo campo de texto libre que acababa en el
+ * discovery anonimo. Ahora son dos cosas distintas, porque lo son: la zona es
+ * publica y el punto exacto es privado.
+ */
 export interface MerchantLocation {
   latitude: number;
   longitude: number;
-  address_text: string | null;
+  /** Zona amplia y publica. */
+  area_label: string | null;
+  /** Punto exacto. Privado salvo consentimiento explicito. */
+  meeting_point: string | null;
+  /** Consentimiento para publicar el punto exacto. Nunca se infiere. */
+  publish_storefront: boolean;
   updated_at: string;
 }
 
 export async function updateMerchantLocation(
-    input: { latitude: number; longitude: number; address_text?: string },
+    input: {
+      latitude: number;
+      longitude: number;
+      area_label?: string;
+      meeting_point?: string;
+      publish_storefront?: boolean;
+    },
     token: string,
 ): Promise<MerchantLocation> {
   const res = await http.patch('/merchants/me/location', input, authHeaders(token));
@@ -569,6 +586,13 @@ export interface MerchantConfig {
   latitude?: number | null;
   longitude?: number | null;
   address_text?: string | null;
+  /**
+   * RED-3: campos de ubicacion. Opcionales aqui porque los escribe
+   * PATCH /merchants/me/location, no el PATCH de tarifas y limites.
+   */
+  area_label?: string | null;
+  meeting_point?: string | null;
+  publish_storefront?: boolean;
 }
 
 export interface UserProfile {
@@ -654,7 +678,10 @@ export interface AvailableMerchant {
   daily_cap_mxn: number;
   latitude: number;
   longitude: number;
-  address_text: string | null;
+  /** RED-3: zona publica. Nunca el punto exacto. */
+  area_label: string | null;
+  /** RED-3: solo si el proveedor consintio publicar su local. */
+  storefront_address: string | null;
   distance_km: number;
   /** Payout the buyer receives for the requested amount. */
   payout_mxn: number;
@@ -858,3 +885,24 @@ http.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// ─── RED-3 · punto de encuentro (solo participantes) ──────────────────────
+
+export interface TradeMeetingPoint {
+  trade_id: string;
+  area_label: string | null;
+  meeting_point: string | null;
+  reason: 'shared' | 'not_set' | 'trade_not_accepted' | 'trade_terminal';
+}
+
+/**
+ * El punto exacto vive detrás de esta llamada autenticada, nunca en el
+ * discovery público. El backend exige participación en la operación.
+ */
+export async function fetchTradeMeetingPoint(
+    tradeId: string,
+    token: string,
+): Promise<TradeMeetingPoint> {
+  const res = await http.get(`/trades/${tradeId}/meeting-point`, authHeaders(token));
+  return res.data as TradeMeetingPoint;
+}

@@ -58,7 +58,10 @@ async function testAvailableMerchantsRoundsCoordinates() {
       daily_cap_mxn: 250000,
       latitude: String(preciseLat),
       longitude: String(preciseLng),
-      address_text: "CDMX",
+      // RED-3: `address_text` salio del contrato publico. La zona sigue
+      // siendo publica; el punto exacto solo viaja con consentimiento.
+      area_label: "CDMX",
+      storefront_address: null,
       distance_km: String(preciseDistanceKm),
       trades_completed: "3",
       trades_terminal: "3",
@@ -78,8 +81,9 @@ async function testAvailableMerchantsRoundsCoordinates() {
   }
 
   ok(results.length >= 1, "expected the seeded merchant to be returned");
-  const merchant = results.find((m) => m.address_text === "CDMX");
-  ok(merchant, "expected to find the seeded merchant by address_text");
+  const merchant = results.find((m) => m.area_label === "CDMX");
+  ok(merchant, "expected to find the seeded merchant by area_label");
+  strictEqual(merchant!.storefront_address, null, "RED-3: sin consentimiento no hay dirección");
 
   const expectedLat = Math.round(preciseLat * 1000) / 1000;
   const expectedLng = Math.round(preciseLng * 1000) / 1000;

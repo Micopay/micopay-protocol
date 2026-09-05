@@ -14,7 +14,9 @@ interface MerchantSettingsProps {
 interface LocationState {
   latitude: number | null;
   longitude: number | null;
-  address_text: string | null;
+  area_label: string | null;
+  meeting_point: string | null;
+  publish_storefront: boolean;
 }
 
 export default function MerchantSettings({
@@ -39,10 +41,13 @@ export default function MerchantSettings({
 
   // Location (WP2): loaded from the same GET /merchants/me/config call, kept separate
   // from `form` because PUT /merchants/me/config rejects unknown properties.
-  const [location, setLocation] = useState<LocationState>({ latitude: null, longitude: null, address_text: null });
+  const [location, setLocation] = useState<LocationState>({ latitude: null, longitude: null, area_label: null, meeting_point: null, publish_storefront: false });
   const [editingLocation, setEditingLocation] = useState(false);
   const [pickerPosition, setPickerPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [addressText, setAddressText] = useState('');
+  // RED-3: consentimiento explicito para publicar el punto exacto. Por
+  // omision false: escribirlo no equivale a autorizar su publicacion.
+  const [publishStorefront, setPublishStorefront] = useState(false);
   const [savingLocation, setSavingLocation] = useState(false);
   const geo = useGeolocation(false);
 
@@ -62,9 +67,12 @@ export default function MerchantSettings({
         setLocation({
           latitude: config.latitude ?? null,
           longitude: config.longitude ?? null,
-          address_text: config.address_text ?? null,
+          area_label: config.area_label ?? null,
+          meeting_point: config.meeting_point ?? null,
+          publish_storefront: config.publish_storefront ?? false,
         });
-        setAddressText(config.address_text ?? '');
+        setAddressText(config.meeting_point ?? '');
+        setPublishStorefront(config.publish_storefront ?? false);
         const status = (user as any).verification_status;
         setAvailabilityState(
           status === "verified"
@@ -106,14 +114,20 @@ export default function MerchantSettings({
         {
           latitude: pickerPosition.lat,
           longitude: pickerPosition.lng,
-          address_text: addressText.trim() ? addressText.trim() : undefined,
+          // RED-3: lo que el proveedor escribe aqui es el PUNTO DE
+          // ENCUENTRO, privado por omision. Publicarlo es una decision
+          // aparte y explicita; no se infiere de que este lleno.
+          meeting_point: addressText.trim() ? addressText.trim() : undefined,
+          publish_storefront: publishStorefront,
         },
         token,
       );
       setLocation({
         latitude: result.latitude,
         longitude: result.longitude,
-        address_text: result.address_text,
+        area_label: result.area_label,
+        meeting_point: result.meeting_point,
+        publish_storefront: result.publish_storefront,
       });
       setEditingLocation(false);
       setMessage(t('merchantSettings.location.saveSuccess'));
@@ -247,8 +261,8 @@ export default function MerchantSettings({
                   pickerPosition={{ lat: location.latitude, lng: location.longitude }}
                   userPosition={{ lat: location.latitude, lng: location.longitude }}
                 />
-                {location.address_text && (
-                  <p className="text-sm text-on-surface-variant">{location.address_text}</p>
+                {location.meeting_point && (
+                  <p className="text-sm text-on-surface-variant">{location.meeting_point}</p>
                 )}
                 <button
                   type="button"
@@ -297,6 +311,31 @@ export default function MerchantSettings({
                         onChange={(e) => setAddressText(e.target.value)}
                         className="w-full rounded-sm border border-slate-200 px-4 py-3"
                       />
+                      {/* RED-3: decir con claridad qué es público y qué no.
+                          El criterio del issue pide exactamente esto. */}
+                      <p className="mt-2 text-xs text-gris leading-relaxed">
+                        Esto es tu <strong>punto de encuentro</strong> y es privado: solo lo ve
+                        la persona con la que ya tienes una operación aceptada. En el mapa
+                        público únicamente aparece tu ubicación aproximada, redondeada a unos
+                        100 metros.
+                      </p>
+                    </label>
+
+                    {/* RED-3: consentimiento explícito. Escribir la dirección
+                        no equivale a autorizar su publicación. */}
+                    <label className="flex items-start gap-3 rounded-sm border-2 border-tinta bg-fondo p-3">
+                      <input
+                        type="checkbox"
+                        checked={publishStorefront}
+                        onChange={(e) => setPublishStorefront(e.target.checked)}
+                        className="mt-0.5 h-5 w-5 flex-shrink-0"
+                      />
+                      <span className="text-xs text-tinta leading-relaxed">
+                        <strong>Publicar mi dirección en el mapa.</strong> Márcalo solo si
+                        atiendes en un local comercial y quieres que cualquiera pueda verla
+                        sin haber iniciado una operación. Si operas desde tu casa, déjalo sin
+                        marcar.
+                      </span>
                     </label>
 
                     <div className="flex gap-3">
