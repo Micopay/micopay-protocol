@@ -75,6 +75,18 @@ export async function tradeRoutes(app: FastifyInstance) {
   });
 
   /**
+   * GET /trades/:id/refund-eligibility
+   *
+   * CASH-6: el reloj que decide es el del servidor. La UI mostraba el
+   * reembolso solo con estado `expired`, que nunca se persiste, asi que una
+   * operacion vencida quedaba sin salida.
+   */
+  app.get('/trades/:id/refund-eligibility', async (request) => {
+    const { id } = request.params as { id: string };
+    return tradeService.getRefundEligibility(id, request.user.id);
+  });
+
+  /**
    * GET /trades/:id/meeting-point
    *
    * RED-3: el punto exacto sale de aqui y nunca del discovery anonimo. Exige

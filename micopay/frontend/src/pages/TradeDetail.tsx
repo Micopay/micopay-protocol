@@ -7,6 +7,8 @@ import {
   completeTrade,
   cancelTradeRequest,
   refundTradeRequest,
+  fetchRefundEligibility,
+  type RefundEligibility,
   lockTrade,
   TradeDetailResponse,
 } from '../services/api';
@@ -833,6 +835,31 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
   const [isSeller, setIsSeller] = useState(false);
   const [isLocking, setIsLocking] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
+  // CASH-6: la elegibilidad la decide el servidor. La UI ofrecia el reembolso
+  // solo con estado `expired`, que nunca se persiste, asi que una operacion
+  // `locked` o `revealing` vencida quedaba sin salida visible.
+  const [refundEligibility, setRefundEligibility] = useState<RefundEligibility | null>(null);
+
+  // Se consulta al cargar y tras cada cambio de estado, para que el CTA
+  // aparezca en cuanto venza sin depender del reloj del dispositivo.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (!trade?.id) return;
+      const effectiveToken = token ?? (await getStoredToken());
+      if (!effectiveToken) return;
+      try {
+        const eligibility = await fetchRefundEligibility(trade.id, effectiveToken);
+        if (!cancelled) setRefundEligibility(eligibility);
+      } catch {
+        // Sin elegibilidad no se inventa un CTA: se deja como estaba.
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [trade?.id, trade?.status, token]);
 
   useEffect(() => {
     if (trade?.buyer_id) {
@@ -932,13 +959,24 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
   // Handle refund
   const handleRefundConfirm = async () => {
     if (!trade) return;
-    const effectiveToken = token ?? await getStoredToken();
-    if (!token) return;
+    // CASH-6: guarda contra doble envio. Sin esto, dos toques seguidos
+    // mandaban dos reembolsos; el segundo choca contra el guard de replay del
+    // backend, pero el usuario veia un error donde en realidad todo salio bien.
+    if (isRefunding) return;
+
+    // El respaldo de sesion se calculaba y luego no se usaba: se comprobaba y
+    // se enviaba `token`, asi que con la sesion en memoria vacia el reembolso
+    // se abandonaba en silencio aunque hubiera token guardado.
+    const effectiveToken = token ?? (await getStoredToken());
+    if (!effectiveToken) {
+      setRefundError('Tu sesión expiró. Vuelve a entrar para recuperar tus fondos.');
+      return;
+    }
 
     setIsRefunding(true);
     setRefundError(null);
     try {
-      await refundTradeRequest(trade.id, token);
+      await refundTradeRequest(trade.id, effectiveToken);
       setShowRefundConfirm(false);
       fetchTrade();
     } catch (e: any) {
@@ -1019,8 +1057,37 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
           />
         );
       case 'locked':
+        // CASH-6: si el servidor dice que ya vencio con fondos bloqueados, la
+        // recuperacion se ofrece aqui mismo. Antes habia que esperar a un
+        // estado `expired` que nunca llega a persistirse.
+        if (refundEligibility?.eligible) {
+          return (
+            <ExpiredView
+              canRefund
+              onRefund={handleRefundClick}
+              refunding={isRefunding}
+              trade={trade}
+              title="Se agotó el tiempo"
+              description="Nadie completó la entrega a tiempo. Tus fondos siguen en el contrato y puedes recuperarlos ahora."
+            />
+          );
+        }
         return <LockedView trade={trade} />;
       case 'revealing':
+        // CASH-6: igual que en `locked` — vencida con fondos dentro, la salida
+        // es el reembolso y no la accion del flujo, que ya no puede completarse.
+        if (refundEligibility?.eligible) {
+          return (
+            <ExpiredView
+              canRefund
+              onRefund={handleRefundClick}
+              refunding={isRefunding}
+              trade={trade}
+              title="Se agotó el tiempo"
+              description="Nadie completó la entrega a tiempo. Tus fondos siguen en el contrato y puedes recuperarlos ahora."
+            />
+          );
+        }
         // CASH-5A eliminó `case 'revealed'`, un estado que ningún backend
         // emite. CASH-5B trae aquí la acción real, repartida por flujo y
         // actor: la vista de confirmación ya no queda inalcanzable.
@@ -1117,10 +1184,13 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
         )}
       </main>
 
-      {/* Refund confirmation dialog — 'expired' is currently unreachable
-          (the backend never persists that status), so this also covers a
-          'cancelled' trade with funds still pending refund (see B3 above). */}
-      {(trade.status === 'expired' || (trade.status === 'cancelled' && trade.lock_tx_hash && !trade.release_tx_hash)) && (
+      {/* CASH-6: el diálogo estaba condicionado a `status === 'expired'`, un
+          estado que —como admitía el propio comentario anterior— el backend
+          nunca persiste. Resultado: aunque el botón se mostrara, pulsarlo no
+          abría nada. Ahora se rige por la elegibilidad que decide el servidor,
+          más el caso de una operación cancelada con fondos aún dentro. */}
+      {(refundEligibility?.eligible ||
+        (trade.status === 'cancelled' && trade.lock_tx_hash && !trade.release_tx_hash)) && (
         <RefundConfirmDialog
           open={showRefundConfirm}
           amount={trade.amount_mxn}

@@ -906,3 +906,28 @@ export async function fetchTradeMeetingPoint(
   const res = await http.get(`/trades/${tradeId}/meeting-point`, authHeaders(token));
   return res.data as TradeMeetingPoint;
 }
+
+// ─── CASH-6 · elegibilidad de reembolso (autoritativa del servidor) ────────
+
+export interface RefundEligibility {
+  trade_id: string;
+  eligible: boolean;
+  reason:
+    | 'eligible'
+    | 'not_participant'
+    | 'no_funds_locked'
+    | 'not_expired_yet'
+    | 'already_settled';
+  expires_at: string;
+  /** Hora del servidor: la cuenta atrás no depende del reloj del teléfono. */
+  server_time: string;
+  seconds_remaining: number;
+}
+
+export async function fetchRefundEligibility(
+    tradeId: string,
+    token: string,
+): Promise<RefundEligibility> {
+  const res = await http.get(`/trades/${tradeId}/refund-eligibility`, authHeaders(token));
+  return res.data as RefundEligibility;
+}
