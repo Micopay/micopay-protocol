@@ -74,6 +74,20 @@ export interface CurrentUserProfile {
   completion_rate?: number | null;
   /** Reputation tier: Nuevo | Bronce | Plata | Oro */
   reputation_tier?: string;
+
+  /**
+   * KYC-1: identidad real del KYC general. `Home` y `MerchantSettings` leían
+   * `verification_status`, un campo que no existe en la respuesta —el propio
+   * código lo casteaba con `as any`— así que su valor era siempre `undefined`.
+   */
+  kyc_level?: number | null;
+  kyc_provider?: 'didit' | 'etherfuse' | null;
+  kyc_level_verified_at?: string | null;
+  /**
+   * Disponibilidad comercial. Es lo que esas dos pantallas querían leer: el
+   * KYC dice quién eres, no si estás atendiendo.
+   */
+  availability?: 'online' | 'offline' | 'paused' | null;
 }
 
 /** CASH-1 (#372): canonical product flow, independent of the escrow roles. */

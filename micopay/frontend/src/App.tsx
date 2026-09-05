@@ -8,6 +8,7 @@ import {
   useNavigate,
   useLocation,
   useParams,
+  useSearchParams,
 } from "react-router-dom";
 import { App as CapApp } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
@@ -586,14 +587,68 @@ function CetesRoute() {
   );
 }
 
-export function KYCRoute() {
+/**
+ * KYC-1: destinos de retorno permitidos.
+ *
+ * Al aprobar hay que volver a lo que el usuario estaba haciendo, pero ese
+ * destino NO puede salir tal cual de la URL: seria un redirect abierto a
+ * cualquier sitio. Se acepta solo una etiqueta de esta lista.
+ */
+const KYC_RETURN_DESTINATIONS = {
+  cetes: '/cetes',
+  home: '/',
+  explore: '/explore',
+  inbox: '/inbox',
+  profile: '/profile',
+} as const;
+
+type KycReturnKey = keyof typeof KYC_RETURN_DESTINATIONS;
+
+function resolveKycReturn(raw: string | null, fallback: KycReturnKey): string {
+  if (raw && raw in KYC_RETURN_DESTINATIONS) {
+    return KYC_RETURN_DESTINATIONS[raw as KycReturnKey];
+  }
+  return KYC_RETURN_DESTINATIONS[fallback];
+}
+
+/**
+ * KYC-1: KYC general de MicoPay (Didit), el que exigen las operaciones P2P.
+ *
+ * Antes solo existia `/kyc`, que abria el proveedor por omision —Etherfuse— y
+ * devolvia a CETES. Un error de nivel en una operacion P2P no tenia forma de
+ * abrir Didit, asi que el KYC general no era un recorrido completo.
+ */
+export function DiditKYCRoute() {
   const navigate = useNavigate();
   const { sessionUser } = useAppCtx();
+  const [params] = useSearchParams();
+  const destination = resolveKycReturn(params.get('return'), 'home');
   return (
       <KYCScreen
           token={sessionUser?.token ?? null}
+          provider="didit"
           onApproved={() => {
-            navigate('/cetes');
+            navigate(destination);
+          }}
+      />
+  );
+}
+
+/**
+ * KYC-1: KYC del anchor (Etherfuse), exclusivo de CETES/SPEI. Conserva el
+ * retorno a CETES de #355.
+ */
+export function KYCRoute() {
+  const navigate = useNavigate();
+  const { sessionUser } = useAppCtx();
+  const [params] = useSearchParams();
+  const destination = resolveKycReturn(params.get('return'), 'cetes');
+  return (
+      <KYCScreen
+          token={sessionUser?.token ?? null}
+          provider="etherfuse"
+          onApproved={() => {
+            navigate(destination);
           }}
       />
   );
@@ -1153,7 +1208,11 @@ function App() {
                 <Route path="/success" element={<ProtectedRoute><SuccessRoute /></ProtectedRoute>} />
                 <Route path="/explore" element={<ProtectedRoute><ExploreRoute /></ProtectedRoute>} />
                 <Route path="/cetes" element={<ProtectedRoute><CetesRoute /></ProtectedRoute>} />
+                {/* KYC-1: rutas explicitas por proposito. `/kyc` sigue
+                    siendo el del anchor para no romper enlaces existentes. */}
                 <Route path="/kyc" element={<ProtectedRoute><KYCRoute /></ProtectedRoute>} />
+                <Route path="/kyc/etherfuse" element={<ProtectedRoute><KYCRoute /></ProtectedRoute>} />
+                <Route path="/kyc/didit" element={<ProtectedRoute><DiditKYCRoute /></ProtectedRoute>} />
                 <Route path="/kyc-approved" element={<ProtectedRoute><KYCApprovedNextRoute /></ProtectedRoute>} />
 
                 <Route path="/blend" element={<ProtectedRoute><BlendRoute /></ProtectedRoute>} />

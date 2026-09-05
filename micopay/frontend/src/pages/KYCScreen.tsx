@@ -81,19 +81,46 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
 
+  /**
+   * KYC-1: la cache local mejora el arranque, pero NO decide.
+   *
+   * Antes esto llamaba a `onApproved()` con solo mirar el valor guardado, sin
+   * preguntarle al servidor. Si el nivel habia expirado o se habia revocado,
+   * la app seguia navegando como verificada. Ahora la cache solo pinta un
+   * estado provisional; quien desbloquea es la respuesta del backend.
+   */
   const loadCachedStatus = async () => {
     const cached = await readJSON<{ status: KYCStatus; reason?: string | null }>(secureStorageKey(provider));
     if (cached?.status === 'approved') {
       setStatus('approved');
       setReason(null);
-      onApproved();
     }
   };
 
   useEffect(() => {
-    void loadCachedStatus();
+    let cancelled = false;
+    const bootstrap = async () => {
+      await loadCachedStatus();
+      if (!token) return;
+      try {
+        const res = await getKYCStatus(token, provider);
+        if (cancelled) return;
+        // El servidor manda, tambien para desmentir a la cache.
+        await applyStatus(res);
+        if (res.status !== 'approved') {
+          await writeJSON(secureStorageKey(provider), { status: res.status });
+        }
+      } catch {
+        // Sin respuesta del servidor no se desbloquea nada: la cache se queda
+        // como indicacion visual y el usuario puede reintentar.
+      }
+    };
+    void bootstrap();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [token, provider]);
 
   const handleOpenHostedFlow = async (emailOverride?: string) => {
     if (!token) {
