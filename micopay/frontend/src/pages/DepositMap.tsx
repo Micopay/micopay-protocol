@@ -288,9 +288,15 @@ function MerchantOfferCard({
                   <span className="material-symbols-outlined text-xs">near_me</span>
                   <span>{distanceLabel} de distancia</span>
                 </div>
-                {merchant.address_text && (
+                {/* RED-3: aquí se pintaba `address_text`, texto libre que
+                    podía ser un domicilio y que viajaba en un endpoint
+                    anónimo. La copia de descubrimiento solo muestra la zona
+                    pública, o la dirección del local si el proveedor
+                    consintió publicarla. El punto de encuentro exacto se pide
+                    aparte, ya dentro de una operación aceptada. */}
+                {(merchant.storefront_address ?? merchant.area_label) && (
                   <p className="text-xs text-gris mt-0.5 truncate max-w-[200px]">
-                    {merchant.address_text}
+                    {merchant.storefront_address ?? merchant.area_label}
                   </p>
                 )}
               </div>

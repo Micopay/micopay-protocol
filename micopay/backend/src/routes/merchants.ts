@@ -116,7 +116,18 @@ export async function merchantRoutes(app: FastifyInstance) {
 
   /**
    * PATCH /merchants/me/location
-   * Authenticated. Sets or updates the merchant's location.
+   * Authenticated. Sets or updates the provider's location.
+   *
+   * RED-3: `address_text` era un solo campo de texto libre que viajaba tal
+   * cual en el discovery anonimo. Ahora se piden dos cosas distintas, porque
+   * lo son:
+   *
+   *   area_label     zona amplia, publica. "Centro, CDMX".
+   *   meeting_point  punto exacto, privado. Solo lo ven las dos partes de una
+   *                  operacion aceptada, salvo consentimiento explicito.
+   *
+   * `publish_storefront` es ese consentimiento y por omision es false. Tener
+   * `meeting_point` lleno NO se interpreta como permiso para publicarlo.
    */
   app.patch('/merchants/me/location', {
     preHandler: [authMiddleware],
@@ -125,9 +136,11 @@ export async function merchantRoutes(app: FastifyInstance) {
         type: 'object',
         required: ['latitude', 'longitude'],
         properties: {
-          latitude:     { type: 'number', minimum: -90,  maximum: 90  },
-          longitude:    { type: 'number', minimum: -180, maximum: 180 },
-          address_text: { type: 'string', maxLength: 200 },
+          latitude:           { type: 'number', minimum: -90,  maximum: 90  },
+          longitude:          { type: 'number', minimum: -180, maximum: 180 },
+          area_label:         { type: 'string', maxLength: 120 },
+          meeting_point:      { type: 'string', maxLength: 200 },
+          publish_storefront: { type: 'boolean' },
         },
         additionalProperties: false,
       },
@@ -136,7 +149,9 @@ export async function merchantRoutes(app: FastifyInstance) {
     const body = request.body as {
       latitude: number;
       longitude: number;
-      address_text?: string;
+      area_label?: string;
+      meeting_point?: string;
+      publish_storefront?: boolean;
     };
 
     // Ensure config row exists before updating location
@@ -144,10 +159,24 @@ export async function merchantRoutes(app: FastifyInstance) {
 
     const updated = await db.getOne(
       `UPDATE merchant_configs
-       SET latitude = $2, longitude = $3, address_text = $4, updated_at = NOW()
+       SET latitude = $2,
+           longitude = $3,
+           area_label = $4,
+           meeting_point = $5,
+           publish_storefront = $6,
+           updated_at = NOW()
        WHERE user_id = $1
-       RETURNING user_id, latitude, longitude, address_text, updated_at`,
-      [request.user.id, body.latitude, body.longitude, body.address_text ?? null],
+       RETURNING user_id, latitude, longitude, area_label, meeting_point,
+                 publish_storefront, updated_at`,
+      [
+        request.user.id,
+        body.latitude,
+        body.longitude,
+        body.area_label ?? null,
+        body.meeting_point ?? null,
+        // Consentimiento explicito: ausente significa NO publicar.
+        body.publish_storefront === true,
+      ],
     );
 
     return reply.send({ location: updated });

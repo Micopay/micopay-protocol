@@ -12,7 +12,12 @@ export interface MerchantConfig {
   daily_cap_mxn: number;
   latitude: number | null;
   longitude: number | null;
-  address_text: string | null;
+  /** RED-3: zona publica. */
+  area_label: string | null;
+  /** RED-3: punto exacto. Privado salvo consentimiento explicito. */
+  meeting_point: string | null;
+  /** RED-3: consentimiento para publicar `meeting_point`. Nunca se infiere. */
+  publish_storefront: boolean;
   updated_at: string;
 }
 
@@ -25,7 +30,13 @@ export interface AvailableMerchant {
   daily_cap_mxn: number;
   latitude: number;
   longitude: number;
-  address_text: string | null;
+  /**
+   * RED-3: zona publica y no sensible. Sustituye a `address_text`, que era
+   * texto libre y podia llevar un domicilio a un endpoint anonimo.
+   */
+  area_label: string | null;
+  /** RED-3: solo si el proveedor consintio publicar su local. */
+  storefront_address: string | null;
   distance_km: number;
   /** Payout the buyer receives for the requested amount */
   payout_mxn: number;
@@ -102,7 +113,7 @@ export async function getOrCreateMerchantConfig(userId: string): Promise<Merchan
 
   const existing = await db.getOne<MerchantConfig>(
     `SELECT user_id, rate_percent, min_trade_mxn, max_trade_mxn, daily_cap_mxn,
-            latitude, longitude, address_text, updated_at
+            latitude, longitude, area_label, meeting_point, publish_storefront, updated_at
      FROM merchant_configs WHERE user_id = $1`,
     [userId],
   );
@@ -112,7 +123,7 @@ export async function getOrCreateMerchantConfig(userId: string): Promise<Merchan
     `INSERT INTO merchant_configs (user_id, rate_percent, min_trade_mxn, max_trade_mxn, daily_cap_mxn, updated_at)
      VALUES ($1, $2, $3, $4, $5, NOW())
      RETURNING user_id, rate_percent, min_trade_mxn, max_trade_mxn, daily_cap_mxn,
-               latitude, longitude, address_text, updated_at`,
+               latitude, longitude, area_label, meeting_point, publish_storefront, updated_at`,
     [
       userId,
       DEFAULT_CONFIG.rate_percent,
@@ -139,7 +150,7 @@ export async function updateMerchantConfig(userId: string, input: UpdateMerchant
          updated_at = NOW()
      WHERE user_id = $1
      RETURNING user_id, rate_percent, min_trade_mxn, max_trade_mxn, daily_cap_mxn,
-               latitude, longitude, address_text, updated_at`,
+               latitude, longitude, area_label, meeting_point, publish_storefront, updated_at`,
     [userId, input.ratePercent, input.minTradeMxn, input.maxTradeMxn, input.dailyCapMxn],
   );
 
@@ -171,7 +182,8 @@ export async function getAvailableMerchants(
     daily_cap_mxn: number;
     latitude: string;
     longitude: string;
-    address_text: string | null;
+    area_label: string | null;
+    storefront_address: string | null;
     distance_km: string;
     trades_completed: string;
     trades_terminal: string;
@@ -185,7 +197,10 @@ export async function getAvailableMerchants(
        mc.daily_cap_mxn,
        mc.latitude,
        mc.longitude,
-       mc.address_text,
+       mc.area_label,
+       -- RED-3: el punto exacto solo sale si hay consentimiento explicito.
+       -- Se resuelve en SQL para que no pueda escaparse por olvido en el map().
+       CASE WHEN mc.publish_storefront THEN mc.meeting_point ELSE NULL END AS storefront_address,
        ${HAVERSINE_SQL} AS distance_km,
        COALESCE((SELECT COUNT(*) FROM trades t WHERE t.seller_id = u.id AND t.status = 'completed'), 0) AS trades_completed,
        COALESCE((SELECT COUNT(*) FROM trades t WHERE t.seller_id = u.id AND t.status IN ('completed','cancelled','refunded')), 0) AS trades_terminal
@@ -227,7 +242,8 @@ export async function getAvailableMerchants(
       // stays accurate — only these two output fields are rounded.
       latitude: Math.round(parseFloat(r.latitude as unknown as string) * 1000) / 1000,
       longitude: Math.round(parseFloat(r.longitude as unknown as string) * 1000) / 1000,
-      address_text: r.address_text,
+      area_label: r.area_label,
+      storefront_address: r.storefront_address,
       distance_km: Math.round(distanceKm * 1000) / 1000,
       payout_mxn: payoutMxn,
       trades_completed: completed,

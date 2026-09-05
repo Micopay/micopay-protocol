@@ -1500,3 +1500,74 @@ async function buildConfirmResult(
     handoff_confirmed_at: handoff.confirmed_at,
   };
 }
+
+
+// ── RED-3 · punto de encuentro, solo para participantes ───────────────────
+
+/**
+ * Estados en que compartir el punto exacto tiene sentido.
+ *
+ * `pending` NO entra: la operacion existe pero nadie comprometio fondos, asi
+ * que basta con crear operaciones contra un proveedor para sacarle la
+ * direccion — la misma enumeracion que RED-3 viene a cerrar, con un paso mas.
+ * Los estados terminales tampoco: ahi la politica de retencion es dejar de
+ * revelarlo.
+ */
+const MEETING_POINT_STATES = ['locked', 'revealing'];
+
+export interface TradeMeetingPoint {
+  trade_id: string;
+  /** Zona publica; se devuelve siempre que haya. */
+  area_label: string | null;
+  /**
+   * Punto exacto. `null` si el proveedor no lo configuro, o si la operacion
+   * ya no esta en un estado que justifique revelarlo.
+   */
+  meeting_point: string | null;
+  /** Por que no viene el punto, cuando no viene. */
+  reason: 'shared' | 'not_set' | 'trade_not_accepted' | 'trade_terminal';
+}
+
+/**
+ * RED-3: devuelve el punto de encuentro de una operacion a quien participa en
+ * ella. Reutiliza la autorizacion normal de participante, asi que un tercero
+ * recibe 403 antes de que se lea nada.
+ */
+export async function getTradeMeetingPoint(
+  tradeId: string,
+  userId: string,
+): Promise<TradeMeetingPoint> {
+  // Lanza 403 si no es participante y 404 si no existe.
+  const trade = await getTradeById(tradeId, userId);
+
+  const config = await db.getOne<{ area_label: string | null; meeting_point: string | null }>(
+    `SELECT area_label, meeting_point FROM merchant_configs WHERE user_id = $1`,
+    [trade.provider_id],
+  );
+
+  const terminal = ['completed', 'cancelled', 'expired', 'refunded'].includes(trade.status);
+  if (terminal) {
+    return {
+      trade_id: trade.id,
+      area_label: config?.area_label ?? null,
+      meeting_point: null,
+      reason: 'trade_terminal',
+    };
+  }
+
+  if (!MEETING_POINT_STATES.includes(trade.status)) {
+    return {
+      trade_id: trade.id,
+      area_label: config?.area_label ?? null,
+      meeting_point: null,
+      reason: 'trade_not_accepted',
+    };
+  }
+
+  return {
+    trade_id: trade.id,
+    area_label: config?.area_label ?? null,
+    meeting_point: config?.meeting_point ?? null,
+    reason: config?.meeting_point ? 'shared' : 'not_set',
+  };
+}
