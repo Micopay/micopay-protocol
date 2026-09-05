@@ -8,6 +8,7 @@ import {
 } from '../services/api';
 import { PLATFORM_FEE_PERCENT } from '../constants/trade';
 import ErrorBanner from '../components/ErrorBanner';
+import MerchantOfferCard from '../components/MerchantOfferCard';
 import type { ApiErrorAction } from '../utils/apiError';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -223,168 +224,6 @@ function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) 
   );
 }
 
-// ─── Merchant offer cards ─────────────────────────────────────────────────────
-
-interface MerchantCardProps {
-  merchant: AvailableMerchant;
-  amount: number;
-  loading: boolean;
-  isBest: boolean;
-  onSelectOffer: (id: string) => void;
-  maxEffectiveFeePercent: number;
-}
-
-function MerchantOfferCard({
-  merchant,
-  amount,
-  loading,
-  isBest,
-  onSelectOffer,
-  maxEffectiveFeePercent,
-}: MerchantCardProps) {
-  const commissionMxn = (amount - merchant.payout_mxn).toFixed(2);
-  const distanceLabel = formatDistance(merchant.distance_km);
-  const platformFeePct = merchant.platform_fee_pct ?? PLATFORM_FEE_PERCENT;
-
-  if (isBest) {
-    return (
-      <div className="relative group">
-        <div className="absolute -top-3 left-6 z-10">
-          <span className="bg-naranja text-papel text-[10px] font-bold px-2 py-0.5 rounded-sm border-[1.5px] border-tinta uppercase tracking-[.1em] ">
-            Mejor oferta
-          </span>
-        </div>
-        <div className="bg-papel rounded-sm border-2 border-tinta shadow-solida p-5 flex flex-col gap-5">
-          <div className="flex justify-between items-start gap-3">
-            <div className="flex gap-4 min-w-0">
-              <div className="w-12 h-12 bg-verde-suave rounded-sm flex items-center justify-center text-verde flex-shrink-0">
-                <span
-                  className="material-symbols-outlined"
-                  style={{ fontVariationSettings: '"FILL" 1' }}
-                >
-                  storefront
-                </span>
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-1 min-w-0">
-                  <h3 className="font-bold text-lg truncate">{merchant.username}</h3>
-                  <span
-                    className="material-symbols-outlined text-accent text-sm flex-shrink-0"
-                    style={{ fontVariationSettings: '"FILL" 1' }}
-                  >
-                    verified
-                  </span>
-                </div>
-                <div className="mt-1 text-sm text-on-surface-variant flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span>{merchant.completion_rate ? `${Math.round(merchant.completion_rate)}% completitud` : 'Sin historial'}</span>
-                  <span>·</span>
-                  <span>{merchant.trades_completed ?? 0} ops</span>
-                  {merchant.tier && <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.1em] rounded-sm border-[1.5px] border-tinta bg-verde-suave text-verde">{merchant.tier}</span>}
-                  <span className={`px-2 py-0.5 text-[11px] font-bold rounded-sm ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-tinta text-papel' : 'bg-papel text-tinta'}`}>
-                    {((merchant.seller_type === 'business') || merchant.is_business) ? 'Negocio' : 'Individuo'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 text-on-surface-variant text-xs">
-                  <span className="material-symbols-outlined text-xs">near_me</span>
-                  <span>{distanceLabel} de distancia</span>
-                </div>
-                {/* RED-3: aquí se pintaba `address_text`, texto libre que
-                    podía ser un domicilio y que viajaba en un endpoint
-                    anónimo. La copia de descubrimiento solo muestra la zona
-                    pública, o la dirección del local si el proveedor
-                    consintió publicarla. El punto de encuentro exacto se pide
-                    aparte, ya dentro de una operación aceptada. */}
-                {(merchant.storefront_address ?? merchant.area_label) && (
-                  <p className="text-xs text-gris mt-0.5 truncate max-w-[200px]">
-                    {merchant.storefront_address ?? merchant.area_label}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="text-right flex-shrink-0">
-              <span className="block text-xs text-on-surface-variant font-label uppercase">Comisión</span>
-              <span className="num text-verde font-bold whitespace-nowrap">${commissionMxn} MXN</span>
-            </div>
-          </div>
-
-          <div className="bg-surface-container-low rounded-sm p-4 flex justify-between items-center">
-            <div className="space-y-1">
-              <p className="text-[10px] text-gris uppercase font-bold tracking-[.1em]">Entregas en efectivo</p>
-              <p className="num font-bold text-naranja">${amount} MXN</p>
-            </div>
-            <span className="material-symbols-outlined text-gris">trending_flat</span>
-            <div className="space-y-1 text-right">
-              <p className="text-[10px] text-gris uppercase font-bold tracking-[.1em]">Recibes en wallet</p>
-              <p className="num font-bold text-verde text-lg">${merchant.payout_mxn.toFixed(2)} MXNe</p>
-            </div>
-          </div>
-
-          <EffectiveFeeNote
-            commissionPct={merchant.rate_percent}
-            platformFeePct={platformFeePct}
-            maxPct={maxEffectiveFeePercent}
-          />
-
-          <button
-            onClick={() => onSelectOffer(merchant.seller_id)}
-            disabled={loading}
-            className="w-full h-[46px] bg-naranja text-papel border-2 border-tinta shadow-solida font-semibold rounded-sm active:translate-x-[3px] active:translate-y-[3px] active:shadow-solida-xs transition-[transform,box-shadow] disabled:opacity-50 disabled:cursor-wait"
-          >
-            {loading ? 'Conectando con el agente…' : 'Elegir este agente'}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-surface-container rounded-sm p-6 ring-1 ring-outline-variant/5 flex flex-col gap-4">
-      <div className="flex justify-between items-start gap-3">
-        <div className="flex gap-4 min-w-0">
-          <div className="w-12 h-12 bg-surface-container-highest rounded-sm flex items-center justify-center text-gris flex-shrink-0">
-            <span className="material-symbols-outlined">storefront</span>
-          </div>
-          <div className="min-w-0">
-            <h3 className="font-bold text-lg truncate">{merchant.username}</h3>
-            <div className="mt-1 text-sm text-on-surface-variant flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span>{merchant.completion_rate ? `${Math.round(merchant.completion_rate)}%` : 'Sin historial'}</span>
-              <span>·</span>
-              <span>{merchant.trades_completed ?? 0} ops</span>
-              {merchant.tier && <span className="px-2 py-0.5 text-[10px] rounded-sm bg-surface-container-high text-verde">{merchant.tier}</span>}
-              <span className={`px-2 py-0.5 text-[10px] rounded-sm ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-tinta text-papel' : 'bg-papel text-tinta'}`}>
-                {((merchant.seller_type === 'business') || merchant.is_business) ? 'Negocio' : 'Individuo'}
-              </span>
-            </div>
-            <div className="flex items-center gap-1 text-on-surface-variant text-xs">
-              <span className="material-symbols-outlined text-xs">near_me</span>
-              <span>{distanceLabel}</span>
-            </div>
-          </div>
-        </div>
-        <div className="text-right flex-shrink-0">
-          <span className="block text-xs text-on-surface-variant font-label uppercase">Recibes</span>
-          <span className="num text-on-surface font-bold whitespace-nowrap">${merchant.payout_mxn.toFixed(2)} MXNe</span>
-        </div>
-      </div>
-      <EffectiveFeeNote
-        commissionPct={merchant.rate_percent}
-        platformFeePct={platformFeePct}
-        maxPct={maxEffectiveFeePercent}
-      />
-      <div className="flex justify-between items-center border-t border-linea pt-4">
-        <p className="text-xs text-on-surface-variant">{distanceLabel} de distancia</p>
-        <button
-          onClick={() => onSelectOffer(merchant.seller_id)}
-          disabled={loading}
-          className="text-verde font-bold text-sm px-4 py-2 hover:bg-primary/5 rounded-sm transition-colors disabled:opacity-50"
-        >
-          Ver detalles
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
 const DepositMap = ({
@@ -487,8 +326,9 @@ const DepositMap = ({
                 amount={amount}
                 loading={loading}
                 isBest={idx === 0}
-                onSelectOffer={onSelectOffer}
+                onChoose={(m) => onSelectOffer(m.seller_id)}
                 maxEffectiveFeePercent={maxEffectiveFeePercent}
+                flow="deposit"
               />
             ))}
           </div>
