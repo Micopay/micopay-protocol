@@ -1,5 +1,6 @@
 import db, { pool as dbPool } from '../db/schema.js';
 import { computeTradeFees, PLATFORM_FEE_PERCENT } from './tradeFees.js';
+import { convertMxnToAsset, DEFAULT_ASSET, stroopsAtFrozenRate } from './assetRate.service.js';
 import { StrKey } from '@stellar/stellar-sdk';
 import { config } from '../config.js';
 import pino from 'pino';
@@ -262,8 +263,14 @@ export async function createTrade(input: CreateTradeInput) {
   // Generate HTLC secret
   const { secret, secretHash } = generateTradeSecret();
 
-  // Calculate amounts
-  const amountStroops = BigInt(amountMxn) * BigInt(STROOPS_PER_MXN);
+  // El peso es la denominacion del acuerdo; el activo es solo el vehiculo. La
+  // conversion vive en UN sitio (`assetRate.service`) y la tasa se congela aqui.
+  //
+  // Antes esto era `amountMxn * 10^7`, o sea 1 MXN = 1 unidad del activo. Con el
+  // escrow bloqueando XLM a ~3.13 MXN, una operacion de 500 pesos bloqueaba 500
+  // XLM = ~1 563 pesos: el cliente entregaba 3.13 veces lo que valia.
+  const conversion = await convertMxnToAsset(amountMxn, DEFAULT_ASSET, request);
+  const amountStroops = conversion.stroops;
 
   // La tarifa del agente se congela AQUI. `merchant_configs.rate_percent` es
   // configuracion mutable: si se leyera al liquidar, un agente podria cambiar
@@ -287,9 +294,13 @@ export async function createTrade(input: CreateTradeInput) {
   const insertTradeSql = `INSERT INTO trades
       (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn,
        provider_fee_mxn, provider_rate_percent, payout_mxn,
+       asset_code, rate_mxn, rate_source, rate_locked_at,
        secret_hash, secret_enc, secret_nonce, status, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $12, $13, $14, $8, $9, $10, 'pending', $11)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'pending', $18)
      RETURNING *`;
+  // En el MISMO orden que las columnas de arriba. El store en memoria parsea el
+  // SQL posicionalmente, asi que intercalar los marcadores lo rompia — y el
+  // error que daba ("Cannot read properties of undefined") no señalaba a nada.
   const insertTradeParams = [
     sellerId,
     buyerId,
@@ -298,13 +309,20 @@ export async function createTrade(input: CreateTradeInput) {
     amountMxn,
     amountStroops.toString(),
     platformFeeMxn,
+    providerFeeMxn,
+    fees.providerRatePercent,
+    payoutMxn,
+    conversion.assetCode,
+    conversion.rateMxn,
+    conversion.rateSource,
+    // Como parametro y no `NOW()`: el store en memoria corta el VALUES en el
+    // primer parentesis de cierre, asi que una llamada a funcion ahi dentro
+    // trunca la lista y el error resultante no señala a nada.
+    new Date(),
     secretHash,
     encrypted,
     nonce,
     expiresAt,
-    providerFeeMxn,
-    fees.providerRatePercent,
-    payoutMxn,
   ];
 
   let result: any;
@@ -543,7 +561,9 @@ export async function prepareLockTrade(
     sellerAddress: seller.stellar_address,
     buyerAddress: buyer.stellar_address,
     amountStroops: BigInt(trade.amount_stroops),
-    platformFeeMxn: trade.platform_fee_mxn,
+    // A la MISMA tasa congelada de la operacion. Volver a consultar la tasa
+    // viva aqui cambiaria por detras lo pactado al crearla.
+    platformFeeStroops: stroopsAtFrozenRate(trade.platform_fee_mxn, trade.rate_mxn),
     secretHash: trade.secret_hash,
   });
 
@@ -586,7 +606,10 @@ export async function lockTrade(
         sellerAddress: seller.stellar_address,
         buyerAddress: buyer.stellar_address,
         amountStroops: BigInt(trade.amount_stroops),
-        platformFeeMxn: trade.platform_fee_mxn,
+        // Debe coincidir EXACTAMENTE con lo que se firmo en `prepare`: si
+        // difiere, `assertInvocationMatches` rechaza el XDR, que es lo que se
+        // busca. Por eso ambos salen de la tasa congelada, no de la viva.
+        platformFeeStroops: stroopsAtFrozenRate(trade.platform_fee_mxn, trade.rate_mxn),
         secretHash: trade.secret_hash,
       });
       lockTxHash = result.txHash;

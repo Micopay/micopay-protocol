@@ -75,6 +75,13 @@ CREATE TABLE trades (
   provider_rate_percent NUMERIC(7, 4),
   payout_mxn       INTEGER,
 
+  -- El peso es la denominacion del acuerdo; el activo y su tasa son metadata,
+  -- congelada al crear la operacion. Ver 20260905200000_trade_asset_rate.
+  asset_code       VARCHAR(12) NOT NULL DEFAULT 'XLM',
+  rate_mxn         NUMERIC(18, 7) NOT NULL DEFAULT 1,
+  rate_source      VARCHAR(32),
+  rate_locked_at   TIMESTAMPTZ,
+
   -- HTLC
   secret_hash     VARCHAR(64) NOT NULL,
   secret_enc      BYTEA,

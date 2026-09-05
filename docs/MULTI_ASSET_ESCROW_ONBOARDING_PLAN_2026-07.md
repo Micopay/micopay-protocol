@@ -68,11 +68,26 @@ equivocado). En cualquier caso hay una inconsistencia real hoy. **Paso 0 obligat
 
 ### WP0 — Diagnóstico del HALLAZGO-1 · ~30 min · bloqueante
 
-> **✅ RESUELTO (Fable, 2026-07-02, verificado on-chain):** el instance storage de `CB4M…` dice
+> **❌ CONCLUSIÓN INCORRECTA — corregida el 2026-09-05.** Ver el recuadro de abajo.
+>
+> ~~**RESUELTO (Fable, 2026-07-02, verificado on-chain):** el instance storage de `CB4M…` dice
 > `TokenId = CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` → **la instancia actual es
 > MXNe** (admin y plataforma: `GDKK…BJJK`). La conversión 1:1 del backend es CORRECTA; el bug es el
-> default `'USDC'` del frontend: `ensureTrustline('USDC')` crea la trustline del asset equivocado,
-> así que a un comprador nuevo sin trustline MXNe el release del escrow le puede fallar.
+> default `'USDC'` del frontend.~~
+>
+> **Qué pasó realmente.** La lectura on-chain fue correcta: ese ES el `TokenId` del escrow. Lo que
+> estaba mal era la referencia contra la que se comparó: `contracts/TESTNET.md` etiquetaba
+> `CDLZFC3S…` como "MXNe token contract", y **es el Stellar Asset Contract del XLM nativo**
+> (`symbol()` devuelve `native`, y `Asset.native().contractId(Networks.TESTNET)` da ese mismo ID).
+>
+> De ahí salió el corolario peligroso — "la conversión 1:1 es CORRECTA" — que dejó vivo el error de
+> unidades: `amount_stroops = amount_mxn * 10^7` hacía que una operación de 500 pesos bloqueara 500
+> XLM (~1 563 pesos), 3.13 veces lo pactado. No se detectó antes porque el bloqueo fallaba aún más
+> arriba, por las direcciones Stellar falsas de los agentes sembrados.
+>
+> **WP2 se implementó el 2026-09-05** con `assetRate.service.ts` y las columnas `asset_code`,
+> `rate_mxn`, `rate_source` y `rate_locked_at`. El activo por defecto es **XLM**, no MXNe: es el
+> único desplegado. No existe ningún SAC de MXNe en testnet.
 > **Para el ejecutor:** el paso 1 ya no es necesario; aplica directamente la rama "token es MXNe"
 > del paso 2 (fix de una línea + env var) como primer commit. En WP3, la instancia NUEVA a deployar
 > es la de **USDC**.
