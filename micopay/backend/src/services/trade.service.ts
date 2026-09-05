@@ -22,6 +22,7 @@ import {
 } from '../db/audit-log.model.js';
 import {
   assertCanCreateTrade,
+  deriveInitiatorId,
   assertCanCancelTrade,
   recordTradeCancelled,
 } from './abuse.service.js';
@@ -219,7 +220,7 @@ export async function createTrade(input: CreateTradeInput) {
     );
   }
 
-  await assertCanCreateTrade({ request, buyerId, sellerId, amountMxn });
+  await assertCanCreateTrade({ request, buyerId, sellerId, flow, providerId, amountMxn });
 
   // #314: tiered KYC gate. The buyer is the funds-moving party for a P2P
   // transfer; audit-only until config.kycGateEnabled is turned on.
@@ -276,11 +277,16 @@ export async function createTrade(input: CreateTradeInput) {
     ],
   );
 
+  // CASH-9: el actor de la creacion es quien la inicio. Antes era `buyerId`,
+  // que en cash-out es el proveedor: la auditoria atribuia la creacion a quien
+  // solo respondio a ella.
+  const initiatorId = deriveInitiatorId(flow, sellerId, buyerId);
+
   await insertTradeAuditEvent({
     tradeId: result.id,
     fromState: UNKNOWN_STATE,
     toState: 'pending',
-    actor: buyerId,
+    actor: initiatorId,
     requestId: getRequestId(request),
     metadata: {
       success: true,
@@ -289,6 +295,7 @@ export async function createTrade(input: CreateTradeInput) {
       buyer_id: buyerId,
       flow,
       provider_id: providerId,
+      initiator_id: initiatorId,
     },
   });
 
