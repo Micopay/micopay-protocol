@@ -1129,6 +1129,73 @@ async function executeRefundOnChain(
   return { status: 'refunded', refund_tx_hash: refundTxHash };
 }
 
+/**
+ * CASH-6 · Elegibilidad de reembolso, decidida por el servidor.
+ *
+ * El backend ya permitia reembolsar tras `expires_at` con fondos bloqueados,
+ * pero la UI solo ofrecia la accion cuando el estado era `expired`... y ese
+ * estado NUNCA se persiste. Una operacion `locked` o `revealing` que vencia
+ * quedaba sin salida visible, justo en el momento en que el reembolso por
+ * timeout es la ultima garantia del usuario.
+ *
+ * La elegibilidad se calcula aqui y no en la proyeccion compartida del
+ * detalle, a proposito: el reloj que decide es el del servidor. Un cliente
+ * con la hora corrida no debe poder adelantar ni retrasar la unica via de
+ * recuperacion, y tampoco tiene que deducirla de tres campos sueltos.
+ */
+export interface RefundEligibility {
+  trade_id: string;
+  eligible: boolean;
+  /** Por que no, cuando no. */
+  reason:
+    | 'eligible'
+    | 'not_participant'
+    | 'no_funds_locked'
+    | 'not_expired_yet'
+    | 'already_settled';
+  expires_at: string;
+  /** Hora del servidor, para que el cliente pinte la cuenta atras sin usar la suya. */
+  server_time: string;
+  /** Segundos que faltan; 0 si ya vencio. */
+  seconds_remaining: number;
+}
+
+export async function getRefundEligibility(
+  tradeId: string,
+  userId: string,
+): Promise<RefundEligibility> {
+  const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (!trade) throw new NotFoundError('TRADE_NOT_FOUND', 'El intercambio no existe', 'Trade not found');
+
+  const now = new Date();
+  const expiresAt = new Date(trade.expires_at);
+  const secondsRemaining = Math.max(0, Math.ceil((expiresAt.getTime() - now.getTime()) / 1000));
+
+  const base = {
+    trade_id: trade.id,
+    expires_at: trade.expires_at,
+    server_time: now.toISOString(),
+    seconds_remaining: secondsRemaining,
+  };
+
+  // Mismo orden de comprobaciones que `refundTrade`, para que esta respuesta
+  // no pueda prometer algo que la accion luego rechace.
+  if (trade.seller_id !== userId && trade.buyer_id !== userId) {
+    return { ...base, eligible: false, reason: 'not_participant' };
+  }
+  if (!trade.lock_tx_hash) {
+    return { ...base, eligible: false, reason: 'no_funds_locked' };
+  }
+  if (['completed', 'refunded'].includes(trade.status)) {
+    return { ...base, eligible: false, reason: 'already_settled' };
+  }
+  if (secondsRemaining > 0) {
+    return { ...base, eligible: false, reason: 'not_expired_yet' };
+  }
+
+  return { ...base, eligible: true, reason: 'eligible' };
+}
+
 export async function refundTrade(
   request: FastifyRequest,
   tradeId: string,
