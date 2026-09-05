@@ -73,9 +73,12 @@ export default function MerchantSettings({
         });
         setAddressText(config.meeting_point ?? '');
         setPublishStorefront(config.publish_storefront ?? false);
-        const status = (user as any).verification_status;
+        // KYC-1: era `(user as any).verification_status`. El cast tapaba que
+        // el campo no existe; el estado real es `availability`.
+        const status = user.availability;
+        // Y comparaba contra "verified", un valor que ese campo nunca tuvo.
         setAvailabilityState(
-          status === "verified"
+          status === "online"
             ? "online"
             : status === "paused"
               ? "paused"

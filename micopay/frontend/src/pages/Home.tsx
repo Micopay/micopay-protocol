@@ -177,10 +177,14 @@ const Home = ({
   useEffect(() => {
     if (!merchantToken) return;
     getCurrentUser(merchantToken)
-      .then((user: any) => {
-        const status = user.verification_status;
+      .then((user) => {
+        // KYC-1: era `user.verification_status`, campo inexistente, asi que
+        // esto siempre caia en "offline". Lo que se quiere leer aqui es la
+        // disponibilidad comercial, que si existe.
+        const status = user.availability;
+        // Y comparaba contra "verified", un valor que ese campo nunca tuvo.
         setAvailabilityState(
-          status === "verified"
+          status === "online"
             ? "online"
             : status === "paused"
               ? "paused"
