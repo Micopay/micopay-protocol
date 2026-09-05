@@ -49,7 +49,10 @@ const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBac
             // pending -> locked -> revealing chain here if needed — nothing
             // else in the app triggers the lock/reveal steps on its own.
             if (activeTrade.status === 'pending') {
-                const escrowAssetCode = import.meta.env.VITE_ESCROW_ASSET_CODE || 'USDC';
+                // Default XLM, que es lo que el escrow desplegado bloquea de verdad. Decia
+                // 'USDC' y creaba la trustline de un activo que el escrow no usa; para
+                // XLM no hace falta trustline, asi que esto queda en nada.
+                const escrowAssetCode = import.meta.env.VITE_ESCROW_ASSET_CODE || 'XLM';
                 await ensureTrustline(escrowAssetCode);
                 await lockTrade(activeTrade.id, token);
             }

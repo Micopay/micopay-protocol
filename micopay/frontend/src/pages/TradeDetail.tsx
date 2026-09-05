@@ -945,7 +945,10 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       // MXNe on one environment, USDC on another); hardcoding the asset code
       // here would silently create the wrong trustline if pointed at a
       // differently-configured escrow.
-      const escrowAssetCode = import.meta.env.VITE_ESCROW_ASSET_CODE || 'USDC';
+      // Default XLM, que es lo que el escrow desplegado bloquea de verdad. Decia
+                // 'USDC' y creaba la trustline de un activo que el escrow no usa; para
+                // XLM no hace falta trustline, asi que esto queda en nada.
+                const escrowAssetCode = import.meta.env.VITE_ESCROW_ASSET_CODE || 'XLM';
       await ensureTrustline(escrowAssetCode);
       await lockTrade(trade.id, effectiveToken);
       fetchTrade(); // Refresh to get locked state

@@ -54,6 +54,7 @@ import {
   registerUser,
   getAuthToken,
   getCurrentUser,
+  lockTrade,
   setAvailability,
   type ProviderStatus,
   createTrade,
@@ -1102,6 +1103,31 @@ function App() {
     try {
       const trade = await createTrade(counterpartyId, activeAmount, sessionUser.token, tradeFlow);
       setActiveTrade(trade);
+
+      // Confirmar ES autorizar: el bloqueo se dispara aqui, en el mismo gesto,
+      // y la huella sale dentro de `lockTrade`.
+      //
+      // Antes el bloqueo solo ocurria al tocar "Ver mi QR de operacion", en otra
+      // pantalla. Mientras tanto el chat mostraba "Estamos bloqueando tu saldo
+      // en cadena, espera la confirmacion" — sin que hubiera NADA en marcha. La
+      // persona esperaba indefinidamente algo que nadie habia empezado, y eso
+      // se reporto como "el escrow se queda en espera".
+      //
+      // Solo en cash-out: ahi la persona es la vendedora del escrow y es su
+      // dinero el que se bloquea. En deposito bloquea el agente, no ella.
+      if (tradeFlow === 'cashout') {
+        try {
+          const locked = await lockTrade(trade.id, sessionUser.token);
+          setActiveTrade((prev) => (prev ? { ...prev, ...locked } : prev));
+          if (locked.lock_tx_hash) setLockTxHash(locked.lock_tx_hash);
+        } catch (lockErr) {
+          // La operacion ya existe y quedo `pending`. No se descarta: se avisa
+          // y se deja reintentar, porque descartarla dejaria una operacion
+          // huerfana en el servidor y al agente esperando.
+          setTradeError(mapApiError(lockErr));
+          return false;
+        }
+      }
       return true;
     } catch (e) {
       const mapped = mapApiError(e);
