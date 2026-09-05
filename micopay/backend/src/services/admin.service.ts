@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import db from '../db/schema.js';
 import { getTradeAuditTrail as getTradeAuditTrailRows, insertTradeAuditEvent } from '../db/audit-log.model.js';
 import { logAuditEvent } from './audit.service.js';
@@ -277,8 +277,8 @@ export async function resolveAdminDispute(input: ResolveDisputeInput) {
     }
   } else {
     releaseTxHash = resolutionType.includes('release') || finalTradeStatus === 'completed'
-      ? `mock_release_${Date.now()}`
-      : `mock_refund_${Date.now()}`;
+      ? `mock_release_${Date.now()}_${randomBytes(4).toString('hex')}`
+      : `mock_refund_${Date.now()}_${randomBytes(4).toString('hex')}`;
   }
 
   // Update dispute record in trade_disputes
