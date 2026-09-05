@@ -1,4 +1,4 @@
-import db from '../db/schema.js';
+import db, { pool as dbPool } from '../db/schema.js';
 import { config } from '../config.js';
 import pino from 'pino';
 import { generateTradeSecret, encryptSecret, decryptSecret } from './secret.service.js';
@@ -14,6 +14,7 @@ import {
   ValidationError,
   TradeStateError,
   MerchantLimitError,
+  KycMonthlyCapExceededError,
 } from '../utils/errors.js';
 import {
   getTradeAuditTrail as getTradeAuditTrailRows,
@@ -26,7 +27,17 @@ import {
   assertCanCancelTrade,
   recordTradeCancelled,
 } from './abuse.service.js';
-import { assertKycTierSufficient } from './kyc-gate.service.js';
+import {
+  evaluateKycForParticipant,
+  kycDecisionToError,
+  logKycDecision,
+  currentMonthWindow,
+} from './kyc-gate.service.js';
+import {
+  lockUsersForVolume,
+  reserveVolume,
+  getMonthlyReservedMxn,
+} from './kycVolumeLedger.service.js';
 import { sendTradeNotificationToMerchant } from './push.service.js';
 
 const logger = pino({ name: 'trade.service' });
@@ -222,9 +233,20 @@ export async function createTrade(input: CreateTradeInput) {
 
   await assertCanCreateTrade({ request, buyerId, sellerId, flow, providerId, amountMxn });
 
-  // #314: tiered KYC gate. The buyer is the funds-moving party for a P2P
-  // transfer; audit-only until config.kycGateEnabled is turned on.
-  await assertKycTierSufficient({ userId: buyerId, operationType: 'p2p_transfer', amountMxn });
+  // CASH-10: el KYC general aplica a las DOS personas, no solo al comprador
+  // del escrow. En cash-out el comprador es el proveedor, asi que la version
+  // anterior dejaba fuera al cliente. Se evalua aqui sin escribir nada; la
+  // reserva de volumen ocurre mas abajo, dentro de la misma transaccion que
+  // crea la operacion.
+  const kycDecisions = await Promise.all(
+    [sellerId, buyerId].map((userId) =>
+      evaluateKycForParticipant({ userId, operationType: 'p2p_transfer', amountMxn }),
+    ),
+  );
+  for (const decision of kycDecisions) {
+    const error = kycDecisionToError(decision, 'p2p_transfer');
+    if (error) throw error;
+  }
 
   const seller = await db.getOne<{ id: string; stellar_address: string }>(
     'SELECT id, stellar_address FROM users WHERE id = $1',
@@ -256,31 +278,91 @@ export async function createTrade(input: CreateTradeInput) {
 
   const expiresAt = new Date(Date.now() + DEFAULT_TIMEOUT_MINUTES * 60 * 1000);
 
-  const result = await db.getOne(
-    `INSERT INTO trades
+  // CASH-10: la operacion y las reservas de volumen entran juntas o no entra
+  // ninguna. Antes el volumen se incrementaba antes de que la operacion
+  // existiera, asi que un fallo posterior dejaba volumen fantasma cargado a
+  // una persona por una operacion que nunca ocurrio.
+  const insertTradeSql = `INSERT INTO trades
       (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn,
        secret_hash, secret_enc, secret_nonce, status, expires_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', $11)
-     RETURNING *`,
-    [
-      sellerId,
-      buyerId,
-      flow,
-      providerId,
-      amountMxn,
-      amountStroops.toString(),
-      platformFeeMxn,
-      secretHash,
-      encrypted,
-      nonce,
-      expiresAt,
-    ],
-  );
+     RETURNING *`;
+  const insertTradeParams = [
+    sellerId,
+    buyerId,
+    flow,
+    providerId,
+    amountMxn,
+    amountStroops.toString(),
+    platformFeeMxn,
+    secretHash,
+    encrypted,
+    nonce,
+    expiresAt,
+  ];
+
+  let result: any;
+  const client = dbPool ? await dbPool.connect() : null;
+
+  if (client) {
+    try {
+      await client.query('BEGIN');
+
+      // Lock por usuario dentro de la transaccion: `keyedMutex` solo servia
+      // dentro de un proceso, asi que con dos instancias del backend dos
+      // peticiones podian pasar el tope juntas.
+      await lockUsersForVolume(client, [sellerId, buyerId]);
+
+      // Se relee el volumen YA con el lock tomado: la lectura previa solo
+      // sirvio para decidir, y entre esa lectura y este punto otra peticion
+      // pudo haber reservado.
+      for (const decision of kycDecisions) {
+        const reserved = await getMonthlyReservedMxn(decision.userId, undefined, client);
+        if (
+          config.kycGateEnabled &&
+          decision.ceilingMxn !== null &&
+          reserved + amountMxn > decision.ceilingMxn
+        ) {
+          throw new KycMonthlyCapExceededError(
+            Math.max(decision.ceilingMxn - reserved, 0),
+            decision.ceilingMxn,
+            currentMonthWindow().resetAt,
+            decision.currentLevel,
+          );
+        }
+      }
+
+      const inserted = await client.query(insertTradeSql, insertTradeParams);
+      result = inserted.rows[0];
+
+      for (const userId of [sellerId, buyerId]) {
+        await reserveVolume(client, { tradeId: result.id, userId, amountMxn });
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  } else {
+    // Store en memoria: sin transacciones ni locks de aviso. Se deja
+    // funcionando para los tests de servicio, pero la atomicidad y la
+    // concurrencia NO se pueden verificar aqui — ver kycVolumeLedger.test.ts.
+    result = await db.getOne(insertTradeSql, insertTradeParams);
+  }
 
   // CASH-9: el actor de la creacion es quien la inicio. Antes era `buyerId`,
   // que en cash-out es el proveedor: la auditoria atribuia la creacion a quien
   // solo respondio a ella.
   const initiatorId = deriveInitiatorId(flow, sellerId, buyerId);
+
+  // CASH-10: la decision se registra DESPUES de commitear, para que la
+  // auditoria refleje operaciones durables y no intentos fallidos.
+  for (const decision of kycDecisions) {
+    await logKycDecision(decision, 'p2p_transfer', amountMxn, result.id);
+  }
 
   await insertTradeAuditEvent({
     tradeId: result.id,
@@ -812,7 +894,12 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
       const result = await submitReleaseTx({ request, signedXdr, tradeIdBytes, secretBytes });
       releaseTxHash = result.txHash;
     } else {
-      releaseTxHash = `mock_release_${Date.now()}`;
+      // Con MOCK_STELLAR el hash lo inventa el backend. Usar solo Date.now()
+      // hace que dos operaciones cerradas en el mismo milisegundo produzcan
+      // el MISMO hash, y el guard de replay rechaza la segunda: un fallo
+      // intermitente que no dice nada sobre el codigo real. El sufijo
+      // aleatorio lo elimina.
+      releaseTxHash = `mock_release_${Date.now()}_${randomBytes(4).toString('hex')}`;
     }
 
     await assertNotReplayed(releaseTxHash, 'trade/complete', userId);
@@ -1013,7 +1100,7 @@ async function executeRefundOnChain(
     const result = await callRefundOnChain({ request, tradeIdBytes });
     refundTxHash = result.txHash;
   } else {
-    refundTxHash = `mock_refund_${Date.now()}`;
+    refundTxHash = `mock_refund_${Date.now()}_${randomBytes(4).toString('hex')}`;
   }
 
   await assertNotReplayed(refundTxHash, 'trade/refund', actorUserId);

@@ -1,4 +1,5 @@
 import db from '../db/schema.js';
+import { getMonthlyReservedMxn } from './kycVolumeLedger.service.js';
 import { config, type KycOperationType } from '../config.js';
 import { logAuditEvent } from './audit.service.js';
 import { KycTierInsufficientError, KycMonthlyCapExceededError } from '../utils/errors.js';
@@ -107,7 +108,7 @@ export async function assertKycTierSufficient(input: AssertKycTierInput): Promis
   }
 }
 
-function currentMonthWindow(now: Date = new Date()): { monthKey: string; resetAt: string } {
+export function currentMonthWindow(now: Date = new Date()): { monthKey: string; resetAt: string } {
   const year = now.getUTCFullYear();
   const month = now.getUTCMonth(); // 0-indexed
   const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
@@ -316,4 +317,116 @@ export async function getKycAuditTrail(filters: KycAuditFilters = {}): Promise<K
   });
 
   return filtered.slice(0, limit);
+}
+
+// ── CASH-10 · decision pura, sin escrituras ────────────────────────────────
+
+export interface KycParticipantDecision {
+  userId: string;
+  currentLevel: number;
+  requiredLevel: number;
+  tierDecision: GateDecision;
+  ceilingMxn: number | null;
+  /** Volumen ya comprometido este mes, leido del ledger. */
+  reservedMxn: number;
+  /** Total si esta operacion se aceptara. */
+  prospectiveMxn: number;
+  volumeDecision: GateDecision;
+  /** `pass` solo si ambas comprobaciones pasan. */
+  decision: GateDecision;
+}
+
+/**
+ * CASH-10: evalua a UNA persona sin tocar nada.
+ *
+ * `assertKycTierSufficient` mezclaba decidir con incrementar el acumulado, y
+ * por eso no se podia preguntar por los dos participantes antes de commitear:
+ * consultar al primero ya le cargaba volumen aunque el segundo fallara.
+ * Separar la decision de la escritura es lo que hace posible el "o los dos, o
+ * ninguno".
+ */
+export async function evaluateKycForParticipant(input: {
+  userId: string;
+  operationType: KycOperationType;
+  amountMxn: number;
+  monthKey?: string;
+}): Promise<KycParticipantDecision> {
+  const { userId, operationType, amountMxn } = input;
+
+  const currentLevel = await getEffectiveKycLevel(userId);
+  const requiredLevel = getRequiredKycLevel(operationType, amountMxn);
+  const tierDecision = computeGateDecision(currentLevel, requiredLevel);
+
+  const ceilingMxn = getMonthlyVolumeCeiling(currentLevel);
+  const reservedMxn = await getMonthlyReservedMxn(userId, input.monthKey);
+  const prospectiveMxn = reservedMxn + amountMxn;
+  const volumeDecision: GateDecision =
+    ceilingMxn === null || prospectiveMxn <= ceilingMxn ? 'pass' : 'block';
+
+  return {
+    userId,
+    currentLevel,
+    requiredLevel,
+    tierDecision,
+    ceilingMxn,
+    reservedMxn,
+    prospectiveMxn,
+    volumeDecision,
+    decision: tierDecision === 'pass' && volumeDecision === 'pass' ? 'pass' : 'block',
+  };
+}
+
+/**
+ * Registra la decision de una persona. Se llama DESPUES de commitear, para
+ * que la auditoria refleje operaciones durables y no intentos fallidos, como
+ * pide el issue.
+ */
+export async function logKycDecision(
+  d: KycParticipantDecision,
+  operationType: KycOperationType,
+  amountMxn: number,
+  tradeId: string | null,
+): Promise<void> {
+  await logAuditEvent({
+    action: 'kyc_gate.decision',
+    actorUserId: d.userId,
+    entityType: 'kyc_gate',
+    entityId: tradeId ?? operationType,
+    details: {
+      check_type: 'tier_and_volume',
+      operation_type: operationType,
+      trade_id: tradeId,
+      amount_mxn: amountMxn,
+      tier_at_time: d.currentLevel,
+      required_level: d.requiredLevel,
+      tier_decision: d.tierDecision,
+      monthly_ceiling_mxn: d.ceilingMxn,
+      monthly_reserved_mxn: d.reservedMxn,
+      monthly_total_mxn: d.prospectiveMxn,
+      volume_decision: d.volumeDecision,
+      gate_decision: d.decision,
+      enforcement_enabled: config.kycGateEnabled,
+    },
+  });
+}
+
+/**
+ * Traduce una decision bloqueada al error que corresponde.
+ * Solo lanza si la aplicacion del gate esta encendida.
+ */
+export function kycDecisionToError(
+  d: KycParticipantDecision,
+  operationType: KycOperationType,
+): Error | null {
+  if (!config.kycGateEnabled || d.decision === 'pass') return null;
+  if (d.tierDecision === 'block') {
+    return new KycTierInsufficientError(d.requiredLevel, d.currentLevel, operationType);
+  }
+  const remaining = d.ceilingMxn === null ? 0 : Math.max(d.ceilingMxn - d.reservedMxn, 0);
+  return new KycMonthlyCapExceededError(
+    remaining,
+    d.ceilingMxn ?? 0,
+    currentMonthWindow().resetAt,
+    d.currentLevel,
+  );
 }
