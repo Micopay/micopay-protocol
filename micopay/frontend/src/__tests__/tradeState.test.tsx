@@ -169,3 +169,32 @@ describe('el chat no enseña identificadores internos', () => {
     }
   });
 });
+
+/**
+ * Las pantallas de monto pintaban la insignia de estado con `pending` fijado a
+ * mano, DOS PANTALLAS antes de confirmar. Decia "Operación creada · la solicitud
+ * se registró" —en pasado— cuando no existía ninguna operación: aún no se elige
+ * agente ni se confirma nada.
+ *
+ * Es la misma clase de fallo que el cartel de "estamos bloqueando tu saldo": la
+ * interfaz afirmando un hecho que no ocurrió. En una app de dinero eso no es un
+ * detalle de copy — es decirle a alguien que su solicitud existe cuando no.
+ */
+describe('no se anuncia una operación que no existe', () => {
+  const dir = dirname(fileURLToPath(import.meta.url));
+
+  for (const screen of ['CashoutRequest', 'DepositRequest']) {
+    it(`${screen} no pinta la insignia de estado`, () => {
+      const source = readFileSync(resolve(dir, `../pages/${screen}.tsx`), 'utf8');
+      expect(source).not.toContain('<TradeStateBadge');
+      // Y no fija un estado a mano: no hay operación de la que hablar.
+      expect(source).not.toContain("getTradeStateDebugOverride('pending')");
+    });
+  }
+
+  it('el estado `pending` sigue describiendo algo ya creado', () => {
+    // El texto no estaba mal: estaba en la pantalla equivocada. Sigue siendo el
+    // correcto cuando la operación SÍ existe, así que no se toca.
+    expect(TRADE_STATE_COPY.pending.happened).toMatch(/se registró/i);
+  });
+});

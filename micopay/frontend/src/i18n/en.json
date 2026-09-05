@@ -142,14 +142,16 @@
     "time": "TIME",
     "timeValue": "< 15 min",
     "search": "Find cash offers",
-    "recoverLabel": "Find a new offer"
+    "recoverLabel": "Find a new offer",
+    "nothingMovedYet": "Nothing has moved yet. You will review the amount, the fee and the agent before confirming."
   },
   "deposit": {
     "title": "Buy with cash",
     "amountLabel": "HOW MUCH CASH DO YOU HAVE?",
     "info": "We'll find agents nearby who will give you digital assets in exchange for your cash. Funds are held in escrow until you complete the meetup.",
     "search": "Find agents",
-    "recoverLabel": "Find a new option"
+    "recoverLabel": "Find a new option",
+    "nothingMovedYet": "Nothing has moved yet. You will review the amount, the fee and the agent before confirming."
   },
   "inbox": {
     "title": "Inbox",

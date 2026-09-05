@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import TradeStateBadge, { getTradeStateDebugOverride, TradeState } from '../components/TradeStateBadge';
 import { AmountField } from '../components/ui';
 
 export interface DepositRequestProps {
@@ -11,7 +10,6 @@ export interface DepositRequestProps {
 const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
   const { t } = useTranslation();
   const [amount, setAmount] = useState('500');
-  const state: TradeState = getTradeStateDebugOverride('pending');
 
   return (
     <div className="bg-fondo min-h-screen text-on-surface font-body">
@@ -35,11 +33,18 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
 
       <main className="max-w-md mx-auto px-6 pt-12 pb-24">
         <div className="flex flex-col space-y-8">
-          <TradeStateBadge
-            state={state}
-            onRecover={() => onSearch(amount || '500')}
-            recoverLabel={t('deposit.recoverLabel')}
-          />
+          {/* Aqui se pintaba la insignia de estado de una operacion con el estado
+            fijado a mano en `pending`. Pero en esta pantalla NO EXISTE ninguna
+            operacion: aun no se elige agente ni se confirma nada. Decia
+            "Operacion creada · la solicitud se registro" — en pasado, afirmando
+            un hecho que no habia ocurrido, dos pantallas antes de confirmar.
+
+            La intencion era buena (principio 2 del manifiesto: la persona
+            siempre sabe donde esta su dinero) pero se cumplia con una mentira.
+            Se conserva la tranquilidad y se quita la afirmacion falsa. */}
+          <p className="text-sm text-on-surface-variant">
+            {t('deposit.nothingMovedYet')}
+          </p>
 
           <div className="space-y-6">
             <label htmlFor="deposit-amount" className="font-medium text-[10px] tracking-wide uppercase text-on-surface-variant/70">

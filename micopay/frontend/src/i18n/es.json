@@ -142,14 +142,16 @@
     "time": "TIEMPO",
     "timeValue": "< 15 min",
     "search": "Buscar opciones de efectivo",
-    "recoverLabel": "Buscar nueva oferta"
+    "recoverLabel": "Buscar nueva oferta",
+    "nothingMovedYet": "Aún no se mueve tu saldo. Vas a poder revisar el monto, la comisión y el agente antes de confirmar."
   },
   "deposit": {
     "title": "Comprar con efectivo",
     "amountLabel": "¿CUÁNTO EFECTIVO TIENES PARA USAR?",
     "info": "Encontraremos agentes cercanos que te darán activos digitales a cambio de tu efectivo. Los fondos quedan en garantía hasta que completes el encuentro.",
     "search": "Buscar agentes",
-    "recoverLabel": "Buscar nueva opción"
+    "recoverLabel": "Buscar nueva opción",
+    "nothingMovedYet": "Aún no se mueve tu saldo. Vas a poder revisar el monto, la comisión y el agente antes de confirmar."
   },
   "inbox": {
     "title": "Bandeja de entrada",

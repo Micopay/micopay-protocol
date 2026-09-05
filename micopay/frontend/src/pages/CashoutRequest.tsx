@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import TradeStateBadge, { getTradeStateDebugOverride, TradeState } from '../components/TradeStateBadge';
 import { AmountField } from '../components/ui';
 
 export interface CashoutRequestProps {
@@ -11,7 +10,6 @@ export interface CashoutRequestProps {
 const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
   const { t } = useTranslation();
   const [amount, setAmount] = useState('500');
-  const state: TradeState = getTradeStateDebugOverride('pending');
 
   return (
     <div className="text-on-surface antialiased overflow-x-hidden min-h-screen bg-surface-container-low">
@@ -35,12 +33,18 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
       </header>
 
       <main className="pt-[calc(6rem+env(safe-area-inset-top))] pb-32 px-6 flex flex-col min-h-screen max-w-md mx-auto">
-        <TradeStateBadge
-          state={state}
-          onRecover={() => onSearch(Number(amount) || 500)}
-          recoverLabel={t('cashout.recoverLabel')}
-          className="mb-6"
-        />
+        {/* Aqui se pintaba la insignia de estado de una operacion con el estado
+            fijado a mano en `pending`. Pero en esta pantalla NO EXISTE ninguna
+            operacion: aun no se elige agente ni se confirma nada. Decia
+            "Operacion creada · la solicitud se registro" — en pasado, afirmando
+            un hecho que no habia ocurrido, dos pantallas antes de confirmar.
+
+            La intencion era buena (principio 2 del manifiesto: la persona
+            siempre sabe donde esta su dinero) pero se cumplia con una mentira.
+            Se conserva la tranquilidad y se quita la afirmacion falsa. */}
+        <p className="mb-6 text-sm text-on-surface-variant">
+          {t('cashout.nothingMovedYet')}
+        </p>
         <div className="mt-8 mb-4">
           <label htmlFor="cashout-amount" className="font-label text-xs font-bold tracking-[0.15em] text-on-surface-variant opacity-70">
             {t('cashout.amountLabel')}
