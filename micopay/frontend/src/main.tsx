@@ -10,6 +10,16 @@ import './i18n'
 // Android hardware back button → browser history. Plays well with HashRouter.
 // On native iOS/web this listener simply doesn't fire (no-op).
 if (Capacitor.isNativePlatform()) {
+  // La confirmacion de la persona no sobrevive a salir de la app: volver a
+  // primer plano es un contexto nuevo, y puede que quien vuelve no sea quien
+  // se fue. Sin esto, la ventana de gracia de 60 s seguiria corriendo mientras
+  // el telefono cambia de manos.
+  CapApp.addListener('appStateChange', ({ isActive }) => {
+    if (!isActive) {
+      void import('./lib/userPresence').then(({ resetPresence }) => resetPresence())
+    }
+  })
+
   CapApp.addListener('backButton', ({ canGoBack }) => {
     if (canGoBack) {
       window.history.back()

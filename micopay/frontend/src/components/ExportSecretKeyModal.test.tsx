@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import ExportSecretKeyModal from './ExportSecretKeyModal';
-import { exportSecretKey } from '../lib/keystore';
+import { revealSecretKey } from '../lib/keystore';
 
-// Mock the keystore module
+// El modal pasa por `revealSecretKey`, que pide confirmacion biometrica antes
+// de devolver la llave. `exportSecretKey` no lleva compuerta porque tambien la
+// usan rutas de solo lectura; mostrarsela a la persona si.
 vi.mock('../lib/keystore', () => ({
-  exportSecretKey: vi.fn(),
+  revealSecretKey: vi.fn(),
 }));
 
 // Mock react-i18next
@@ -75,7 +77,7 @@ describe('ExportSecretKeyModal — SEC-25 QR + Clipboard security', () => {
     // Ver clockOffsetMs arriba: aísla el rate limit entre tests.
     clockOffsetMs += RATE_LIMIT_WINDOW_MS * 2;
     vi.setSystemTime(Date.now() + clockOffsetMs);
-    (exportSecretKey as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_SECRET_KEY);
+    (revealSecretKey as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_SECRET_KEY);
   });
 
   afterEach(() => {
@@ -90,7 +92,7 @@ describe('ExportSecretKeyModal — SEC-25 QR + Clipboard security', () => {
 
     // Wait for the secret key to load
     await waitFor(() => {
-      expect(exportSecretKey).toHaveBeenCalledTimes(1);
+      expect(revealSecretKey).toHaveBeenCalledTimes(1);
     });
 
     // QR code should be rendered — the SVG element is from qrcode.react
@@ -105,7 +107,7 @@ describe('ExportSecretKeyModal — SEC-25 QR + Clipboard security', () => {
     render(<ExportSecretKeyModal onClose={onClose} />);
 
     await waitFor(() => {
-      expect(exportSecretKey).toHaveBeenCalledTimes(1);
+      expect(revealSecretKey).toHaveBeenCalledTimes(1);
     });
 
     // Click copy button
@@ -126,7 +128,7 @@ describe('ExportSecretKeyModal — SEC-25 QR + Clipboard security', () => {
     render(<ExportSecretKeyModal onClose={onClose} />);
 
     await waitFor(() => {
-      expect(exportSecretKey).toHaveBeenCalledTimes(1);
+      expect(revealSecretKey).toHaveBeenCalledTimes(1);
     });
 
     // Click copy button
@@ -147,7 +149,7 @@ describe('ExportSecretKeyModal — SEC-25 QR + Clipboard security', () => {
     render(<ExportSecretKeyModal onClose={onClose} />);
 
     await waitFor(() => {
-      expect(exportSecretKey).toHaveBeenCalledTimes(1);
+      expect(revealSecretKey).toHaveBeenCalledTimes(1);
     });
 
     // Click copy button
@@ -177,7 +179,7 @@ describe('ExportSecretKeyModal — SEC-25 QR + Clipboard security', () => {
     render(<ExportSecretKeyModal onClose={onClose} />);
 
     await waitFor(() => {
-      expect(exportSecretKey).toHaveBeenCalledTimes(1);
+      expect(revealSecretKey).toHaveBeenCalledTimes(1);
     });
 
     // Should show masked dots
@@ -196,7 +198,7 @@ describe('ExportSecretKeyModal — SEC-25 QR + Clipboard security', () => {
     render(<ExportSecretKeyModal onClose={onClose} />);
 
     await waitFor(() => {
-      expect(exportSecretKey).toHaveBeenCalledTimes(1);
+      expect(revealSecretKey).toHaveBeenCalledTimes(1);
     });
 
     const closeBtn = screen.getByText('Close');
@@ -206,7 +208,7 @@ describe('ExportSecretKeyModal — SEC-25 QR + Clipboard security', () => {
   });
 
   it('shows error state when loading fails', async () => {
-    (exportSecretKey as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('load failed'));
+    (revealSecretKey as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('load failed'));
     render(<ExportSecretKeyModal onClose={onClose} />);
 
     await waitFor(() => {

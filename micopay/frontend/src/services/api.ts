@@ -358,7 +358,10 @@ export async function lockTrade(
       authHeaders(sellerToken),
   );
   const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
-  const signedXdr = 'mock' in prepared ? undefined : await signTransactionXdr(prepared.xdr, prepared.network_passphrase);
+  const signedXdr =
+    'mock' in prepared
+      ? undefined
+      : await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'lock');
 
   const res = await http.post(
       `/trades/${tradeId}/lock`,
@@ -412,7 +415,10 @@ export async function completeTrade(
 ): Promise<CompleteTradeResponse> {
   const prepareRes = await http.post(`/trades/${tradeId}/complete/prepare`, {}, authHeaders(token));
   const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
-  const signedXdr = 'mock' in prepared ? undefined : await signTransactionXdr(prepared.xdr, prepared.network_passphrase);
+  const signedXdr =
+    'mock' in prepared
+      ? undefined
+      : await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'release');
 
   const res = await http.post(`/trades/${tradeId}/complete`, signedXdr ? { signed_xdr: signedXdr } : {}, authHeaders(token));
   return res.data;

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import DeleteAccountModal from "../components/DeleteAccountModal";
 import SecretKeyBackupModal from "../components/SecretKeyBackupModal";
-import { exportSecretKey, importKeypair } from '../lib/keystore';
+import { revealSecretKey, importKeypair } from '../lib/keystore';
 import {
   deleteAccount,
   getCurrentUser,
@@ -164,7 +164,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
   const handleExport = async () => {
     setExportError(null);
     try {
-      const secret = await exportSecretKey();
+      const secret = await revealSecretKey();
       setRevealedSecret(secret);
     } catch {
       setExportError('No se pudo leer tu llave. Cierra la app y vuelve a intentarlo.');

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { QRCodeSVG } from "qrcode.react";
-import { exportSecretKey } from "../lib/keystore";
+import { revealSecretKey } from "../lib/keystore";
 
 interface ExportSecretKeyModalProps {
   onClose: () => void;
@@ -29,7 +29,7 @@ const ExportSecretKeyModal = ({ onClose }: ExportSecretKeyModalProps) => {
   const loadSecretKey = async () => {
     try {
       setLoading(true);
-      const key = await exportSecretKey();
+      const key = await revealSecretKey();
       setSecretKey(key);
     } catch (err) {
       console.error("Failed to load secret key:", err);

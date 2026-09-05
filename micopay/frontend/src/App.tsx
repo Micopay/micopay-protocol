@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, createContext, useContext } from "react";
-import { generateAndStoreKeypair, keypairExists, getPublicKey, exportSecretKey } from './lib/keystore';
+import { generateAndStoreKeypair, keypairExists, getPublicKey, revealSecretKey } from './lib/keystore';
 import {
   HashRouter,
   Routes,
@@ -1151,7 +1151,9 @@ function App() {
 
   useEffect(() => {
     if (showBackupPrompt) {
-      exportSecretKey().then(setBackupSecret).catch(console.error);
+      // Mostrar la llave siempre pide confirmacion, sin ventana de gracia:
+      // es el secreto de mayor valor del sistema.
+      revealSecretKey().then(setBackupSecret).catch(console.error);
     }
   }, [showBackupPrompt]);
 

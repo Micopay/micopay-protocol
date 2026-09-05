@@ -1,5 +1,6 @@
 import { Keypair, TransactionBuilder, Operation, Memo, Networks, Asset, Horizon } from '@stellar/stellar-sdk';
-import { exportSecretKey } from '../lib/keystore';
+import { requireUserPresence } from '../lib/userPresence';
+import { exportSecretKey, getPublicKey } from '../lib/keystore';
 import { getAsset } from '../constants/assets';
 import { buildTxUrl } from '../utils/stellarExplorer';
 
@@ -46,13 +47,15 @@ function toAsset(code: string): Asset {
  */
 export async function hasTrustline(assetCode: string): Promise<boolean> {
   if (assetCode.toUpperCase() === 'XLM') return true;
-  const secret = await exportSecretKey();
-  if (!secret) throw new PaymentError('NO_KEY', 'No se encontró la llave de tu dispositivo.');
-  const keypair = Keypair.fromSecret(secret);
+  // Consulta de solo lectura: basta la clave PUBLICA. Antes sacaba la secreta
+  // solo para derivarla, lo que ademas obligaria a pedir huella para mirar un
+  // saldo si la compuerta estuviera aqui.
+  const publicKey = await getPublicKey();
+  if (!publicKey) throw new PaymentError('NO_KEY', 'No se encontró la llave de tu dispositivo.');
 
   let account;
   try {
-    account = await server.loadAccount(keypair.publicKey());
+    account = await server.loadAccount(publicKey);
   } catch {
     return false; // account not yet funded on-chain
   }
@@ -71,6 +74,8 @@ export async function hasTrustline(assetCode: string): Promise<boolean> {
 export async function ensureTrustline(assetCode: string): Promise<SendResult | null> {
   if (await hasTrustline(assetCode)) return null;
 
+  // Mueve dinero: se confirma antes de tocar la llave.
+  await requireUserPresence('payment');
   const secret = await exportSecretKey();
   if (!secret) throw new PaymentError('NO_KEY', 'No se encontró la llave de tu dispositivo.');
   const keypair = Keypair.fromSecret(secret);
@@ -124,6 +129,8 @@ export async function sendPayment(params: {
     throw new PaymentError('BAD_AMOUNT', 'Ingresa un monto mayor a 0.');
   }
 
+  // Mueve dinero: se confirma antes de tocar la llave.
+  await requireUserPresence('payment');
   const secret = await exportSecretKey();
   if (!secret) throw new PaymentError('NO_KEY', 'No se encontró la llave de tu dispositivo.');
   const keypair = Keypair.fromSecret(secret);

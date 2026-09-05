@@ -1,4 +1,5 @@
 import { Keypair, TransactionBuilder, Operation, Memo, Networks, Asset, Horizon } from '@stellar/stellar-sdk';
+import { requireUserPresence } from '../lib/userPresence';
 import { exportSecretKey } from '../lib/keystore';
 import { Buffer } from 'buffer';
 import { buildTxUrl } from '../utils/stellarExplorer';
@@ -14,6 +15,8 @@ export async function sendCETESToEtherfuse(
   withdrawMemo: string,
   cetesIssuer: string
 ): Promise<{ hash: string; explorerUrl: string }> {
+  // Mueve dinero: se confirma antes de tocar la llave.
+  await requireUserPresence('payment');
   const secret = await exportSecretKey();
   if (!secret) throw new Error("No se encontró la llave privada del dispositivo.");
 
