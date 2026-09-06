@@ -242,8 +242,10 @@ export async function createTrade(input: CreateTradeInput) {
     if (error) throw error;
   }
 
-  const seller = await db.getOne<{ id: string; stellar_address: string }>(
-    'SELECT id, stellar_address FROM users WHERE id = $1',
+  // `username` se necesita para nombrar al cliente en el aviso al proveedor:
+  // en cash-out el cliente es el seller, no el buyer.
+  const seller = await db.getOne<{ id: string; stellar_address: string; username: string | null }>(
+    'SELECT id, stellar_address, username FROM users WHERE id = $1',
     [sellerId],
   );
   if (!seller) {
@@ -405,12 +407,22 @@ export async function createTrade(input: CreateTradeInput) {
     },
   });
 
-  // Fire-and-forget — push failure must never fail trade creation
-  const buyerUsername = buyer.username || buyer.stellar_address || 'Usuario';
-  sendTradeNotificationToMerchant(sellerId, {
+  // El aviso va al PROVEEDOR, no al `seller`.
+  //
+  // Antes iba a `sellerId`, que es correcto solo en deposito. En cash-out el
+  // seller del escrow es el CLIENTE —lo fijo CASH-1 con `deriveProviderId`— asi
+  // que la app le notificaba a la persona su propia operacion recien creada,
+  // mientras el agente, que es quien tiene que actuar, no se enteraba de nada.
+  // Este codigo es anterior al modelo de flujos y nunca se actualizo.
+  //
+  // Y por lo mismo el nombre que se anuncia es el del CLIENTE: la contraparte
+  // del proveedor, sea comprador o vendedor del escrow segun el flujo.
+  const clientParty = providerId === sellerId ? buyer : seller;
+  const clientUsername = clientParty.username || clientParty.stellar_address || 'Usuario';
+  sendTradeNotificationToMerchant(providerId, {
     tradeId: result.id,
     amount: `${amountMxn.toLocaleString('es-MX')} MXN`,
-    buyerUsername,
+    buyerUsername: clientUsername,
   }).catch((err: unknown) => {
     logger.error({ err, trade_id: result.id, category: 'trade.lifecycle' }, '[trade] Push notification failed silently');
   });
