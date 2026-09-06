@@ -344,7 +344,9 @@
     "cashoutAgentPendingTitle": "Esperando garantía del cliente",
     "cashoutAgentPendingDesc": "El cliente está bloqueando su saldo. Cuando se confirme, entrégale el efectivo.",
     "verifyingEscrowStatus": "Verificando estado de la garantía…",
-    "tradeStatus": "Operación: {{status}}"
+    "tradeStatus": "Operación: {{status}}",
+    "depositWaitingLockTitle": "Esperando que el agente bloquee los fondos",
+    "depositWaitingLockDesc": "Todavía no hay garantía. NO entregues el efectivo hasta que este aviso cambie a verde."
   },
   "qrReveal": {
     "verified": "Verificado",

@@ -9,6 +9,7 @@ import {
 import { PLATFORM_FEE_PERCENT } from '../constants/trade';
 import ErrorBanner from '../components/ErrorBanner';
 import MerchantOfferCard from '../components/MerchantOfferCard';
+import type { OfferConfirmData } from './ExploreMap';
 import type { ApiErrorAction } from '../utils/apiError';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -23,6 +24,12 @@ function formatDistance(km: number): string {
 interface DepositMapProps {
   onBack: () => void;
   onSelectOffer: (offerId: string) => void;
+  /**
+   * Paso de confirmacion, igual que en cash-out. El deposito saltaba directo al
+   * chat al elegir agente: sin resumen del monto, la comision y quien es la
+   * contraparte. Los dos flujos comprometen dinero y los dos merecen ese paso.
+   */
+  onProceedToConfirm?: (offer: OfferConfirmData) => void;
   loading?: boolean;
   amount?: number;
   creationError?: string | null;
@@ -229,6 +236,7 @@ function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) 
 const DepositMap = ({
   onBack,
   onSelectOffer,
+  onProceedToConfirm,
   loading = false,
   amount = 500,
   creationError,
@@ -326,7 +334,21 @@ const DepositMap = ({
                 amount={amount}
                 loading={loading}
                 isBest={idx === 0}
-                onChoose={(m) => onSelectOffer(m.seller_id)}
+                onChoose={(m) => {
+                  if (onProceedToConfirm) {
+                    onProceedToConfirm({
+                      id: m.seller_id,
+                      name: m.username,
+                      receiveMxn: m.payout_mxn,
+                      commissionPct: m.rate_percent,
+                      platformFeeMxn: m.platform_fee_mxn,
+                      providerFeeMxn: m.provider_fee_mxn,
+                      nearbyCount: merchants.length,
+                    });
+                  } else {
+                    onSelectOffer(m.seller_id);
+                  }
+                }}
                 maxEffectiveFeePercent={maxEffectiveFeePercent}
                 flow="deposit"
               />

@@ -344,7 +344,9 @@
     "cashoutAgentPendingTitle": "Waiting for client escrow",
     "cashoutAgentPendingDesc": "The client is locking their balance. Once confirmed, hand over the cash.",
     "verifyingEscrowStatus": "Verifying escrow status…",
-    "tradeStatus": "Trade: {{status}}"
+    "tradeStatus": "Trade: {{status}}",
+    "depositWaitingLockTitle": "Waiting for the agent to lock the funds",
+    "depositWaitingLockDesc": "There is no escrow yet. Do NOT hand over the cash until this notice turns green."
   },
   "qrReveal": {
     "verified": "Verified",

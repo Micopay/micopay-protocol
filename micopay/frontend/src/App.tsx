@@ -278,10 +278,25 @@ function DepositRoute() {
 
 function MapDepositRoute() {
   const navigate = useNavigate();
-  const { handleDepositOfferSelected, tradeLoading, tradeError, clearTradeError, retryTradeFlow } = useAppCtx();
+  const { activeAmount, handleDepositOfferSelected, tradeLoading, tradeError, clearTradeError, retryTradeFlow } = useAppCtx();
   return (
       <DepositMap
           onBack={() => navigate('/deposit')}
+          onProceedToConfirm={(offer) => {
+            navigate('/confirm', {
+              state: {
+                merchantId: offer.id,
+                merchantName: offer.name,
+                receiveMxn: offer.receiveMxn,
+                commissionPct: offer.commissionPct,
+                amountMxn: activeAmount,
+                platformFeeMxn: offer.platformFeeMxn,
+                providerFeeMxn: offer.providerFeeMxn,
+                flow: 'deposit',
+                nearbyCount: offer.nearbyCount,
+              },
+            });
+          }}
           onSelectOffer={async (offerId) => {
             const ok = await handleDepositOfferSelected(offerId);
             if (ok) navigate('/chat-deposit');
@@ -339,7 +354,8 @@ function MapRoute() {
 function ConfirmRoute() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { handleOfferSelected, tradeLoading, tradeError, clearTradeError } = useAppCtx();
+  const { handleOfferSelected, handleDepositOfferSelected, tradeLoading, tradeError, clearTradeError } =
+    useAppCtx();
   const state = location.state as {
     merchantName: string;
     merchantId: string;
@@ -358,6 +374,11 @@ function ConfirmRoute() {
     return <Navigate to="/map" replace />;
   }
 
+  // El deposito no tenia esta pantalla: al elegir agente saltaba directo al
+  // chat, sin resumen. Los dos flujos comprometen dinero, asi que los dos
+  // pasan por el mismo paso de revisar antes de aceptar.
+  const isDeposit = state.flow === 'deposit';
+
   return (
     <TradeConfirmationPage
       merchantName={state.merchantName}
@@ -373,8 +394,10 @@ function ConfirmRoute() {
       errorMessage={tradeError?.message ?? null}
       onBack={() => navigate(-1)}
       onConfirm={async () => {
-        const ok = await handleOfferSelected(state.merchantId);
-        if (ok) navigate('/chat');
+        const ok = isDeposit
+          ? await handleDepositOfferSelected(state.merchantId)
+          : await handleOfferSelected(state.merchantId);
+        if (ok) navigate(isDeposit ? '/chat-deposit' : '/chat');
         return ok;
       }}
     />

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChatMessages } from '../hooks/useChatMessages';
 import { buildTxUrl } from '../utils/stellarExplorer';
+import { parseTradeState, type TradeState } from '../components/TradeStateBadge';
 import { getTrade } from '../services/api';
 
 interface DepositChatProps {
@@ -39,6 +40,7 @@ const DepositChat = ({
     const [inputValue, setInputValue] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [fetchedLockTxHash, setFetchedLockTxHash] = useState<string | null>(null);
+    const [escrowStatus, setEscrowStatus] = useState<TradeState | null>(null);
     const displayLockTxHash = fetchedLockTxHash ?? lockTxHash;
 
     // Auto-scroll to bottom when messages change
@@ -54,6 +56,7 @@ const DepositChat = ({
             try {
                 const trade = await getTrade(tradeId, token);
                 if (trade.lock_tx_hash) setFetchedLockTxHash(trade.lock_tx_hash);
+                setEscrowStatus(parseTradeState(trade.status));
             } catch (e) {
                 console.warn('Failed to fetch trade status', e);
             }
@@ -107,12 +110,29 @@ const DepositChat = ({
                 {/* Status Banner */}
                 <section className="px-6 py-4">
                     <div className="bg-papel border border-primary/10 rounded-sm p-4 flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-sm bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                            <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>task_alt</span>
+                        {/* Este cartel se pintaba SIEMPRE, con palomita verde,
+                            diciendo "el agente bloqueó los activos que recibirás"
+                            en el instante en que llegabas — sin mirar el estado
+                            real y sin que el agente hubiera hecho nada todavía.
+                            En la práctica bloquear tarda; anunciarlo antes de
+                            tiempo puede hacer que alguien entregue efectivo
+                            creyendo que hay garantía cuando no la hay. */}
+                        <div className={`w-10 h-10 rounded-sm flex items-center justify-center shrink-0 ${escrowStatus === 'locked' ? 'bg-primary/10 text-primary' : 'bg-naranja/10 text-naranja'}`}>
+                            <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>
+                                {escrowStatus === 'locked' ? 'task_alt' : 'hourglass_top'}
+                            </span>
                         </div>
                         <div className="flex flex-col gap-1 min-w-0">
-                            <p className="text-sm font-bold text-primary font-headline">{t('chatRoom.agentFoundTitle')}</p>
-                            <p className="text-xs text-on-surface/60">{t('chatRoom.agentFoundDesc')}</p>
+                            <p className={`text-sm font-bold font-headline ${escrowStatus === 'locked' ? 'text-primary' : 'text-naranja'}`}>
+                                {escrowStatus === 'locked'
+                                    ? t('chatRoom.agentFoundTitle')
+                                    : t('chatRoom.depositWaitingLockTitle')}
+                            </p>
+                            <p className="text-xs text-on-surface/60">
+                                {escrowStatus === 'locked'
+                                    ? t('chatRoom.agentFoundDesc')
+                                    : t('chatRoom.depositWaitingLockDesc')}
+                            </p>
                             {displayLockTxHash ? (
                                 <a
                                     href={buildTxUrl(displayLockTxHash)}
