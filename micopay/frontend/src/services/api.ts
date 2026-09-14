@@ -462,7 +462,13 @@ export interface TradeHistoryItem {
 
 export interface MerchantTrade {
   id: string;
-  buyer_handle: string;
+  /** CASH-3: la contraparte es el CLIENTE, que en cash-out es el vendedor del
+   *  escrow y no el comprador. Antes se llamaba `buyer_handle` y en cash-out
+   *  traia el nombre del propio proveedor. */
+  client_handle: string;
+  /** CASH-3: sin esto las dos clases de solicitud se ven identicas en la
+   *  bandeja, y el proveedor no sabe si va a entregar o a recibir efectivo. */
+  flow: TradeFlow;
   amount_mxn: number;
   /** CASH-5A: estado canónico. El tipo documenta el contrato; la realidad
    *  en runtime se valida con parseTradeState antes de usarla. */

@@ -303,8 +303,10 @@ export async function tradeRoutes(app: FastifyInstance) {
 
   /**
    * GET /merchants/me/trades
-   * List incoming trades for the authenticated merchant, filtered by state.
-   * Returns trades where merchant is the seller, newest first.
+   * List incoming trades for the authenticated provider, filtered by state.
+   * Returns trades where the caller is the Red MicoPay provider (CASH-3:
+   * antes era el vendedor del escrow, que en cash-out es el cliente), newest
+   * first.
    */
   app.get('/merchants/me/trades', {
     schema: {

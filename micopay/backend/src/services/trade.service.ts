@@ -1428,29 +1428,66 @@ export async function lookupAuditByRequestId(requestId: string) {
   }));
 }
 
-export async function getMerchantTrades(merchantId: string, state: string = 'all') {
+/**
+ * CASH-3: la bandeja del proveedor.
+ *
+ * Filtraba por `seller_id`. En deposito eso es el proveedor, pero en cash-out
+ * el vendedor del escrow es el CLIENTE: el proveedor no veia ni una sola
+ * solicitud de cash-out, que es justo el flujo donde tiene que salir de lo que
+ * este haciendo para entregar efectivo. Ahora filtra por `provider_id`, la
+ * columna canonica de CASH-1 — la misma que ya usa `idx_trades_provider`.
+ *
+ * La contraparte tampoco se podia leer del JOIN sobre `buyer_id`: en cash-out
+ * ese es el propio proveedor, asi que la fila mostraba su nombre como si fuera
+ * el del cliente. El nombre se resuelve aparte con `deriveInitiatorId`, que es
+ * la unica definicion de quien es el cliente segun el flujo (CASH-9).
+ */
+export async function getMerchantTrades(providerId: string, state: string = 'all') {
   const statusValues = state === 'all'
     ? ['pending', 'locked', 'revealing', 'completed', 'cancelled', 'refunded']
     : [state];
 
-  const trades = await db.getMany(
+  const trades = await db.getMany<{
+    id: string; seller_id: string; buyer_id: string; flow: TradeFlow;
+    amount_mxn: number; status: string; created_at: string;
+  }>(
     `SELECT
        t.id,
        t.seller_id,
        t.buyer_id,
+       t.flow,
        t.amount_mxn,
        t.status,
-       t.created_at,
-       u.username as buyer_handle
+       t.created_at
      FROM trades t
-     JOIN users u ON t.buyer_id = u.id
-     WHERE t.seller_id = $1
+     WHERE t.provider_id = $1
        AND t.status = ANY($2)
      ORDER BY t.created_at DESC`,
-    [merchantId, statusValues],
+    [providerId, statusValues],
   );
 
-  return trades;
+  const clientIds = [
+    ...new Set(trades.map((t) => deriveInitiatorId(t.flow, t.seller_id, t.buyer_id))),
+  ];
+  const clients = clientIds.length
+    ? await db.getMany<{ id: string; username: string | null }>(
+        'SELECT id, username FROM users WHERE id = ANY($1)',
+        [clientIds],
+      )
+    : [];
+  const handleById = new Map(clients.map((c) => [c.id, c.username]));
+
+  return trades.map((t) => ({
+    id: t.id,
+    seller_id: t.seller_id,
+    buyer_id: t.buyer_id,
+    flow: t.flow,
+    amount_mxn: t.amount_mxn,
+    status: t.status,
+    created_at: t.created_at,
+    client_handle:
+      handleById.get(deriveInitiatorId(t.flow, t.seller_id, t.buyer_id)) ?? 'Usuario MicoPay',
+  }));
 }
 
 /**
@@ -1646,7 +1683,7 @@ async function buildConfirmResult(
   handoff: CashHandoff,
   resumed: boolean,
 ): Promise<MerchantConfirmResult> {
-  const clientId = trade.flow === 'cashout' ? trade.seller_id : trade.buyer_id;
+  const clientId = deriveInitiatorId(trade.flow, trade.seller_id, trade.buyer_id);
   const client = await db.getOne<{ username: string }>(
     'SELECT username FROM users WHERE id = $1',
     [clientId],

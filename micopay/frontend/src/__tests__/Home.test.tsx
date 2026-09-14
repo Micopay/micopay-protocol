@@ -81,8 +81,8 @@ describe('Home — pending-trades badge', () => {
 
   it('shows the badge with the correct count when there are pending trades', async () => {
     mockGetMerchantTrades.mockResolvedValue([
-      { id: 't1', buyer_handle: 'alice', amount_mxn: 100, status: 'pending', created_at: '2024-06-01T10:00:00Z' },
-      { id: 't2', buyer_handle: 'bob', amount_mxn: 200, status: 'pending', created_at: '2024-06-01T11:00:00Z' },
+      { id: 't1', client_handle: 'alice', flow: 'cashout', amount_mxn: 100, status: 'pending', created_at: '2024-06-01T10:00:00Z' },
+      { id: 't2', client_handle: 'bob', flow: 'deposit', amount_mxn: 200, status: 'pending', created_at: '2024-06-01T11:00:00Z' },
     ]);
 
     render(<Home {...createProps()} />);
