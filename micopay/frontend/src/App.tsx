@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, createContext, useContext } from "react";
+import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import { generateAndStoreKeypair, keypairExists, getPublicKey, revealSecretKey } from './lib/keystore';
 import {
   HashRouter,
@@ -48,6 +48,7 @@ import MerchantSettings from "./pages/MerchantSettings";
 import BottomNav from "./components/BottomNav";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import DebugOverlay from "./components/DebugOverlay";
+import SecretKeyBackupModal from "./components/SecretKeyBackupModal";
 import OfflineQueueStatus from "./components/OfflineQueueStatus";
 
 import {
@@ -951,7 +952,6 @@ function App() {
   const [showBackupPrompt, setShowBackupPrompt] = useState(false);
   const [pendingTradeContext, setPendingTradeContext] = useState<{ resolve: (val: boolean) => void, execute: () => Promise<boolean> } | null>(null);
   const [backupSecret, setBackupSecret] = useState<string>('');
-  const [copiedBackup, setCopiedBackup] = useState(false);
 
   const [startupError, setStartupError] = useState<{ title: string; message: string; details?: string } | null>(null);
   const [backendConnected, setBackendConnected] = useState(false);
@@ -1199,21 +1199,42 @@ function App() {
   const handleDepositOfferSelected = async (offerId: string) => checkBackupGate(() => runTradeFlow(offerId, 'deposit'));
 
   useEffect(() => {
-    if (showBackupPrompt) {
-      // Mostrar la llave siempre pide confirmacion, sin ventana de gracia:
-      // es el secreto de mayor valor del sistema.
-      revealSecretKey().then(setBackupSecret).catch(console.error);
-    }
+    if (!showBackupPrompt) return;
+    // Mostrar la llave siempre pide confirmacion, sin ventana de gracia:
+    // es el secreto de mayor valor del sistema.
+    revealSecretKey()
+      .then(setBackupSecret)
+      .catch((err) => {
+        // El modal solo se monta con la llave ya en mano, asi que si revelarla
+        // falla no hay nada que enseñar. Cerrar la compuerta y devolver "no"
+        // es la unica salida: dejarla abierta deja la operacion colgada
+        // esperando una promesa que ya no va a resolver nadie.
+        console.error(err);
+        handleCloseBackup();
+      });
   }, [showBackupPrompt]);
 
-  const handleCopyBackup = async () => {
-    navigator.clipboard.writeText(backupSecret);
-    setCopiedBackup(true);
-    await setBackupConfirmed();
-    setTimeout(() => setCopiedBackup(false), 2000);
-  };
+  // T-12/T-13 dejo esta compuerta atras. Los otros dos flujos de respaldo
+  // pasaron a SecretKeyBackupModal —FLAG_SECURE y sin portapapeles— pero este,
+  // que es el que bloquea la PRIMERA operacion con fondos, seguia escribiendo
+  // la llave secreta en el portapapeles global: en Android 13+ el sistema la
+  // previsualiza en pantalla y se queda en el buffer hasta que se copie otra
+  // cosa, y desde un WebView no se puede marcar con EXTRA_IS_SENSITIVE.
+  //
+  // Y peor que el portapapeles: copiar marcaba la cuenta como respaldada y
+  // "Continuar" ejecutaba la operacion de todas formas. La compuerta no
+  // guardaba nada. Ahora solo se pasa transcribiendo los ultimos 4 caracteres,
+  // que es la misma prueba que exige el alta.
 
-  const handleConfirmBackup = () => {
+  // SecretKeyBackupModal llama a onConfirmed y JUSTO DESPUES a onClose — un
+  // solo camino de cierre para los tres flujos que lo usan. Sin esta marca,
+  // confirmar dispararia tambien la rama de cancelar: la operacion se
+  // ejecutaria y a la vez la compuerta se resolveria como "no".
+  const backupConfirmedRef = useRef(false);
+
+  const handleBackupConfirmed = () => {
+    backupConfirmedRef.current = true;
+    void setBackupConfirmed();
     setShowBackupPrompt(false);
     if (pendingTradeContext) {
       pendingTradeContext.execute().then(pendingTradeContext.resolve);
@@ -1221,7 +1242,11 @@ function App() {
     }
   };
 
-  const handleCancelBackup = () => {
+  const handleCloseBackup = () => {
+    if (backupConfirmedRef.current) {
+      backupConfirmedRef.current = false;
+      return;
+    }
     setShowBackupPrompt(false);
     if (pendingTradeContext) {
       pendingTradeContext.resolve(false);
@@ -1350,47 +1375,14 @@ function App() {
               </Routes>
               <BottomNavAdapter />
 
-              {showBackupPrompt && (
-                <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-6 animate-fade-in">
-                  <div className="bg-papel rounded-sm w-full max-w-sm p-6 relative overflow-hidden">
-                    <div className="text-center mb-6">
-                      <div className="w-16 h-16 bg-red-50 rounded-sm flex items-center justify-center mx-auto mb-4 text-red-500">
-                        <span className="material-symbols-outlined text-3xl">shield_lock</span>
-                      </div>
-                      <h2 className="text-xl font-extrabold text-tinta">Respaldo Requerido</h2>
-                      <p className="text-sm text-gris mt-2">Antes de iniciar una operación con fondos, debes respaldar tu llave secreta. Sin ella, podrías perder tus fondos.</p>
-                    </div>
-
-                    <div className="bg-red-50 border border-red-100 rounded-sm p-4 mb-6">
-                      <label className="block text-xs font-bold text-red-800 uppercase tracking-wider mb-2">
-                        Tu Llave Secreta
-                      </label>
-                      <button
-                        onClick={handleCopyBackup}
-                        className="w-full bg-red-100 hover:bg-red-200 text-red-800 font-bold py-3 rounded-sm flex items-center justify-center gap-2 transition-all active:translate-x-[2px] active:translate-y-[2px]"
-                      >
-                        <span className="material-symbols-outlined text-base">{copiedBackup ? 'check' : 'content_copy'}</span>
-                        {copiedBackup ? '¡Copiada!' : 'Copiar Llave Secreta'}
-                      </button>
-                      <p className="text-[10px] text-red-600 mt-3 text-center leading-relaxed font-medium">NUNCA la compartas. Quien la tenga controla tus fondos.</p>
-                    </div>
-
-                    <div className="flex gap-3">
-                      <button
-                        onClick={handleCancelBackup}
-                        className="flex-1 py-3 text-gris font-bold rounded-sm bg-gray-50 hover:bg-gray-100 transition-colors"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        onClick={handleConfirmBackup}
-                        className="flex-1 py-3 text-papel font-bold rounded-sm bg-verde hover:bg-[#005740] transition-colors"
-                      >
-                        Continuar
-                      </button>
-                    </div>
-                  </div>
-                </div>
+              {showBackupPrompt && backupSecret && (
+                <SecretKeyBackupModal
+                  secretKey={backupSecret}
+                  requireConfirmation
+                  reason="Antes de tu primera operación con fondos tienes que respaldar tu llave secreta. Sin ella, si pierdes el teléfono pierdes el dinero."
+                  onConfirmed={handleBackupConfirmed}
+                  onClose={handleCloseBackup}
+                />
               )}
             </div>
           </HashRouter>
