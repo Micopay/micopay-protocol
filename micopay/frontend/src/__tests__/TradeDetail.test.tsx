@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import TradeDetail from '../pages/TradeDetail';
@@ -271,6 +271,50 @@ describe('TradeDetail', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  /**
+   * H3: el bloqueo no envia ninguna transaccion previa del cliente y toma el
+   * activo de la operacion, no de VITE_ESCROW_ASSET_CODE.
+   */
+  describe('Bloqueo y activo de la operación', () => {
+    // La sesion de vendedor no debe filtrarse a otras pruebas aunque una falle.
+    afterEach(() => {
+      mockReadJSON.mockResolvedValue({ id: 'buyer-1', token: 'mock-token' });
+    });
+
+    const renderAsSeller = async (assetCode: string | undefined) => {
+      mockReadJSON.mockResolvedValue({ id: 'seller-1', token: 'mock-token' });
+      mockGetTrade.mockResolvedValue({ ...createMockTrade('pending'), asset_code: assetCode });
+      renderWithRouter();
+      const button = await screen.findByRole('button', { name: /bloquear fondos/i });
+      fireEvent.click(button);
+    };
+
+    it('XLM: pide el bloqueo sin crear trustline', async () => {
+      const api = await import('../services/api');
+      const payment = await import('../services/payment');
+      await renderAsSeller('XLM');
+      await waitFor(() => expect(api.lockTrade).toHaveBeenCalledWith('trade-123', 'mock-token'));
+      expect(payment.ensureTrustline).not.toHaveBeenCalled();
+    });
+
+    it('otro activo: se detiene antes de firmar o pedir el bloqueo', async () => {
+      const api = await import('../services/api');
+      const payment = await import('../services/payment');
+      await renderAsSeller('USDC');
+      await waitFor(() =>
+        expect(screen.getByText(/activo que la app todavía no puede bloquear/i)).toBeInTheDocument(),
+      );
+      expect(api.lockTrade).not.toHaveBeenCalled();
+      expect(payment.ensureTrustline).not.toHaveBeenCalled();
+    });
+
+    it('respuesta sin asset_code: no inventa el activo y deja decidir al servidor', async () => {
+      const api = await import('../services/api');
+      await renderAsSeller(undefined);
+      await waitFor(() => expect(api.lockTrade).toHaveBeenCalled());
     });
   });
 

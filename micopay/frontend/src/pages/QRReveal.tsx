@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { App as CapApp } from '@capacitor/app';
 import { QRCodeSVG } from 'qrcode.react';
 import { getSecret, revealTrade, lockTrade, getTrade, TradeData } from '../services/api';
-import { ensureTrustline } from '../services/payment';
 import { getTradeStateDebugOverride, normalizeTradeState, TradeState } from '../components/TradeStateBadge';
 import ErrorBanner from '../components/ErrorBanner';
 import SupportLink from '../components/SupportLink';
@@ -12,6 +11,7 @@ import { getDemoQrPayload, IS_DEMO_MODE } from '../utils/demoMode';
 import { buildTxUrl } from '../utils/stellarExplorer';
 import { useCountdown } from '../hooks/useCountdown';
 import TradeEscrowSummary from '../components/TradeEscrowSummary';
+import { assertNoClientPreparationForLock } from '../utils/escrowLock';
 
 interface QRRevealProps {
     activeTrade: TradeData | null;
@@ -70,11 +70,9 @@ const QRReveal = ({ activeTrade, token, viewerId, counterpartyName, ownName, onB
             const status = current?.status ?? activeTrade.status;
 
             if (status === 'pending') {
-                // Default XLM, que es lo que el escrow desplegado bloquea de verdad. Decia
-                // 'USDC' y creaba la trustline de un activo que el escrow no usa; para
-                // XLM no hace falta trustline, asi que esto queda en nada.
-                const escrowAssetCode = import.meta.env.VITE_ESCROW_ASSET_CODE || 'XLM';
-                await ensureTrustline(escrowAssetCode);
+                // H3: el activo sale de la OPERACION del servidor, no de la
+                // configuracion del APK, y no se envia ningun ChangeTrust previo.
+                assertNoClientPreparationForLock(current?.asset_code ?? activeTrade.asset_code);
                 await lockTrade(activeTrade.id, token);
             }
             // Swallow errors here: if the trade was already revealed (stale

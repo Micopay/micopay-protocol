@@ -84,6 +84,22 @@ describe('el activo del escrow', () => {
     }
   });
 
+  /**
+   * H3: el activo del bloqueo sale de la operacion y el cliente no envia un
+   * ChangeTrust antes de pedirlo. Con la configuracion del APK como fuente, un
+   * valor discordante firmaba una transaccion innecesaria antes de que el
+   * guard del backend pudiera intervenir.
+   */
+  it('las pantallas de bloqueo no crean trustline ni leen el activo de la configuración', () => {
+    for (const file of ['src/pages/QRReveal.tsx', 'src/pages/TradeDetail.tsx']) {
+      const src = read(file);
+      expect(src, file).not.toContain('ensureTrustline');
+      expect(src, file).not.toContain('VITE_ESCROW_ASSET_CODE');
+      expect(src, file).toContain('assertNoClientPreparationForLock(');
+      expect(src.indexOf('assertNoClientPreparationForLock('), file).toBeLessThan(src.indexOf('await lockTrade('));
+    }
+  });
+
   it('está declarado explícitamente en el entorno de testnet', () => {
     // Heredarlo de `.env` en silencio fue como se coló el USDC.
     expect(read('.env.testnet')).toMatch(/VITE_ESCROW_ASSET_CODE=XLM/);

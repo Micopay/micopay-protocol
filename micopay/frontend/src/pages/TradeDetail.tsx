@@ -12,9 +12,9 @@ import {
   lockTrade,
   TradeDetailResponse,
 } from '../services/api';
-import { ensureTrustline } from '../services/payment';
 import TradeEscrowSummary from '../components/TradeEscrowSummary';
 import { shouldKeepPollingTrade } from '../utils/escrowAmounts';
+import { assertNoClientPreparationForLock } from '../utils/escrowLock';
 import { errorMessages } from '../constants/errorMessages';
 import { readJSON } from '../services/secureStorage';
 import { useCountdown } from '../hooks/useCountdown';
@@ -942,17 +942,9 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
     setIsLocking(true);
     setLockError(null);
     try {
-      // Lazily create the trustline for whatever asset this escrow deployment
-      // settles in — a no-op if it already exists. Configurable because the
-      // same contract code can be deployed with different token_ids (e.g.
-      // MXNe on one environment, USDC on another); hardcoding the asset code
-      // here would silently create the wrong trustline if pointed at a
-      // differently-configured escrow.
-      // Default XLM, que es lo que el escrow desplegado bloquea de verdad. Decia
-                // 'USDC' y creaba la trustline de un activo que el escrow no usa; para
-                // XLM no hace falta trustline, asi que esto queda en nada.
-                const escrowAssetCode = import.meta.env.VITE_ESCROW_ASSET_CODE || 'XLM';
-      await ensureTrustline(escrowAssetCode);
+      // H3: el activo sale de la OPERACION, no de la configuracion del APK, y
+      // el cliente no envia ningun ChangeTrust previo (XLM no lo necesita).
+      assertNoClientPreparationForLock(trade.asset_code);
       await lockTrade(trade.id, effectiveToken);
       fetchTrade(); // Refresh to get locked state
     } catch (e: any) {
