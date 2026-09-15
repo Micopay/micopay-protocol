@@ -498,6 +498,7 @@ function QRDepositRoute() {
       <DepositQR
           activeTrade={activeTrade}
           buyerToken={sessionUser?.token ?? null}
+          viewerId={sessionUser?.id ?? null}
           onBack={() => navigate('/chat-deposit')}
           onChat={() => navigate('/chat-deposit')}
           onSuccess={() => navigate('/success')}
