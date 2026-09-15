@@ -137,6 +137,24 @@ export interface TradeData {
   amount_mxn: number;
   lock_tx_hash?: string | null;
   release_tx_hash?: string | null;
+  /**
+   * WP-A: activo y cifras del escrow, congelados por el servidor al crear la
+   * operacion. Opcionales porque una respuesta antigua o una operacion demo no
+   * los trae: en ese caso la UI muestra solo pesos y no inventa el activo.
+   */
+  asset_code?: string | null;
+  /** MXN por 1 unidad del activo, decimal en cadena. */
+  rate_mxn?: string | null;
+  /**
+   * Cifras en unidades minimas (stroops), como cadenas enteras. Nunca se
+   * recalculan en el cliente. El contrato bloquea `amount + platform_fee`:
+   *  - `amount_stroops`: lo que recibe el comprador al liberar;
+   *  - `platform_fee_stroops`: la comision de plataforma;
+   *  - `total_locked_stroops`: lo que retiene el escrow y devuelve si hay reembolso.
+   */
+  amount_stroops?: string | null;
+  platform_fee_stroops?: string | null;
+  total_locked_stroops?: string | null;
 }
 
 export interface TradeDetailResponse {
@@ -322,13 +340,13 @@ export async function createTrade(
     amountMxn: number,
     callerToken: string,
     flow: TradeFlow = 'deposit',
+    /** WP-B: `asset_code` del escrow. Omitido -> el backend usa XLM. */
+    assetCode?: string,
 ): Promise<TradeData> {
   try {
-    const res = await http.post(
-        '/trades',
-        { counterparty_id: counterpartyId, amount_mxn: amountMxn, flow },
-        authHeaders(callerToken),
-    );
+    const body: Record<string, unknown> = { counterparty_id: counterpartyId, amount_mxn: amountMxn, flow };
+    if (assetCode !== undefined) body.asset_code = assetCode;
+    const res = await http.post('/trades', body, authHeaders(callerToken));
     return res.data.trade;
   } catch (e: unknown) {
     throw toApiError(extractApiErrorPayload(e));
@@ -558,6 +576,37 @@ export interface XlmMxnRate {
 export async function getXlmMxnRate(): Promise<XlmMxnRate> {
   const res = await http.get('/rate/xlm-mxn');
   return res.data;
+}
+
+/** Tasas por `code` de `ESCROW_ASSET_OPTIONS`. Solo activos habilitados. */
+const ESCROW_RATE_FETCHERS: Record<string, () => Promise<XlmMxnRate>> = {
+  XLM: getXlmMxnRate,
+};
+
+/**
+ * WP-B: MXN por 1 unidad del activo del escrow, para mostrar el equivalente
+ * ESTIMADO antes de crear la operacion. La tasa vinculante la congela el
+ * servidor al crearla; esta nunca se envia de vuelta.
+ *
+ * Rechaza una tasa que no sea un numero finito y positivo: dividir el monto
+ * entre 0, NaN o un negativo pintaria un equivalente absurdo con apariencia de
+ * dato real.
+ */
+export async function getEscrowAssetRate(code: string): Promise<XlmMxnRate> {
+  const fetcher = ESCROW_RATE_FETCHERS[code];
+  if (!fetcher) {
+    throw new Error(`No rate source for escrow asset ${code}`);
+  }
+  const data = await fetcher();
+  return { ...data, rate: parseEscrowAssetRate(data?.rate) };
+}
+
+export function parseEscrowAssetRate(raw: unknown): number {
+  const rate = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+  if (typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) {
+    throw new Error(`Invalid escrow asset rate: ${String(raw)}`);
+  }
+  return rate;
 }
 
 /**
