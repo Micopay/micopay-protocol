@@ -1,6 +1,13 @@
 import db, { pool as dbPool } from '../db/schema.js';
 import { computeTradeFees, PLATFORM_FEE_PERCENT } from './tradeFees.js';
-import { convertMxnToAsset, DEFAULT_ASSET, stroopsAtFrozenRate } from './assetRate.service.js';
+import {
+  AssetNotEnabledError,
+  assertEnabledEscrowAsset,
+  convertMxnToAsset,
+  resolveRequestedEscrowAsset,
+  stroopsAtFrozenRate,
+  type SupportedAsset,
+} from './assetRate.service.js';
 import { StrKey } from '@stellar/stellar-sdk';
 import { config } from '../config.js';
 import pino from 'pino';
@@ -178,6 +185,95 @@ export interface CreateTradeInput {
    */
   flow: TradeFlow;
   amountMxn: number;
+  /**
+   * Activo pedido, tal como llega. `undefined` -> XLM (APK ya instalados). Se
+   * valida con `resolveRequestedEscrowAsset` antes de cualquier otro efecto.
+   */
+  assetCode?: unknown;
+}
+
+/**
+ * Traduce la politica de activos al contexto del BLOQUEO.
+ *
+ * Al crear, un activo no habilitado es un error de quien pide (422
+ * ASSET_NOT_ENABLED). Al bloquear, la operacion ya existe: si su activo no tiene
+ * escrow, el registro es incoherente con el contrato que se va a invocar, y eso
+ * es un conflicto de estado (409 ASSET_ESCROW_MISMATCH), no una peticion mal
+ * formada.
+ *
+ * Sin default: un registro con `asset_code` nulo o vacio NO se trata como XLM.
+ * Bloquear fondos sobre una suposicion es exactamente lo que no debe pasar.
+ * Tampoco se normaliza: un 'xlm' guardado en minusculas tambien es incoherente,
+ * porque la creacion siempre persiste el codigo normalizado.
+ */
+export function assertLockableEscrowAsset(trade: { id?: string; asset_code?: unknown }): SupportedAsset {
+  const stored = trade.asset_code;
+  const mismatch = (detail: string) =>
+    new ConflictError(
+      'ASSET_ESCROW_MISMATCH',
+      'Esta operacion no se puede bloquear con el escrow disponible.',
+      `Trade ${trade.id ?? '?'}: ${detail}`,
+      409,
+    );
+
+  if (typeof stored !== 'string' || stored.length === 0) {
+    throw mismatch(`asset_code is missing (${stored === null ? 'null' : typeof stored})`);
+  }
+  try {
+    return assertEnabledEscrowAsset(stored);
+  } catch (err) {
+    if (err instanceof AssetNotEnabledError) {
+      throw mismatch(`asset_code ${stored} has no deployed escrow`);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Las tres cifras del escrow en stroops, como cadenas enteras (D9 del plan).
+ *
+ * El contrato transfiere `amount + platform_fee` al bloquear y ese mismo total
+ * al reembolsar; al liberar, `amount` va al comprador y la comision aparte. La
+ * comision sale de la tasa congelada, igual que en `prepareLockTrade`, para que
+ * la cifra que ve la app sea la que se firma.
+ *
+ * Con datos incompletos devuelve `null` en lugar de adivinar.
+ */
+export function escrowAmountsForTrade(trade: {
+  asset_code?: unknown;
+  amount_stroops?: unknown;
+  platform_fee_mxn?: unknown;
+  rate_mxn?: unknown;
+}): {
+  amount_stroops: string | null;
+  platform_fee_stroops: string | null;
+  total_locked_stroops: string | null;
+} {
+  const empty = { amount_stroops: null, platform_fee_stroops: null, total_locked_stroops: null };
+  if (typeof trade.asset_code !== 'string' || trade.asset_code.length === 0) return empty;
+  if (trade.amount_stroops === null || trade.amount_stroops === undefined) return empty;
+  if (trade.rate_mxn === null || trade.rate_mxn === undefined) return empty;
+
+  let amount: bigint;
+  try {
+    amount = BigInt(String(trade.amount_stroops));
+  } catch {
+    return empty;
+  }
+  // `platform_fee_mxn` es INTEGER (init.sql). Los mismos argumentos que
+  // `prepareLockTrade`: si esto calculara distinto, la app mostraria una cifra
+  // y se firmaria otra.
+  let fee: bigint;
+  try {
+    fee = stroopsAtFrozenRate(Number(trade.platform_fee_mxn), String(trade.rate_mxn));
+  } catch {
+    return { amount_stroops: amount.toString(), platform_fee_stroops: null, total_locked_stroops: null };
+  }
+  return {
+    amount_stroops: amount.toString(),
+    platform_fee_stroops: fee.toString(),
+    total_locked_stroops: (amount + fee).toString(),
+  };
 }
 
 /**
@@ -197,6 +293,12 @@ export function deriveProviderId(
 
 export async function createTrade(input: CreateTradeInput) {
   const { request, sellerId, buyerId, flow, amountMxn } = input;
+
+  // PRIMERA instruccion, a proposito: antes del log, KYC, limites, el secreto
+  // HTLC, la conversion, la transaccion CASH-10 y los avisos. Un activo sin
+  // escrow no debe dejar ningun efecto de negocio. La ruta ya lo valida, pero
+  // esto cubre tambien a quien llame al servicio directamente.
+  const assetCode = resolveRequestedEscrowAsset(input.assetCode);
 
   if (flow !== 'deposit' && flow !== 'cashout') {
     throw new ValidationError(
@@ -271,7 +373,7 @@ export async function createTrade(input: CreateTradeInput) {
   // Antes esto era `amountMxn * 10^7`, o sea 1 MXN = 1 unidad del activo. Con el
   // escrow bloqueando XLM a ~3.13 MXN, una operacion de 500 pesos bloqueaba 500
   // XLM = ~1 563 pesos: el cliente entregaba 3.13 veces lo que valia.
-  const conversion = await convertMxnToAsset(amountMxn, DEFAULT_ASSET, request);
+  const conversion = await convertMxnToAsset(amountMxn, assetCode, request);
   const amountStroops = conversion.stroops;
 
   // La tarifa del agente se congela AQUI. `merchant_configs.rate_percent` es
@@ -552,6 +654,10 @@ export async function prepareLockTrade(
   if (trade.seller_id !== userId) throw new ForbiddenError('Only the seller can lock');
   if (trade.status !== 'pending') throw new ConflictError(`Trade is ${trade.status}, expected pending`);
 
+  // Antes del atajo mock: un registro incoherente se rechaza igual en pruebas
+  // que en cadena, y nunca se construye un XDR para el contrato equivocado.
+  assertLockableEscrowAsset(trade);
+
   if (config.mockStellar) {
     return { mock: true as const };
   }
@@ -598,6 +704,10 @@ export async function lockTrade(
     fromState = trade.status;
     if (trade.seller_id !== userId) throw new ForbiddenError('Only the seller can lock');
     if (trade.status !== 'pending') throw new ConflictError(`Trade is ${trade.status}, expected pending`);
+
+    // Mismo guard que en `prepareLockTrade`, antes de enviar nada (y antes de
+    // la rama mock). Si alguien llega aqui sin pasar por prepare, tampoco pasa.
+    assertLockableEscrowAsset(trade);
 
     let lockTxHash: string;
     let stellarTradeId: string;

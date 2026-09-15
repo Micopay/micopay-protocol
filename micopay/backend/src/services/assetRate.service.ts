@@ -31,7 +31,7 @@
  */
 
 import type { FastifyRequest } from 'fastify';
-import { BadRequestError } from '../utils/errors.js';
+import { AppError, BadRequestError, ValidationError } from '../utils/errors.js';
 import { getRateMxn } from '../routes/rate.js';
 
 /** Decimales de un token Soroban estandar (y de XLM). */
@@ -70,6 +70,82 @@ export const DEFAULT_ASSET: SupportedAsset = 'XLM';
 
 export function isSupportedAsset(code: string): code is SupportedAsset {
   return Object.prototype.hasOwnProperty.call(ASSETS, code);
+}
+
+/**
+ * Activos con los que se puede OPERAR hoy: los que tienen un escrow desplegado.
+ *
+ * No confundir con `isSupportedAsset`. Aquel dice que la aritmetica sabe
+ * convertir el activo; este, que existe un contrato capaz de bloquearlo. USDC y
+ * MXNE estan en el primero y no en este: una operacion en USDC se crearia con
+ * montos correctos y luego se intentaria bloquear en el contrato del XLM
+ * nativo. Un activo entra aqui cuando WP3 despliega su instancia.
+ */
+export const ENABLED_ESCROW_ASSETS: readonly SupportedAsset[] = ['XLM'];
+
+/** Longitud de `trades.asset_code` (VARCHAR(12)). */
+export const ASSET_CODE_MAX_LENGTH = 12;
+
+/** El activo tiene forma valida pero no hay escrow para operarlo (422). */
+export class AssetNotEnabledError extends AppError {
+  constructor(public readonly assetCode: string) {
+    super(
+      'ASSET_NOT_ENABLED',
+      'Ese activo todavia no esta disponible para operar.',
+      `Escrow asset not enabled: ${assetCode}. Enabled: ${ENABLED_ESCROW_ASSETS.join(', ')}`,
+      422,
+    );
+  }
+}
+
+/**
+ * Comprobacion estricta de un codigo YA normalizado: sin trim, sin mayusculas
+ * y sin default. Es la politica comun a la creacion y al bloqueo; cada llamador
+ * decide que error le corresponde al usuario (ver `assertLockableEscrowAsset`
+ * en trade.service).
+ */
+export function assertEnabledEscrowAsset(code: string): SupportedAsset {
+  if (!(ENABLED_ESCROW_ASSETS as readonly string[]).includes(code)) {
+    throw new AssetNotEnabledError(code);
+  }
+  return code as SupportedAsset;
+}
+
+/**
+ * El activo que PIDE quien crea una operacion.
+ *
+ * - Ausente (`undefined`) -> `DEFAULT_ASSET`. Los APK ya instalados no lo
+ *   envian y deben seguir funcionando.
+ * - Cualquier otro tipo, cadena vacia o mas larga que la columna -> 400.
+ * - Cadena con forma valida -> trim + mayusculas, y 422 si no esta habilitado.
+ *
+ * El default se aplica SOLO aqui, a una peticion. Un registro ya guardado sin
+ * activo es un dato incompleto, no un XLM implicito.
+ */
+export function resolveRequestedEscrowAsset(raw: unknown): SupportedAsset {
+  if (raw === undefined) return DEFAULT_ASSET;
+  return assertEnabledEscrowAsset(normalizeEscrowAssetCode(raw));
+}
+
+/**
+ * Solo la FORMA (tipo y longitud) y la normalizacion, sin politica. Lanza 400;
+ * si el activo esta habilitado lo decide `assertEnabledEscrowAsset`, con 422.
+ * Asi `"USDC"` y `123` no acaban en el mismo codigo de error.
+ *
+ * La ruta la llama sobre el cuerpo CRUDO, antes de que ajv (con `coerceTypes`)
+ * convierta 123 en "123" o null en "".
+ */
+export function normalizeEscrowAssetCode(raw: unknown): string {
+  const invalid = (detail: string) =>
+    new ValidationError('INVALID_ASSET_CODE', 'Por favor, verifica los datos ingresados.', detail);
+  if (typeof raw !== 'string') {
+    throw invalid(`asset_code must be a string, got ${raw === null ? 'null' : typeof raw}`);
+  }
+  const code = raw.trim().toUpperCase();
+  if (code.length === 0 || code.length > ASSET_CODE_MAX_LENGTH) {
+    throw invalid(`asset_code must have 1-${ASSET_CODE_MAX_LENGTH} characters`);
+  }
+  return code;
 }
 
 /**
