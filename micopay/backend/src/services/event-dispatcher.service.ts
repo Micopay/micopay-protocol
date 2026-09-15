@@ -79,16 +79,30 @@ export function parseEscrowEvent(
 // ── DB mutations (idempotent) ─────────────────────────────────────────────
 
 const ACTOR_SYSTEM = 'system:event-listener';
-const TERMINAL_STATES = new Set(['completed', 'cancelled']);
+
+/**
+ * Estados en los que el escrow YA se liquido: los fondos salieron del contrato.
+ *
+ * Antes eran `completed` y `cancelled`. Pero `cancelled` no es una liquidacion:
+ * cancelar detiene la app y NO toca el contrato (CASH-2). Una operacion
+ * cancelada con bloqueo sigue teniendo los fondos dentro hasta que alguien
+ * llama a `refund()` o `release()`, y ese evento era justo el que se ignoraba.
+ * Y `refunded` no estaba, asi que un evento tardio podia degradar a `cancelled`
+ * una operacion que el refund HTTP o el sweep ya habian liquidado.
+ * (Hallazgo H1 de docs/AUDITORIA_IMPLEMENTACION_SELECTOR_ACTIVO_2026-09-14.md.)
+ */
+const SETTLED_STATES = new Set(['completed', 'refunded']);
 
 /**
  * Apply a parsed escrow event to the database.
  *
- * All mutations are guarded with NOT IN ('completed', 'cancelled') so
- * re-delivering the same event is a safe no-op.
+ * Mutations are guarded with NOT IN ('completed', 'refunded') so re-delivering
+ * the same event is a safe no-op, and a settled trade is never rewritten.
  *
- * - released  → trade transitions to completed (clears encrypted secret).
- * - refunded  → trade transitions to cancelled (clears encrypted secret).
+ * - released  → completed, with the tx hash (clears encrypted secret).
+ * - refunded  → refunded, with the tx hash in `release_tx_hash`, the same
+ *               column the HTTP refund and the sweep use (clears secret).
+ *               Also from `cancelled`: that is where refunds usually happen.
  * - locked    → no-op (the HTTP lock route already handled this).
  */
 export async function applyEscrowEvent(parsed: ParsedEscrowEvent): Promise<void> {
@@ -136,8 +150,8 @@ async function handleReleased(ev: ParsedEscrowEvent): Promise<void> {
     return;
   }
 
-  if (TERMINAL_STATES.has(trade.status)) {
-    // Idempotent: already in a terminal state — no mutation required.
+  if (SETTLED_STATES.has(trade.status)) {
+    // Idempotent: already settled — no mutation required.
     return;
   }
 
@@ -149,7 +163,7 @@ async function handleReleased(ev: ParsedEscrowEvent): Promise<void> {
             secret_enc   = NULL,
             secret_nonce = NULL
       WHERE id     = $1
-        AND status NOT IN ('completed', 'cancelled')`,
+        AND status NOT IN ('completed', 'refunded')`,
     [trade.id, ev.txHash],
   );
 
@@ -186,37 +200,41 @@ async function handleRefunded(ev: ParsedEscrowEvent): Promise<void> {
     return;
   }
 
-  if (TERMINAL_STATES.has(trade.status)) {
+  if (SETTLED_STATES.has(trade.status)) {
     return;
   }
 
+  // Antes pasaba a `cancelled` sin guardar el hash: la fila quedaba con
+  // `lock_tx_hash` y sin liquidacion, exactamente lo que la app lee como "en
+  // garantia", con el dinero ya devuelto. Ahora queda como lo deja el refund
+  // HTTP (`executeRefundOnChain`): `refunded` y el hash en `release_tx_hash`.
   await db.execute(
     `UPDATE trades
-        SET status       = 'cancelled',
-            secret_enc   = NULL,
-            secret_nonce = NULL
+        SET status          = 'refunded',
+            release_tx_hash = $2,
+            completed_at    = NOW(),
+            secret_enc      = NULL,
+            secret_nonce    = NULL
       WHERE id     = $1
-        AND status NOT IN ('completed', 'cancelled')`,
-    [trade.id],
+        AND status NOT IN ('completed', 'refunded')`,
+    [trade.id, ev.txHash],
   );
 
   await insertTradeAuditEvent({
     tradeId: trade.id,
     fromState: trade.status,
-    toState: 'cancelled',
+    toState: 'refunded',
     actor: ACTOR_SYSTEM,
     metadata: {
       source: 'soroban_event',
       event_id: ev.eventId,
-      cancel_reason: 'refunded_on_chain',
       refund_tx_hash: ev.txHash,
-      refund_expected: true,
       ledger: ev.ledger,
     },
   });
 
   logger.info(
     { trade_id: trade.id, ledger: ev.ledger, tx_hash: ev.txHash, category: 'event-dispatcher' },
-    '[dispatcher] Trade cancelled via on-chain refunded event',
+    '[dispatcher] Trade refunded via on-chain refunded event',
   );
 }

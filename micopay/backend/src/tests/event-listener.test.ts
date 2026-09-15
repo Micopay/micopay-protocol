@@ -383,7 +383,21 @@ async function insertTestTrade(overrides: {
   // CASH-1: fixtures model a deposit, so the escrow seller is also the
   // provider. Hoisted because provider_id must equal seller_id — two separate
   // randomUUID() calls would violate chk_trades_flow_provider.
-  const sellerId = randomUUID();
+  //
+  // Los dos participantes se crean de verdad: contra PostgreSQL las llaves
+  // foraneas de `trades` rechazan ids inventados, y asi la suite puede probar
+  // el SQL real del dispatcher y no solo el store en memoria.
+  const suffix = randomUUID().replace(/-/g, '');
+  const makeUser = async (label: string) => {
+    const row = await db.getOne<{ id: string }>(
+      `INSERT INTO users (stellar_address, username) VALUES ($1, $2) RETURNING id`,
+      [`G${suffix.slice(0, 32).toUpperCase()}${label}`.padEnd(56, 'A').slice(0, 56), `evt_${label}_${suffix.slice(0, 20)}`],
+    );
+    if (!row?.id) throw new Error('Failed to seed user');
+    return row.id;
+  };
+  const sellerId = await makeUser('S');
+  const buyerId = await makeUser('B');
 
   await db.execute(
     `INSERT INTO trades
@@ -395,7 +409,7 @@ async function insertTestTrade(overrides: {
       overrides.status,
       overrides.contractTradeId,
       sellerId,       // seller_id
-      randomUUID(),   // buyer_id
+      buyerId,        // buyer_id
       'deposit',      // flow
       sellerId,       // provider_id
       100,            // amount_mxn
@@ -427,7 +441,12 @@ async function testApplyReleasedIdempotentOnCompleted() {
   console.log('  ✓ applyEscrowEvent(released) is a no-op when trade is already completed');
 }
 
-async function testApplyRefundedIdempotentOnCancelled() {
+/**
+ * H1: cancelar no liquida el contrato. Una operacion cancelada con bloqueo es
+ * justo donde llega el refund; antes el evento se ignoraba y la fila quedaba
+ * "en garantia" con el dinero ya devuelto.
+ */
+async function testApplyRefundedSettlesCancelledTrade() {
   const contractTradeId = 'f'.repeat(64);
   const tradeId = randomUUID();
 
@@ -443,9 +462,55 @@ async function testApplyRefundedIdempotentOnCancelled() {
 
   await applyEscrowEvent(parsed);
 
-  const after = await db.getOne<{ status: string }>('SELECT status FROM trades WHERE id = $1', [tradeId]);
-  strictEqual(after?.status, 'cancelled', 'Already-cancelled trade must stay cancelled');
-  console.log('  ✓ applyEscrowEvent(refunded) is a no-op when trade is already cancelled');
+  const after = await db.getOne<{ status: string; release_tx_hash: string | null }>(
+    'SELECT status, release_tx_hash FROM trades WHERE id = $1', [tradeId]);
+  strictEqual(after?.status, 'refunded', 'A cancelled trade with funds inside must become refunded');
+  strictEqual(after?.release_tx_hash, 'tx_idem_2', 'The refund tx hash must be recorded');
+  console.log('  ✓ applyEscrowEvent(refunded) settles a cancelled trade as refunded with its hash');
+}
+
+/** H1: un evento tardio no reescribe una operacion que el refund HTTP/sweep ya liquido. */
+async function testLateRefundedEventKeepsRefundedTrade() {
+  const contractTradeId = '3c'.repeat(32);
+  const tradeId = randomUUID();
+
+  await insertTestTrade({ id: tradeId, status: 'refunded', contractTradeId });
+  await db.execute('UPDATE trades SET release_tx_hash = $2 WHERE id = $1', [tradeId, 'tx_http_refund']);
+
+  for (const type of ['refunded', 'released'] as const) {
+    await applyEscrowEvent({
+      type,
+      contractTradeIdHex: contractTradeId,
+      eventId: `evt-late-${type}`,
+      txHash: `tx_late_${type}`,
+      ledger: 500,
+    });
+  }
+
+  const after = await db.getOne<{ status: string; release_tx_hash: string | null }>(
+    'SELECT status, release_tx_hash FROM trades WHERE id = $1', [tradeId]);
+  strictEqual(after?.status, 'refunded', 'A refunded trade must stay refunded');
+  strictEqual(after?.release_tx_hash, 'tx_http_refund', 'The original refund hash must be kept');
+  console.log('  ✓ late refunded/released events do not rewrite an already refunded trade');
+}
+
+/** H1: repetir el mismo evento de reembolso es idempotente. */
+async function testRefundedEventIsIdempotent() {
+  const contractTradeId = '4d'.repeat(32);
+  const tradeId = randomUUID();
+
+  await insertTestTrade({ id: tradeId, status: 'locked', contractTradeId });
+  const ev: ParsedEscrowEvent = {
+    type: 'refunded', contractTradeIdHex: contractTradeId, eventId: 'evt-rep', txHash: 'tx_rep_1', ledger: 600,
+  };
+  await applyEscrowEvent(ev);
+  await applyEscrowEvent({ ...ev, txHash: 'tx_rep_2' });
+
+  const after = await db.getOne<{ status: string; release_tx_hash: string | null }>(
+    'SELECT status, release_tx_hash FROM trades WHERE id = $1', [tradeId]);
+  strictEqual(after?.status, 'refunded');
+  strictEqual(after?.release_tx_hash, 'tx_rep_1', 'The first settlement hash wins');
+  console.log('  ✓ re-delivering a refunded event is a no-op');
 }
 
 async function testApplyReleasedUpdatesActiveTradeToCompleted() {
@@ -485,9 +550,11 @@ async function testApplyRefundedUpdatesActiveTradeToRefunded() {
 
   await applyEscrowEvent(parsed);
 
-  const after = await db.getOne<{ status: string }>('SELECT status FROM trades WHERE id = $1', [tradeId]);
-  strictEqual(after?.status, 'cancelled', 'Locked trade must be cancelled on on-chain refund');
-  console.log('  ✓ applyEscrowEvent(refunded) cancels an active trade');
+  const after = await db.getOne<{ status: string; release_tx_hash: string | null }>(
+    'SELECT status, release_tx_hash FROM trades WHERE id = $1', [tradeId]);
+  strictEqual(after?.status, 'refunded', 'Locked trade must be refunded on on-chain refund');
+  strictEqual(after?.release_tx_hash, 'tx_idem_4', 'The refund tx hash must be recorded');
+  console.log('  ✓ applyEscrowEvent(refunded) refunds an active trade and records the hash');
 }
 
 // ── Runner ────────────────────────────────────────────────────────────────
@@ -499,7 +566,7 @@ const SUITES = [
   { name: 'EscrowEventListener — reconnect', tests: [testReconnectAfterError, testCursorResetOnOldestLedgerError] },
   { name: 'EscrowEventListener — deduplication', tests: [testDuplicateEventSkipped, testDuplicateAcrossPolls] },
   { name: 'parseEscrowEvent', tests: [testParseReleasedEvent, testParseRefundedEvent, testParseLockedEvent, testParseUnknownEventReturnsNull, testParseMalformedValueReturnsNull, testParseWrongTradeIdLength] },
-  { name: 'applyEscrowEvent — idempotency', tests: [testApplyReleasedIdempotentOnCompleted, testApplyRefundedIdempotentOnCancelled, testApplyReleasedUpdatesActiveTradeToCompleted, testApplyRefundedUpdatesActiveTradeToRefunded] },
+  { name: 'applyEscrowEvent — idempotency', tests: [testApplyReleasedIdempotentOnCompleted, testApplyRefundedSettlesCancelledTrade, testLateRefundedEventKeepsRefundedTrade, testRefundedEventIsIdempotent, testApplyReleasedUpdatesActiveTradeToCompleted, testApplyRefundedUpdatesActiveTradeToRefunded] },
 ];
 
 async function runAll() {
