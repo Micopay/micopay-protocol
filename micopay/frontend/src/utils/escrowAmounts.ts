@@ -86,6 +86,24 @@ function phaseOf(trade: EscrowTrade): EscrowPhase | null {
   }
 }
 
+/**
+ * H2: si la pantalla debe seguir preguntando al servidor por esta operacion.
+ *
+ * Mientras siga activa, si. Y tambien si esta cancelada o vencida con un bloqueo
+ * sin liquidar: los fondos siguen en el contrato y el reembolso (del usuario,
+ * del sweep o de un evento en cadena) puede llegar en cualquier momento. Antes
+ * el detalle dejaba de consultar al pasar a `cancelled` y seguia mostrando "en
+ * garantia" despues de que el servidor ya habia registrado el reembolso.
+ * Se detiene al confirmarse `completed` o `refunded`.
+ */
+export function shouldKeepPollingTrade(
+  trade: Pick<EscrowTrade, 'status' | 'lock_tx_hash' | 'release_tx_hash'> | null | undefined,
+): boolean {
+  if (!trade) return false;
+  if (trade.status === 'pending' || IN_CONTRACT_STATES.has(trade.status)) return true;
+  return STOPPED_STATES.has(trade.status) && !!trade.lock_tx_hash && !trade.release_tx_hash;
+}
+
 export function describeEscrowForViewer(trade: EscrowTrade | null | undefined, viewerId: string | null | undefined): EscrowView | null {
   if (!trade || !viewerId) return null;
   const { asset_code, amount_stroops, platform_fee_stroops, total_locked_stroops } = trade;

@@ -17,7 +17,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import i18n from '../i18n';
-import { describeEscrowForViewer, formatStroops } from '../utils/escrowAmounts';
+import { describeEscrowForViewer, formatStroops, shouldKeepPollingTrade } from '../utils/escrowAmounts';
 import TradeEscrowSummary from '../components/TradeEscrowSummary';
 import SuccessScreen, { receiptFromServer } from '../pages/SuccessScreen';
 import TradeConfirmationPage from '../pages/TradeConfirmation';
@@ -98,6 +98,22 @@ describe('describeEscrowForViewer', () => {
     expect(describeEscrowForViewer(cashout({ status: 'locked' }), 'stranger')).toBeNull();
     expect(describeEscrowForViewer(cashout({ status: 'locked' }), null)).toBeNull();
     expect(describeEscrowForViewer(null, CLIENT)).toBeNull();
+  });
+});
+
+describe('shouldKeepPollingTrade (H2)', () => {
+  it.each([
+    ['pending', { status: 'pending' }, true],
+    ['locked', { status: 'locked', lock_tx_hash: 'tx' }, true],
+    ['revealing', { status: 'revealing', lock_tx_hash: 'tx' }, true],
+    ['cancelled with funds inside', { status: 'cancelled', lock_tx_hash: 'tx' }, true],
+    ['expired with funds inside', { status: 'expired', lock_tx_hash: 'tx' }, true],
+    ['cancelled before lock', { status: 'cancelled' }, false],
+    ['cancelled already settled', { status: 'cancelled', lock_tx_hash: 'tx', release_tx_hash: 'rx' }, false],
+    ['completed', { status: 'completed', lock_tx_hash: 'tx', release_tx_hash: 'rx' }, false],
+    ['refunded', { status: 'refunded', lock_tx_hash: 'tx', release_tx_hash: 'rx' }, false],
+  ])('%s -> %s', (_label, patch, expected) => {
+    expect(shouldKeepPollingTrade(cashout(patch))).toBe(expected);
   });
 });
 

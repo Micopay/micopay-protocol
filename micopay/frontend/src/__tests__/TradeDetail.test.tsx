@@ -229,6 +229,51 @@ describe('TradeDetail', () => {
   // combinaciones de flujo y participante.
 
 
+  /**
+   * H2 (docs/AUDITORIA_IMPLEMENTACION_SELECTOR_ACTIVO_2026-09-14.md): el
+   * polling se apagaba al pasar a `cancelled`. Una cancelada con bloqueo espera
+   * el reembolso, y la pantalla seguia diciendo "Reembolso pendiente" despues
+   * de que el servidor ya lo habia registrado.
+   */
+  describe('Polling hasta que se liquide', () => {
+    it('refreshes a cancelled trade with funds locked until the refund lands', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        mockGetTrade
+          .mockResolvedValueOnce(createMockTrade('cancelled'))
+          .mockResolvedValue({ ...createMockTrade('refunded'), release_tx_hash: 'refund_tx' });
+
+        renderWithRouter();
+        await waitFor(() => expect(screen.getByText(/reembolso pendiente/i)).toBeInTheDocument());
+
+        await vi.advanceTimersByTimeAsync(5000);
+        await waitFor(() => expect(screen.queryByText(/reembolso pendiente/i)).toBeNull());
+        expect(screen.getByText('Reembolsado')).toBeInTheDocument();
+
+        // Ya liquidada: no sigue consultando.
+        const calls = mockGetTrade.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(15000);
+        expect(mockGetTrade.mock.calls.length).toBe(calls);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not poll a cancelled trade that never locked funds', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        mockGetTrade.mockResolvedValue({ ...createMockTrade('cancelled'), lock_tx_hash: null });
+        renderWithRouter();
+        await waitFor(() => expect(screen.getByText(/operación cancelada/i)).toBeInTheDocument());
+        const calls = mockGetTrade.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(15000);
+        expect(mockGetTrade.mock.calls.length).toBe(calls);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe('Error handling', () => {
     it('should show 404 screen when trade is not found', async () => {
       const error = new Error('Not found');
