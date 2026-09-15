@@ -134,6 +134,8 @@ async function testCreateRejected(app: any, flow: Flow) {
     ['empty', '', 400, 'INVALID_ASSET_CODE'],
     ['blank', '   ', 400, 'INVALID_ASSET_CODE'],
     ['too long', 'X'.repeat(13), 400, 'INVALID_ASSET_CODE'],
+    // H6: la longitud es la de la entrada cruda, no la recortada.
+    ['padded past the limit', `${' '.repeat(10)}XLM`, 400, 'INVALID_ASSET_CODE'],
   ];
 
   for (const [label, asset_code, status, code] of cases) {
@@ -165,7 +167,12 @@ async function testDirectServiceGuardRunsFirst() {
   }) as any;
   const before = await countTrades();
 
-  for (const [assetCode, expected] of [['USDC', 'AssetNotEnabledError'], [123, 'INVALID_ASSET_CODE']] as const) {
+  for (const [assetCode, expected] of [
+    ['USDC', 'AssetNotEnabledError'],
+    [123, 'INVALID_ASSET_CODE'],
+    // H6: una llamada directa tampoco acepta un codigo que excede el limite con espacios.
+    [`${' '.repeat(10)}XLM`, 'INVALID_ASSET_CODE'],
+  ] as const) {
     try {
       await createTrade({
         request: exploding,
@@ -181,7 +188,7 @@ async function testDirectServiceGuardRunsFirst() {
         ok(err instanceof AssetNotEnabledError, `USDC: expected AssetNotEnabledError, got ${err?.message}`);
         strictEqual(err.httpStatus, 422);
       } else {
-        ok(err instanceof AppError && err.code === expected, `123: expected ${expected}, got ${err?.message}`);
+        ok(err instanceof AppError && err.code === expected, `${JSON.stringify(assetCode)}: expected ${expected}, got ${err?.message}`);
         strictEqual(err.httpStatus, 400);
       }
     }

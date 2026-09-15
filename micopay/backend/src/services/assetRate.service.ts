@@ -141,9 +141,16 @@ export function normalizeEscrowAssetCode(raw: unknown): string {
   if (typeof raw !== 'string') {
     throw invalid(`asset_code must be a string, got ${raw === null ? 'null' : typeof raw}`);
   }
+  // La longitud se mide sobre la entrada CRUDA, igual que el `maxLength` del
+  // schema. Medirla tras el trim dejaba pasar "          XLM" (13) por aqui,
+  // y luego ajv la rechazaba con VALIDATION_ERROR en vez de INVALID_ASSET_CODE;
+  // y una llamada directa al servicio la aceptaba (H6 de la auditoria).
+  if (raw.length > ASSET_CODE_MAX_LENGTH) {
+    throw invalid(`asset_code must have at most ${ASSET_CODE_MAX_LENGTH} characters`);
+  }
   const code = raw.trim().toUpperCase();
-  if (code.length === 0 || code.length > ASSET_CODE_MAX_LENGTH) {
-    throw invalid(`asset_code must have 1-${ASSET_CODE_MAX_LENGTH} characters`);
+  if (code.length === 0) {
+    throw invalid('asset_code must not be blank');
   }
   return code;
 }
