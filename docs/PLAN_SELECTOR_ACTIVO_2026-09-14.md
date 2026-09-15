@@ -246,6 +246,16 @@ pinta activo.
    aparece "USDC"). Nada de grep sobre archivos: hay comentarios técnicos legítimos en QRReveal,
    TradeDetail y MerchantOfferCard.
 
+**Notas de implementación WP-E (2026-09-14):**
+- **Cambio de alcance, decidido por Eric:** `TradeCancelled.tsx`, `CancelTradeDialog.tsx` y
+  `components/TradeConfirmation.tsx` resultaron ser **código muerto**: nadie los importa. La
+  cancelación real vive en `TradeDetail`, que no nombra USDC. En vez de corregir textos que no se
+  muestran, **se eliminaron**; siguen en el historial de git.
+- Sí se mostraba "Tus MXNE ya están en tu billetera" (`success.depositSubtitle`) al terminar un
+  depósito: pasa a "Tus fondos ya están en tu billetera".
+- Test: `escrowAssetCopy.test.ts` revisa las secciones i18n del flujo y los literales de sus 15
+  pantallas **sin comentarios**, para evitar los falsos positivos que señaló la auditoría.
+
 ### WP-F · Seeds demo coherentes · ~0.25 día
 
 1. `index.ts:289` y `:485`: calcular `amount_stroops` con `convertMxnToAsset` o, si no hay tasa
