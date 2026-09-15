@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { useChatMessages } from '../hooks/useChatMessages';
 import { buildTxUrl } from '../utils/stellarExplorer';
 import { parseTradeState, type TradeState } from '../components/TradeStateBadge';
-import { getTrade } from '../services/api';
+import { getTrade, type TradeData } from '../services/api';
+import TradeEscrowSummary from '../components/TradeEscrowSummary';
 
 interface DepositChatProps {
     tradeId: string;
@@ -41,6 +42,8 @@ const DepositChat = ({
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [fetchedLockTxHash, setFetchedLockTxHash] = useState<string | null>(null);
     const [escrowStatus, setEscrowStatus] = useState<TradeState | null>(null);
+    // WP-D: la operacion del servidor, para la cifra del escrow segun el rol.
+    const [escrowTrade, setEscrowTrade] = useState<TradeData | null>(null);
     const displayLockTxHash = fetchedLockTxHash ?? lockTxHash;
 
     // Auto-scroll to bottom when messages change
@@ -57,6 +60,7 @@ const DepositChat = ({
                 const trade = await getTrade(tradeId, token);
                 if (trade.lock_tx_hash) setFetchedLockTxHash(trade.lock_tx_hash);
                 setEscrowStatus(parseTradeState(trade.status));
+                setEscrowTrade(trade);
             } catch (e) {
                 console.warn('Failed to fetch trade status', e);
             }
@@ -149,6 +153,7 @@ const DepositChat = ({
                             )}
                         </div>
                     </div>
+                    <TradeEscrowSummary trade={escrowTrade} viewerId={userId} className="mt-2 px-1" />
                 </section>
 
                 {/* Loading State */}

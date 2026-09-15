@@ -135,6 +135,9 @@ export interface TradeData {
   status: TradeState;
   secret_hash: string;
   amount_mxn: number;
+  /** Roles del escrow. GET /trades/:id y POST /trades los devuelven. */
+  seller_id?: string;
+  buyer_id?: string;
   lock_tx_hash?: string | null;
   release_tx_hash?: string | null;
   /**
@@ -162,6 +165,9 @@ export interface TradeDetailResponse {
     lock_tx_hash?: string | null;
     release_tx_hash?: string | null;
     platform_fee_mxn?: number;
+    /** Congeladas al crear la operacion (tradeFees.ts del backend). */
+    provider_fee_mxn?: number;
+    payout_mxn?: number;
     seller_id?: string;
     buyer_id?: string;
     flow?: TradeFlow;

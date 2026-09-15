@@ -11,12 +11,18 @@ import { mapApiError, type MappedApiError } from '../utils/apiError';
 import { getDemoQrPayload, IS_DEMO_MODE } from '../utils/demoMode';
 import { buildTxUrl } from '../utils/stellarExplorer';
 import { useCountdown } from '../hooks/useCountdown';
+import TradeEscrowSummary from '../components/TradeEscrowSummary';
 
 interface QRRevealProps {
     activeTrade: TradeData | null;
     /** CASH-7: un solo token de sesion; el rol se deriva del trade. */
     token: string | null;
-    amount: number;
+    /**
+     * WP-D: quien mira, para elegir la cifra del escrow que le toca. El monto ya
+     * no llega como prop: antes era `activeAmount`, estado local de la pantalla
+     * de monto; ahora sale de la operacion del servidor.
+     */
+    viewerId?: string | null;
     /** Counterparty shown in the header — who the seller is meeting. */
     counterpartyName?: string | null;
     /** The current (seller) device's own username, shown on the QR card so
@@ -27,8 +33,11 @@ interface QRRevealProps {
     onSuccess: (releaseTxHash: string) => void;
 }
 
-const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBack, onChat, onSuccess }: QRRevealProps) => {
+const QRReveal = ({ activeTrade, token, viewerId, counterpartyName, ownName, onBack, onChat, onSuccess }: QRRevealProps) => {
     const { t } = useTranslation();
+    // WP-D: la ultima version de la operacion que devolvio el servidor.
+    const [serverTrade, setServerTrade] = useState<TradeData | null>(null);
+    const displayTrade = serverTrade ?? activeTrade;
     const [qrPayload, setQrPayload] = useState<string | null>(null);
     const [qrExpiresAt, setQrExpiresAt] = useState<string | null>(null);
     const [secretLoaded, setSecretLoaded] = useState(false);
@@ -57,6 +66,7 @@ const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBac
             // esta operacion antes que tu" — un mensaje que hablaba de un
             // conflicto entre personas donde solo habia estado desactualizado.
             const current = await getTrade(activeTrade.id, token).catch(() => null);
+            if (current) setServerTrade(current);
             const status = current?.status ?? activeTrade.status;
 
             if (status === 'pending') {
@@ -76,6 +86,7 @@ const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBac
             setSecretLoaded(true);
 
             const fresh = await getTrade(activeTrade.id, token).catch(() => null);
+            if (fresh) setServerTrade(fresh);
             if (fresh?.lock_tx_hash) setLockTxHash(fresh.lock_tx_hash);
         } catch (e) {
             if (IS_DEMO_MODE) {
@@ -104,6 +115,7 @@ const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBac
         const poll = async () => {
             try {
                 const fresh = await getTrade(activeTrade.id, token);
+                setServerTrade(fresh);
                 if (fresh.status === 'completed' && fresh.release_tx_hash) {
                     setCompletedTxHash(fresh.release_tx_hash);
                 }
@@ -252,7 +264,10 @@ const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBac
                             />
                             <div className="mt-6">
                                 <h3 className="font-headline font-extrabold text-xl text-on-surface">{ownName ?? '—'}</h3>
-                                <p className="num mt-2 font-headline font-black text-2xl text-on-surface">${amount} MXN</p>
+                                {displayTrade ? (
+                                    <p className="num mt-2 font-headline font-black text-2xl text-on-surface">${displayTrade.amount_mxn} MXN</p>
+                                ) : null}
+                                <TradeEscrowSummary trade={displayTrade} viewerId={viewerId} className="mt-1" />
                                 {qrCountdown && (
                                     <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
                                         <span aria-hidden="true" className="material-symbols-outlined text-[14px]">timer</span>

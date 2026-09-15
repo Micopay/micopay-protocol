@@ -4,6 +4,8 @@ import {
   platformFeeMxnFromAmount,
 } from '../constants/trade';
 import { effectiveFeePercent, MAX_EFFECTIVE_FEE_PERCENT } from '../services/api';
+import { getEscrowAssetOption } from '../constants/escrowAssets';
+import { formatEstimateUnits, useEscrowAssetEstimate } from '../hooks/useEscrowAssetEstimate';
 
 export interface TradeConfirmationPageProps {
   merchantName: string;
@@ -26,6 +28,13 @@ export interface TradeConfirmationPageProps {
   errorMessage?: string | null;
   /** Effective-fee threshold (%) above which a warning is shown. Defaults to the shared guardrail. */
   maxEffectiveFeePercent?: number;
+  /**
+   * WP-D: clave del activo elegido en la pantalla de monto. La operacion aun no
+   * existe, asi que lo que se muestra es un ESTIMADO rotulado como tal.
+   */
+  assetKey?: string;
+  /** Inyectable para pruebas. */
+  fetchRate?: (code: string) => Promise<{ rate: number }>;
 }
 
 export default function TradeConfirmationPage({
@@ -42,8 +51,12 @@ export default function TradeConfirmationPage({
   loading = false,
   errorMessage,
   maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
+  assetKey,
+  fetchRate,
 }: TradeConfirmationPageProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const asset = assetKey ? getEscrowAssetOption(assetKey) : undefined;
+  const estimate = useEscrowAssetEstimate(asset?.enabled ? asset.code : null, amountMxn, fetchRate);
   // Antes la parte del agente se DEDUCIA restando: `receiveMxn` venia del
   // descubrimiento descontando solo la tarifa del agente, y a ese total se le
   // restaba la comision de plataforma. Resultado: un agente al 1.5% aparecia
@@ -100,6 +113,27 @@ export default function TradeConfirmationPage({
               <dt className="text-on-surface-variant">{t('confirm.type')}</dt>
               <dd className="font-semibold text-right">{agentType}</dd>
             </div>
+
+            {asset ? (
+              <div className="flex justify-between gap-4">
+                <dt className="text-on-surface-variant">{t('escrowAsset.selectedAsset')}</dt>
+                <dd className="text-right">
+                  <span className="font-semibold">{asset.code} · {asset.networkLabel}</span>
+                  {estimate.status === 'ready' && estimate.units !== null ? (
+                    <span className="num block text-xs text-on-surface-variant" data-testid="confirm-asset-estimate">
+                      {t('escrowAsset.estimate', {
+                        units: formatEstimateUnits(estimate.units, asset.displayDecimals, i18n.language),
+                        code: asset.code,
+                        rate: formatEstimateUnits(estimate.rate, 2, i18n.language),
+                      })}
+                    </span>
+                  ) : null}
+                  <span className="block text-xs text-on-surface-variant">
+                    {estimate.status === 'error' ? t('escrowAsset.rateUnavailable') : t('escrowAsset.rateLocksOnCreate')}
+                  </span>
+                </dd>
+              </div>
+            ) : null}
 
             <div className="flex justify-between gap-4 border-t border-linea pt-3">
               <dt className="text-on-surface-variant">{t('confirm.youReceive')}</dt>

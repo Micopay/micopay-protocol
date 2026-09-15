@@ -25,7 +25,7 @@ import ChatRoom from "./pages/ChatRoom";
 import DepositChat from "./pages/DepositChat";
 import QRReveal from "./pages/QRReveal";
 import DepositQR from "./pages/DepositQR";
-import SuccessScreen from "./pages/SuccessScreen";
+import SuccessScreen, { receiptFromServer, type SuccessReceipt } from "./pages/SuccessScreen";
 import Explore from "./pages/Explore";
 import History from "./pages/History";
 import TradeDetail from "./pages/TradeDetail";
@@ -363,7 +363,7 @@ function MapRoute() {
 function ConfirmRoute() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { handleOfferSelected, handleDepositOfferSelected, tradeLoading, tradeError, clearTradeError } =
+  const { handleOfferSelected, handleDepositOfferSelected, tradeLoading, tradeError, clearTradeError, activeAssetKey } =
     useAppCtx();
   const state = location.state as {
     merchantName: string;
@@ -399,6 +399,7 @@ function ConfirmRoute() {
       providerFeeMxn={state.providerFeeMxn}
       flow={state.flow ?? 'cashout'}
       nearbyCount={state.nearbyCount}
+      assetKey={activeAssetKey}
       loading={tradeLoading}
       errorMessage={tradeError?.message ?? null}
       onBack={() => navigate(-1)}
@@ -473,14 +474,14 @@ function ChatDepositRoute() {
 
 function QRRevealRoute() {
   const navigate = useNavigate();
-  const { activeTrade, sessionUser, activeAmount, setReleaseTxHash } = useAppCtx();
+  const { activeTrade, sessionUser } = useAppCtx();
   const { counterpartyName } = useTradeParticipantInfo(activeTrade, sessionUser);
 
   return (
       <QRReveal
           activeTrade={activeTrade}
           token={sessionUser?.token ?? null}
-          amount={activeAmount}
+          viewerId={sessionUser?.id ?? null}
           counterpartyName={counterpartyName}
           ownName={sessionUser?.username ?? null}
           onBack={() => navigate('/chat')}
@@ -506,9 +507,9 @@ function QRDepositRoute() {
 
 function SuccessRoute() {
   const navigate = useNavigate();
-  const { flow, activeTrade, lockTxHash, releaseTxHash, sessionUser, activeAmount, resetTradeFlow } = useAppCtx();
-  const [tradeDetail, setTradeDetail] = useState<TradeHistoryItem | null>(null);
-  const [sellerUsername, setSellerUsername] = useState<string | null>(null);
+  const { flow, activeTrade, lockTxHash, releaseTxHash, sessionUser, resetTradeFlow } = useAppCtx();
+  const [receipt, setReceipt] = useState<SuccessReceipt | null>(null);
+  const [agentName, setAgentName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Block access if there is no real active trade
@@ -518,27 +519,17 @@ function SuccessRoute() {
       return;
     }
 
-    // Fetch real trade data from backend
     if (sessionUser?.token) {
       fetchTradeDetail(activeTrade.id, sessionUser.token)
-        .then(({ trade, seller_username }) => {
-          setTradeDetail({
-            id: trade.id,
-            status: trade.status,
-            amount_mxn: trade.amount_mxn,
-            platform_fee_mxn: trade.platform_fee_mxn ?? 0,
-            lock_tx_hash: trade.lock_tx_hash ?? lockTxHash,
-            release_tx_hash: trade.release_tx_hash ?? releaseTxHash,
-            created_at: trade.created_at ?? new Date().toISOString(),
-            completed_at: trade.completed_at ?? null,
-            seller_id: trade.seller_id ?? '',
-            buyer_id: trade.buyer_id ?? '',
-            // CASH-1: prefer the canonical flow the backend persisted; fall
-            // back to the UI flow only while the detail is still loading.
-            flow: trade.flow ?? (flow ?? 'deposit'),
-            provider_id: trade.provider_id ?? '',
-          });
-          setSellerUsername(seller_username);
+        .then(({ trade, seller_username, buyer_username }) => {
+          // WP-D: el recibo se pinta con la operacion del servidor. Antes esta
+          // respuesta se guardaba y luego se descartaba: la pantalla recibia un
+          // objeto armado con el monto local, comisiones de 1%/0.8% sin
+          // redondeo y fechas nuevas.
+          setReceipt(receiptFromServer(trade, lockTxHash, releaseTxHash));
+          // El agente es el PROVEEDOR. En cash-out el seller del escrow es el
+          // cliente, asi que `seller_username` era el nombre de la propia persona.
+          setAgentName(trade.provider_id === trade.seller_id ? seller_username : buyer_username);
         })
         .catch((e) => {
           console.warn('Could not fetch trade detail for receipt', e);
@@ -559,46 +550,15 @@ function SuccessRoute() {
     );
   }
 
-  // Use fetched trade detail if available, otherwise build from context
-  const trade: TradeHistoryItem & { completed_at: string | null } = tradeDetail ?? {
-    id: activeTrade.id,
-    status: activeTrade.status,
-    amount_mxn: activeTrade.amount_mxn,
-    platform_fee_mxn: 0,
-    lock_tx_hash: lockTxHash,
-    release_tx_hash: releaseTxHash,
-    created_at: new Date().toISOString(),
-    completed_at: new Date().toISOString(),
-    seller_id: '',
-    buyer_id: '',
-    flow: flow ?? 'deposit',
-    provider_id: '',
-  };
-
   return (
       <SuccessScreen
           type={flow === 'cashout' ? 'cashout' : 'deposit'}
-          trade={{
-            id: activeTrade?.id ?? 'demo',
-            status: activeTrade?.status ?? 'completed',
-            amount_mxn: activeAmount,
-            platform_fee_mxn: flow === 'cashout' ? activeAmount * 0.01 : activeAmount * 0.008,
-            lock_tx_hash: lockTxHash,
-            release_tx_hash: null,
-            created_at: new Date().toISOString(),
-            completed_at: new Date().toISOString(),
-            // CASH-7: este recibo es el respaldo local que se pinta mientras
-            // el detalle real no ha cargado. Con una sola sesion se ve que el
-            // codigo anterior ponia el mismo id en los dos lados del escrow y
-            // no decia nada. Lo honesto: la persona ocupa el lado que le toca
-            // segun el flujo — vendedora en cash-out, compradora en deposito —
-            // y la contraparte no se conoce aqui, asi que tampoco el proveedor.
-            seller_id: flow === 'cashout' ? (sessionUser?.id ?? '') : '',
-            buyer_id: flow === 'cashout' ? '' : (sessionUser?.id ?? ''),
-            flow: flow ?? 'deposit',
-            provider_id: '',
-          }}
-          agentName={sellerUsername ?? (flow === 'cashout' ? 'Farmacia Guadalupe' : 'Tienda Don Pepe')}
+          // Si el detalle no llego, el respaldo es la operacion que devolvio
+          // POST /trades, sin comisiones ni fechas inventadas: lo que no se sabe
+          // se oculta en la pantalla.
+          trade={receipt ?? receiptFromServer(activeTrade, lockTxHash, releaseTxHash)}
+          viewerId={sessionUser?.id ?? null}
+          agentName={agentName}
           onHome={() => {
             resetTradeFlow();
             navigate('/');

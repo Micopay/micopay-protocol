@@ -146,7 +146,14 @@
     "estimate": "≈ {{units}} {{code}} · 1 {{code}} = ${{rate}}",
     "rateLoading": "Consultando la tasa…",
     "rateLocksOnCreate": "Estimado. La tasa se fija al crear la operación.",
-    "rateUnavailable": "No pudimos obtener la tasa. Se fija al crear la operación."
+    "rateUnavailable": "No pudimos obtener la tasa. Se fija al crear la operación.",
+    "selectedAsset": "Activo",
+    "lockerToLock": "Vas a bloquear {{total}} {{code}} (incluye {{fee}} {{code}} de comisión).",
+    "lockerInEscrow": "En garantía: {{total}} {{code}} (incluye {{fee}} {{code}} de comisión).",
+    "lockerReleased": "Se liberaron {{amount}} {{code}} y {{fee}} {{code}} de comisión.",
+    "lockerRefunded": "Se te devolvieron {{total}} {{code}}.",
+    "receiverWillReceive": "Vas a recibir {{amount}} {{code}}.",
+    "receiverReceived": "Recibiste {{amount}} {{code}}."
   },
   "inbox": {
     "title": "Bandeja de entrada",
@@ -371,10 +378,10 @@
     "depositDone": "¡Depósito exitoso!",
     "cashoutSubtitle": "Recibiste tu efectivo",
     "depositSubtitle": "Tus MXNE ya están en tu billetera",
-    "mxnSent": "MXN enviados",
+    "mxnSent": "Valor enviado",
     "cashDelivered": "Efectivo entregado",
     "cashReceived": "Efectivo recibido",
-    "mxneReceived": "MXNE recibidos",
+    "mxneReceived": "Valor recibido",
     "commission": "Comisión",
     "agent": "Agente",
     "verified": "Verificado",

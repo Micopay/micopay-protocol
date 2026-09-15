@@ -13,6 +13,7 @@ import {
   TradeDetailResponse,
 } from '../services/api';
 import { ensureTrustline } from '../services/payment';
+import TradeEscrowSummary from '../components/TradeEscrowSummary';
 import { errorMessages } from '../constants/errorMessages';
 import { readJSON } from '../services/secureStorage';
 import { useCountdown } from '../hooks/useCountdown';
@@ -1179,6 +1180,9 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
 
       {/* Main Content */}
       <main className="max-w-md mx-auto px-6 py-8">
+        {/* WP-D: la cifra del escrow que le toca a quien mira, con datos del
+            servidor. Sin metadatos de activo no se pinta. */}
+        <TradeEscrowSummary trade={trade} viewerId={userId} className="mb-4" />
         {renderStateView()}
 
         {/* Support link visible in all states */}

@@ -218,6 +218,24 @@ final, `App.tsx:354`), `components/MerchantOfferCard.tsx`, `pages/TradeDetail.ts
 muestra comisión mientras carga; confirmación final muestra el activo; respuesta sin `asset_code` no
 pinta activo.
 
+**Notas de implementación WP-D (2026-09-14):**
+- **Desviación:** `MerchantOfferCard` **no** muestra el activo. Hacerlo obligaba a pasar el
+  activo y la tasa por los dos mapas, y el activo ya aparece justo antes (pantalla de monto) y
+  justo después (confirmación final, con estimado). Queda como candidato si la auditoría lo pide.
+- `components/TradeConfirmation.tsx` no se importa en ningún sitio (código muerto). Se trata en
+  WP-E: corregir su texto o eliminarlo.
+- Operaciones `cancelled`/`expired` con `lock_tx_hash` y sin liberar muestran "En garantía" a
+  quien bloqueó, porque los fondos siguen en el contrato. Es el mismo criterio que `ExpiredView`.
+  Quien recibe no ve nada en esos casos ni en `refunded`.
+- Éxito, además de usar el detalle del servidor: el neto sale de `payout_mxn` (antes
+  `monto - comisión de plataforma`, que ignoraba la del agente); la comisión es agente +
+  plataforma; el agente es el **proveedor** (antes `seller_username`, que en cash-out es la propia
+  persona); sin nombre real no se inventa ("Farmacia Guadalupe"/"Tienda Don Pepe") y se oculta la
+  calificación; las etiquetas "MXN enviados"/"MXNE recibidos" pasan a "Valor enviado"/"Valor
+  recibido".
+- El cálculo del estimado se extrajo a `hooks/useEscrowAssetEstimate.ts`, compartido por el
+  selector y la confirmación.
+
 ### WP-E · Corregir textos falsos · ~0.25 día
 
 1. Sustituir "USDC" por el activo real de la operación, o por "tu garantía" si aún no existe, vía

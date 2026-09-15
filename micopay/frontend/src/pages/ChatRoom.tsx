@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChatMessages } from '../hooks/useChatMessages';
-import { getTrade } from '../services/api';
+import { getTrade, type TradeData } from '../services/api';
+import TradeEscrowSummary from '../components/TradeEscrowSummary';
 import { buildTxUrl } from '../utils/stellarExplorer';
 import { TRADE_STATE_COPY, parseTradeState } from '../components/TradeStateBadge';
 
@@ -58,6 +59,8 @@ const ChatRoom = ({
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [escrowStatus, setEscrowStatus] = useState<string | null>(null);
     const [escrowAmount, setEscrowAmount] = useState<number | null>(null);
+    // WP-D: la operacion del servidor, para la cifra del escrow segun el rol.
+    const [escrowTrade, setEscrowTrade] = useState<TradeData | null>(null);
     const [fetchedLockTxHash, setFetchedLockTxHash] = useState<string | null>(null);
     const displayLockTxHash = fetchedLockTxHash ?? lockTxHash;
 
@@ -76,6 +79,7 @@ const ChatRoom = ({
                 const trade = await getTrade(tradeId, token);
                 setEscrowStatus(trade.status);
                 setEscrowAmount(trade.amount_mxn);
+                setEscrowTrade(trade);
                 if (trade.lock_tx_hash) setFetchedLockTxHash(trade.lock_tx_hash);
             } catch (e) {
                 console.warn('Failed to fetch trade status', e);
@@ -237,6 +241,8 @@ const ChatRoom = ({
                         </>
                     )}
                 </div>
+
+                <TradeEscrowSummary trade={escrowTrade} viewerId={userId} className="-mt-2 mb-2 px-1" />
 
                 {/* Loading State */}
                 {isLoading && (
