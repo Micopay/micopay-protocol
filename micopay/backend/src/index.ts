@@ -259,6 +259,7 @@ app.register(clientErrorRoutes, { prefix: '' });
 
 async function seedData() {
   const db = (await import('./db/schema.js')).default;
+  const { demoSeedEscrowColumns: seedEscrow } = await import('./db/demoSeedTrades.js');
   const existing = await db.getMany('SELECT id FROM trades LIMIT 1');
   if (existing.length > 0) return;
 
@@ -278,6 +279,7 @@ async function seedData() {
   for (let i = 0; i < 20; i++) {
     const status = statuses[i % statuses.length];
     const amount = 150 + (i * 75);
+    const escrow = seedEscrow(amount);
     const createdAt = new Date(now.getTime() - (i * 3600000 * 2));
     const expiresAt = new Date(createdAt.getTime() + 7200000);
     
@@ -286,18 +288,26 @@ async function seedData() {
       // with it. `sellerId` is the merchant and therefore the Red MicoPay
       // provider in both directions — escrow seller on deposit, escrow buyer
       // on cash-out.
+      //
+      // WP-F: activo, tasa y stroops explicitos y marcados como sinteticos
+      // (`demoSeedEscrowColumns`). Antes `amount * 10^7` = 1 MXN por XLM, sin
+      // activo ni tasa. Mismo orden de columnas y marcadores: el store en
+      // memoria parsea el INSERT posicionalmente.
       `INSERT INTO trades 
        (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn, 
-        secret_hash, status, created_at, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        asset_code, rate_mxn, rate_source, secret_hash, status, created_at, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         i % 2 === 0 ? sellerId : userId,
         i % 2 === 0 ? userId : sellerId,
         i % 2 === 0 ? 'deposit' : 'cashout',
         sellerId,
         amount,
-        (amount * 10000000).toString(),
+        escrow.amount_stroops,
         Math.ceil(amount * 0.008),
+        escrow.asset_code,
+        escrow.rate_mxn,
+        escrow.rate_source,
         `hash_${i}`,
         status,
         createdAt,
@@ -349,6 +359,7 @@ async function createFundedTestnetAccount(
 async function seedDemoMerchants(): Promise<void> {
   const { StrKey } = await import('@stellar/stellar-sdk');
   const db = (await import('./db/schema.js')).default;
+  const { demoSeedEscrowColumns: seedEscrow } = await import('./db/demoSeedTrades.js');
 
   // Demo origin for seeded merchants. Override per-deployment with
   // SEED_ORIGIN_LAT / SEED_ORIGIN_LNG so the discovery map shows agents near
@@ -478,21 +489,27 @@ async function seedDemoMerchants(): Promise<void> {
     ];
     for (let i = 0; i < rows.length; i++) {
       const amount = 200 + (i % 8) * 150;
+      const escrow = seedEscrow(amount);
       const createdAt = new Date(now - i * 86400000);
       await db.execute(
         // CASH-1: map merchants seed deposit history — the merchant locks the
         // crypto as escrow seller, so it is both seller_id and provider_id.
+        // WP-F: igual que `seedData`, cifras de escrow sinteticas y declaradas.
         `INSERT INTO trades
-           (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn, secret_hash, status, created_at, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+           (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn,
+            asset_code, rate_mxn, rate_source, secret_hash, status, created_at, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
         [
           user.id,
           buyer!.id,
           'deposit',
           user.id,
           amount,
-          (amount * 10000000).toString(),
+          escrow.amount_stroops,
           Math.ceil(amount * 0.008),
+          escrow.asset_code,
+          escrow.rate_mxn,
+          escrow.rate_source,
           `seed_${m.username}_${i}`,
           rows[i],
           createdAt,

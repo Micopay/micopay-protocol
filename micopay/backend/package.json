@@ -30,6 +30,7 @@
     "test:kyc-ledger": "MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/kycVolumeLedger.test.ts",
     "test:initiator": "ALLOW_IN_MEMORY_DB=true MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/initiatorAttribution.test.ts",
     "test:cash-handoff": "ALLOW_IN_MEMORY_DB=true MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/cashHandoff.test.ts",
+    "test:demo-seed": "node --import tsx src/tests/demoSeedTrades.test.ts",
     "test:trade-asset": "ALLOW_IN_MEMORY_DB=true MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/tradeAsset.test.ts",
     "test:trade-asset-pg": "MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/tradeAssetPg.test.ts",
     "test:provider-inbox": "ALLOW_IN_MEMORY_DB=true MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/providerInbox.test.ts"

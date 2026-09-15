@@ -264,6 +264,21 @@ pinta activo.
 2. Confirmar que `SEED_DEMO_DATA` está desactivado en producción (task definition) antes del
    despliegue.
 
+**Notas de implementación WP-F (2026-09-14):**
+- **Producción tiene `SEED_DEMO_DATA=true`** (task definition `micopay-backend:14`, verificado en
+  ECS el 2026-09-14). Es coherente con la demo en testnet aprobada el 2026-09-05, pero implica que
+  los seeds sí corren en el entorno desplegado. **No se cambió la configuración de AWS.** Decisión
+  pendiente de Eric: apagarlo antes de mainnet.
+- Se eligió siempre la tasa sintética fija (`3.0000000`, `rate_source = 'demo_seed_synthetic'`)
+  en vez de intentar la tasa viva: el arranque no debe depender de una API externa para sembrar
+  historial de demostración, y congelar una tasa viva haría pasar datos inventados por reales.
+- Las filas demo que ya existen en la base de producción **no se reescriben**. Las anteriores al
+  2026-09-05 quedaron como `legacy_1to1_bug` por la migración de WP2. `seedData` solo corre con la
+  tabla vacía y `seedDemoMerchants` sale temprano si ya sembró, así que el cambio solo afecta a
+  bases nuevas.
+- Verificado arrancando el backend real con `SEED_DEMO_DATA=true` contra PostgreSQL 16 limpio:
+  68 trades, todos `XLM / 3.0000000 / demo_seed_synthetic` y 0 con conversión 1:1.
+
 ---
 
 ## 4. Orden, compatibilidad y despliegue
