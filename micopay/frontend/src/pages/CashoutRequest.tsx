@@ -1,13 +1,17 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AmountField } from '../components/ui';
+import AssetSelector from '../components/AssetSelector';
 
 export interface CashoutRequestProps {
   onBack: () => void;
   onSearch: (amount: number) => void;
+  /** WP-C: clave de `ESCROW_ASSET_OPTIONS`; vive en el contexto de la app. */
+  assetKey: string;
+  onAssetChange: (key: string) => void;
 }
 
-const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
+const CashoutRequest = ({ onBack, onSearch, assetKey, onAssetChange }: CashoutRequestProps) => {
   const { t } = useTranslation();
   const [amount, setAmount] = useState('500');
 
@@ -59,6 +63,15 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
+
+        <div className="mb-8">
+          <AssetSelector
+            flow="cashout"
+            amountMxn={amount.trim() === '' ? null : Number(amount)}
+            value={assetKey}
+            onChange={onAssetChange}
+          />
+        </div>
 
         <div className="space-y-6">
           <div className="p-6 bg-surface-container-low rounded-sm border-l-4 border-primary/20">

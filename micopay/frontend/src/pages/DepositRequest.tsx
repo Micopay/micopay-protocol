@@ -1,13 +1,17 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AmountField } from '../components/ui';
+import AssetSelector from '../components/AssetSelector';
 
 export interface DepositRequestProps {
   onBack: () => void;
   onSearch: (amount: string) => void;
+  /** WP-C: clave de `ESCROW_ASSET_OPTIONS`; vive en el contexto de la app. */
+  assetKey: string;
+  onAssetChange: (key: string) => void;
 }
 
-const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
+const DepositRequest = ({ onBack, onSearch, assetKey, onAssetChange }: DepositRequestProps) => {
   const { t } = useTranslation();
   const [amount, setAmount] = useState('500');
 
@@ -58,6 +62,13 @@ const DepositRequest = ({ onBack, onSearch }: DepositRequestProps) => {
               onChange={(e) => setAmount(e.target.value)}
             />
           </div>
+
+          <AssetSelector
+            flow="deposit"
+            amountMxn={amount.trim() === '' ? null : Number(amount)}
+            value={assetKey}
+            onChange={onAssetChange}
+          />
 
           <div className="bg-surface-container-lowest p-6 rounded-sm space-y-4">
             <div className="flex items-start space-x-4">

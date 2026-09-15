@@ -139,6 +139,15 @@
     "recoverLabel": "Buscar nueva opción",
     "nothingMovedYet": "Aún no se mueve tu saldo. Vas a poder revisar el monto, la comisión y el agente antes de confirmar."
   },
+  "escrowAsset": {
+    "payWith": "¿Con qué pagas?",
+    "receiveIn": "¿Qué quieres recibir?",
+    "comingSoon": "Próximamente",
+    "estimate": "≈ {{units}} {{code}} · 1 {{code}} = ${{rate}}",
+    "rateLoading": "Consultando la tasa…",
+    "rateLocksOnCreate": "Estimado. La tasa se fija al crear la operación.",
+    "rateUnavailable": "No pudimos obtener la tasa. Se fija al crear la operación."
+  },
   "inbox": {
     "title": "Bandeja de entrada",
     "scan": "Escanear",

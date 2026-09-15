@@ -139,6 +139,15 @@
     "recoverLabel": "Find a new option",
     "nothingMovedYet": "Nothing has moved yet. You will review the amount, the fee and the agent before confirming."
   },
+  "escrowAsset": {
+    "payWith": "What are you paying with?",
+    "receiveIn": "What do you want to receive?",
+    "comingSoon": "Coming soon",
+    "estimate": "≈ {{units}} {{code}} · 1 {{code}} = ${{rate}}",
+    "rateLoading": "Checking the rate…",
+    "rateLocksOnCreate": "Estimate. The rate is locked when the trade is created.",
+    "rateUnavailable": "We couldn't get the rate. It is locked when the trade is created."
+  },
   "inbox": {
     "title": "Inbox",
     "scan": "Scan",

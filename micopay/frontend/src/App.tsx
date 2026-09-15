@@ -68,6 +68,7 @@ import {
 import { readJSON, writeJSON, removeKey, isBackupConfirmed, setBackupConfirmed } from "./services/secureStorage";
 import { ApiError, mapApiError, type MappedApiError } from "./utils/apiError";
 import { IS_DEMO_MODE } from "./utils/demoMode";
+import { DEFAULT_ESCROW_ASSET_KEY, getEscrowAssetOption } from "./constants/escrowAssets";
 
 const USERS_STORAGE_KEY = "micopay_user";
 /**
@@ -131,11 +132,14 @@ export interface AppCtx {
   lockTxHash: string | null;
   releaseTxHash: string | null;
   activeAmount: number;
+  /** WP-C: activo elegido en la pantalla de monto (clave de ESCROW_ASSET_OPTIONS). */
+  activeAssetKey: string;
   tradeLoading: boolean;
   tradeError: MappedApiError | null;
   flow: Flow;
   devicePublicKey: string | null;
   setActiveAmount: (n: number) => void;
+  setActiveAssetKey: (key: string) => void;
   setFlow: (f: Flow) => void;
   setReleaseTxHash: (h: string | null) => void;
   handleOfferSelected: (offerId: string) => Promise<boolean>;
@@ -220,10 +224,12 @@ function InboxRoute() {
 
 function CashoutRoute() {
   const navigate = useNavigate();
-  const { setActiveAmount } = useAppCtx();
+  const { setActiveAmount, activeAssetKey, setActiveAssetKey } = useAppCtx();
   return (
       <CashoutRequest
           onBack={() => navigate('/')}
+          assetKey={activeAssetKey}
+          onAssetChange={setActiveAssetKey}
           onSearch={(amount) => {
             setActiveAmount(amount);
             navigate('/map');
@@ -265,10 +271,12 @@ function ReceivePaymentRoute() {
 
 function DepositRoute() {
   const navigate = useNavigate();
-  const { setActiveAmount } = useAppCtx();
+  const { setActiveAmount, activeAssetKey, setActiveAssetKey } = useAppCtx();
   return (
       <DepositRequest
           onBack={() => navigate('/')}
+          assetKey={activeAssetKey}
+          onAssetChange={setActiveAssetKey}
           onSearch={(amount) => {
             setActiveAmount(Number(amount) || 500);
             navigate('/map-deposit');
@@ -941,6 +949,7 @@ function App() {
   const [lockTxHash, setLockTxHash] = useState<string | null>(null);
   const [releaseTxHash, setReleaseTxHash] = useState<string | null>(null);
   const [activeAmount, setActiveAmount] = useState(500);
+  const [activeAssetKey, setActiveAssetKey] = useState(DEFAULT_ESCROW_ASSET_KEY);
   const [tradeLoading, setTradeLoading] = useState(false);
   const [tradeError, setTradeError] = useState<MappedApiError | null>(null);
   const [pendingSellerId, setPendingSellerId] = useState<string | null>(null);
@@ -1110,6 +1119,7 @@ function App() {
 
   const resetTradeFlow = () => {
     setFlow(null);
+    setActiveAssetKey(DEFAULT_ESCROW_ASSET_KEY);
     setActiveTrade(null);
     setLockTxHash(null);
     setReleaseTxHash(null);
@@ -1124,7 +1134,11 @@ function App() {
     setTradeLoading(true);
     setTradeError(null);
     try {
-      const trade = await createTrade(counterpartyId, activeAmount, sessionUser.token, tradeFlow);
+      // WP-C: el codigo del activo elegido. Si la clave no existe en el
+      // catalogo no se envia nada y el servidor aplica su default (XLM); una
+      // opcion deshabilitada no se puede elegir en el selector.
+      const assetCode = getEscrowAssetOption(activeAssetKey)?.code;
+      const trade = await createTrade(counterpartyId, activeAmount, sessionUser.token, tradeFlow, assetCode);
       setActiveTrade(trade);
 
       // Confirmar ES autorizar: el bloqueo se dispara aqui, en el mismo gesto,
@@ -1268,11 +1282,13 @@ function App() {
     lockTxHash,
     releaseTxHash,
     activeAmount,
+    activeAssetKey,
     tradeLoading,
     tradeError,
     flow,
     devicePublicKey,
     setActiveAmount,
+    setActiveAssetKey,
     setFlow,
     setReleaseTxHash,
     handleOfferSelected,
