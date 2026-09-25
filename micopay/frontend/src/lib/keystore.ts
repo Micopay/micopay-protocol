@@ -1,5 +1,6 @@
 import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
 import { readJSON, writeJSON, removeKey } from '../services/secureStorage';
+import { requireUserPresence, type PresenceReason } from './userPresence';
 
 const KEYPAIR_KEY = 'stellar_keypair';
 
@@ -41,7 +42,15 @@ export async function signChallenge(challenge: string): Promise<string> {
  * contract's require_auth() must be satisfied by the device's own key —
  * the secret key never leaves this module.
  */
-export async function signTransactionXdr(xdr: string, networkPassphrase: string): Promise<string> {
+export async function signTransactionXdr(
+    xdr: string,
+    networkPassphrase: string,
+    reason: PresenceReason = 'sign_request',
+): Promise<string> {
+    // La compuerta va DENTRO, no en cada llamador: esta funcion firma
+    // transacciones que mueven dinero, y un llamador nuevo que se olvide de
+    // pedir confirmacion volveria a abrir el hueco en silencio.
+    await requireUserPresence(reason);
     const stored = await readJSON<StoredKeypair>(KEYPAIR_KEY);
     if (!stored?.secretKey) throw new Error('No keypair — call generateAndStoreKeypair first');
     const kp = Keypair.fromSecret(stored.secretKey);
@@ -59,10 +68,29 @@ export async function importKeypair(secretKey: string): Promise<string> {
     return kp.publicKey();
 }
 
+/**
+ * Devuelve la llave secreta SIN pedir confirmacion.
+ *
+ * No lleva compuerta a proposito: varias rutas la usan para derivar la clave
+ * publica o firmar operaciones internas, y pedir huella para consultar un saldo
+ * enseñaria a la gente a confirmar sin leer.
+ *
+ * Para enseñarsela a la persona, usar `revealSecretKey()`.
+ */
 export async function exportSecretKey(): Promise<string> {
     const stored = await readJSON<StoredKeypair>(KEYPAIR_KEY);
     if (!stored?.secretKey) throw new Error('No keypair stored');
     return stored.secretKey;
+}
+
+/**
+ * La llave para MOSTRARSELA a la persona (respaldo). Siempre pregunta, y sin
+ * ventana de gracia: es el secreto de mayor valor del sistema y quien la ve
+ * puede vaciar la cuenta desde cualquier otro dispositivo.
+ */
+export async function revealSecretKey(): Promise<string> {
+    await requireUserPresence('reveal_key', true);
+    return exportSecretKey();
 }
 
 export async function deleteKeypair(): Promise<void> {

@@ -1,8 +1,25 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChatMessages } from '../hooks/useChatMessages';
-import { getTrade } from '../services/api';
+import { getTrade, type TradeData } from '../services/api';
+import TradeEscrowSummary from '../components/TradeEscrowSummary';
 import { buildTxUrl } from '../utils/stellarExplorer';
+import { TRADE_STATE_COPY, parseTradeState } from '../components/TradeStateBadge';
+
+/**
+ * Redaccion humana de un estado, del mismo diccionario que usa la insignia.
+ * Si llegara un estado desconocido —un backend nuevo, una version vieja de la
+ * app— se dice algo honesto en vez de enseñar el identificador interno.
+ */
+function stateCopy(status: string): { label: string; next: string } {
+    const parsed = parseTradeState(status);
+    if (parsed) return TRADE_STATE_COPY[parsed];
+    return {
+        label: 'Operación en curso',
+        next: 'Estamos verificando el estado con el servidor.',
+    };
+}
+
 
 interface ChatRoomProps {
     tradeId: string;
@@ -42,6 +59,8 @@ const ChatRoom = ({
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [escrowStatus, setEscrowStatus] = useState<string | null>(null);
     const [escrowAmount, setEscrowAmount] = useState<number | null>(null);
+    // WP-D: la operacion del servidor, para la cifra del escrow segun el rol.
+    const [escrowTrade, setEscrowTrade] = useState<TradeData | null>(null);
     const [fetchedLockTxHash, setFetchedLockTxHash] = useState<string | null>(null);
     const displayLockTxHash = fetchedLockTxHash ?? lockTxHash;
 
@@ -60,6 +79,7 @@ const ChatRoom = ({
                 const trade = await getTrade(tradeId, token);
                 setEscrowStatus(trade.status);
                 setEscrowAmount(trade.amount_mxn);
+                setEscrowTrade(trade);
                 if (trade.lock_tx_hash) setFetchedLockTxHash(trade.lock_tx_hash);
             } catch (e) {
                 console.warn('Failed to fetch trade status', e);
@@ -162,9 +182,18 @@ const ChatRoom = ({
                                         <p className="text-xs text-amber-600">{t('chatRoom.cashoutAgentPendingDesc')}</p>
                                     </>
                                 ) : escrowStatus ? (
-                                    <p className="text-sm font-semibold text-on-surface/60">
-                                        {t('chatRoom.tradeStatus', { status: escrowStatus })}
-                                    </p>
+                                    // Los demás estados (revealing, completed, cancelled…) salen del
+                                    // mismo diccionario que la insignia. Antes caían a
+                                    // "Operación: revealing" — el nombre interno del sistema, en
+                                    // mitad de una operación con dinero dentro.
+                                    <>
+                                        <p className="text-sm font-semibold text-on-surface">
+                                            {stateCopy(escrowStatus).label}
+                                        </p>
+                                        <p className="text-xs text-on-surface/60">
+                                            {stateCopy(escrowStatus).next}
+                                        </p>
+                                    </>
                                 ) : (
                                     <p className="text-xs text-on-surface/40">{t('chatRoom.verifyingEscrowStatus')}</p>
                                 )}
@@ -193,9 +222,18 @@ const ChatRoom = ({
                                         {lockTxLink}
                                     </>
                                 ) : escrowStatus ? (
-                                    <p className="text-sm font-semibold text-on-surface/60">
-                                        {t('chatRoom.tradeStatus', { status: escrowStatus })}
-                                    </p>
+                                    // Los demás estados (revealing, completed, cancelled…) salen del
+                                    // mismo diccionario que la insignia. Antes caían a
+                                    // "Operación: revealing" — el nombre interno del sistema, en
+                                    // mitad de una operación con dinero dentro.
+                                    <>
+                                        <p className="text-sm font-semibold text-on-surface">
+                                            {stateCopy(escrowStatus).label}
+                                        </p>
+                                        <p className="text-xs text-on-surface/60">
+                                            {stateCopy(escrowStatus).next}
+                                        </p>
+                                    </>
                                 ) : (
                                     <p className="text-xs text-on-surface/40">{t('chatRoom.verifyingEscrowStatus')}</p>
                                 )}
@@ -203,6 +241,8 @@ const ChatRoom = ({
                         </>
                     )}
                 </div>
+
+                <TradeEscrowSummary trade={escrowTrade} viewerId={userId} className="-mt-2 mb-2 px-1" />
 
                 {/* Loading State */}
                 {isLoading && (

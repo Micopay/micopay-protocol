@@ -25,15 +25,26 @@ interface SecretKeyBackupModalProps {
   onConfirmed?: () => void;
   /** Si es false, se puede cerrar sin transcribir (export desde Perfil). */
   requireConfirmation?: boolean;
+  /**
+   * Por que aparece. El alta y el export desde Perfil los abre el usuario, asi
+   * que el motivo se sobreentiende; la compuerta previa a la primera operacion
+   * con fondos salta sola y sin esto el usuario no sabe por que.
+   */
+  reason?: string;
 }
 
 const CONFIRM_CHARS = 4;
+
+const DEFAULT_REASON =
+  'Anótala en papel y guárdala fuera del teléfono. Es la única forma de recuperar tu ' +
+  'cuenta. Quien la tenga controla tus fondos.';
 
 export default function SecretKeyBackupModal({
   secretKey,
   onClose,
   onConfirmed,
   requireConfirmation = true,
+  reason = DEFAULT_REASON,
 }: SecretKeyBackupModalProps) {
   const [revealed, setRevealed] = useState(false);
   const [input, setInput] = useState('');
@@ -69,10 +80,7 @@ export default function SecretKeyBackupModal({
             <span className="material-symbols-outlined text-3xl">key</span>
           </div>
           <h2 className="text-lg font-extrabold text-[#0B1E26]">Respalda tu llave secreta</h2>
-          <p className="text-sm text-[#67808C] mt-2 leading-relaxed">
-            Anótala en papel y guárdala fuera del teléfono. Es la única forma de recuperar tu
-            cuenta. Quien la tenga controla tus fondos.
-          </p>
+          <p className="text-sm text-[#67808C] mt-2 leading-relaxed">{reason}</p>
         </div>
 
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-4">

@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import TradeStateBadge, { getTradeStateDebugOverride, TradeState } from '../components/TradeStateBadge';
 import { AmountField } from '../components/ui';
+import AssetSelector from '../components/AssetSelector';
 
 export interface CashoutRequestProps {
   onBack: () => void;
   onSearch: (amount: number) => void;
+  /** WP-C: clave de `ESCROW_ASSET_OPTIONS`; vive en el contexto de la app. */
+  assetKey: string;
+  onAssetChange: (key: string) => void;
 }
 
-const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
+const CashoutRequest = ({ onBack, onSearch, assetKey, onAssetChange }: CashoutRequestProps) => {
   const { t } = useTranslation();
   const [amount, setAmount] = useState('500');
-  const state: TradeState = getTradeStateDebugOverride('pending');
 
   return (
     <div className="text-on-surface antialiased overflow-x-hidden min-h-screen bg-surface-container-low">
@@ -35,12 +37,18 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
       </header>
 
       <main className="pt-[calc(6rem+env(safe-area-inset-top))] pb-32 px-6 flex flex-col min-h-screen max-w-md mx-auto">
-        <TradeStateBadge
-          state={state}
-          onRecover={() => onSearch(Number(amount) || 500)}
-          recoverLabel={t('cashout.recoverLabel')}
-          className="mb-6"
-        />
+        {/* Aqui se pintaba la insignia de estado de una operacion con el estado
+            fijado a mano en `pending`. Pero en esta pantalla NO EXISTE ninguna
+            operacion: aun no se elige agente ni se confirma nada. Decia
+            "Operacion creada · la solicitud se registro" — en pasado, afirmando
+            un hecho que no habia ocurrido, dos pantallas antes de confirmar.
+
+            La intencion era buena (principio 2 del manifiesto: la persona
+            siempre sabe donde esta su dinero) pero se cumplia con una mentira.
+            Se conserva la tranquilidad y se quita la afirmacion falsa. */}
+        <p className="mb-6 text-sm text-on-surface-variant">
+          {t('cashout.nothingMovedYet')}
+        </p>
         <div className="mt-8 mb-4">
           <label htmlFor="cashout-amount" className="font-label text-xs font-bold tracking-[0.15em] text-on-surface-variant opacity-70">
             {t('cashout.amountLabel')}
@@ -55,6 +63,15 @@ const CashoutRequest = ({ onBack, onSearch }: CashoutRequestProps) => {
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
+
+        <div className="mb-8">
+          <AssetSelector
+            flow="cashout"
+            amountMxn={amount.trim() === '' ? null : Number(amount)}
+            value={assetKey}
+            onChange={onAssetChange}
+          />
+        </div>
 
         <div className="space-y-6">
           <div className="p-6 bg-surface-container-low rounded-sm border-l-4 border-primary/20">

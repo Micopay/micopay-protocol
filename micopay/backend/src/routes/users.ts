@@ -8,6 +8,7 @@ import { deleteAccount } from "../services/account.service.js";
 import { createRateLimiter } from '../middleware/rateLimit.middleware.js';
 import { ConflictError, ValidationError } from "../utils/errors.js";
 import { verifyAndConsumeChallenge } from "../services/challenge.service.js";
+import { setProviderAvailability } from "../services/providerEnrollment.service.js";
 
 const authRateLimit = createRateLimiter({
   windowMs: config.authRateLimitWindowMs,
@@ -93,11 +94,15 @@ export async function userRoutes(app: FastifyInstance) {
         );
       }
 
+      // RED-1: abrir una cuenta NO te mete en Red MicoPay. Antes esto pasaba
+      // `true` y publicaba a toda persona registrada como proveedora de efectivo
+      // en el mapa, sin que lo hubiera decidido. El alta es explicita y vive en
+      // `provider_status`, que arranca en 'not_enrolled' por defecto.
       const user = await db.getOne(
         `INSERT INTO users (stellar_address, username, phone_hash, merchant_available)
          VALUES ($1, $2, $3, $4)
-         RETURNING id, stellar_address, username, merchant_available, created_at`,
-        [stellar_address, username, phone_hash || null, true],
+         RETURNING id, stellar_address, username, merchant_available, provider_status, created_at`,
+        [stellar_address, username, phone_hash || null, false],
       );
 
       // Create wallet record
@@ -281,19 +286,19 @@ export async function userRoutes(app: FastifyInstance) {
     async (request) => {
       const { availability } = request.body as { availability: "online" | "offline" | "paused" };
       const userId = request.user.id;
-      const merchant_available = availability === "online";
 
-      await db.execute(
-        `UPDATE users SET merchant_available = $1 WHERE id = $2`,
-        [merchant_available, userId],
-      );
+      // RED-1: la escritura canonica vive en un solo sitio. Antes esto tocaba
+      // solo `merchant_available` y dejaba `users.availability` obsoleta, asi
+      // que el mapa podia mostrar disponible a quien se habia puesto en pausa.
+      // Ademas, quien no es agente activo no tiene disponibilidad que cambiar.
+      const result = await setProviderAvailability(userId, availability);
 
       request.log.info(
         { user_id: userId, availability, category: "merchant" },
         "[merchant] Availability updated",
       );
 
-      return { merchant_available };
+      return result;
     },
   );
 }

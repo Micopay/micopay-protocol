@@ -9,6 +9,7 @@ import {
 } from '../services/api';
 import { PLATFORM_FEE_PERCENT } from '../constants/trade';
 import ErrorBanner from '../components/ErrorBanner';
+import MerchantOfferCard from '../components/MerchantOfferCard';
 import type { ApiErrorAction } from '../utils/apiError';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -35,6 +36,9 @@ interface Offer {
   commissionPct: number;
   /** Platform fee (%) — the other half of the effective cost. */
   platformFeePct: number;
+  /** Desglose en MXN, tal y como lo calcula el servidor. */
+  platformFeeMxn?: number;
+  providerFeeMxn?: number;
   badge?: string;
   isPrimary?: boolean;
   completionRate?: number;
@@ -53,6 +57,8 @@ function merchantToOffer(m: AvailableMerchant, index: number): Offer {
     receiveMxn: m.payout_mxn,
     commissionPct: m.rate_percent,
     platformFeePct: m.platform_fee_pct ?? PLATFORM_FEE_PERCENT,
+    platformFeeMxn: m.platform_fee_mxn,
+    providerFeeMxn: m.provider_fee_mxn,
     isPrimary: index === 0,
     completionRate: m.completion_rate ?? 0,
     tradesCompleted: m.trades_completed ?? 0,
@@ -66,6 +72,9 @@ export interface OfferConfirmData {
   name: string;
   receiveMxn: number;
   commissionPct: number;
+  /** Desglose del servidor, arrastrado hasta la confirmacion sin recalcular. */
+  platformFeeMxn?: number;
+  providerFeeMxn?: number;
   nearbyCount: number;
 }
 
@@ -161,7 +170,7 @@ const ExploreMap = ({
   }
 
   if (state.status === 'error') {
-    return <FetchError onBack={onBack} onRetry={refetch} />;
+    return <FetchError onBack={onBack} onRetry={refetch} detail={state.error} />;
   }
 
   const merchants = state.status === 'success' ? state.merchants : [];
@@ -221,178 +230,41 @@ const ExploreMap = ({
             </div>
 
             {/* Offers List */}
+            {/* Offers List
+                Antes habia aqui una tarjeta propia, del sistema ANTERIOR al
+                rediseño: borde de 1 px casi invisible, sin sombra, insignias en
+                pildora y un `ring` difuminado. La de deposito ya seguia
+                "Mercado / Rotulo" y es la que se conserva.
+                Una sola tarjeta para los dos flujos: la proxima mejora llega a
+                ambos en vez de arreglarse en uno y quedar pendiente en el otro,
+                que es como se llego a tener dos. */}
             <div className="space-y-4">
-              {offers.map((offer, idx) => {
-                const isPrimary = offer.isPrimary ?? idx === 0;
-                const isSelected = selectedMerchantId === offer.id;
-                if (isPrimary) {
-                  return (
-                    <article
-                      key={offer.id}
-                      ref={isSelected ? selectedOfferRef : null}
-                      className={`relative bg-surface p-6 rounded-sm border overflow-hidden transition-all ${isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-primary-container/10'}`}
-                    >
-                      <div className="flex gap-2 mb-4">
-                        <span className="px-3 py-1 bg-verde text-papel text-[11px] font-bold rounded-full uppercase tracking-wider">
-                          {t('map.bestOffer')}
-                        </span>
-                        {isSelected && (
-                          <span className="px-3 py-1 bg-primary/10 text-verde text-[11px] font-bold rounded-full uppercase tracking-wider">
-                            {t('map.selectedOnMap')}
-                          </span>
-                        )}
-                        {offer.badge && (
-                          <span className="px-3 py-1 bg-surface-container-high text-verde text-[11px] font-bold rounded-full uppercase tracking-wider">
-                            {offer.badge}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-start justify-between mb-6">
-                        <div className="flex gap-4 min-w-0">
-                          <div className="w-14 h-14 bg-verde-suave rounded-sm flex items-center justify-center flex-shrink-0">
-                            <span className="material-symbols-outlined text-verde text-3xl">{offer.icon}</span>
-                          </div>
-                          <div className="min-w-0">
-                            <h3 className="font-headline font-bold text-lg text-on-surface truncate">{offer.name}</h3>
-                            <p className="text-sm text-gris font-medium flex items-center gap-1">
-                              <span className="material-symbols-outlined text-sm">directions_walk</span>
-                              {offer.distance} · {offer.walkMinutes} min
-                            </p>
-                            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                              <span className="num text-[12px] text-on-surface-variant">{offer.completionRate ? t('map.completion', { pct: Math.round(offer.completionRate) }) : t('map.noHistory')}</span>
-                              <span className="text-[12px] text-on-surface-variant">·</span>
-                              <span className="text-[12px] text-on-surface-variant">{offer.tradesCompleted ?? 0} {t('map.ops')}</span>
-                              {offer.tier && (
-                                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.1em] rounded-sm border-[1.5px] border-tinta bg-verde-suave text-verde">{offer.tier}</span>
-                              )}
-                              <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.1em] rounded-sm border-[1.5px] border-tinta ${offer.isBusiness ? 'bg-tinta text-papel' : 'bg-papel text-tinta'}`}>
-                                {offer.isBusiness ? t('map.business') : t('map.individual')}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between mb-6 p-4 bg-papel rounded-sm">
-                        <div>
-                          <p className="text-[11px] font-bold text-gris uppercase tracking-wider mb-1">{t('map.youReceive')}</p>
-                          <p className="text-2xl font-headline font-extrabold text-naranja">
-                            ${offer.receiveMxn.toFixed(2)} MXN
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[11px] font-bold text-gris uppercase tracking-wider mb-1">{t('map.commission')}</p>
-                          <p className="text-sm font-bold text-on-surface">
-                            ${(amount - offer.receiveMxn).toFixed(2)} ({offer.commissionPct}%)
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mb-6 p-4 bg-papel rounded-sm">
-                        <EffectiveFeeNote
-                          commissionPct={offer.commissionPct}
-                          platformFeePct={offer.platformFeePct}
-                          maxPct={maxEffectiveFeePercent}
-                        />
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (onProceedToConfirm) {
-                            onProceedToConfirm({
-                              id: offer.id,
-                              name: offer.name,
-                              receiveMxn: offer.receiveMxn,
-                              commissionPct: offer.commissionPct,
-                              nearbyCount: offers.length,
-                            });
-                          } else {
-                            onSelectOffer(offer.id);
-                          }
-                        }}
-                        disabled={loading}
-                        className="w-full h-[52px] bg-naranja text-papel border-2 border-tinta shadow-solida font-headline font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-70 flex items-center justify-center gap-2"
-                      >
-                        {loading ? (
-                          <>
-                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            {t('map.preparingEscrow')}
-                          </>
-                        ) : (
-                          t('map.goWithAgent')
-                        )}
-                      </button>
-                    </article>
-                  );
-                }
-
-                return (
-                  <article
-                    key={offer.id}
-                    ref={isSelected ? selectedOfferRef : null}
-                    className={`bg-surface-container-low/30 p-5 rounded-sm border transition-all ${isSelected ? 'border-primary ring-2 ring-primary/30 bg-primary/5' : 'border-transparent hover:border-surface-container-high'}`}
-                  >
-                    <div className="flex items-start justify-between gap-3 mb-4">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-11 h-11 bg-papel rounded-sm flex items-center justify-center border-2 border-tinta flex-shrink-0">
-                          <span className="material-symbols-outlined text-gris">{offer.icon}</span>
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="font-headline font-bold text-on-surface truncate">{offer.name}</h3>
-                            {offer.badge && (
-                            <span className="text-[11px] font-bold text-verde bg-primary/10 px-2 py-0.5 rounded-sm">
-                              {offer.badge}
-                            </span>
-                          )}
-                            <div className="mt-1 text-sm text-on-surface-variant flex flex-wrap items-center gap-x-2 gap-y-1">
-                              <span>{offer.completionRate ? `${Math.round(offer.completionRate)}%` : t('map.noHistory')}</span>
-                              <span>·</span>
-                              <span>{offer.tradesCompleted ?? 0} {t('map.ops')}</span>
-                              {offer.tier && <span className="px-2 py-0.5 text-[10px] rounded-sm bg-surface-container-high text-verde">{offer.tier}</span>}
-                              <span className={`px-2 py-0.5 text-[10px] rounded-sm ${offer.isBusiness ? 'bg-tinta text-papel' : 'bg-papel text-tinta'}`}>
-                                {offer.isBusiness ? t('map.business') : t('map.individual')}
-                              </span>
-                            </div>
-                          {isSelected && (
-                            <span className="inline-block mt-1 text-[11px] font-bold text-verde bg-papel px-2 py-0.5 rounded-sm">
-                              {t('map.selectedOnMap')}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-[10px] font-bold text-gris uppercase tracking-wider">{t('map.offer')}</p>
-                        <p className="text-lg font-headline font-bold text-on-surface whitespace-nowrap">
-                          ${offer.receiveMxn.toFixed(2)} MXN
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mb-4">
-                      <EffectiveFeeNote
-                        commissionPct={offer.commissionPct}
-                        platformFeePct={offer.platformFeePct}
-                        maxPct={maxEffectiveFeePercent}
-                      />
-                    </div>
-                    <button
-                      onClick={() => {
-                        if (onProceedToConfirm) {
-                          onProceedToConfirm({
-                            id: offer.id,
-                            name: offer.name,
-                            receiveMxn: offer.receiveMxn,
-                            commissionPct: offer.commissionPct,
-                            nearbyCount: offers.length,
-                          });
-                        } else {
-                          onSelectOffer(offer.id);
-                        }
-                      }}
-                      disabled={loading}
-                      className="w-full py-3 border border-primary text-verde font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-70"
-                    >
-                      {t('map.viewOffer')}
-                    </button>
-                  </article>
-                );
-              })}
+              {merchants.map((merchant, idx) => (
+                <MerchantOfferCard
+                  key={merchant.seller_id}
+                  merchant={merchant}
+                  amount={amount}
+                  loading={loading}
+                  isBest={idx === 0}
+                  maxEffectiveFeePercent={maxEffectiveFeePercent}
+                  flow="cashout"
+                  onChoose={(m) => {
+                    if (onProceedToConfirm) {
+                      onProceedToConfirm({
+                        id: m.seller_id,
+                        name: m.username,
+                        receiveMxn: m.payout_mxn,
+                        commissionPct: m.rate_percent,
+                        platformFeeMxn: m.platform_fee_mxn,
+                        providerFeeMxn: m.provider_fee_mxn,
+                        nearbyCount: merchants.length,
+                      });
+                    } else {
+                      onSelectOffer(m.seller_id);
+                    }
+                  }}
+                />
+              ))}
             </div>
 
             {/* Footer Note */}
@@ -485,12 +357,26 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
   );
 }
 
-function FetchError({ onBack, onRetry }: { onBack: () => void; onRetry: () => void }) {
+function FetchError({
+  onBack,
+  onRetry,
+  detail,
+}: {
+  onBack: () => void;
+  onRetry: () => void;
+  detail?: string;
+}) {
   const { t } = useTranslation();
   return (
     <StateShell onBack={onBack} icon="cloud_off" title={t('map.couldNotLoad')}>
+      {/*
+        Este estado agrupa dos causas muy distintas: no se pudo obtener la
+        ubicación, o falló la petición al servidor. Culpar siempre a la
+        conexión mandó una investigación entera por el camino equivocado el
+        2026-09-05, así que cuando el hook sabe qué pasó, se dice.
+      */}
       <p className="text-sm text-gris font-medium max-w-xs mb-6">
-        {t('map.checkConnection')}
+        {detail || t('map.checkConnection')}
       </p>
       <button
         onClick={onRetry}

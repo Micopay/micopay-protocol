@@ -12,7 +12,9 @@ import {
   lockTrade,
   TradeDetailResponse,
 } from '../services/api';
-import { ensureTrustline } from '../services/payment';
+import TradeEscrowSummary from '../components/TradeEscrowSummary';
+import { shouldKeepPollingTrade } from '../utils/escrowAmounts';
+import { assertNoClientPreparationForLock } from '../utils/escrowLock';
 import { errorMessages } from '../constants/errorMessages';
 import { readJSON } from '../services/secureStorage';
 import { useCountdown } from '../hooks/useCountdown';
@@ -68,8 +70,6 @@ async function isCurrentUserSeller(tradeSellerId: string): Promise<boolean> {
 
 const TRADE_POLL_INTERVAL = 5000;
 const SUPPORT_EMAIL = 'support@micopay.io';
-
-const ACTIVE_STATES = ['pending', 'locked', 'revealing'];
 
 /**
  * CASH-5A: la píldora compacta del detalle. La presentación puede diferir de
@@ -902,13 +902,16 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
     fetchTrade();
   }, [fetchTrade]);
 
-  // Poll for active states
+  // Poll mientras la operacion siga viva o tenga fondos sin liquidar (H2):
+  // una cancelada con bloqueo espera el reembolso, y la pantalla tiene que
+  // enterarse cuando llegue.
+  const keepPolling = shouldKeepPollingTrade(trade);
   useEffect(() => {
-    if (!trade || !ACTIVE_STATES.includes(trade.status)) return;
+    if (!keepPolling) return;
 
     const interval = setInterval(fetchTrade, TRADE_POLL_INTERVAL);
     return () => clearInterval(interval);
-  }, [trade?.status, fetchTrade]);
+  }, [keepPolling, fetchTrade]);
 
   // Handle cancel
   const handleCancel = async () => {
@@ -939,14 +942,9 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
     setIsLocking(true);
     setLockError(null);
     try {
-      // Lazily create the trustline for whatever asset this escrow deployment
-      // settles in — a no-op if it already exists. Configurable because the
-      // same contract code can be deployed with different token_ids (e.g.
-      // MXNe on one environment, USDC on another); hardcoding the asset code
-      // here would silently create the wrong trustline if pointed at a
-      // differently-configured escrow.
-      const escrowAssetCode = import.meta.env.VITE_ESCROW_ASSET_CODE || 'USDC';
-      await ensureTrustline(escrowAssetCode);
+      // H3: el activo sale de la OPERACION, no de la configuracion del APK, y
+      // el cliente no envia ningun ChangeTrust previo (XLM no lo necesita).
+      assertNoClientPreparationForLock(trade.asset_code);
       await lockTrade(trade.id, effectiveToken);
       fetchTrade(); // Refresh to get locked state
     } catch (e: any) {
@@ -1176,6 +1174,9 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
 
       {/* Main Content */}
       <main className="max-w-md mx-auto px-6 py-8">
+        {/* WP-D: la cifra del escrow que le toca a quien mira, con datos del
+            servidor. Sin metadatos de activo no se pinta. */}
+        <TradeEscrowSummary trade={trade} viewerId={userId} className="mb-4" />
         {renderStateView()}
 
         {/* Support link visible in all states */}

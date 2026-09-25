@@ -1,20 +1,54 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
-import { completeTrade, TradeData } from '../services/api';
+import { completeTrade, getTrade, TradeData } from '../services/api';
+import TradeEscrowSummary from '../components/TradeEscrowSummary';
+import { shouldKeepPollingTrade } from '../utils/escrowAmounts';
+
+const DEPOSIT_QR_POLL_MS = 5000;
 
 interface DepositQRProps {
     activeTrade: TradeData | null;
     buyerToken: string | null;
+    /**
+     * H4: quien mira (el cliente que deposita), para mostrar lo que va a
+     * recibir. Esta es la pantalla que abre el cliente desde el chat de
+     * deposito; antes no mostraba ni el activo ni la cantidad.
+     */
+    viewerId?: string | null;
     onBack: () => void;
     onChat: () => void;
     onSuccess: (releaseTxHash: string) => void;
 }
 
-const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: DepositQRProps) => {
+const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSuccess }: DepositQRProps) => {
     const { t } = useTranslation();
     const [isConfirming, setIsConfirming] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // H4: la operacion del servidor. `activeTrade` es la respuesta de crearla
+    // y no cambia; el bloqueo del agente llega despues.
+    const [serverTrade, setServerTrade] = useState<TradeData | null>(null);
+    const displayTrade = serverTrade ?? activeTrade;
+    const keepPolling = serverTrade ? shouldKeepPollingTrade(serverTrade) : true;
+
+    useEffect(() => {
+        if (!activeTrade || !buyerToken || !keepPolling) return;
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const fresh = await getTrade(activeTrade.id, buyerToken);
+                if (!cancelled) setServerTrade(fresh);
+            } catch {
+                // Sin datos del servidor se muestra lo que ya habia; no se inventa.
+            }
+        };
+        load();
+        const interval = setInterval(load, DEPOSIT_QR_POLL_MS);
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, [activeTrade, buyerToken, keepPolling]);
 
     const handleComplete = async () => {
         if (!activeTrade || !buyerToken) return;
@@ -103,6 +137,10 @@ const DepositQR = ({ activeTrade, buyerToken, onBack, onChat, onSuccess }: Depos
                     </div>
                     <div className="text-center space-y-2">
                         <p className="font-bold text-[11px] tracking-[0.15em] text-primary uppercase">MUESTRA ESTE CÓDIGO AL AGENTE</p>
+                        {displayTrade ? (
+                            <p className="num font-headline font-black text-2xl text-on-surface">${displayTrade.amount_mxn} MXN</p>
+                        ) : null}
+                        <TradeEscrowSummary trade={displayTrade} viewerId={viewerId} />
                     </div>
                 </div>
 

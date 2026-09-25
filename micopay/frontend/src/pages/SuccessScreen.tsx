@@ -1,12 +1,67 @@
 import { useTranslation } from 'react-i18next';
-import { TradeHistoryItem } from '../services/api';
+import type { TradeData, TradeDetailResponse } from '../services/api';
 import { buildTxUrl, truncateHash } from '../utils/stellarExplorer';
 import SupportLink from '../components/SupportLink';
+import TradeEscrowSummary from '../components/TradeEscrowSummary';
+
+/**
+ * WP-D: el recibo, con datos del servidor. Lo que no llega es `null` y la
+ * pantalla lo oculta; nunca se rellena con estado local ni con porcentajes.
+ */
+export interface SuccessReceipt
+  extends Pick<
+    TradeData,
+    'id' | 'status' | 'amount_mxn' | 'seller_id' | 'buyer_id' | 'asset_code' | 'amount_stroops' | 'platform_fee_stroops' | 'total_locked_stroops'
+  > {
+    lock_tx_hash: string | null;
+    release_tx_hash: string | null;
+    created_at: string | null;
+    completed_at: string | null;
+    platform_fee_mxn: number | null;
+    provider_fee_mxn: number | null;
+    /** Lo que recibe el cliente, ya descontadas las dos comisiones. */
+    payout_mxn: number | null;
+}
+
+type ServerTrade = TradeData & Partial<Omit<TradeDetailResponse['trade'], keyof TradeData>>;
+
+const numOrNull = (v: unknown): number | null => {
+    const n = typeof v === 'string' ? Number(v) : v;
+    return typeof n === 'number' && Number.isFinite(n) ? n : null;
+};
+
+export function receiptFromServer(
+    trade: ServerTrade,
+    lockTxHash: string | null,
+    releaseTxHash: string | null,
+): SuccessReceipt {
+    return {
+        id: trade.id,
+        status: trade.status,
+        amount_mxn: trade.amount_mxn,
+        seller_id: trade.seller_id,
+        buyer_id: trade.buyer_id,
+        asset_code: trade.asset_code,
+        amount_stroops: trade.amount_stroops,
+        platform_fee_stroops: trade.platform_fee_stroops,
+        total_locked_stroops: trade.total_locked_stroops,
+        lock_tx_hash: trade.lock_tx_hash ?? lockTxHash,
+        release_tx_hash: trade.release_tx_hash ?? releaseTxHash,
+        created_at: trade.created_at ?? null,
+        completed_at: trade.completed_at ?? null,
+        platform_fee_mxn: numOrNull(trade.platform_fee_mxn),
+        provider_fee_mxn: numOrNull(trade.provider_fee_mxn),
+        payout_mxn: numOrNull(trade.payout_mxn),
+    };
+}
 
 interface SuccessScreenProps {
     type: 'cashout' | 'deposit';
-    trade: TradeHistoryItem & { completed_at: string | null };
-    agentName: string;
+    trade: SuccessReceipt;
+    /** Quien mira, para la cifra del escrow que le toca. */
+    viewerId?: string | null;
+    /** El agente (proveedor). null si no se pudo obtener: no se inventa. */
+    agentName: string | null;
     onHome: () => void;
 }
 
@@ -15,11 +70,17 @@ function isMockHash(hash: string | null | undefined): boolean {
     return !!hash && hash.startsWith('mock');
 }
 
-const SuccessScreen = ({ type, trade, agentName, onHome }: SuccessScreenProps) => {
+const SuccessScreen = ({ type, trade, viewerId, agentName, onHome }: SuccessScreenProps) => {
     const { t } = useTranslation();
     const amount = trade.amount_mxn.toFixed(2);
-    const commission = trade.platform_fee_mxn.toFixed(2);
-    const received = (trade.amount_mxn - trade.platform_fee_mxn).toFixed(2);
+    // Las dos comisiones y el neto salen de la operacion. Antes el neto era
+    // `monto - comision de plataforma`, que ignoraba la del agente.
+    const commission =
+        trade.platform_fee_mxn !== null && trade.provider_fee_mxn !== null
+            ? (trade.platform_fee_mxn + trade.provider_fee_mxn).toFixed(2)
+            : null;
+    const received = trade.payout_mxn !== null ? trade.payout_mxn.toFixed(2) : null;
+    const agentLabel = agentName ?? '—';
     const lockTxHash = trade.lock_tx_hash;
     const releaseTxHash = trade.release_tx_hash;
 
@@ -41,9 +102,9 @@ const SuccessScreen = ({ type, trade, agentName, onHome }: SuccessScreenProps) =
         const receiptType = type === 'cashout' ? t('success.receiptWithdrawal') : t('success.receiptDeposit');
         const receiptText = `${t('success.receiptTextTitle', { type: receiptType })}${isSimulated ? ` (${t('success.testnetSimulated')})` : ''}
 ${t('success.receiptAmount')}: $${amount} MXN
-${t('success.receiptReceived')}: $${received} MXN
-${t('success.receiptCommission')}: $${commission} MXN
-${t('success.receiptAgent')}: ${agentName}
+${received !== null ? `${t('success.receiptReceived')}: $${received} MXN` : ''}
+${commission !== null ? `${t('success.receiptCommission')}: $${commission} MXN` : ''}
+${t('success.receiptAgent')}: ${agentLabel}
 ${t('success.receiptTradeId')}: ${trade.id}
 ${lockTxHash ? `${t('success.receiptLock')}: ${truncateHash(lockTxHash, 16)}` : ''}
 ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash, 16)}` : ''}`;
@@ -98,18 +159,21 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
                         </span>
                         <span className="num font-bold text-on-surface">${amount}</span>
                     </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-on-surface-variant font-medium text-sm">
-                            {type === 'cashout' ? t('success.cashReceived') : t('success.mxneReceived')}
-                        </span>
-                        <span className="font-bold text-primary text-lg">
-                            {type === 'cashout' ? `$${received}` : `+${received}`}
-                        </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-on-surface-variant font-medium text-sm">{t('success.commission')}</span>
-                        <span className="font-medium text-on-surface">-${commission}</span>
-                    </div>
+                    {received !== null ? (
+                        <div className="flex justify-between items-center">
+                            <span className="text-on-surface-variant font-medium text-sm">
+                                {type === 'cashout' ? t('success.cashReceived') : t('success.mxneReceived')}
+                            </span>
+                            <span className="font-bold text-primary text-lg">${received}</span>
+                        </div>
+                    ) : null}
+                    {commission !== null ? (
+                        <div className="flex justify-between items-center">
+                            <span className="text-on-surface-variant font-medium text-sm">{t('success.commission')}</span>
+                            <span className="font-medium text-on-surface">-${commission}</span>
+                        </div>
+                    ) : null}
+                    <TradeEscrowSummary trade={trade} viewerId={viewerId} />
                 </div>
 
                 <div className="h-[1px] w-full bg-outline-variant/10"></div>
@@ -118,7 +182,7 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
                     <div className="flex justify-between items-start">
                         <span className="text-on-surface-variant font-medium text-sm">{t('success.agent')}</span>
                         <div className="text-right">
-                            <p className="font-semibold text-on-surface text-sm">{agentName}</p>
+                            <p className="font-semibold text-on-surface text-sm">{agentLabel}</p>
                             <div className="flex items-center justify-end gap-1 mt-0.5 text-primary">
                                 <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: '"FILL" 1' }}>verified</span>
                                 <span className="text-[10px] font-bold uppercase tracking-wider">{t('success.verified')}</span>
@@ -247,7 +311,7 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
                 </section>
 
                 {/* Star rating */}
-                <section>
+                {agentName ? <section>
                     <p className="text-on-surface-variant font-medium text-sm mb-4">{t('success.howWasService', { agentName })}</p>
                     <div className="flex justify-center gap-2">
                         {[1, 2, 3, 4, 5].map((star) => (
@@ -259,7 +323,7 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
                             </span>
                         ))}
                     </div>
-                </section>
+                </section> : null}
             </div>
 
             {/* Primary Action */}

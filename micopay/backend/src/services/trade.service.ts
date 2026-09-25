@@ -1,21 +1,21 @@
 import db, { pool as dbPool } from '../db/schema.js';
+import { computeTradeFees, PLATFORM_FEE_PERCENT } from './tradeFees.js';
+import {
+  AssetNotEnabledError,
+  assertEnabledEscrowAsset,
+  convertMxnToAsset,
+  resolveRequestedEscrowAsset,
+  stroopsAtFrozenRate,
+  type SupportedAsset,
+} from './assetRate.service.js';
+import { StrKey } from '@stellar/stellar-sdk';
 import { config } from '../config.js';
 import pino from 'pino';
 import { generateTradeSecret, encryptSecret, decryptSecret } from './secret.service.js';
 import { createHash, randomBytes } from 'crypto';
 import type { FastifyRequest } from 'fastify';
 import { prepareLockTx, submitLockTx, prepareReleaseTx, submitReleaseTx, callRefundOnChain, verifyLockOnChain, assertNotReplayed } from './stellar.service.js';
-import {
-  NotFoundError,
-  ForbiddenError,
-  ConflictError,
-  BadRequestError,
-  AuthError,
-  ValidationError,
-  TradeStateError,
-  MerchantLimitError,
-  KycMonthlyCapExceededError,
-} from '../utils/errors.js';
+import { AppError, NotFoundError, ForbiddenError, ConflictError, BadRequestError, AuthError, ValidationError, TradeStateError, MerchantLimitError, KycMonthlyCapExceededError } from '../utils/errors.js';
 import {
   getTradeAuditTrail as getTradeAuditTrailRows,
   getAuditEventsByRequestId,
@@ -70,7 +70,8 @@ function getRequestId(request: FastifyRequest): string | undefined {
 }
 
 const STROOPS_PER_MXN = 10_000_000; // 7 decimals
-const PLATFORM_FEE_PERCENT = 0.8; // 0.8% platform fee
+// El desglose vive en tradeFees.ts, un solo sitio: tenerlo en dos fue el
+// origen de que el agente cobrara menos de lo que configuraba.
 const DEFAULT_TIMEOUT_MINUTES = 120; // 2 hours
 const UNKNOWN_STATE = 'unknown';
 /** SEC-02: TTL corto del token del QR. Nunca sobrepasa `trades.expires_at`. */
@@ -184,6 +185,95 @@ export interface CreateTradeInput {
    */
   flow: TradeFlow;
   amountMxn: number;
+  /**
+   * Activo pedido, tal como llega. `undefined` -> XLM (APK ya instalados). Se
+   * valida con `resolveRequestedEscrowAsset` antes de cualquier otro efecto.
+   */
+  assetCode?: unknown;
+}
+
+/**
+ * Traduce la politica de activos al contexto del BLOQUEO.
+ *
+ * Al crear, un activo no habilitado es un error de quien pide (422
+ * ASSET_NOT_ENABLED). Al bloquear, la operacion ya existe: si su activo no tiene
+ * escrow, el registro es incoherente con el contrato que se va a invocar, y eso
+ * es un conflicto de estado (409 ASSET_ESCROW_MISMATCH), no una peticion mal
+ * formada.
+ *
+ * Sin default: un registro con `asset_code` nulo o vacio NO se trata como XLM.
+ * Bloquear fondos sobre una suposicion es exactamente lo que no debe pasar.
+ * Tampoco se normaliza: un 'xlm' guardado en minusculas tambien es incoherente,
+ * porque la creacion siempre persiste el codigo normalizado.
+ */
+export function assertLockableEscrowAsset(trade: { id?: string; asset_code?: unknown }): SupportedAsset {
+  const stored = trade.asset_code;
+  const mismatch = (detail: string) =>
+    new ConflictError(
+      'ASSET_ESCROW_MISMATCH',
+      'Esta operacion no se puede bloquear con el escrow disponible.',
+      `Trade ${trade.id ?? '?'}: ${detail}`,
+      409,
+    );
+
+  if (typeof stored !== 'string' || stored.length === 0) {
+    throw mismatch(`asset_code is missing (${stored === null ? 'null' : typeof stored})`);
+  }
+  try {
+    return assertEnabledEscrowAsset(stored);
+  } catch (err) {
+    if (err instanceof AssetNotEnabledError) {
+      throw mismatch(`asset_code ${stored} has no deployed escrow`);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Las tres cifras del escrow en stroops, como cadenas enteras (D9 del plan).
+ *
+ * El contrato transfiere `amount + platform_fee` al bloquear y ese mismo total
+ * al reembolsar; al liberar, `amount` va al comprador y la comision aparte. La
+ * comision sale de la tasa congelada, igual que en `prepareLockTrade`, para que
+ * la cifra que ve la app sea la que se firma.
+ *
+ * Con datos incompletos devuelve `null` en lugar de adivinar.
+ */
+export function escrowAmountsForTrade(trade: {
+  asset_code?: unknown;
+  amount_stroops?: unknown;
+  platform_fee_mxn?: unknown;
+  rate_mxn?: unknown;
+}): {
+  amount_stroops: string | null;
+  platform_fee_stroops: string | null;
+  total_locked_stroops: string | null;
+} {
+  const empty = { amount_stroops: null, platform_fee_stroops: null, total_locked_stroops: null };
+  if (typeof trade.asset_code !== 'string' || trade.asset_code.length === 0) return empty;
+  if (trade.amount_stroops === null || trade.amount_stroops === undefined) return empty;
+  if (trade.rate_mxn === null || trade.rate_mxn === undefined) return empty;
+
+  let amount: bigint;
+  try {
+    amount = BigInt(String(trade.amount_stroops));
+  } catch {
+    return empty;
+  }
+  // `platform_fee_mxn` es INTEGER (init.sql). Los mismos argumentos que
+  // `prepareLockTrade`: si esto calculara distinto, la app mostraria una cifra
+  // y se firmaria otra.
+  let fee: bigint;
+  try {
+    fee = stroopsAtFrozenRate(Number(trade.platform_fee_mxn), String(trade.rate_mxn));
+  } catch {
+    return { amount_stroops: amount.toString(), platform_fee_stroops: null, total_locked_stroops: null };
+  }
+  return {
+    amount_stroops: amount.toString(),
+    platform_fee_stroops: fee.toString(),
+    total_locked_stroops: (amount + fee).toString(),
+  };
 }
 
 /**
@@ -203,6 +293,12 @@ export function deriveProviderId(
 
 export async function createTrade(input: CreateTradeInput) {
   const { request, sellerId, buyerId, flow, amountMxn } = input;
+
+  // PRIMERA instruccion, a proposito: antes del log, KYC, limites, el secreto
+  // HTLC, la conversion, la transaccion CASH-10 y los avisos. Un activo sin
+  // escrow no debe dejar ningun efecto de negocio. La ruta ya lo valida, pero
+  // esto cubre tambien a quien llame al servicio directamente.
+  const assetCode = resolveRequestedEscrowAsset(input.assetCode);
 
   if (flow !== 'deposit' && flow !== 'cashout') {
     throw new ValidationError(
@@ -248,8 +344,10 @@ export async function createTrade(input: CreateTradeInput) {
     if (error) throw error;
   }
 
-  const seller = await db.getOne<{ id: string; stellar_address: string }>(
-    'SELECT id, stellar_address FROM users WHERE id = $1',
+  // `username` se necesita para nombrar al cliente en el aviso al proveedor:
+  // en cash-out el cliente es el seller, no el buyer.
+  const seller = await db.getOne<{ id: string; stellar_address: string; username: string | null }>(
+    'SELECT id, stellar_address, username FROM users WHERE id = $1',
     [sellerId],
   );
   if (!seller) {
@@ -269,9 +367,24 @@ export async function createTrade(input: CreateTradeInput) {
   // Generate HTLC secret
   const { secret, secretHash } = generateTradeSecret();
 
-  // Calculate amounts
-  const amountStroops = BigInt(amountMxn) * BigInt(STROOPS_PER_MXN);
-  const platformFeeMxn = Math.ceil(amountMxn * PLATFORM_FEE_PERCENT / 100);
+  // El peso es la denominacion del acuerdo; el activo es solo el vehiculo. La
+  // conversion vive en UN sitio (`assetRate.service`) y la tasa se congela aqui.
+  //
+  // Antes esto era `amountMxn * 10^7`, o sea 1 MXN = 1 unidad del activo. Con el
+  // escrow bloqueando XLM a ~3.13 MXN, una operacion de 500 pesos bloqueaba 500
+  // XLM = ~1 563 pesos: el cliente entregaba 3.13 veces lo que valia.
+  const conversion = await convertMxnToAsset(amountMxn, assetCode, request);
+  const amountStroops = conversion.stroops;
+
+  // La tarifa del agente se congela AQUI. `merchant_configs.rate_percent` es
+  // configuracion mutable: si se leyera al liquidar, un agente podria cambiar
+  // retroactivamente lo que cobro por operaciones ya pactadas.
+  const providerConfig = await db.getOne<{ rate_percent: string | number }>(
+    'SELECT rate_percent FROM merchant_configs WHERE user_id = $1',
+    [providerId],
+  );
+  const fees = computeTradeFees(amountMxn, Number(providerConfig?.rate_percent ?? 0));
+  const { providerFeeMxn, platformFeeMxn, payoutMxn } = fees;
 
   // Encrypt and store secret immediately (Option A from spec)
   const { encrypted, nonce } = encryptSecret(secret);
@@ -284,9 +397,14 @@ export async function createTrade(input: CreateTradeInput) {
   // una persona por una operacion que nunca ocurrio.
   const insertTradeSql = `INSERT INTO trades
       (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn,
+       provider_fee_mxn, provider_rate_percent, payout_mxn,
+       asset_code, rate_mxn, rate_source, rate_locked_at,
        secret_hash, secret_enc, secret_nonce, status, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', $11)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'pending', $18)
      RETURNING *`;
+  // En el MISMO orden que las columnas de arriba. El store en memoria parsea el
+  // SQL posicionalmente, asi que intercalar los marcadores lo rompia — y el
+  // error que daba ("Cannot read properties of undefined") no señalaba a nada.
   const insertTradeParams = [
     sellerId,
     buyerId,
@@ -295,6 +413,16 @@ export async function createTrade(input: CreateTradeInput) {
     amountMxn,
     amountStroops.toString(),
     platformFeeMxn,
+    providerFeeMxn,
+    fees.providerRatePercent,
+    payoutMxn,
+    conversion.assetCode,
+    conversion.rateMxn,
+    conversion.rateSource,
+    // Como parametro y no `NOW()`: el store en memoria corta el VALUES en el
+    // primer parentesis de cierre, asi que una llamada a funcion ahi dentro
+    // trunca la lista y el error resultante no señala a nada.
+    new Date(),
     secretHash,
     encrypted,
     nonce,
@@ -381,12 +509,22 @@ export async function createTrade(input: CreateTradeInput) {
     },
   });
 
-  // Fire-and-forget — push failure must never fail trade creation
-  const buyerUsername = buyer.username || buyer.stellar_address || 'Usuario';
-  sendTradeNotificationToMerchant(sellerId, {
+  // El aviso va al PROVEEDOR, no al `seller`.
+  //
+  // Antes iba a `sellerId`, que es correcto solo en deposito. En cash-out el
+  // seller del escrow es el CLIENTE —lo fijo CASH-1 con `deriveProviderId`— asi
+  // que la app le notificaba a la persona su propia operacion recien creada,
+  // mientras el agente, que es quien tiene que actuar, no se enteraba de nada.
+  // Este codigo es anterior al modelo de flujos y nunca se actualizo.
+  //
+  // Y por lo mismo el nombre que se anuncia es el del CLIENTE: la contraparte
+  // del proveedor, sea comprador o vendedor del escrow segun el flujo.
+  const clientParty = providerId === sellerId ? buyer : seller;
+  const clientUsername = clientParty.username || clientParty.stellar_address || 'Usuario';
+  sendTradeNotificationToMerchant(providerId, {
     tradeId: result.id,
     amount: `${amountMxn.toLocaleString('es-MX')} MXN`,
-    buyerUsername,
+    buyerUsername: clientUsername,
   }).catch((err: unknown) => {
     logger.error({ err, trade_id: result.id, category: 'trade.lifecycle' }, '[trade] Push notification failed silently');
   });
@@ -488,6 +626,24 @@ export async function getTradeHistory(userId: string, status?: string, page = 1,
  * Build the unsigned lock() transaction for the seller to sign with their own key.
  * Backend never holds or needs the seller's secret key.
  */
+
+/**
+ * Una direccion Stellar valida no es solo una cadena de 56 caracteres que
+ * empieza por G: lleva checksum. Los agentes sembrados por el seed tenian
+ * direcciones fabricadas a partir del nombre de usuario
+ * (`GABARROTESXLAXESQUINAXXX...`) que pasaban cualquier comprobacion superficial
+ * y reventaban dentro del SDK.
+ */
+function assertUsableStellarAddress(address: string | null | undefined, whose: string): void {
+  if (address && StrKey.isValidEd25519PublicKey(address)) return;
+  throw new AppError(
+    'INVALID_STELLAR_ADDRESS',
+    `No se puede bloquear el dinero: ${whose} no tiene una cuenta Stellar valida.`,
+    `Invalid Stellar address for ${whose}: ${address ?? 'null'}`,
+    422,
+  );
+}
+
 export async function prepareLockTrade(
   request: FastifyRequest,
   tradeId: string,
@@ -498,6 +654,10 @@ export async function prepareLockTrade(
   if (trade.seller_id !== userId) throw new ForbiddenError('Only the seller can lock');
   if (trade.status !== 'pending') throw new ConflictError(`Trade is ${trade.status}, expected pending`);
 
+  // Antes del atajo mock: un registro incoherente se rechaza igual en pruebas
+  // que en cadena, y nunca se construye un XDR para el contrato equivocado.
+  assertLockableEscrowAsset(trade);
+
   if (config.mockStellar) {
     return { mock: true as const };
   }
@@ -507,12 +667,21 @@ export async function prepareLockTrade(
   if (!seller) throw new NotFoundError('Seller not found');
   if (!buyer) throw new NotFoundError('Buyer not found');
 
+  // Se comprueba ANTES de llamar a Soroban. Una direccion invalida hacia
+  // reventar el SDK con "Unsupported address type", que salia como 500 y la app
+  // mostraba "el servidor no responde": un mensaje que manda a buscar el fallo
+  // en el sitio equivocado. El problema no es la red, son los datos.
+  assertUsableStellarAddress(seller.stellar_address, 'tu cuenta');
+  assertUsableStellarAddress(buyer.stellar_address, 'la cuenta de la otra parte');
+
   const { xdr, networkPassphrase } = await prepareLockTx({
     request,
     sellerAddress: seller.stellar_address,
     buyerAddress: buyer.stellar_address,
     amountStroops: BigInt(trade.amount_stroops),
-    platformFeeMxn: trade.platform_fee_mxn,
+    // A la MISMA tasa congelada de la operacion. Volver a consultar la tasa
+    // viva aqui cambiaria por detras lo pactado al crearla.
+    platformFeeStroops: stroopsAtFrozenRate(trade.platform_fee_mxn, trade.rate_mxn),
     secretHash: trade.secret_hash,
   });
 
@@ -536,6 +705,10 @@ export async function lockTrade(
     if (trade.seller_id !== userId) throw new ForbiddenError('Only the seller can lock');
     if (trade.status !== 'pending') throw new ConflictError(`Trade is ${trade.status}, expected pending`);
 
+    // Mismo guard que en `prepareLockTrade`, antes de enviar nada (y antes de
+    // la rama mock). Si alguien llega aqui sin pasar por prepare, tampoco pasa.
+    assertLockableEscrowAsset(trade);
+
     let lockTxHash: string;
     let stellarTradeId: string;
 
@@ -555,7 +728,10 @@ export async function lockTrade(
         sellerAddress: seller.stellar_address,
         buyerAddress: buyer.stellar_address,
         amountStroops: BigInt(trade.amount_stroops),
-        platformFeeMxn: trade.platform_fee_mxn,
+        // Debe coincidir EXACTAMENTE con lo que se firmo en `prepare`: si
+        // difiere, `assertInvocationMatches` rechaza el XDR, que es lo que se
+        // busca. Por eso ambos salen de la tasa congelada, no de la viva.
+        platformFeeStroops: stroopsAtFrozenRate(trade.platform_fee_mxn, trade.rate_mxn),
         secretHash: trade.secret_hash,
       });
       lockTxHash = result.txHash;
@@ -1362,29 +1538,66 @@ export async function lookupAuditByRequestId(requestId: string) {
   }));
 }
 
-export async function getMerchantTrades(merchantId: string, state: string = 'all') {
+/**
+ * CASH-3: la bandeja del proveedor.
+ *
+ * Filtraba por `seller_id`. En deposito eso es el proveedor, pero en cash-out
+ * el vendedor del escrow es el CLIENTE: el proveedor no veia ni una sola
+ * solicitud de cash-out, que es justo el flujo donde tiene que salir de lo que
+ * este haciendo para entregar efectivo. Ahora filtra por `provider_id`, la
+ * columna canonica de CASH-1 — la misma que ya usa `idx_trades_provider`.
+ *
+ * La contraparte tampoco se podia leer del JOIN sobre `buyer_id`: en cash-out
+ * ese es el propio proveedor, asi que la fila mostraba su nombre como si fuera
+ * el del cliente. El nombre se resuelve aparte con `deriveInitiatorId`, que es
+ * la unica definicion de quien es el cliente segun el flujo (CASH-9).
+ */
+export async function getMerchantTrades(providerId: string, state: string = 'all') {
   const statusValues = state === 'all'
     ? ['pending', 'locked', 'revealing', 'completed', 'cancelled', 'refunded']
     : [state];
 
-  const trades = await db.getMany(
+  const trades = await db.getMany<{
+    id: string; seller_id: string; buyer_id: string; flow: TradeFlow;
+    amount_mxn: number; status: string; created_at: string;
+  }>(
     `SELECT
        t.id,
        t.seller_id,
        t.buyer_id,
+       t.flow,
        t.amount_mxn,
        t.status,
-       t.created_at,
-       u.username as buyer_handle
+       t.created_at
      FROM trades t
-     JOIN users u ON t.buyer_id = u.id
-     WHERE t.seller_id = $1
+     WHERE t.provider_id = $1
        AND t.status = ANY($2)
      ORDER BY t.created_at DESC`,
-    [merchantId, statusValues],
+    [providerId, statusValues],
   );
 
-  return trades;
+  const clientIds = [
+    ...new Set(trades.map((t) => deriveInitiatorId(t.flow, t.seller_id, t.buyer_id))),
+  ];
+  const clients = clientIds.length
+    ? await db.getMany<{ id: string; username: string | null }>(
+        'SELECT id, username FROM users WHERE id = ANY($1)',
+        [clientIds],
+      )
+    : [];
+  const handleById = new Map(clients.map((c) => [c.id, c.username]));
+
+  return trades.map((t) => ({
+    id: t.id,
+    seller_id: t.seller_id,
+    buyer_id: t.buyer_id,
+    flow: t.flow,
+    amount_mxn: t.amount_mxn,
+    status: t.status,
+    created_at: t.created_at,
+    client_handle:
+      handleById.get(deriveInitiatorId(t.flow, t.seller_id, t.buyer_id)) ?? 'Usuario MicoPay',
+  }));
 }
 
 /**
@@ -1580,7 +1793,7 @@ async function buildConfirmResult(
   handoff: CashHandoff,
   resumed: boolean,
 ): Promise<MerchantConfirmResult> {
-  const clientId = trade.flow === 'cashout' ? trade.seller_id : trade.buyer_id;
+  const clientId = deriveInitiatorId(trade.flow, trade.seller_id, trade.buyer_id);
   const client = await db.getOne<{ username: string }>(
     'SELECT username FROM users WHERE id = $1',
     [clientId],

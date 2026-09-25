@@ -349,7 +349,11 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 bg-primary/10 rounded-sm flex items-center justify-center">
                           <span className="material-symbols-outlined text-primary text-lg">
-                            {asset.code === 'XLM' ? 'star' : asset.code === 'USDC' ? 'attach_money' : 'currency_peso'}
+                            {/* `currency_peso` no existe en Material Symbols: se
+                                renderizaba como el texto crudo. `payments` si
+                                existe y es el que usa el resto de la app para
+                                pesos. */}
+                            {asset.code === 'XLM' ? 'star' : asset.code === 'USDC' ? 'attach_money' : 'payments'}
                           </span>
                         </div>
                         <p className="font-bold text-on-surface">{asset.code}</p>

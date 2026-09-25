@@ -21,7 +21,6 @@ export async function assertNotReplayed(
   }
 }
 
-const STROOPS_PER_MXN = 10_000_000n;
 const DEFAULT_TIMEOUT_MINUTES = 120;
 
 function getNetworkPassphrase(NetworksModule: typeof import('@stellar/stellar-sdk').Networks) {
@@ -145,7 +144,13 @@ export async function prepareLockTx(params: {
   sellerAddress: string;
   buyerAddress: string;
   amountStroops: bigint;
-  platformFeeMxn: number;
+  /**
+   * Comision de plataforma YA convertida a stroops del activo. Antes llegaba en
+   * pesos y se multiplicaba aqui por 10^7, o sea 1 MXN = 1 unidad del activo:
+   * el mismo error de unidades que el monto. La conversion vive en
+   * `assetRate.service` y nadie mas multiplica.
+   */
+  platformFeeStroops: bigint;
   secretHash: string; // 64-char hex (32 bytes)
   timeoutMinutes?: number;
 }): Promise<{ xdr: string; networkPassphrase: string }> {
@@ -154,7 +159,7 @@ export async function prepareLockTx(params: {
   } = await import('@stellar/stellar-sdk');
 
   const {
-    sellerAddress, buyerAddress, amountStroops, platformFeeMxn, secretHash,
+    sellerAddress, buyerAddress, amountStroops, platformFeeStroops, secretHash,
     timeoutMinutes = DEFAULT_TIMEOUT_MINUTES,
   } = params;
 
@@ -164,7 +169,6 @@ export async function prepareLockTx(params: {
   const account = await rpc.getAccount(sellerAddress);
   const contract = new Contract(config.escrowContractId);
 
-  const platformFeeStroops = BigInt(platformFeeMxn) * STROOPS_PER_MXN;
   const secretHashBytes = Buffer.from(secretHash, 'hex');
 
   const tx = new TransactionBuilder(account, { fee: '1000000', networkPassphrase })
@@ -205,7 +209,7 @@ export async function submitLockTx(params: {
   sellerAddress: string;
   buyerAddress: string;
   amountStroops: bigint;
-  platformFeeMxn: number;
+  platformFeeStroops: bigint;
   secretHash: string;
 }): Promise<{ txHash: string }> {
   const { TransactionBuilder, Networks, rpc: rpcModule } = await import('@stellar/stellar-sdk');
@@ -220,7 +224,7 @@ export async function submitLockTx(params: {
       params.sellerAddress,
       params.buyerAddress,
       params.amountStroops,
-      BigInt(params.platformFeeMxn) * STROOPS_PER_MXN,
+      params.platformFeeStroops,
       Buffer.from(params.secretHash, 'hex'),
       // timeout_minutes (6th arg) intentionally omitted — not fund-relevant.
     ],

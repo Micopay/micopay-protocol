@@ -3,6 +3,7 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 import { createRateLimiter } from '../middleware/rateLimit.middleware.js';
 import { config } from '../config.js';
 import * as tradeService from '../services/trade.service.js';
+import { ASSET_CODE_MAX_LENGTH, normalizeEscrowAssetCode } from '../services/assetRate.service.js';
 
 const tradeRateLimit = createRateLimiter({
   windowMs: config.tradeRateLimitWindowMs,
@@ -31,12 +32,29 @@ export async function tradeRoutes(app: FastifyInstance) {
    *
    * In both directions the Red MicoPay liquidity provider is the counterparty,
    * never the caller. provider_id is derived here from the authenticated caller
-   * and that rule; it is never read from the request body. `additionalProperties:
-   * false` means a client that tries to send provider_id is rejected outright
-   * rather than silently ignored.
+   * and that rule; it is never read from the request body. With Fastify's
+   * default ajv options `additionalProperties: false` STRIPS unknown fields
+   * instead of rejecting them (pinned by tradeFlow.test.ts), so a forged
+   * provider_id is dropped before the handler runs.
+   *
+   * `asset_code` (optional): the escrow asset. Absent -> XLM, so installed APKs
+   * keep working. Error contract:
+   *   400 VALIDATION_ERROR / INVALID_ASSET_CODE — not a string (null, number,
+   *       boolean, object), empty, or longer than the column;
+   *   422 ASSET_NOT_ENABLED — well-formed code without a deployed escrow.
    */
   app.post('/trades', {
     preHandler: [tradeRateLimit],
+    // Fastify's default ajv runs with `coerceTypes`, which would turn 123 into
+    // "123" and null into "" before the schema check — so the schema alone
+    // cannot promise a 400 for a wrong type. The ORIGINAL type is checked here,
+    // before validation, without changing ajv globally.
+    preValidation: async (request) => {
+      const body = request.body as Record<string, unknown> | null | undefined;
+      if (body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, 'asset_code')) {
+        normalizeEscrowAssetCode(body.asset_code);
+      }
+    },
     schema: {
       body: {
         type: 'object',
@@ -45,15 +63,17 @@ export async function tradeRoutes(app: FastifyInstance) {
           counterparty_id: { type: 'string', format: 'uuid' },
           amount_mxn: { type: 'integer', minimum: 100, maximum: 50000 },
           flow: { type: 'string', enum: ['deposit', 'cashout'] },
+          asset_code: { type: 'string', minLength: 1, maxLength: ASSET_CODE_MAX_LENGTH },
         },
         additionalProperties: false,
       },
     },
   }, async (request, reply) => {
-    const { counterparty_id, amount_mxn, flow } = request.body as {
+    const { counterparty_id, amount_mxn, flow, asset_code } = request.body as {
       counterparty_id: string;
       amount_mxn: number;
       flow: 'deposit' | 'cashout';
+      asset_code?: string;
     };
     const callerId = request.user.id;
     const sellerId = flow === 'cashout' ? callerId : counterparty_id;
@@ -65,13 +85,14 @@ export async function tradeRoutes(app: FastifyInstance) {
       buyerId,
       flow,
       amountMxn: amount_mxn,
+      assetCode: asset_code,
     });
 
     // Don't expose encrypted secret fields in response
     const { secret_enc, secret_nonce, ...safeTrade } = trade;
 
     reply.status(201);
-    return { trade: safeTrade };
+    return { trade: { ...safeTrade, ...tradeService.escrowAmountsForTrade(trade) } };
   });
 
   /**
@@ -133,7 +154,12 @@ export async function tradeRoutes(app: FastifyInstance) {
       await tradeService.getTradeDetailForParticipant(id, request.user.id);
 
     const { secret_enc, secret_nonce, ...safeTrade } = trade;
-    return { trade: safeTrade, merchant_unavailable, seller_username, buyer_username };
+    return {
+      trade: { ...safeTrade, ...tradeService.escrowAmountsForTrade(trade) },
+      merchant_unavailable,
+      seller_username,
+      buyer_username,
+    };
   });
 
   /**
@@ -303,8 +329,10 @@ export async function tradeRoutes(app: FastifyInstance) {
 
   /**
    * GET /merchants/me/trades
-   * List incoming trades for the authenticated merchant, filtered by state.
-   * Returns trades where merchant is the seller, newest first.
+   * List incoming trades for the authenticated provider, filtered by state.
+   * Returns trades where the caller is the Red MicoPay provider (CASH-3:
+   * antes era el vendedor del escrow, que en cash-out es el cliente), newest
+   * first.
    */
   app.get('/merchants/me/trades', {
     schema: {

@@ -16,7 +16,15 @@ CREATE TABLE users (
   stellar_address          VARCHAR(56) UNIQUE,
   username                 VARCHAR(30) UNIQUE,
   phone_hash               VARCHAR(64) UNIQUE,
-  merchant_available       BOOLEAN NOT NULL DEFAULT true,
+  -- RED-1: nadie nace publicado en el mapa. Pertenecer a Red MicoPay es una
+  -- decision explicita (provider_status), y estar disponible ahora mismo es un
+  -- hecho aparte de pertenecer.
+  merchant_available       BOOLEAN NOT NULL DEFAULT false,
+  provider_status          VARCHAR(24) NOT NULL DEFAULT 'not_enrolled'
+                             CONSTRAINT chk_users_provider_status
+                             CHECK (provider_status IN ('not_enrolled', 'pending_verification', 'active', 'suspended')),
+  provider_enrolled_at     TIMESTAMPTZ,
+  provider_activated_at    TIMESTAMPTZ,
   deleted_at               TIMESTAMPTZ,
   deleted_username         VARCHAR(30),
   deleted_stellar_address  VARCHAR(56),
@@ -25,6 +33,7 @@ CREATE TABLE users (
 );
 
 CREATE INDEX idx_users_stellar ON users (stellar_address);
+CREATE INDEX idx_users_provider_status ON users (provider_status) WHERE provider_status = 'active';
 
 -- ================================================
 -- WALLETS
@@ -58,7 +67,20 @@ CREATE TABLE trades (
   amount_mxn      INTEGER NOT NULL,
   amount_stroops  BIGINT NOT NULL,
   seller_fee_mxn  INTEGER NOT NULL DEFAULT 0,
+  -- Las tres cifras se congelan al crear la operacion: una comision pactada no
+  -- puede cambiar despues porque el agente edite su perfil. El cliente paga las
+  -- dos, y `payout_mxn` es lo que recibe limpio.
   platform_fee_mxn INTEGER NOT NULL DEFAULT 0,
+  provider_fee_mxn INTEGER NOT NULL DEFAULT 0,
+  provider_rate_percent NUMERIC(7, 4),
+  payout_mxn       INTEGER,
+
+  -- El peso es la denominacion del acuerdo; el activo y su tasa son metadata,
+  -- congelada al crear la operacion. Ver 20260905200000_trade_asset_rate.
+  asset_code       VARCHAR(12) NOT NULL DEFAULT 'XLM',
+  rate_mxn         NUMERIC(18, 7) NOT NULL DEFAULT 1,
+  rate_source      VARCHAR(32),
+  rate_locked_at   TIMESTAMPTZ,
 
   -- HTLC
   secret_hash     VARCHAR(64) NOT NULL,

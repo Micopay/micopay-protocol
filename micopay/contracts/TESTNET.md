@@ -8,8 +8,24 @@ The `micopay-api` x402 service uses a separate escrow contract; do not mix them.
 | Contract | ID |
 |----------|----|
 | MicopayEscrow (HTLC) | `CB4M5777YFQWKGDUULCX5W6PXEDJSJARDTMH4VV6FXC4W4UPANALO3HZ` |
-| MXNe token contract  | `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` |
-| MXNe issuer address  | `GBZXN7PIRZGNMHGA7MUUUF4GWMTISGNQ5E72TFL6GDWPE6K4RCAVOALV` |
+| **XLM (native) SAC** — token del escrow | `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` |
+| MXNe issuer address (sin SAC desplegado) | `GBZXN7PIRZGNMHGA7MUUUF4GWMTISGNQ5E72TFL6GDWPE6K4RCAVOALV` |
+
+> ⚠️ **Corregido el 2026-09-05.** Esta tabla etiquetaba `CDLZFC3S…` como "MXNe
+> token contract". **Es el Stellar Asset Contract del XLM nativo**, verificado
+> de dos formas independientes: su `symbol()` devuelve `native`, y
+> `Asset.native().contractId(Networks.TESTNET)` da exactamente ese ID.
+>
+> El error costo caro. El diagnostico WP0 del plan multiactivo (2026-07-02) leyo
+> correctamente el `TokenId` del escrow en cadena, lo comparo contra esta tabla,
+> concluyo "la instancia es MXNe" y de ahi dedujo que la conversion 1:1 del
+> backend era correcta. No lo era: el escrow bloquea XLM, y `amount_stroops =
+> amount_mxn * 10^7` hacia que una operacion de 500 pesos bloqueara 500 XLM
+> (~1 563 pesos). La verificacion fue real; la referencia contra la que se
+> comparo estaba mal.
+>
+> No hay ningun SAC de MXNe desplegado en testnet a dia de hoy. El issuer de
+> arriba existe, pero su contrato de activo no.
 
 Both contracts verified live on testnet (`stellar contract fetch --network testnet --id <ID>`
 returns valid WASM with `initialize`, `lock`, `refund`, `release`, `get_trade` exports).

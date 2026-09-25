@@ -20,6 +20,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import TradeStateBadge, {
+  TRADE_STATE_COPY,
   TRADE_STATES,
   parseTradeState,
   normalizeTradeState,
@@ -137,5 +138,63 @@ describe('CASH-5A · la UI no reintroduce estados inventados', () => {
   it('TradeDetail no rotula un estado desconocido como pendiente', () => {
     const src = read('../pages/TradeDetail.tsx');
     expect(src).not.toMatch(/STATUS_CONFIG\[status\]\s*\|\|\s*STATUS_CONFIG\.pending/);
+  });
+});
+
+/**
+ * El chat mostraba "Operación: revealing" —el identificador interno del
+ * sistema— porque solo tenía redacción para `locked` y `pending`, y todo lo
+ * demás caía a un texto plantilla con el estado crudo dentro.
+ *
+ * Los textos humanos YA existían en `TRADE_STATE_COPY` desde CASH-5A, pero solo
+ * los usaba la insignia. Dos listas paralelas garantizan que una se quede atrás,
+ * y la que se quedó atrás fue la que ve el usuario en mitad de una operación con
+ * su dinero dentro.
+ */
+describe('el chat no enseña identificadores internos', () => {
+  const source = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../pages/ChatRoom.tsx'), 'utf8');
+
+  it('usa el diccionario compartido en vez de la plantilla con el estado crudo', () => {
+    expect(source).toContain('TRADE_STATE_COPY');
+    // `chatRoom.tradeStatus` es la plantilla "Operación: {{status}}".
+    expect(source).not.toContain("t('chatRoom.tradeStatus'");
+  });
+
+  it('todos los estados canónicos tienen redacción humana', () => {
+    for (const state of TRADE_STATES) {
+      const copy = TRADE_STATE_COPY[state];
+      expect(copy?.label, `falta la etiqueta de "${state}"`).toBeTruthy();
+      // Ninguna debe ser el identificador tal cual.
+      expect(copy.label.toLowerCase()).not.toBe(state);
+    }
+  });
+});
+
+/**
+ * Las pantallas de monto pintaban la insignia de estado con `pending` fijado a
+ * mano, DOS PANTALLAS antes de confirmar. Decia "Operación creada · la solicitud
+ * se registró" —en pasado— cuando no existía ninguna operación: aún no se elige
+ * agente ni se confirma nada.
+ *
+ * Es la misma clase de fallo que el cartel de "estamos bloqueando tu saldo": la
+ * interfaz afirmando un hecho que no ocurrió. En una app de dinero eso no es un
+ * detalle de copy — es decirle a alguien que su solicitud existe cuando no.
+ */
+describe('no se anuncia una operación que no existe', () => {
+  const dir = dirname(fileURLToPath(import.meta.url));
+
+  for (const screen of ['CashoutRequest', 'DepositRequest']) {
+    it(`${screen} no pinta la insignia de estado`, () => {
+      const source = readFileSync(resolve(dir, `../pages/${screen}.tsx`), 'utf8');
+      expect(source).not.toContain('<TradeStateBadge');
+      // Y no fija un estado a mano: no hay operación de la que hablar.
+      expect(source).not.toContain("getTradeStateDebugOverride('pending')");
+    });
+  }
+
+  it('el estado `pending` sigue describiendo algo ya creado', () => {
+    // El texto no estaba mal: estaba en la pantalla equivocada. Sigue siendo el
+    // correcto cuando la operación SÍ existe, así que no se toca.
+    expect(TRADE_STATE_COPY.pending.happened).toMatch(/se registró/i);
   });
 });

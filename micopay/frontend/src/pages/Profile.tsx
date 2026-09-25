@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import DeleteAccountModal from "../components/DeleteAccountModal";
 import SecretKeyBackupModal from "../components/SecretKeyBackupModal";
-import { exportSecretKey, importKeypair } from '../lib/keystore';
+import { revealSecretKey, importKeypair } from '../lib/keystore';
 import {
   deleteAccount,
   getCurrentUser,
@@ -28,10 +28,18 @@ interface ProfileProps {
   onLogout: () => void;
   onNavigatePrivacy?: () => void;
   onNavigateTerms?: () => void;
+  /** RED-2: entrada al alta como agente de Red MicoPay. */
+  onNavigateJoinNetwork?: () => void;
+  /** Pertenencia real, leida del servidor. No se infiere de tener sesion. */
+  providerStatus?: 'not_enrolled' | 'pending_verification' | 'active' | 'suspended' | null;
+  /** Disponibilidad actual; solo significa algo si eres agente activo. */
+  availability?: string | null;
+  /** Cambia la disponibilidad. Solo se ofrece a agentes activos. */
+  onToggleAvailability?: (next: 'online' | 'paused') => void;
   onToggleDebug?: () => void;
 }
 
-const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout, onNavigatePrivacy, onNavigateTerms }: ProfileProps) => {
+const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout, onNavigatePrivacy, onNavigateTerms, onNavigateJoinNetwork, providerStatus, availability, onToggleAvailability }: ProfileProps) => {
   const { t, i18n } = useTranslation();
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -156,7 +164,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
   const handleExport = async () => {
     setExportError(null);
     try {
-      const secret = await exportSecretKey();
+      const secret = await revealSecretKey();
       setRevealedSecret(secret);
     } catch {
       setExportError('No se pudo leer tu llave. Cierra la app y vuelve a intentarlo.');
@@ -357,6 +365,73 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                       </button>
                     ))}
                   </div>
+                </section>
+
+                {/* RED-2: Red MicoPay. La tarjeta cambia segun la pertenencia REAL,
+                    no segun haya sesion. Quien no es agente ve una invitacion;
+                    quien lo es, su interruptor de disponibilidad. */}
+                <section className="bg-papel rounded-sm p-5 border-2 border-tinta/60">
+                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-gris mb-3">Red MicoPay</p>
+
+                  {(providerStatus == null || providerStatus === 'not_enrolled') && (
+                    <>
+                      <p className="text-sm text-tinta mb-1 font-bold">Gana dando efectivo</p>
+                      <p className="text-sm text-gris mb-4">
+                        Entrega efectivo a quien lo necesita cerca de ti y cobra tu comisión. No
+                        necesitas tener un negocio.
+                      </p>
+                      <button
+                        onClick={onNavigateJoinNetwork}
+                        className="w-full min-h-12 bg-verde text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
+                      >
+                        Únete a Red MicoPay
+                      </button>
+                    </>
+                  )}
+
+                  {providerStatus === 'pending_verification' && (
+                    <>
+                      <p className="text-sm text-tinta mb-1 font-bold">Alta a medias</p>
+                      <p className="text-sm text-gris mb-4">
+                        Te faltan pasos para activarte como agente.
+                      </p>
+                      <button
+                        onClick={onNavigateJoinNetwork}
+                        className="w-full min-h-12 border-2 border-verde text-verde font-bold rounded-sm"
+                      >
+                        Continuar mi alta
+                      </button>
+                    </>
+                  )}
+
+                  {providerStatus === 'active' && (
+                    <>
+                      <p className="text-sm text-tinta mb-1 font-bold">Eres agente</p>
+                      <p className="text-sm text-gris mb-4">
+                        {availability === 'online'
+                          ? 'Apareces en el mapa y puedes recibir solicitudes.'
+                          : 'Estás en pausa: sigues siendo agente, pero no apareces en el mapa.'}
+                      </p>
+                      <button
+                        onClick={() =>
+                          onToggleAvailability?.(availability === 'online' ? 'paused' : 'online')
+                        }
+                        className={`w-full min-h-12 font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all ${
+                          availability === 'online'
+                            ? 'border-2 border-tinta text-tinta'
+                            : 'bg-verde text-papel'
+                        }`}
+                      >
+                        {availability === 'online' ? 'Ponerme en pausa' : 'Ponerme disponible'}
+                      </button>
+                    </>
+                  )}
+
+                  {providerStatus === 'suspended' && (
+                    <p className="text-sm text-gris">
+                      Tu cuenta de agente está suspendida. Escríbenos para revisarlo.
+                    </p>
+                  )}
                 </section>
 
                 <section className="bg-papel rounded-sm p-5 border-2 border-tinta/60 ">

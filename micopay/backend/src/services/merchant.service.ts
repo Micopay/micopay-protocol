@@ -1,5 +1,6 @@
 import db from '../db/schema.js';
 import { BadRequestError, NotFoundError } from '../utils/errors.js';
+import { computeTradeFees } from './tradeFees.js';
 
 export const GLOBAL_MIN_AMOUNT_MXN = 100;
 export const GLOBAL_MAX_AMOUNT_MXN = 50000;
@@ -38,8 +39,14 @@ export interface AvailableMerchant {
   /** RED-3: solo si el proveedor consintio publicar su local. */
   storefront_address: string | null;
   distance_km: number;
-  /** Payout the buyer receives for the requested amount */
+  /** Lo que el cliente recibe limpio, ya descontadas AMBAS comisiones. */
   payout_mxn: number;
+  /** Comision del agente en MXN, para este monto. */
+  provider_fee_mxn: number;
+  /** Comision de MicoPay en MXN, para este monto. */
+  platform_fee_mxn: number;
+  /** Coste total sobre el monto, en %. */
+  effective_fee_percent: number;
   /** Completed trades as seller — reputation signal */
   trades_completed: number;
   /** Completion rate (%) over terminal trades, null if no history */
@@ -147,10 +154,15 @@ export async function updateMerchantConfig(userId: string, input: UpdateMerchant
          min_trade_mxn = $3,
          max_trade_mxn = $4,
          daily_cap_mxn = $5,
+         -- RED-1: guardar la configuracion ES el acto de aceptar tus terminos.
+         -- La lista de alta lo exige, porque tener numeros por defecto no
+         -- significa que la persona los haya visto.
+         terms_confirmed_at = NOW(),
          updated_at = NOW()
      WHERE user_id = $1
      RETURNING user_id, rate_percent, min_trade_mxn, max_trade_mxn, daily_cap_mxn,
-               latitude, longitude, area_label, meeting_point, publish_storefront, updated_at`,
+               latitude, longitude, area_label, meeting_point, publish_storefront,
+               terms_confirmed_at, updated_at`,
     [userId, input.ratePercent, input.minTradeMxn, input.maxTradeMxn, input.dailyCapMxn],
   );
 
@@ -161,6 +173,8 @@ export async function updateMerchantConfig(userId: string, input: UpdateMerchant
  * GET /merchants/available
  *
  * Returns merchants who:
+ *  - are enrolled and active in Red MicoPay (provider_status = 'active')
+ *  - are not suspended, banned or deleted
  *  - have merchant_available = true
  *  - have a location set (latitude/longitude NOT NULL)
  *  - are within radius_km of the caller's position
@@ -206,7 +220,17 @@ export async function getAvailableMerchants(
        COALESCE((SELECT COUNT(*) FROM trades t WHERE t.seller_id = u.id AND t.status IN ('completed','cancelled','refunded')), 0) AS trades_terminal
      FROM merchant_configs mc
      JOIN users u ON u.id = mc.user_id
-     WHERE u.merchant_available = true
+     -- RED-1: el mapa lista agentes, no cuentas. Pertenecer a la Red
+     -- (provider_status) es un hecho aparte de estar disponible ahora mismo
+     -- (merchant_available). Antes bastaba lo segundo, y como nacia en true,
+     -- cualquier persona registrada con ubicacion aparecia como proveedora.
+     -- Suspendidos y baneados salen aqui, no al crear la operacion: ofrecer a
+     -- alguien que va a rechazar es una promesa que la pantalla no puede cumplir.
+     WHERE u.provider_status = 'active'
+       AND u.merchant_available = true
+       AND u.is_suspended = false
+       AND COALESCE(u.is_banned, false) = false
+       AND u.deleted_at IS NULL
        AND mc.latitude  IS NOT NULL
        AND mc.longitude IS NOT NULL
        AND mc.min_trade_mxn <= $3
@@ -220,9 +244,12 @@ export async function getAvailableMerchants(
   return rows.map((r) => {
     const ratePercent = parseFloat(r.rate_percent as unknown as string);
     const distanceKm = parseFloat(r.distance_km as unknown as string);
-    const payoutMxn = parseFloat(
-      (amount_mxn * (1 - ratePercent / 100)).toFixed(2),
-    );
+    // Antes esto anunciaba `monto * (1 - tarifa)`: ignoraba la comision de
+    // plataforma, asi que el mapa prometia un neto que la operacion no cumplia.
+    // Ahora sale del mismo modulo que usa `createTrade`, para que la cifra que
+    // se ve al elegir agente sea exactamente la que se cobra al aceptar.
+    const fees = computeTradeFees(amount_mxn, ratePercent);
+    const payoutMxn = fees.payoutMxn;
     const completed = parseInt(r.trades_completed as unknown as string, 10) || 0;
     const terminal = parseInt(r.trades_terminal as unknown as string, 10) || 0;
     const completionRate = terminal > 0 ? Math.round((completed / terminal) * 100) : null;
@@ -246,6 +273,11 @@ export async function getAvailableMerchants(
       storefront_address: r.storefront_address,
       distance_km: Math.round(distanceKm * 1000) / 1000,
       payout_mxn: payoutMxn,
+      // El desglose viaja completo para que la app no tenga que deducirlo
+      // restando, que es como se colo el error anterior.
+      provider_fee_mxn: fees.providerFeeMxn,
+      platform_fee_mxn: fees.platformFeeMxn,
+      effective_fee_percent: fees.effectivePercent,
       trades_completed: completed,
       completion_rate: completionRate,
       tier,

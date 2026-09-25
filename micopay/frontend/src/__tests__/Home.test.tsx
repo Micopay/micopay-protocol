@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { render, screen, waitFor } from '@testing-library/react';
 import Home from '../pages/Home';
 import * as api from '../services/api';
@@ -78,8 +81,8 @@ describe('Home — pending-trades badge', () => {
 
   it('shows the badge with the correct count when there are pending trades', async () => {
     mockGetMerchantTrades.mockResolvedValue([
-      { id: 't1', buyer_handle: 'alice', amount_mxn: 100, status: 'pending', created_at: '2024-06-01T10:00:00Z' },
-      { id: 't2', buyer_handle: 'bob', amount_mxn: 200, status: 'pending', created_at: '2024-06-01T11:00:00Z' },
+      { id: 't1', client_handle: 'alice', flow: 'cashout', amount_mxn: 100, status: 'pending', created_at: '2024-06-01T10:00:00Z' },
+      { id: 't2', client_handle: 'bob', flow: 'deposit', amount_mxn: 200, status: 'pending', created_at: '2024-06-01T11:00:00Z' },
     ]);
 
     render(<Home {...createProps()} />);
@@ -224,5 +227,46 @@ describe('Home — non-custodial wallet balance states', () => {
     await waitFor(() => {
       expect(screen.getAllByText('--').length).toBeGreaterThanOrEqual(1);
     });
+  });
+});
+
+/**
+ * La acción principal del producto estaba al FINAL de la pantalla, después del
+ * historial. Con historial CERO ya quedaba fuera de la vista: en una cuenta
+ * recién creada había que hacer scroll para encontrar "Convertir a efectivo",
+ * y cada operación nueva la empujaba más abajo.
+ *
+ * Se fija por posición en la fuente, no por render: lo que importa es el ORDEN
+ * de las secciones, y es exactamente lo que se puede volver a perder al añadir
+ * una sección nueva sin pensar dónde va.
+ */
+describe('el orden de Inicio pone la acción antes que el registro', () => {
+  const source = readFileSync(
+    resolve(dirname(fileURLToPath(import.meta.url)), '../pages/Home.tsx'),
+    'utf8',
+  );
+
+  const at = (needle: string) => {
+    const i = source.indexOf(needle);
+    expect(i, `no se encontró "${needle}" en Home.tsx`).toBeGreaterThan(-1);
+    return i;
+  };
+
+  it('los CTA van antes que activos e historial', () => {
+    const cta = at('onClick={onNavigateCashout}');
+    expect(cta, 'el CTA debe ir antes de ACTIVOS').toBeLessThan(at("t('home.assets')"));
+    expect(cta, 'el CTA debe ir antes del historial').toBeLessThan(
+      at("t('home.recentActivity')"),
+    );
+  });
+
+  it('el saldo sigue primero: responde "cuánto tengo" antes de "qué hago"', () => {
+    expect(at("t('home.totalValue'")).toBeLessThan(at('onClick={onNavigateCashout}'));
+  });
+
+  it('el historial de Inicio está acotado', () => {
+    // Sin tope volvería a empujar hacia abajo lo que venga después.
+    expect(source).toContain('HOME_HISTORY_LIMIT');
+    expect(source).toMatch(/trades\.slice\(0, HOME_HISTORY_LIMIT\)/);
   });
 });

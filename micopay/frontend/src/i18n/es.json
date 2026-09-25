@@ -29,7 +29,8 @@
       "pending": "Pendiente",
       "cancelled": "Cancelado",
       "refunded": "Reembolsado"
-    }
+    },
+    "seeAllActivity": "Ver todo el historial"
   },
   "pay": {
     "title": "Pagar",
@@ -94,20 +95,6 @@
     "copyAddress": "Copiar dirección",
     "importKey": "Importar clave",
     "exportKey": "Exportar clave secreta ⚠️",
-    "exportKeyTitle": "Resguarda tu clave",
-    "exportKeyHeading": "Tu Clave Secreta",
-    "exportKeyWarning": "MicoPay nunca almacena tu clave secreta en nuestros servidores. Cualquier persona con esta clave tiene control total de tus fondos. Guárdala sin conexión y a salvo.",
-    "exportKeyLabel": "Clave Secreta",
-    "exportKeyShow": "Mostrar",
-    "exportKeyHide": "Ocultar",
-    "exportKeyCopy": "Copiar al portapapeles",
-    "exportKeyCopied": "¡Copiado!",
-    "exportKeyClose": "Cerrar",
-    "exportKeyQR": "Escanea para respaldar",
-    "exportKeyQRHint": "Captura de pantalla o imprime este código QR. La clave secreta nunca toca el portapapeles, por lo que otras apps no pueden leerla.",
-    "exportClipboardWarning": "⚠️ Advertencia: el portapapeles de Android es legible por otras apps, teclados (Gboard, SwiftKey) y servicios de sincronización en la nube. Prefiere el código QR de arriba.",
-    "exportRateLimited": "Límite de exportación. Intenta de nuevo en",
-    "exportKeyError": "Error al cargar la clave secreta.",
     "legal": "Legal",
     "privacy": "Política de Privacidad",
     "terms": "Términos de Servicio",
@@ -141,14 +128,32 @@
     "time": "TIEMPO",
     "timeValue": "< 15 min",
     "search": "Buscar opciones de efectivo",
-    "recoverLabel": "Buscar nueva oferta"
+    "recoverLabel": "Buscar nueva oferta",
+    "nothingMovedYet": "Aún no se mueve tu saldo. Vas a poder revisar el monto, la comisión y el agente antes de confirmar."
   },
   "deposit": {
     "title": "Comprar con efectivo",
     "amountLabel": "¿CUÁNTO EFECTIVO TIENES PARA USAR?",
     "info": "Encontraremos agentes cercanos que te darán activos digitales a cambio de tu efectivo. Los fondos quedan en garantía hasta que completes el encuentro.",
     "search": "Buscar agentes",
-    "recoverLabel": "Buscar nueva opción"
+    "recoverLabel": "Buscar nueva opción",
+    "nothingMovedYet": "Aún no se mueve tu saldo. Vas a poder revisar el monto, la comisión y el agente antes de confirmar."
+  },
+  "escrowAsset": {
+    "payWith": "¿Con qué pagas?",
+    "receiveIn": "¿Qué quieres recibir?",
+    "comingSoon": "Próximamente",
+    "estimate": "≈ {{units}} {{code}} · 1 {{code}} = ${{rate}}",
+    "rateLoading": "Consultando la tasa…",
+    "rateLocksOnCreate": "Estimado. La tasa se fija al crear la operación.",
+    "rateUnavailable": "No pudimos obtener la tasa. Se fija al crear la operación.",
+    "selectedAsset": "Activo",
+    "lockerToLock": "Vas a bloquear {{total}} {{code}} (incluye {{fee}} {{code}} de comisión).",
+    "lockerInEscrow": "En garantía: {{total}} {{code}} (incluye {{fee}} {{code}} de comisión).",
+    "lockerReleased": "Se liberaron {{amount}} {{code}} y {{fee}} {{code}} de comisión.",
+    "lockerRefunded": "Se te devolvieron {{total}} {{code}}.",
+    "receiverWillReceive": "Vas a recibir {{amount}} {{code}}.",
+    "receiverReceived": "Recibiste {{amount}} {{code}}."
   },
   "inbox": {
     "title": "Bandeja de entrada",
@@ -161,7 +166,9 @@
     "buyer": "Comprador",
     "status": "Estado",
     "filterAll": "Todos",
-    "withStatus": " con estado \"{{status}}\""
+    "withStatus": " con estado \"{{status}}\"",
+    "flowDeposit": "Recibes efectivo",
+    "flowCashout": "Entregas efectivo"
   },
   "tier": {
     "Nuevo": "Nuevo",
@@ -334,14 +341,16 @@
     "viewMyQrAgent": "Ver mi QR para el agente",
     "cashoutClientLockedTitle": "Oferta aceptada · Tu saldo en garantía",
     "cashoutClientLockedDesc": "Bloqueaste tu saldo. Ve a la ubicación del agente; te entregará el efectivo.",
-    "cashoutClientPendingTitle": "Preparando tu garantía",
-    "cashoutClientPendingDesc": "Estamos bloqueando tu saldo en cadena. Espera la confirmación antes de moverte.",
+    "cashoutClientPendingTitle": "Tu saldo aún no está en garantía",
+    "cashoutClientPendingDesc": "El bloqueo no se completó. Abre la operación para reintentarlo; hasta entonces el agente no puede entregarte el efectivo.",
     "cashoutAgentLockedTitle": "Cliente conectado · Saldo en garantía",
     "cashoutAgentLockedDesc": "El cliente bloqueó {{amount}} MXN en garantía. Entrégale el efectivo en persona para completar el intercambio.",
     "cashoutAgentPendingTitle": "Esperando garantía del cliente",
     "cashoutAgentPendingDesc": "El cliente está bloqueando su saldo. Cuando se confirme, entrégale el efectivo.",
     "verifyingEscrowStatus": "Verificando estado de la garantía…",
-    "tradeStatus": "Operación: {{status}}"
+    "tradeStatus": "Operación: {{status}}",
+    "depositWaitingLockTitle": "Esperando que el agente bloquee los fondos",
+    "depositWaitingLockDesc": "Todavía no hay garantía. NO entregues el efectivo hasta que este aviso cambie a verde."
   },
   "qrReveal": {
     "verified": "Verificado",
@@ -368,11 +377,11 @@
     "cashoutDone": "¡Listo!",
     "depositDone": "¡Depósito exitoso!",
     "cashoutSubtitle": "Recibiste tu efectivo",
-    "depositSubtitle": "Tus MXNE ya están en tu billetera",
-    "mxnSent": "MXN enviados",
+    "depositSubtitle": "Tus fondos ya están en tu billetera",
+    "mxnSent": "Valor enviado",
     "cashDelivered": "Efectivo entregado",
     "cashReceived": "Efectivo recibido",
-    "mxneReceived": "MXNE recibidos",
+    "mxneReceived": "Valor recibido",
     "commission": "Comisión",
     "agent": "Agente",
     "verified": "Verificado",
@@ -433,42 +442,130 @@
   },
   "errors": {
     "network": {
-      "offline": { "title": "Sin conexión", "message": "No pudimos conectarnos. Revisa tu señal e intenta otra vez.", "action": "Vuelve a intentar cuando tengas señal." },
-      "unavailable": { "title": "Servicio no disponible", "message": "El servicio está ocupado o en mantenimiento. Intenta de nuevo en unos minutos.", "action": "Espera un momento y vuelve a intentarlo." },
-      "timeout": { "title": "Tiempo de espera agotado", "message": "La operación tardó demasiado y no se pudo terminar a tiempo.", "action": "Intenta otra vez. Tus fondos siguen protegidos." }
+      "offline": {
+        "title": "Sin conexión",
+        "message": "No pudimos conectarnos. Revisa tu señal e intenta otra vez.",
+        "action": "Vuelve a intentar cuando tengas señal."
+      },
+      "unavailable": {
+        "title": "Servicio no disponible",
+        "message": "El servicio está ocupado o en mantenimiento. Intenta de nuevo en unos minutos.",
+        "action": "Espera un momento y vuelve a intentarlo."
+      },
+      "timeout": {
+        "title": "Tiempo de espera agotado",
+        "message": "La operación tardó demasiado y no se pudo terminar a tiempo.",
+        "action": "Intenta otra vez. Tus fondos siguen protegidos."
+      }
     },
     "auth": {
-      "invalidCredentials": { "title": "Datos incorrectos", "message": "El usuario o la clave no coinciden.", "action": "Revisa tus datos e inténtalo de nuevo." },
-      "sessionExpired": { "title": "Sesión vencida", "message": "Tu sesión terminó por seguridad.", "action": "Vuelve a entrar para seguir usando la app." },
-      "unauthorized": { "title": "No tienes acceso", "message": "No puedes ver esta información con esa cuenta.", "action": "Entra con la cuenta correcta o pide acceso." }
+      "invalidCredentials": {
+        "title": "Datos incorrectos",
+        "message": "El usuario o la clave no coinciden.",
+        "action": "Revisa tus datos e inténtalo de nuevo."
+      },
+      "sessionExpired": {
+        "title": "Sesión vencida",
+        "message": "Tu sesión terminó por seguridad.",
+        "action": "Vuelve a entrar para seguir usando la app."
+      },
+      "unauthorized": {
+        "title": "No tienes acceso",
+        "message": "No puedes ver esta información con esa cuenta.",
+        "action": "Entra con la cuenta correcta o pide acceso."
+      }
     },
     "financial": {
-      "conflict": { "title": "La operación ya cambió", "message": "Otra persona movió esta operación antes que tú.", "action": "Actualiza la pantalla y revisa el estado." },
-      "insufficientFunds": { "title": "Saldo insuficiente", "message": "No tienes saldo suficiente para completar esta operación.", "action": "Prueba con un monto menor o recarga saldo." },
-      "failed": { "title": "No se pudo completar", "message": "La operación no pudo terminarse.", "action": "Intenta otra vez. Tus fondos no se pierden." },
-      "cancelled": { "title": "Operación cancelada", "message": "La operación se canceló antes de terminar.", "action": "Puedes iniciar una nueva operación cuando quieras." }
+      "conflict": {
+        "title": "La operación ya cambió",
+        "message": "Otra persona movió esta operación antes que tú.",
+        "action": "Actualiza la pantalla y revisa el estado."
+      },
+      "insufficientFunds": {
+        "title": "Saldo insuficiente",
+        "message": "No tienes saldo suficiente para completar esta operación.",
+        "action": "Prueba con un monto menor o recarga saldo."
+      },
+      "failed": {
+        "title": "No se pudo completar",
+        "message": "La operación no pudo terminarse.",
+        "action": "Intenta otra vez. Tus fondos no se pierden."
+      },
+      "cancelled": {
+        "title": "Operación cancelada",
+        "message": "La operación se canceló antes de terminar.",
+        "action": "Puedes iniciar una nueva operación cuando quieras."
+      }
     },
     "escrow": {
-      "unavailable": { "title": "Garantía no disponible", "message": "No pudimos preparar la garantía en este momento.", "action": "Vuelve a intentarlo. Tu saldo sigue protegido." },
-      "releasePending": { "title": "Liberación en proceso", "message": "La garantía todavía está esperando la siguiente confirmación.", "action": "Espera unos minutos o revisa el historial." }
+      "unavailable": {
+        "title": "Garantía no disponible",
+        "message": "No pudimos preparar la garantía en este momento.",
+        "action": "Vuelve a intentarlo. Tu saldo sigue protegido."
+      },
+      "releasePending": {
+        "title": "Liberación en proceso",
+        "message": "La garantía todavía está esperando la siguiente confirmación.",
+        "action": "Espera unos minutos o revisa el historial."
+      }
     },
     "qr": {
-      "invalid": { "title": "Código no válido", "message": "El código no se puede leer o ya no sirve.", "action": "Pide un código nuevo y vuelve a escanearlo." },
-      "cameraDenied": { "title": "Cámara no disponible", "message": "No se permitió usar la cámara.", "action": "Activa el permiso y vuelve a intentarlo." },
-      "scanFailed": { "title": "No se pudo completar el escaneo", "message": "No logramos terminar la lectura del QR.", "action": "Ajusta la cámara e inténtalo de nuevo." },
-      "expired": { "title": "Código vencido", "message": "Ese código ya expiró.", "action": "Genera uno nuevo para seguir." },
-      "unreadable": { "title": "No pudimos leer el código", "message": "La cámara no logró leer el código.", "action": "Ajusta la cámara o intenta con más luz." }
+      "invalid": {
+        "title": "Código no válido",
+        "message": "El código no se puede leer o ya no sirve.",
+        "action": "Pide un código nuevo y vuelve a escanearlo."
+      },
+      "cameraDenied": {
+        "title": "Cámara no disponible",
+        "message": "No se permitió usar la cámara.",
+        "action": "Activa el permiso y vuelve a intentarlo."
+      },
+      "scanFailed": {
+        "title": "No se pudo completar el escaneo",
+        "message": "No logramos terminar la lectura del QR.",
+        "action": "Ajusta la cámara e inténtalo de nuevo."
+      },
+      "expired": {
+        "title": "Código vencido",
+        "message": "Ese código ya expiró.",
+        "action": "Genera uno nuevo para seguir."
+      },
+      "unreadable": {
+        "title": "No pudimos leer el código",
+        "message": "La cámara no logró leer el código.",
+        "action": "Ajusta la cámara o intenta con más luz."
+      }
     },
     "dispute": {
-      "pending": { "title": "Disputa en curso", "message": "Tu caso todavía está siendo revisado.", "action": "Espera la respuesta del equipo de soporte." },
-      "resolved": { "title": "Disputa resuelta", "message": "La disputa ya fue cerrada.", "action": "Revisa el historial para ver el resultado." }
+      "pending": {
+        "title": "Disputa en curso",
+        "message": "Tu caso todavía está siendo revisado.",
+        "action": "Espera la respuesta del equipo de soporte."
+      },
+      "resolved": {
+        "title": "Disputa resuelta",
+        "message": "La disputa ya fue cerrada.",
+        "action": "Revisa el historial para ver el resultado."
+      }
     },
     "refund": {
-      "pending": { "title": "Reembolso en proceso", "message": "El reembolso todavía está en camino.", "action": "Espera a que la red confirme el movimiento." },
-      "failed": { "title": "No se pudo hacer el reembolso", "message": "El reembolso no pudo completarse por ahora.", "action": "Intenta más tarde o contacta soporte." }
+      "pending": {
+        "title": "Reembolso en proceso",
+        "message": "El reembolso todavía está en camino.",
+        "action": "Espera a que la red confirme el movimiento."
+      },
+      "failed": {
+        "title": "No se pudo hacer el reembolso",
+        "message": "El reembolso no pudo completarse por ahora.",
+        "action": "Intenta más tarde o contacta soporte."
+      }
     },
     "generic": {
-      "fallback": { "title": "Algo salió mal", "message": "No pudimos terminar esta acción. Intenta de nuevo.", "action": "Si el problema sigue, contacta soporte." }
+      "fallback": {
+        "title": "Algo salió mal",
+        "message": "No pudimos terminar esta acción. Intenta de nuevo.",
+        "action": "Si el problema sigue, contacta soporte."
+      }
     }
   },
   "merchantSettings": {
