@@ -287,7 +287,9 @@
     "missingTradeId": "No se encontró un ID de trade en el QR",
     "verificationFailed": "Error al verificar el intercambio",
     "scanClientQr": "Escanear QR del cliente",
-    "verifyingQr": "Verificando QR con el servidor…"
+    "verifyingQr": "Verificando QR con el servidor…",
+    "cashConfirmedTitle": "Efectivo confirmado",
+    "cashConfirmedDesc": "El cliente ya puede recibir sus activos. La operación se completa cuando los libere."
   },
   "tier": {
     "Nuevo": "Nuevo",
