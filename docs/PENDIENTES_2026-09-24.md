@@ -23,7 +23,7 @@ Las secciones 1 a 8 siguen siendo el detalle. Aquí va todo en un solo orden.
 | 2 | Mergear #390 (aviso del depósito) | 2 | **P0** | Interno | Nulo | — |
 | 3 | QR del depósito decorativo: decidir quitarlo (recomendado) o hacerlo real | 2 | **P0** | Interno (decisión) | Bajo si se quita | — |
 | 4 | "Completed" en inglés en el recibo. Cosmético: entra en el APK si da tiempo, sin bloquearlo | 2 | P1 | Interno | Bajo | — |
-| 5 | Compilar el APK nuevo y volver a probar retiro y depósito en el teléfono | 2 | **P0** | Interno | Medio | 1–4 |
+| 5 | Compilar el APK nuevo y volver a probar retiro y depósito en el teléfono | 2 | **P0** | Interno | Medio | 1–3 |
 | 6 | Créditos de AWS: **verificar ya** saldo, consumo y fecha real de agotamiento (la de ~2026-10-15 es una estimación del 2026-09-01). Solo si eso revela más urgencia, adelantar el recorte (ALB) por delante del APK | 5 | **P1** (fecha) | Interno | Bajo (verificar) / Medio (recorte) | — |
 | 7 | Alarma `RunningTaskCount < 1` antes del próximo despliegue | 5 | P1 | Interno | Bajo | — |
 | 8 | Desplegar `main` (con KYC-1): hoy `main` va por delante de producción | 1 | P1 | Interno | Medio | 7 |
@@ -181,11 +181,12 @@ Revisado en el código el 2026-09-24. Ninguna de estas pantallas se probó en el
 
 ### Posible trabajo para Drips, si se reabre
 
-Solo complejidad baja o media y nada que toque dinero:
+Solo complejidad baja o media y nada que toque dinero. Primera wave, según la sección 0 (filas 15, 16 y 17):
+- Conectar el botón "Abrir chat con el vendedor" de `LockedView` al chat de la operación.
 - Revisar los textos sin traducir en toda la app.
 - Que los scripts de prueba del backend corran en Windows (`cross-env`). Hoy fallan con `"ALLOW_IN_MEMORY_DB" no se reconoce…`.
-- Reforzar las pruebas que no prueban nada (las 5 de discovery que vinieron en #373).
-- Arreglar `cashHandoff.test`, que falla contra PostgreSQL desde antes del 2026-09-14.
+
+Fuera de Drips por ahora: las pruebas de discovery (retirado, venían de #373) y `cashHandoff.test` (interno hasta diagnosticarlo). Ver filas 18 y 19.
 
 Mantener interno: comisiones, escrow, CASH-8, KYC-2, SAFE-1, TRUST-1 y TRUST-2, lo de la demo y AWS.
 RED-2 **ya está hecho** (`d441ddb`).
