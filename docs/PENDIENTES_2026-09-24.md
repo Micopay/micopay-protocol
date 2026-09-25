@@ -19,12 +19,12 @@ Las secciones 1 a 8 siguen siendo el detalle. Aquí va todo en un solo orden.
 
 | # | Pendiente | Sección | Prioridad | Dueño | Esfuerzo | Depende de |
 |---|---|---|---|---|---|---|
-| 1 | Depósito atorado con agente real: falta "Recibí el efectivo" (`reveal`) en `LockedView` | 2 | **P0** | Interno | Bajo | — |
+| 1 | Depósito atorado con agente real: falta "Recibí el efectivo" (`reveal`) en `LockedView`. No es solo visual: verificar rol (agente), flujo (depósito), estado (`locked`), errores del servidor y doble pulsación | 2 | **P0** | Interno | Medio | — |
 | 2 | Mergear #390 (aviso del depósito) | 2 | **P0** | Interno | Nulo | — |
 | 3 | QR del depósito decorativo: decidir quitarlo (recomendado) o hacerlo real | 2 | **P0** | Interno (decisión) | Bajo si se quita | — |
-| 4 | "Completed" en inglés en el recibo | 2 | P0 | Interno, en el lote del APK | Bajo | — |
+| 4 | "Completed" en inglés en el recibo. Cosmético: entra en el APK si da tiempo, sin bloquearlo | 2 | P1 | Interno | Bajo | — |
 | 5 | Compilar el APK nuevo y volver a probar retiro y depósito en el teléfono | 2 | **P0** | Interno | Medio | 1–4 |
-| 6 | Créditos de AWS se acaban ~2026-10-15; decidir el recorte (ALB) | 5 | **P1** (fecha) | Interno | Medio | — |
+| 6 | Créditos de AWS: **verificar ya** saldo, consumo y fecha real de agotamiento (la de ~2026-10-15 es una estimación del 2026-09-01). Solo si eso revela más urgencia, adelantar el recorte (ALB) por delante del APK | 5 | **P1** (fecha) | Interno | Bajo (verificar) / Medio (recorte) | — |
 | 7 | Alarma `RunningTaskCount < 1` antes del próximo despliegue | 5 | P1 | Interno | Bajo | — |
 | 8 | Desplegar `main` (con KYC-1): hoy `main` va por delante de producción | 1 | P1 | Interno | Medio | 7 |
 | 9 | Configurar Didit en producción (secretos, webhook) y probar el alta de agente en el teléfono | 1 | P1 | Interno | Medio | 8 |
@@ -36,19 +36,20 @@ Las secciones 1 a 8 siguen siendo el detalle. Aquí va todo en un solo orden.
 | 15 | Botón "Abrir chat con el vendedor" de `LockedView` sin `onClick` | 2 | P2 | **Drips** (o interno si entra en el APK) | Bajo | — |
 | 16 | Textos sin traducir en toda la app | 7 | P3 | **Drips** | Bajo–medio | — |
 | 17 | Scripts de prueba del backend en Windows (`cross-env`) | 7 | P3 | **Drips** | Bajo | — |
-| 18 | Reforzar las 5 pruebas de discovery que no prueban nada | 7 | P3 | **Drips** | Bajo–medio | — |
-| 19 | `cashHandoff.test` falla contra PostgreSQL | 7 | P3 | **Drips** | Medio | — |
+| 18 | ~~Reforzar las 5 pruebas de discovery que no prueban nada~~ **Retirado:** esas pruebas venían en #373, que se cerró sin integrar. El `merchant.discovery.test.ts` de `main` tiene aserciones reales (coordenadas redondeadas, RED-3, rate limit 429) | 7 | — | — | — | — |
+| 19 | `cashHandoff.test` y el supuesto fallo contra PostgreSQL: **reproducir y diagnosticar primero**. La cabecera dice que corre en memoria, y prueba autorización, entrega de efectivo y liberación del escrow. Solo pasaría a Drips si el arreglo resulta ser de fixtures o infraestructura de pruebas | 7 | P3 | Interno | Medio | — |
 | 20 | Triage de micopaybridge (GrantFox): issues #14, #18, #19, #32, #33 y PRs #25, #26, #29, #41 | 7 | P3 | Interno (decisión) | Medio | — |
 | 21 | Efectivo disponible del agente y rebalanceo (¿enlazar con Etherfuse?) | 8 | P3 | Interno (exploración) | Alto | 10, 11 |
 
-**Candidatos a issues de Drips:** 15, 16, 17, 18 y 19. El 10 podría serlo cuando el diseño esté decidido. Ninguno toca dinero, escrow ni KYC.
+**Candidatos a issues de Drips (primera wave):** 15, 16 y 17, cada uno con alcance concreto (archivos, criterio de aceptación). Ninguno de los tres toca dinero, escrow ni KYC. El 19 queda interno hasta el diagnóstico. El 10 no se agrega solo para sumar: antes hay que definir la compatibilidad con clientes que no mandan `flow` y probar los dos tipos de operación.
 
-**Verificado en el código el 2026-09-25:** 1 (`revealTrade` solo se llama desde `QRReveal`), 15 (el botón no tiene `onClick`, `TradeDetail.tsx`) y 17 (`backend/package.json` no usa `cross-env`). El resto viene de la revisión del 2026-09-24 y no se volvió a comprobar; el 19 en particular conviene reproducirlo antes de publicar el issue.
+**Verificado en el código el 2026-09-25:** 1 (`revealTrade` solo se llama desde `QRReveal`), 15 (el botón no tiene `onClick`, `TradeDetail.tsx`), 17 (`backend/package.json` no usa `cross-env`), 18 (retirado, ver la fila) y la cabecera de `cashHandoff.test.ts` (19). El resto viene de la revisión del 2026-09-24.
 
-**Preguntas para Codex:**
-1. ¿El orden P0 → P1 es correcto, o el recorte de AWS (6) debería ir antes que el APK por la fecha?
-2. ¿Hay algo marcado como Drips que en realidad toque dinero o necesite contexto de fundador?
-3. ¿Los candidatos a Drips alcanzan para una wave, o conviene sumar el 10 ya con el diseño cerrado?
+**Revisión de Codex (2026-09-25), ya incorporada:**
+- AWS frente al APK: verificar ahora créditos y consumo; el APK sigue como trabajo principal mientras esa comprobación no muestre algo más urgente.
+- Delegar: chat, traducciones y `cross-env`. Discovery quedó retirado; `cashHandoff` después del diagnóstico interno.
+- Tamaño de la wave: los tres candidatos alcanzan para empezar.
+- "Completed" baja a P1 y el botón "Recibí el efectivo" sube a esfuerzo medio por las comprobaciones que necesita.
 
 ---
 
@@ -67,9 +68,9 @@ Las secciones 1 a 8 siguen siendo el detalle. Aquí va todo en un solo orden.
 
 **App:** la pantalla `KYCScreen` y el botón "Verificarme" en `ProviderOnboarding`.
 
-### Hecho, pero sin mergear: PR #388 (KYC-1)
+### Mergeado el 2026-09-25: PR #388 (KYC-1)
 
-Rama `feat/kyc-1-didit-journey` (`ea75692`, `ad97e62`). Tiene CI verde y se puede mergear. **No está en el backend desplegado.** Corrige:
+Estaba en la rama `feat/kyc-1-didit-journey`; ya está en `main` (`df21dbb`). **Todavía no está en el backend desplegado.** Corrige:
 - **Seguridad:** el webhook tomaba el usuario y el nivel de `vendor_data`, que viene dentro del mismo mensaje. Con una firma válida se le podía subir el nivel de KYC a cualquier usuario. Ahora se resuelve con el `session_id` guardado en `kyc_didit_sessions`.
 - Un aviso duplicado alargaba la vigencia de la verificación (`kyc_level_verified_at`).
 - Una aprobación de nivel menor bajaba un nivel mayor que seguía vigente.
@@ -138,12 +139,12 @@ Revisado en el código el 2026-09-24. Ninguna de estas pantallas se probó en el
 
 ## 4. Bot agente de demostración
 
-- Código en `micopay/backend/scripts/demo-agent/` (`bot.ts` y `qr_from_phone.py`), **sin commit**.
+- Código en `micopay/backend/scripts/demo-agent/` (`bot.ts` y `qr_from_phone.py`), en `main` desde #389.
 - Cuenta `agente_demo_rgjo`. Su llave está en `~/.micopay/demo-agent.json`, fuera del repo.
 - La activé como agente con un UPDATE directo en RDS, porque activarla por la API pide Didit.
 - Está ubicado unos 150 m al lado de donde estaba el teléfono (CDMX, 19.3568, -99.1659).
 - [ ] Si la demo es en otro lugar: conectar el teléfono y correr `npx tsx scripts/demo-agent/bot.ts setup`.
-- [ ] Decidir si el bot entra al repo.
+- [x] Decidir si el bot entra al repo: entró con #389.
 - Los 4 agentes sembrados siguen en Coatepec/Xalapa (`SEED_ORIGIN_LAT/LNG` = 19.1489, -96.9663) y no aceptan operaciones solos.
 
 ---
@@ -160,7 +161,7 @@ Revisado en el código el 2026-09-24. Ninguna de estas pantallas se probó en el
 
 ## 6. Comisiones (H5), en pausa
 
-- Plan escrito en `PLAN_COMISIONES_EFECTIVO_2026-09-24.md`, **sin commit**, pendiente de la auditoría de Codex.
+- Plan escrito en `PLAN_COMISIONES_EFECTIVO_2026-09-24.md`, en `main` desde #389, pendiente de la auditoría de Codex.
 - Decisiones abiertas:
   1. ¿Los límites y el KYC se miden sobre el efectivo o sobre la cripto?
   2. ¿Qué hace el servidor si el mapa no le manda el tipo de operación?
