@@ -11,7 +11,11 @@
  * quedo atras fue la del flujo principal del producto.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { createElement } from 'react';
+import { render, screen, cleanup } from '@testing-library/react';
+import i18n from '../i18n';
+import MerchantOfferCard from '../components/MerchantOfferCard';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,10 +56,10 @@ describe('lo único que cambia entre flujos es la dirección', () => {
   const card = read('../components/MerchantOfferCard.tsx');
 
   it('las etiquetas de entrega y recepción dependen del flujo', () => {
-    expect(card).toContain('EXCHANGE_LABELS');
+    expect(card).toContain('EXCHANGE_LABEL_KEYS');
     // En depósito entregas efectivo; en cash-out lo recibes.
-    expect(card).toMatch(/deposit: \{ gives: 'Entregas en efectivo'/);
-    expect(card).toMatch(/cashout: \{ gives: 'Entregas de tu saldo'/);
+    expect(card).toMatch(/deposit:\s*\{[\s\S]*offerCard\.exchange\.depositGives/);
+    expect(card).toMatch(/cashout:\s*\{[\s\S]*offerCard\.exchange\.cashoutGives/);
   });
 
   it('no nombra un activo que el escrow no usa', () => {
@@ -66,7 +70,54 @@ describe('lo único que cambia entre flujos es la dirección', () => {
     // buscaba "MXNe" en todo el fichero y fallaba por su propio comentario
     // explicativo, que es exactamente el tipo de test que grita sin motivo.
     const rendered = card.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
-    expect(rendered).not.toMatch(/toFixed\(2\)\} MXNe/);
-    expect(rendered).toMatch(/toFixed\(2\)\} MXN</);
+    expect(rendered).not.toMatch(/MXNe/);
+    expect(rendered).toContain("offerCard.amountMxn");
+  });
+});
+
+
+describe('MerchantOfferCard i18n', () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders translated English copy', () => {
+    render(
+      createElement(MerchantOfferCard, {
+        merchant: {
+          seller_id: 'm1',
+          username: 'agent',
+          rate_percent: 2,
+          min_trade_mxn: 100,
+          max_trade_mxn: 5000,
+          daily_cap_mxn: 10000,
+          latitude: 19,
+          longitude: -96,
+          area_label: 'Centro',
+          storefront_address: null,
+          distance_km: 1.2,
+          payout_mxn: 490,
+          completion_rate: 0.95,
+          trades_completed: 12,
+          tier: 'gold',
+          seller_type: 'business',
+          is_business: true,
+          platform_fee_pct: 1,
+        },
+        amount: 500,
+        loading: false,
+        isBest: true,
+        onChoose: () => {},
+        maxEffectiveFeePercent: 5,
+        flow: 'deposit',
+      }),
+    );
+
+    expect(screen.getByText('Best offer')).toBeInTheDocument();
+    expect(screen.getByText('Commission')).toBeInTheDocument();
   });
 });
