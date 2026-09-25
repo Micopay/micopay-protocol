@@ -42,3 +42,5 @@ walkthrough.md
 # IDE
 .idea/
 
+
+__pycache__/

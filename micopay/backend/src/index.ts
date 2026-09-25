@@ -259,6 +259,7 @@ app.register(clientErrorRoutes, { prefix: '' });
 
 async function seedData() {
   const db = (await import('./db/schema.js')).default;
+  const { demoSeedEscrowColumns: seedEscrow } = await import('./db/demoSeedTrades.js');
   const existing = await db.getMany('SELECT id FROM trades LIMIT 1');
   if (existing.length > 0) return;
 
@@ -278,6 +279,7 @@ async function seedData() {
   for (let i = 0; i < 20; i++) {
     const status = statuses[i % statuses.length];
     const amount = 150 + (i * 75);
+    const escrow = seedEscrow(amount);
     const createdAt = new Date(now.getTime() - (i * 3600000 * 2));
     const expiresAt = new Date(createdAt.getTime() + 7200000);
     
@@ -286,18 +288,26 @@ async function seedData() {
       // with it. `sellerId` is the merchant and therefore the Red MicoPay
       // provider in both directions — escrow seller on deposit, escrow buyer
       // on cash-out.
+      //
+      // WP-F: activo, tasa y stroops explicitos y marcados como sinteticos
+      // (`demoSeedEscrowColumns`). Antes `amount * 10^7` = 1 MXN por XLM, sin
+      // activo ni tasa. Mismo orden de columnas y marcadores: el store en
+      // memoria parsea el INSERT posicionalmente.
       `INSERT INTO trades 
        (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn, 
-        secret_hash, status, created_at, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        asset_code, rate_mxn, rate_source, secret_hash, status, created_at, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         i % 2 === 0 ? sellerId : userId,
         i % 2 === 0 ? userId : sellerId,
         i % 2 === 0 ? 'deposit' : 'cashout',
         sellerId,
         amount,
-        (amount * 10000000).toString(),
+        escrow.amount_stroops,
         Math.ceil(amount * 0.008),
+        escrow.asset_code,
+        escrow.rate_mxn,
+        escrow.rate_source,
         `hash_${i}`,
         status,
         createdAt,
@@ -313,8 +323,43 @@ async function seedData() {
  * during a testnet/demo run. Only runs on the ephemeral in-memory store
  * (ALLOW_IN_MEMORY_DB=true) and is idempotent.
  */
+
+/**
+ * Crea una cuenta Stellar REAL de testnet para un agente sembrado y la fondea
+ * con friendbot. Solo se usa en el seed de demostracion.
+ *
+ * Friendbot es de testnet y puede fallar o tardar; si no responde, se devuelve
+ * el par de llaves igualmente. La cuenta quedara sin fondear y el bloqueo
+ * fallara mas adelante con un mensaje claro, que es preferible a abortar el
+ * arranque del servidor entero por un seed de demo.
+ */
+async function createFundedTestnetAccount(
+  label: string,
+): Promise<{ stellar: string; secret: string }> {
+  const { Keypair } = await import('@stellar/stellar-sdk');
+  const kp = Keypair.random();
+  const stellar = kp.publicKey();
+
+  try {
+    const res = await fetch(`https://friendbot.stellar.org/?addr=${stellar}`, {
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) throw new Error(`friendbot ${res.status}`);
+    app.log.info({ category: 'seed', username: label, stellar }, '[seed] Demo agent funded');
+  } catch (err) {
+    app.log.warn(
+      { err, category: 'seed', username: label, stellar },
+      '[seed] Friendbot failed; demo agent created unfunded',
+    );
+  }
+
+  return { stellar, secret: kp.secret() };
+}
+
 async function seedDemoMerchants(): Promise<void> {
+  const { StrKey } = await import('@stellar/stellar-sdk');
   const db = (await import('./db/schema.js')).default;
+  const { demoSeedEscrowColumns: seedEscrow } = await import('./db/demoSeedTrades.js');
 
   // Demo origin for seeded merchants. Override per-deployment with
   // SEED_ORIGIN_LAT / SEED_ORIGIN_LNG so the discovery map shows agents near
@@ -325,10 +370,10 @@ async function seedDemoMerchants(): Promise<void> {
   };
 
   const merchants = [
-    { username: 'farmacia_guadalupe',   rate: 1.0, dlat: 0.004,  dlng: 0.003,  addr: 'Av. Juárez 34, Centro',          completed: 12, cancelled: 0 },
-    { username: 'abarrotes_la_esquina', rate: 1.5, dlat: -0.005, dlng: 0.006,  addr: 'Calle 5 de Mayo 12, Centro',     completed: 8,  cancelled: 1 },
-    { username: 'tienda_don_chendo',    rate: 0.8, dlat: 0.007,  dlng: -0.004, addr: 'Madero 88, Centro Histórico',    completed: 21, cancelled: 1 },
-    { username: 'cafe_lopez',           rate: 2.0, dlat: -0.003, dlng: -0.007, addr: 'Regina 19, Col. Centro',         completed: 5,  cancelled: 0 },
+    { username: 'farmacia_guadalupe',   rate: 1.0, dlat: 0.004,  dlng: 0.003,  area: 'Centro',           addr: 'Av. Juárez 34, Centro',          completed: 12, cancelled: 0 },
+    { username: 'abarrotes_la_esquina', rate: 1.5, dlat: -0.005, dlng: 0.006,  area: 'Centro',           addr: 'Calle 5 de Mayo 12, Centro',     completed: 8,  cancelled: 1 },
+    { username: 'tienda_don_chendo',    rate: 0.8, dlat: 0.007,  dlng: -0.004, area: 'Centro Histórico', addr: 'Madero 88, Centro Histórico',    completed: 21, cancelled: 1 },
+    { username: 'cafe_lopez',           rate: 2.0, dlat: -0.003, dlng: -0.007, area: 'Col. Centro',      addr: 'Regina 19, Col. Centro',         completed: 5,  cancelled: 0 },
   ];
 
   // If already seeded, just reposition the configs to the current origin (the
@@ -339,9 +384,50 @@ async function seedDemoMerchants(): Promise<void> {
   if (already) {
     for (const m of merchants) {
       await db.execute(
-        `UPDATE merchant_configs SET latitude = $2, longitude = $3, updated_at = NOW()
+        `UPDATE merchant_configs
+            SET latitude = $2, longitude = $3,
+                area_label = COALESCE(area_label, $4),
+                meeting_point = COALESCE(meeting_point, $5),
+                updated_at = NOW()
          WHERE user_id = (SELECT id FROM users WHERE username = $1)`,
-        [m.username, center.lat + m.dlat, center.lng + m.dlng],
+        [m.username, center.lat + m.dlat, center.lng + m.dlng, m.area, m.addr],
+      ).catch(() => {});
+      // Filas sembradas antes del 2026-09-05 tienen una direccion Stellar
+      // fabricada del nombre de usuario, sin checksum valido: el escrow no
+      // puede bloquear contra ellas. Se les da una cuenta real y fondeada.
+      const stale = await db.getOne<{ id: string; stellar_address: string }>(
+        `SELECT id, stellar_address FROM users WHERE username = $1`,
+        [m.username],
+      ).catch(() => null);
+      if (stale && !StrKey.isValidEd25519PublicKey(stale.stellar_address)) {
+        const { stellar, secret } = await createFundedTestnetAccount(m.username);
+        const { encryptSecret } = await import('./services/secret.service.js');
+        const { encrypted, nonce } = encryptSecret(secret);
+        await db.execute(
+          `UPDATE users SET stellar_address = $2, demo_secret_enc = $3, demo_secret_nonce = $4
+            WHERE id = $1`,
+          [stale.id, stellar, encrypted, nonce],
+        ).catch(() => {});
+        await db.execute(
+          `UPDATE wallets SET stellar_address = $2 WHERE user_id = $1`,
+          [stale.id, stellar],
+        ).catch(() => {});
+        app.log.info(
+          { category: 'seed', username: m.username, stellar },
+          '[seed] Demo agent address repaired (was not a valid Stellar key)',
+        );
+      }
+
+      // Filas sembradas antes de RED-1 quedaron sin alta; sin esto desaparecen
+      // del mapa al activarse el filtro de `provider_status`.
+      await db.execute(
+        `UPDATE users
+            SET provider_status = 'active',
+                provider_enrolled_at = COALESCE(provider_enrolled_at, NOW()),
+                provider_activated_at = COALESCE(provider_activated_at, NOW()),
+                merchant_available = true
+          WHERE username = $1 AND provider_status <> 'active'`,
+        [m.username],
       ).catch(() => {});
     }
     app.log.info({ category: 'seed' }, '📍 Demo merchants repositioned to current origin');
@@ -361,17 +447,39 @@ async function seedDemoMerchants(): Promise<void> {
   }
 
   for (const m of merchants) {
-    const stellar = ('G' + m.username.toUpperCase().replace(/[^A-Z0-9]/g, 'X')).padEnd(56, 'X').slice(0, 56);
+    // La direccion se fabricaba a partir del nombre de usuario:
+    //   'G' + 'ABARROTES_LA_ESQUINA' -> GABARROTESXLAXESQUINAXXX...
+    // 56 caracteres que empiezan por G, pero SIN checksum valido. Con
+    // MOCK_STELLAR=true daba igual porque no se tocaba la cadena; al pasar a
+    // false, el bloqueo del escrow revienta con "Unsupported address type" y
+    // la operacion se queda en `pending` para siempre.
+    //
+    // Ahora son cuentas reales de testnet, fondeadas, cuya llave se guarda
+    // cifrada para poder firmar la liberacion durante las pruebas. Ver la
+    // migracion 20260905190000: es custodia, y solo vale en testnet.
+    const { stellar, secret } = await createFundedTestnetAccount(m.username);
+    // RED-1: el seed SI puede crear agentes activos, explicitamente. Lo que no
+    // puede es que el registro normal lo haga por inferencia.
+    const { encryptSecret } = await import('./services/secret.service.js');
+    const { encrypted, nonce } = encryptSecret(secret);
     const user = await db.getOne(
-      `INSERT INTO users (username, stellar_address, merchant_available) VALUES ($1, $2, true) RETURNING id`,
-      [m.username, stellar],
+      `INSERT INTO users (username, stellar_address, merchant_available, provider_status,
+                          provider_enrolled_at, provider_activated_at,
+                          demo_secret_enc, demo_secret_nonce)
+       VALUES ($1, $2, true, 'active', NOW(), NOW(), $3, $4) RETURNING id`,
+      [m.username, stellar, encrypted, nonce],
     );
     await db.execute(`INSERT INTO wallets (user_id, stellar_address) VALUES ($1, $2)`, [user.id, stellar]).catch(() => {});
+    // RED-3: `area_label` es la zona publica; `meeting_point` es privado y solo
+    // lo ven las dos partes de una operacion viva. El seed no publica la
+    // direccion exacta (publish_storefront queda en su default false), porque
+    // dar por hecho el consentimiento es justo lo que RED-3 prohibe.
     await db.execute(
       `INSERT INTO merchant_configs
-         (user_id, rate_percent, min_trade_mxn, max_trade_mxn, daily_cap_mxn, latitude, longitude, address_text, updated_at)
-       VALUES ($1, $2, 100, 50000, 250000, $3, $4, $5, NOW())`,
-      [user.id, m.rate, center.lat + m.dlat, center.lng + m.dlng, m.addr],
+         (user_id, rate_percent, min_trade_mxn, max_trade_mxn, daily_cap_mxn,
+          latitude, longitude, area_label, meeting_point, updated_at)
+       VALUES ($1, $2, 100, 50000, 250000, $3, $4, $5, $6, NOW())`,
+      [user.id, m.rate, center.lat + m.dlat, center.lng + m.dlng, m.area, m.addr],
     );
 
     const now = Date.now();
@@ -381,21 +489,27 @@ async function seedDemoMerchants(): Promise<void> {
     ];
     for (let i = 0; i < rows.length; i++) {
       const amount = 200 + (i % 8) * 150;
+      const escrow = seedEscrow(amount);
       const createdAt = new Date(now - i * 86400000);
       await db.execute(
         // CASH-1: map merchants seed deposit history — the merchant locks the
         // crypto as escrow seller, so it is both seller_id and provider_id.
+        // WP-F: igual que `seedData`, cifras de escrow sinteticas y declaradas.
         `INSERT INTO trades
-           (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn, secret_hash, status, created_at, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+           (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn,
+            asset_code, rate_mxn, rate_source, secret_hash, status, created_at, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
         [
           user.id,
           buyer!.id,
           'deposit',
           user.id,
           amount,
-          (amount * 10000000).toString(),
+          escrow.amount_stroops,
           Math.ceil(amount * 0.008),
+          escrow.asset_code,
+          escrow.rate_mxn,
+          escrow.rate_source,
           `seed_${m.username}_${i}`,
           rows[i],
           createdAt,

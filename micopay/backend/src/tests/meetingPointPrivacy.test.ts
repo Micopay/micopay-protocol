@@ -53,9 +53,12 @@ const CENTER = {
 async function createUser(label: string): Promise<string> {
   seq++;
   const suffix = `${RUN}${String(seq).padStart(2, "0")}`;
+  // RED-1: los proveedores se dan de alta explicitamente. Desde que pertenecer
+  // a Red MicoPay es un estado propio, crear una cuenta "disponible" ya no la
+  // convierte en proveedora: esa inferencia era justo el defecto.
   const row = await db.getOne<{ id: string }>(
-    `INSERT INTO users (stellar_address, username, phone_hash, merchant_available, availability, is_suspended)
-     VALUES ($1, $2, $3, true, 'online', false)
+    `INSERT INTO users (stellar_address, username, phone_hash, merchant_available, availability, is_suspended, provider_status)
+     VALUES ($1, $2, $3, true, 'online', false, 'active')
      RETURNING id`,
     [`G${"H".repeat(47)}${suffix}`, `red3_${label}_${suffix}`, `h_red3_${label}_${suffix}`],
   );

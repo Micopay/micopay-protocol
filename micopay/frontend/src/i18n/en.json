@@ -29,7 +29,8 @@
       "pending": "Pending",
       "cancelled": "Cancelled",
       "refunded": "Refunded"
-    }
+    },
+    "seeAllActivity": "See all activity"
   },
   "pay": {
     "title": "Pay",
@@ -94,20 +95,6 @@
     "copyAddress": "Copy address",
     "importKey": "Import key",
     "exportKey": "Export secret key ⚠️",
-    "exportKeyTitle": "Backup your key",
-    "exportKeyHeading": "Your Secret Key",
-    "exportKeyWarning": "MicoPay never stores your secret key on our servers. Anyone with this key has full control of your funds. Keep it offline and safe.",
-    "exportKeyLabel": "Secret Key",
-    "exportKeyShow": "Reveal",
-    "exportKeyHide": "Hide",
-    "exportKeyCopy": "Copy to Clipboard",
-    "exportKeyCopied": "Copied!",
-    "exportKeyClose": "Close",
-    "exportKeyQR": "Scan to backup",
-    "exportKeyQRHint": "Screenshot or print this QR code. The secret key never touches the clipboard, so other apps cannot read it.",
-    "exportClipboardWarning": "⚠️ Clipboard warning: Android clipboard is readable by other apps, keyboards (Gboard, SwiftKey), and cloud sync services. Prefer the QR code above.",
-    "exportRateLimited": "Export rate-limited. Try again in",
-    "exportKeyError": "Failed to load secret key.",
     "legal": "Legal",
     "privacy": "Privacy Policy",
     "terms": "Terms of Service",
@@ -141,14 +128,32 @@
     "time": "TIME",
     "timeValue": "< 15 min",
     "search": "Find cash offers",
-    "recoverLabel": "Find a new offer"
+    "recoverLabel": "Find a new offer",
+    "nothingMovedYet": "Nothing has moved yet. You will review the amount, the fee and the agent before confirming."
   },
   "deposit": {
     "title": "Buy with cash",
     "amountLabel": "HOW MUCH CASH DO YOU HAVE?",
     "info": "We'll find agents nearby who will give you digital assets in exchange for your cash. Funds are held in escrow until you complete the meetup.",
     "search": "Find agents",
-    "recoverLabel": "Find a new option"
+    "recoverLabel": "Find a new option",
+    "nothingMovedYet": "Nothing has moved yet. You will review the amount, the fee and the agent before confirming."
+  },
+  "escrowAsset": {
+    "payWith": "What are you paying with?",
+    "receiveIn": "What do you want to receive?",
+    "comingSoon": "Coming soon",
+    "estimate": "≈ {{units}} {{code}} · 1 {{code}} = ${{rate}}",
+    "rateLoading": "Checking the rate…",
+    "rateLocksOnCreate": "Estimate. The rate is locked when the trade is created.",
+    "rateUnavailable": "We couldn't get the rate. It is locked when the trade is created.",
+    "selectedAsset": "Asset",
+    "lockerToLock": "You will lock {{total}} {{code}} (includes a {{fee}} {{code}} fee).",
+    "lockerInEscrow": "In escrow: {{total}} {{code}} (includes a {{fee}} {{code}} fee).",
+    "lockerReleased": "{{amount}} {{code}} and a {{fee}} {{code}} fee were released.",
+    "lockerRefunded": "{{total}} {{code}} were returned to you.",
+    "receiverWillReceive": "You will receive {{amount}} {{code}}.",
+    "receiverReceived": "You received {{amount}} {{code}}."
   },
   "inbox": {
     "title": "Inbox",
@@ -161,7 +166,9 @@
     "buyer": "Buyer",
     "status": "Status",
     "filterAll": "All",
-    "withStatus": " with status \"{{status}}\""
+    "withStatus": " with status \"{{status}}\"",
+    "flowDeposit": "You receive cash",
+    "flowCashout": "You hand over cash"
   },
   "tier": {
     "Nuevo": "New",
@@ -334,14 +341,16 @@
     "viewMyQrAgent": "View my QR for the agent",
     "cashoutClientLockedTitle": "Offer accepted · Your balance in escrow",
     "cashoutClientLockedDesc": "You locked your balance. Go to the agent's location; they will hand you the cash.",
-    "cashoutClientPendingTitle": "Preparing your escrow",
-    "cashoutClientPendingDesc": "We are locking your balance on-chain. Wait for confirmation before heading out.",
+    "cashoutClientPendingTitle": "Your funds are not in escrow yet",
+    "cashoutClientPendingDesc": "The lock did not complete. Open the trade to retry; until then the agent cannot hand you the cash.",
     "cashoutAgentLockedTitle": "Client connected · Balance in escrow",
     "cashoutAgentLockedDesc": "The client locked {{amount}} MXN in escrow. Hand over the cash in person to complete the exchange.",
     "cashoutAgentPendingTitle": "Waiting for client escrow",
     "cashoutAgentPendingDesc": "The client is locking their balance. Once confirmed, hand over the cash.",
     "verifyingEscrowStatus": "Verifying escrow status…",
-    "tradeStatus": "Trade: {{status}}"
+    "tradeStatus": "Trade: {{status}}",
+    "depositWaitingLockTitle": "Waiting for the agent to lock the funds",
+    "depositWaitingLockDesc": "There is no escrow yet. Do NOT hand over the cash until this notice turns green."
   },
   "qrReveal": {
     "verified": "Verified",
@@ -368,11 +377,11 @@
     "cashoutDone": "Done!",
     "depositDone": "Deposit successful!",
     "cashoutSubtitle": "You received your cash",
-    "depositSubtitle": "Your MXNE is already in your wallet",
-    "mxnSent": "MXN sent",
+    "depositSubtitle": "Your funds are already in your wallet",
+    "mxnSent": "Value sent",
     "cashDelivered": "Cash delivered",
     "cashReceived": "Cash received",
-    "mxneReceived": "MXNE received",
+    "mxneReceived": "Value received",
     "commission": "Commission",
     "agent": "Agent",
     "verified": "Verified",
@@ -433,42 +442,130 @@
   },
   "errors": {
     "network": {
-      "offline": { "title": "No connection", "message": "We couldn't connect. Check your signal and try again.", "action": "Try again once you have signal." },
-      "unavailable": { "title": "Service unavailable", "message": "The service is busy or under maintenance. Try again in a few minutes.", "action": "Wait a moment and try again." },
-      "timeout": { "title": "Timed out", "message": "The operation took too long and couldn't finish in time.", "action": "Try again. Your funds are still protected." }
+      "offline": {
+        "title": "No connection",
+        "message": "We couldn't connect. Check your signal and try again.",
+        "action": "Try again once you have signal."
+      },
+      "unavailable": {
+        "title": "Service unavailable",
+        "message": "The service is busy or under maintenance. Try again in a few minutes.",
+        "action": "Wait a moment and try again."
+      },
+      "timeout": {
+        "title": "Timed out",
+        "message": "The operation took too long and couldn't finish in time.",
+        "action": "Try again. Your funds are still protected."
+      }
     },
     "auth": {
-      "invalidCredentials": { "title": "Incorrect details", "message": "The username or key don't match.", "action": "Check your details and try again." },
-      "sessionExpired": { "title": "Session expired", "message": "Your session ended for security reasons.", "action": "Log back in to keep using the app." },
-      "unauthorized": { "title": "No access", "message": "You can't view this information with that account.", "action": "Log in with the correct account or request access." }
+      "invalidCredentials": {
+        "title": "Incorrect details",
+        "message": "The username or key don't match.",
+        "action": "Check your details and try again."
+      },
+      "sessionExpired": {
+        "title": "Session expired",
+        "message": "Your session ended for security reasons.",
+        "action": "Log back in to keep using the app."
+      },
+      "unauthorized": {
+        "title": "No access",
+        "message": "You can't view this information with that account.",
+        "action": "Log in with the correct account or request access."
+      }
     },
     "financial": {
-      "conflict": { "title": "The trade already changed", "message": "Someone else moved this trade before you.", "action": "Refresh the screen and check its status." },
-      "insufficientFunds": { "title": "Insufficient balance", "message": "You don't have enough balance to complete this trade.", "action": "Try a smaller amount or top up your balance." },
-      "failed": { "title": "Couldn't complete", "message": "The operation couldn't finish.", "action": "Try again. Your funds aren't lost." },
-      "cancelled": { "title": "Trade cancelled", "message": "The trade was cancelled before it finished.", "action": "You can start a new trade whenever you like." }
+      "conflict": {
+        "title": "The trade already changed",
+        "message": "Someone else moved this trade before you.",
+        "action": "Refresh the screen and check its status."
+      },
+      "insufficientFunds": {
+        "title": "Insufficient balance",
+        "message": "You don't have enough balance to complete this trade.",
+        "action": "Try a smaller amount or top up your balance."
+      },
+      "failed": {
+        "title": "Couldn't complete",
+        "message": "The operation couldn't finish.",
+        "action": "Try again. Your funds aren't lost."
+      },
+      "cancelled": {
+        "title": "Trade cancelled",
+        "message": "The trade was cancelled before it finished.",
+        "action": "You can start a new trade whenever you like."
+      }
     },
     "escrow": {
-      "unavailable": { "title": "Escrow unavailable", "message": "We couldn't prepare the escrow right now.", "action": "Try again. Your balance is still protected." },
-      "releasePending": { "title": "Release in progress", "message": "The escrow is still waiting for the next confirmation.", "action": "Wait a few minutes or check your history." }
+      "unavailable": {
+        "title": "Escrow unavailable",
+        "message": "We couldn't prepare the escrow right now.",
+        "action": "Try again. Your balance is still protected."
+      },
+      "releasePending": {
+        "title": "Release in progress",
+        "message": "The escrow is still waiting for the next confirmation.",
+        "action": "Wait a few minutes or check your history."
+      }
     },
     "qr": {
-      "invalid": { "title": "Invalid code", "message": "The code can't be read or is no longer valid.", "action": "Ask for a new code and scan it again." },
-      "cameraDenied": { "title": "Camera unavailable", "message": "Camera access wasn't allowed.", "action": "Enable the permission and try again." },
-      "scanFailed": { "title": "Couldn't finish scanning", "message": "We couldn't finish reading the QR.", "action": "Adjust the camera and try again." },
-      "expired": { "title": "Code expired", "message": "That code already expired.", "action": "Generate a new one to continue." },
-      "unreadable": { "title": "We couldn't read the code", "message": "The camera couldn't read the code.", "action": "Adjust the camera or try with more light." }
+      "invalid": {
+        "title": "Invalid code",
+        "message": "The code can't be read or is no longer valid.",
+        "action": "Ask for a new code and scan it again."
+      },
+      "cameraDenied": {
+        "title": "Camera unavailable",
+        "message": "Camera access wasn't allowed.",
+        "action": "Enable the permission and try again."
+      },
+      "scanFailed": {
+        "title": "Couldn't finish scanning",
+        "message": "We couldn't finish reading the QR.",
+        "action": "Adjust the camera and try again."
+      },
+      "expired": {
+        "title": "Code expired",
+        "message": "That code already expired.",
+        "action": "Generate a new one to continue."
+      },
+      "unreadable": {
+        "title": "We couldn't read the code",
+        "message": "The camera couldn't read the code.",
+        "action": "Adjust the camera or try with more light."
+      }
     },
     "dispute": {
-      "pending": { "title": "Dispute in progress", "message": "Your case is still under review.", "action": "Wait for a response from the support team." },
-      "resolved": { "title": "Dispute resolved", "message": "The dispute has already been closed.", "action": "Check your history to see the outcome." }
+      "pending": {
+        "title": "Dispute in progress",
+        "message": "Your case is still under review.",
+        "action": "Wait for a response from the support team."
+      },
+      "resolved": {
+        "title": "Dispute resolved",
+        "message": "The dispute has already been closed.",
+        "action": "Check your history to see the outcome."
+      }
     },
     "refund": {
-      "pending": { "title": "Refund in progress", "message": "The refund is still on its way.", "action": "Wait for the network to confirm the transfer." },
-      "failed": { "title": "Refund couldn't be processed", "message": "The refund couldn't be completed right now.", "action": "Try again later or contact support." }
+      "pending": {
+        "title": "Refund in progress",
+        "message": "The refund is still on its way.",
+        "action": "Wait for the network to confirm the transfer."
+      },
+      "failed": {
+        "title": "Refund couldn't be processed",
+        "message": "The refund couldn't be completed right now.",
+        "action": "Try again later or contact support."
+      }
     },
     "generic": {
-      "fallback": { "title": "Something went wrong", "message": "We couldn't finish this action. Try again.", "action": "If the problem continues, contact support." }
+      "fallback": {
+        "title": "Something went wrong",
+        "message": "We couldn't finish this action. Try again.",
+        "action": "If the problem continues, contact support."
+      }
     }
   },
   "merchantSettings": {

@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { App as CapApp } from '@capacitor/app';
 import { QRCodeSVG } from 'qrcode.react';
 import { getSecret, revealTrade, lockTrade, getTrade, TradeData } from '../services/api';
-import { ensureTrustline } from '../services/payment';
 import { getTradeStateDebugOverride, normalizeTradeState, TradeState } from '../components/TradeStateBadge';
 import ErrorBanner from '../components/ErrorBanner';
 import SupportLink from '../components/SupportLink';
@@ -11,12 +10,19 @@ import { mapApiError, type MappedApiError } from '../utils/apiError';
 import { getDemoQrPayload, IS_DEMO_MODE } from '../utils/demoMode';
 import { buildTxUrl } from '../utils/stellarExplorer';
 import { useCountdown } from '../hooks/useCountdown';
+import TradeEscrowSummary from '../components/TradeEscrowSummary';
+import { assertNoClientPreparationForLock } from '../utils/escrowLock';
 
 interface QRRevealProps {
     activeTrade: TradeData | null;
     /** CASH-7: un solo token de sesion; el rol se deriva del trade. */
     token: string | null;
-    amount: number;
+    /**
+     * WP-D: quien mira, para elegir la cifra del escrow que le toca. El monto ya
+     * no llega como prop: antes era `activeAmount`, estado local de la pantalla
+     * de monto; ahora sale de la operacion del servidor.
+     */
+    viewerId?: string | null;
     /** Counterparty shown in the header — who the seller is meeting. */
     counterpartyName?: string | null;
     /** The current (seller) device's own username, shown on the QR card so
@@ -27,8 +33,11 @@ interface QRRevealProps {
     onSuccess: (releaseTxHash: string) => void;
 }
 
-const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBack, onChat, onSuccess }: QRRevealProps) => {
+const QRReveal = ({ activeTrade, token, viewerId, counterpartyName, ownName, onBack, onChat, onSuccess }: QRRevealProps) => {
     const { t } = useTranslation();
+    // WP-D: la ultima version de la operacion que devolvio el servidor.
+    const [serverTrade, setServerTrade] = useState<TradeData | null>(null);
+    const displayTrade = serverTrade ?? activeTrade;
     const [qrPayload, setQrPayload] = useState<string | null>(null);
     const [qrExpiresAt, setQrExpiresAt] = useState<string | null>(null);
     const [secretLoaded, setSecretLoaded] = useState(false);
@@ -48,9 +57,22 @@ const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBac
             // This is the seller's own screen, so drive the whole
             // pending -> locked -> revealing chain here if needed — nothing
             // else in the app triggers the lock/reveal steps on its own.
-            if (activeTrade.status === 'pending') {
-                const escrowAssetCode = import.meta.env.VITE_ESCROW_ASSET_CODE || 'USDC';
-                await ensureTrustline(escrowAssetCode);
+            // El estado local puede venir viejo: desde que el bloqueo ocurre al
+            // confirmar, para cuando se llega aqui la operacion suele estar ya
+            // bloqueada. Se pregunta al servidor antes de decidir.
+            //
+            // Sin esto se intentaba bloquear una operacion ya bloqueada, el
+            // servidor respondia 409 y la app lo traducia a "otra persona movio
+            // esta operacion antes que tu" — un mensaje que hablaba de un
+            // conflicto entre personas donde solo habia estado desactualizado.
+            const current = await getTrade(activeTrade.id, token).catch(() => null);
+            if (current) setServerTrade(current);
+            const status = current?.status ?? activeTrade.status;
+
+            if (status === 'pending') {
+                // H3: el activo sale de la OPERACION del servidor, no de la
+                // configuracion del APK, y no se envia ningun ChangeTrust previo.
+                assertNoClientPreparationForLock(current?.asset_code ?? activeTrade.asset_code);
                 await lockTrade(activeTrade.id, token);
             }
             // Swallow errors here: if the trade was already revealed (stale
@@ -62,6 +84,7 @@ const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBac
             setSecretLoaded(true);
 
             const fresh = await getTrade(activeTrade.id, token).catch(() => null);
+            if (fresh) setServerTrade(fresh);
             if (fresh?.lock_tx_hash) setLockTxHash(fresh.lock_tx_hash);
         } catch (e) {
             if (IS_DEMO_MODE) {
@@ -90,6 +113,7 @@ const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBac
         const poll = async () => {
             try {
                 const fresh = await getTrade(activeTrade.id, token);
+                setServerTrade(fresh);
                 if (fresh.status === 'completed' && fresh.release_tx_hash) {
                     setCompletedTxHash(fresh.release_tx_hash);
                 }
@@ -142,9 +166,11 @@ const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBac
                         </div>
                     </div>
                 </div>
-                <button aria-label="Más opciones" className="min-h-12 min-w-12 rounded-sm bg-fondo border-2 border-tinta flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary">
-                    <span aria-hidden="true" className="material-symbols-outlined text-verde">more_vert</span>
-                </button>
+                {/* Aqui habia un boton de "Mas opciones" recuadrado, sin ningun
+                    onClick: no hacia nada al pulsarlo y descuadraba la esquina
+                    superior derecha. Un boton muerto es peor que ninguno —
+                    promete una accion que no existe. Vuelve el dia que haya
+                    opciones que ofrecer. */}
             </header>
 
             <main className="pt-[calc(6rem+env(safe-area-inset-top))] pb-12 px-6 max-w-md mx-auto">
@@ -236,7 +262,10 @@ const QRReveal = ({ activeTrade, token, amount, counterpartyName, ownName, onBac
                             />
                             <div className="mt-6">
                                 <h3 className="font-headline font-extrabold text-xl text-on-surface">{ownName ?? '—'}</h3>
-                                <p className="num mt-2 font-headline font-black text-2xl text-on-surface">${amount} MXN</p>
+                                {displayTrade ? (
+                                    <p className="num mt-2 font-headline font-black text-2xl text-on-surface">${displayTrade.amount_mxn} MXN</p>
+                                ) : null}
+                                <TradeEscrowSummary trade={displayTrade} viewerId={viewerId} className="mt-1" />
                                 {qrCountdown && (
                                     <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
                                         <span aria-hidden="true" className="material-symbols-outlined text-[14px]">timer</span>

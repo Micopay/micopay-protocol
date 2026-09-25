@@ -36,7 +36,17 @@ type TradeStateCopy = {
   recoveryLabel?: string;
 };
 
-const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
+/**
+ * Estos textos ya estaban escritos para personas —"Esperando la entrega",
+ * "Muestra el codigo al agente"— pero solo los usaba la insignia de estado.
+ * `ChatRoom` mantenia su propia lista con `locked` y `pending`, y cualquier otro
+ * estado caia a "Operacion: revealing", el nombre interno del sistema.
+ *
+ * Se exporta para que exista UNA sola redaccion por estado. Dos listas paralelas
+ * garantizan que una se quede atras, y la que se quedo atras fue la que ve el
+ * usuario en mitad de una operacion con su dinero dentro.
+ */
+export const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
   locked: {
     label: 'Operación bloqueada',
     happened: 'La operación ya se abrió y los fondos quedaron en garantía.',

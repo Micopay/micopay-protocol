@@ -531,7 +531,14 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
               <div key={trade.id} className="bg-papel rounded-sm p-4 ">
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <p className="font-medium text-on-surface">{trade.buyer_handle}</p>
+                    <p className="font-medium text-on-surface">{trade.client_handle}</p>
+                    {/* CASH-3: desde que la bandeja tambien trae los cash-out,
+                        las dos clases de solicitud se veian identicas. Esta
+                        linea dice lo unico que el proveedor necesita saber de
+                        un vistazo: si va a recibir efectivo o a entregarlo. */}
+                    <p className="text-sm text-gris">
+                      {trade.flow === 'cashout' ? t('inbox.flowCashout') : t('inbox.flowDeposit')}
+                    </p>
                     <p className="text-sm text-gray-500">
                       {new Date(trade.created_at).toLocaleDateString('es-MX')}
                     </p>

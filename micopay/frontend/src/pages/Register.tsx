@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { registerUser, getAuthToken, getCurrentUser, UserData } from '../services/api';
-import { generateAndStoreKeypair, getPublicKey, exportSecretKey, keypairExists } from '../lib/keystore';
+import { generateAndStoreKeypair, getPublicKey, revealSecretKey, keypairExists } from '../lib/keystore';
 import { setBackupConfirmed, writeJSON } from '../services/secureStorage';
 import { ApiError } from '../utils/apiError';
 import { hashPhone } from '../lib/phoneHash';
@@ -47,7 +47,7 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
         await generateAndStoreKeypair();
       }
       const pub = await getPublicKey();
-      const sec = await exportSecretKey();
+      const sec = await revealSecretKey();
       if (!pub || !sec) throw new Error('No se pudo generar tu identidad Stellar');
 
       // Hash the phone number client-side (if provided) so the raw

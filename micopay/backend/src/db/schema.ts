@@ -96,6 +96,19 @@ function evalCondition(row: any, clause: string, params: any[]): boolean {
       : row[col] === null || row[col] === undefined;
   }
 
+  // = ANY($n). A diferencia de IN, la lista no viene inline en el SQL sino
+  // como parametro (un array), asi que la rama de igualdad de abajo comparaba
+  // la columna contra la cadena literal "ANY($2)" y no casaba nunca. La
+  // bandeja del proveedor filtra asi por estado: sin esto devolvia [] siempre
+  // y cualquier test contra el store en memoria pasaba por el motivo
+  // equivocado.
+  const anyMatch = trimmed.match(/^([\w.]+)\s*=\s*ANY\s*\((\$\d+)\)$/i);
+  if (anyMatch) {
+    const col = colName(anyMatch[1]);
+    const list = resolveVal(anyMatch[2], params);
+    return Array.isArray(list) && list.some((v) => v === row[col]);
+  }
+
   // Equality
   const eqMatch = trimmed.match(/^([\w.]+)\s*=\s*(.+)$/i);
   if (eqMatch) {

@@ -84,10 +84,57 @@ export interface CurrentUserProfile {
   kyc_provider?: 'didit' | 'etherfuse' | null;
   kyc_level_verified_at?: string | null;
   /**
-   * Disponibilidad comercial. Es lo que esas dos pantallas querían leer: el
-   * KYC dice quién eres, no si estás atendiendo.
+   * RED-1: pertenencia a Red MicoPay. Es un hecho aparte de tener sesión, de
+   * estar verificado y de estar disponible ahora mismo. Ausente = no inscrito;
+   * nunca se debe inferir de que haya sesión, que era el defecto anterior.
+   */
+  provider_status?: ProviderStatus | null;
+  /**
+   * Disponibilidad comercial actual. Solo significa algo si eres agente activo.
+   * El KYC dice quién eres, no si estás atendiendo.
    */
   availability?: 'online' | 'offline' | 'paused' | null;
+  merchant_available?: boolean | null;
+}
+
+/** RED-1: los cuatro estados posibles de pertenencia a Red MicoPay. */
+export type ProviderStatus = 'not_enrolled' | 'pending_verification' | 'active' | 'suspended';
+
+export interface ProviderReadinessItem {
+  /** Identificador estable: la app no depende del texto del servidor. */
+  key: 'kyc' | 'location' | 'limits';
+  done: boolean;
+  detail: string | null;
+}
+
+export interface ProviderReadiness {
+  status: ProviderStatus;
+  /** La elegibilidad la decide el servidor. La app no la deduce sumando items. */
+  can_activate: boolean;
+  items: ProviderReadinessItem[];
+  availability: string | null;
+  merchant_available: boolean;
+  required_kyc_level: number;
+  kyc_level: number;
+  kyc_provider: string | null;
+}
+
+/** RED-1: inicia el alta como agente. Idempotente. */
+export async function enrollAsProvider(token: string): Promise<ProviderReadiness> {
+  const res = await http.post('/merchants/me/enroll', {}, authHeaders(token));
+  return res.data;
+}
+
+/** RED-1: qué falta para poder activarse. La verdad la dice el servidor. */
+export async function fetchProviderReadiness(token: string): Promise<ProviderReadiness> {
+  const res = await http.get('/merchants/me/readiness', authHeaders(token));
+  return res.data;
+}
+
+/** RED-1: activa al agente. Falla cerrada en el servidor si falta algo. */
+export async function activateProvider(token: string): Promise<ProviderReadiness> {
+  const res = await http.post('/merchants/me/activate', {}, authHeaders(token));
+  return res.data;
 }
 
 /** CASH-1 (#372): canonical product flow, independent of the escrow roles. */
@@ -100,8 +147,29 @@ export interface TradeData {
   status: TradeState;
   secret_hash: string;
   amount_mxn: number;
+  /** Roles del escrow. GET /trades/:id y POST /trades los devuelven. */
+  seller_id?: string;
+  buyer_id?: string;
   lock_tx_hash?: string | null;
   release_tx_hash?: string | null;
+  /**
+   * WP-A: activo y cifras del escrow, congelados por el servidor al crear la
+   * operacion. Opcionales porque una respuesta antigua o una operacion demo no
+   * los trae: en ese caso la UI muestra solo pesos y no inventa el activo.
+   */
+  asset_code?: string | null;
+  /** MXN por 1 unidad del activo, decimal en cadena. */
+  rate_mxn?: string | null;
+  /**
+   * Cifras en unidades minimas (stroops), como cadenas enteras. Nunca se
+   * recalculan en el cliente. El contrato bloquea `amount + platform_fee`:
+   *  - `amount_stroops`: lo que recibe el comprador al liberar;
+   *  - `platform_fee_stroops`: la comision de plataforma;
+   *  - `total_locked_stroops`: lo que retiene el escrow y devuelve si hay reembolso.
+   */
+  amount_stroops?: string | null;
+  platform_fee_stroops?: string | null;
+  total_locked_stroops?: string | null;
 }
 
 export interface TradeDetailResponse {
@@ -109,6 +177,9 @@ export interface TradeDetailResponse {
     lock_tx_hash?: string | null;
     release_tx_hash?: string | null;
     platform_fee_mxn?: number;
+    /** Congeladas al crear la operacion (tradeFees.ts del backend). */
+    provider_fee_mxn?: number;
+    payout_mxn?: number;
     seller_id?: string;
     buyer_id?: string;
     flow?: TradeFlow;
@@ -287,13 +358,13 @@ export async function createTrade(
     amountMxn: number,
     callerToken: string,
     flow: TradeFlow = 'deposit',
+    /** WP-B: `asset_code` del escrow. Omitido -> el backend usa XLM. */
+    assetCode?: string,
 ): Promise<TradeData> {
   try {
-    const res = await http.post(
-        '/trades',
-        { counterparty_id: counterpartyId, amount_mxn: amountMxn, flow },
-        authHeaders(callerToken),
-    );
+    const body: Record<string, unknown> = { counterparty_id: counterpartyId, amount_mxn: amountMxn, flow };
+    if (assetCode !== undefined) body.asset_code = assetCode;
+    const res = await http.post('/trades', body, authHeaders(callerToken));
     return res.data.trade;
   } catch (e: unknown) {
     throw toApiError(extractApiErrorPayload(e));
@@ -316,21 +387,28 @@ export async function getTrade(
 export async function lockTrade(
     tradeId: string,
     sellerToken: string,
-): Promise<{ lock_tx_hash: string }> {
+): Promise<{ status?: TradeState; lock_tx_hash: string }> {
   const prepareRes = await http.post(
       `/trades/${tradeId}/lock/prepare`,
       {},
       authHeaders(sellerToken),
   );
   const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
-  const signedXdr = 'mock' in prepared ? undefined : await signTransactionXdr(prepared.xdr, prepared.network_passphrase);
+  const signedXdr =
+    'mock' in prepared
+      ? undefined
+      : await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'lock');
 
   const res = await http.post(
       `/trades/${tradeId}/lock`,
       signedXdr ? { signed_xdr: signedXdr } : {},
       authHeaders(sellerToken),
   );
-  return { lock_tx_hash: res.data.lock_tx_hash };
+  // El `status` viaja tambien. Descartarlo dejaba el estado local en `pending`
+  // despues de un bloqueo exitoso, y la pantalla del QR volvia a intentar
+  // bloquear una operacion ya bloqueada: el servidor respondia 409 y la app lo
+  // traducia a "otra persona movio esta operacion antes que tu".
+  return { status: res.data.status as TradeState | undefined, lock_tx_hash: res.data.lock_tx_hash };
 }
 
 export async function revealTrade(
@@ -377,7 +455,10 @@ export async function completeTrade(
 ): Promise<CompleteTradeResponse> {
   const prepareRes = await http.post(`/trades/${tradeId}/complete/prepare`, {}, authHeaders(token));
   const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
-  const signedXdr = 'mock' in prepared ? undefined : await signTransactionXdr(prepared.xdr, prepared.network_passphrase);
+  const signedXdr =
+    'mock' in prepared
+      ? undefined
+      : await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'release');
 
   const res = await http.post(`/trades/${tradeId}/complete`, signedXdr ? { signed_xdr: signedXdr } : {}, authHeaders(token));
   return res.data;
@@ -417,7 +498,13 @@ export interface TradeHistoryItem {
 
 export interface MerchantTrade {
   id: string;
-  buyer_handle: string;
+  /** CASH-3: la contraparte es el CLIENTE, que en cash-out es el vendedor del
+   *  escrow y no el comprador. Antes se llamaba `buyer_handle` y en cash-out
+   *  traia el nombre del propio proveedor. */
+  client_handle: string;
+  /** CASH-3: sin esto las dos clases de solicitud se ven identicas en la
+   *  bandeja, y el proveedor no sabe si va a entregar o a recibir efectivo. */
+  flow: TradeFlow;
   amount_mxn: number;
   /** CASH-5A: estado canónico. El tipo documenta el contrato; la realidad
    *  en runtime se valida con parseTradeState antes de usarla. */
@@ -507,6 +594,37 @@ export interface XlmMxnRate {
 export async function getXlmMxnRate(): Promise<XlmMxnRate> {
   const res = await http.get('/rate/xlm-mxn');
   return res.data;
+}
+
+/** Tasas por `code` de `ESCROW_ASSET_OPTIONS`. Solo activos habilitados. */
+const ESCROW_RATE_FETCHERS: Record<string, () => Promise<XlmMxnRate>> = {
+  XLM: getXlmMxnRate,
+};
+
+/**
+ * WP-B: MXN por 1 unidad del activo del escrow, para mostrar el equivalente
+ * ESTIMADO antes de crear la operacion. La tasa vinculante la congela el
+ * servidor al crearla; esta nunca se envia de vuelta.
+ *
+ * Rechaza una tasa que no sea un numero finito y positivo: dividir el monto
+ * entre 0, NaN o un negativo pintaria un equivalente absurdo con apariencia de
+ * dato real.
+ */
+export async function getEscrowAssetRate(code: string): Promise<XlmMxnRate> {
+  const fetcher = ESCROW_RATE_FETCHERS[code];
+  if (!fetcher) {
+    throw new Error(`No rate source for escrow asset ${code}`);
+  }
+  const data = await fetcher();
+  return { ...data, rate: parseEscrowAssetRate(data?.rate) };
+}
+
+export function parseEscrowAssetRate(raw: unknown): number {
+  const rate = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+  if (typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) {
+    throw new Error(`Invalid escrow asset rate: ${String(raw)}`);
+  }
+  return rate;
 }
 
 /**
@@ -690,6 +808,11 @@ export async function updateMerchantAvailabilityWithOfflineSupport(
 
 /** Mirrors backend `AvailableMerchant` from GET /merchants/available. */
 export interface AvailableMerchant {
+  /** Desglose de comisiones calculado por el servidor, en MXN. Llega entero
+   *  para que la app no tenga que deducir ninguna parte restando. */
+  provider_fee_mxn?: number;
+  platform_fee_mxn?: number;
+  effective_fee_percent?: number;
   seller_id: string;
   username: string;
   rate_percent: number;

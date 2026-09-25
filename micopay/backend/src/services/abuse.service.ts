@@ -279,10 +279,23 @@ async function assertProviderAvailable(providerId: string): Promise<void> {
     availability: string | null;
     is_suspended: boolean | null;
     merchant_available: boolean | null;
+    provider_status: string | null;
   }>(
-    `SELECT availability, is_suspended, merchant_available FROM users WHERE id = $1`,
+    `SELECT availability, is_suspended, merchant_available, provider_status
+       FROM users WHERE id = $1`,
     [providerId],
   );
+
+  // RED-1: quien no esta dado de alta en la Red no es proveedor, por muy
+  // disponible que diga estar. El descubrimiento ya no lo ofrece; esto cierra
+  // la puerta a quien llegue con un id directo.
+  if ((provider?.provider_status ?? "not_enrolled") !== "active") {
+    throw new RiskBlockedError(
+      "MERCHANT_NOT_ENROLLED",
+      "Esta persona no es agente de Red MicoPay.",
+      `Provider ${providerId} provider_status=${provider?.provider_status ?? "not_enrolled"}`,
+    );
+  }
 
   if (provider?.is_suspended) {
     throw new RiskBlockedError(
@@ -572,9 +585,13 @@ export async function pauseUser(
   adminId: string | null,
 ): Promise<void> {
   await db.execute(
+    // RED-1: pausar tiene que sacar del mapa de verdad. `availability` y
+    // `merchant_available` son el mismo hecho contado dos veces; escribir solo
+    // uno dejaba al proveedor pausado pero visible.
     `UPDATE users
      SET is_suspended = true,
          availability = 'paused',
+         merchant_available = false,
          suspended_at = NOW(),
          suspension_reason = $2
      WHERE id = $1`,
@@ -595,9 +612,13 @@ export async function unpauseUser(
   adminId: string | null,
 ): Promise<void> {
   await db.execute(
+    // Reactivar no re-publica sola a una cuenta: vuelve en pausa y es la
+    // persona quien decide ponerse disponible otra vez. Y si nunca fue agente,
+    // levantar una suspension no puede convertirla en uno.
     `UPDATE users
      SET is_suspended = false,
-         availability = 'online',
+         availability = 'paused',
+         merchant_available = false,
          suspended_at = NULL,
          suspension_reason = NULL
      WHERE id = $1`,

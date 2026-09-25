@@ -136,6 +136,24 @@ async function resolveRate(
   );
 }
 
+/**
+ * La misma tasa que sirve el endpoint, para quien la necesita dentro del
+ * backend (la conversion peso -> activo del escrow). Se expone como CADENA con
+ * 7 decimales a proposito: `assetRate.service` hace aritmetica entera y un
+ * float encadenado ahi introduce error que luego se multiplica por el monto.
+ *
+ * Reutiliza la misma cascada cache -> fuentes vivas -> cache rancia -> 503, para
+ * que no existan dos formas distintas de obtener el mismo numero.
+ */
+export async function getRateMxn(
+  pair: 'xlm-mxn' | 'usdc-mxn',
+  request: { log: { warn: (obj: unknown, msg: string) => void } },
+): Promise<{ rate: string; source: string }> {
+  const sources = pair === 'usdc-mxn' ? USDC_SOURCES : SOURCES;
+  const entry = await resolveRate(pair, sources, request);
+  return { rate: entry.rate.toFixed(7), source: entry.source };
+}
+
 export async function rateRoutes(app: FastifyInstance) {
   app.get('/rate/xlm-mxn', async (request) => resolveRate('xlm-mxn', SOURCES, request));
 

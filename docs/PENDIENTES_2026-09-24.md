@@ -1,0 +1,142 @@
+# Pendientes · 2026-09-24
+
+Estado al cierre del 24 de septiembre de 2026. Rama `feat/red-1-onboarding-interno`, con push hasta `42d859a`.
+
+---
+
+## 1. Didit (KYC)
+
+### Lo que ya está hecho y desplegado
+
+**Backend** (en `main` y en producción, `v13`):
+- Integración con Didit: crea la sesión y manda a la persona a la página de Didit (`services/didit.service.ts`, desde el 2026-07-22).
+- Rutas: `POST /defi/kyc/start?provider=didit`, consulta de estado y webhook `/defi/kyc/webhook/didit` con verificación de firma.
+- Tabla `kyc_didit_sessions` y niveles de KYC 1 y 2 (migración `20260722130000_didit_kyc_provider`).
+- Límites de volumen mensual por nivel de KYC (#316 y #322, julio).
+- CASH-10: el KYC aplica al cliente y al agente, y el volumen se cuenta de forma atómica (mergeado el 2026-09-04).
+- Circuit breakers y reintentos si Didit falla (2026-07-27).
+- Para ser agente se pide KYC de Didit nivel 1 (RED-1 y RED-2, `d441ddb`, 2026-09-05).
+
+**App:** la pantalla `KYCScreen` y el botón "Verificarme" en `ProviderOnboarding`.
+
+### Hecho, pero sin mergear: PR #388 (KYC-1)
+
+Rama `feat/kyc-1-didit-journey` (`ea75692`, `ad97e62`). Tiene CI verde y se puede mergear. **No está en el backend desplegado.** Corrige:
+- **Seguridad:** el webhook tomaba el usuario y el nivel de `vendor_data`, que viene dentro del mismo mensaje. Con una firma válida se le podía subir el nivel de KYC a cualquier usuario. Ahora se resuelve con el `session_id` guardado en `kyc_didit_sessions`.
+- Un aviso duplicado alargaba la vigencia de la verificación (`kyc_level_verified_at`).
+- Una aprobación de nivel menor bajaba un nivel mayor que seguía vigente.
+- Ante un mensaje raro se guardaba en los logs el cuerpo entero, con datos personales.
+- La app daba por verificada a la persona usando solo su memoria local, sin preguntarle al servidor.
+
+### Lo que falta para que funcione en producción
+
+La configuración del servidor (task definition 15) **no tiene ninguna variable de Didit**. Faltan `DIDIT_API_KEY`, `DIDIT_WORKFLOW_ID` y el secreto del webhook. Consecuencias según el código:
+- Verificarse falla con "DIDIT_API_KEY not configured".
+- El webhook rechaza todo ("webhook secret not configured"), así que la falla del #388 hoy no se puede explotar.
+- Nadie puede volverse agente desde la app.
+- `KYC_GATE_ENABLED=false`: no se le pide KYC a nadie para operar.
+
+**Pasos:**
+- [ ] Mergear el #388.
+- [ ] Guardar en AWS Secrets Manager la llave, el workflow y el secreto del webhook de Didit, y agregarlos a la task definition.
+- [ ] Registrar en Didit el webhook `https://api.micopay.app/defi/kyc/webhook/didit`.
+- [ ] Desplegar el backend.
+- [ ] Probar "Únete a Red MicoPay" → "Verificarme" en el teléfono.
+
+> **En demos:** no tocar "Únete a Red MicoPay" → "Verificarme" hasta terminar esto.
+
+---
+
+## 2. APK para demos
+
+El APK del 2026-09-14 está instalado en el teléfono (Xiaomi 2303ERA42L); el hash coincide con el que se compiló.
+El 2026-09-24 se probaron un **retiro** y un **depósito** de $500 contra producción. Los dos se completaron.
+
+Corregir antes del próximo APK:
+- [x] **El aviso del depósito regresaba a rojo** después de que el agente confirmaba el efectivo (`revealing`) y seguía diciendo "NO entregues el efectivo". Corregido en `pages/DepositChat.tsx`, **sin commit**.
+- [ ] **"Completed" en inglés** en el recibo, en el campo Estado.
+- [ ] **El QR del depósito es decorativo.** Solo contiene `micopay://confirm?trade_id=…`, el servidor no lo pide y el escáner del agente no reconoce ese tipo de QR. Decidir: **quitarlo** y dejar "Confirma cuando hayas entregado el efectivo" (recomendado), o **hacerlo real** con cambios en el servidor.
+- [ ] **🔴 Con un agente real, el depósito se queda atorado.** Después de bloquear, la operación queda en `locked` y `TradeDetail` → `LockedView` le dice al agente "Esperando confirmación del vendedor", aunque el vendedor es él. No tiene ningún botón de **"Recibí el efectivo"**, que en el servidor es `POST /trades/:id/reveal`. Esa llamada solo existe en `QRReveal`, que usa el `activeTrade` del flujo del cliente, y el agente no llega ahí desde su bandeja. Sin esa confirmación el cliente no puede cerrar y la operación vence. El bot no sufre esto porque llama al servidor directamente. **Arreglo (solo app):** agregar "Recibí el efectivo" en `LockedView` cuando quien mira es el agente de un depósito. Se encontró leyendo el código, sin probarlo en el teléfono.
+- [ ] **El botón "Abrir chat con el vendedor" de `LockedView` no hace nada**: no tiene `onClick`. Conectarlo al chat de la operación.
+- [ ] Compilar el APK nuevo, instalarlo y volver a probar los dos flujos.
+
+---
+
+## 3. Pantallas de agente y onboarding: lo que ya existe
+
+Revisado en el código el 2026-09-24. Ninguna de estas pantallas se probó en el teléfono.
+
+**Onboarding de persona** (`Welcome.tsx`, `/welcome`): es solo explicativo y no cambia nada en el servidor. Explica que el dinero vive en el teléfono, que hay una llave con respaldo, qué es un cash-out y por qué el dinero queda retenido, y que el QR cierra la operación con una persona real. Además están `Register.tsx` y `Login.tsx`.
+
+**Alta como agente** (`ProviderOnboarding.tsx`, `/join-network`, commit `d441ddb` del 2026-09-05, que cubre RED-1 y RED-2):
+- Entrada con "Únete a Red MicoPay" en Perfil.
+- Explicación y lista de requisitos: identidad (Didit), zona, y comisión con montos. La lista se lee de `/merchants/me/readiness`, así que el avance sobrevive a cerrar la app.
+- Tres decisiones separadas: unirse (queda pendiente), activarse y ponerse disponible.
+- Perfil muestra el estado: no inscrito, pendiente, activo con el interruptor disponible/pausado, o suspendido.
+- La pestaña de bandeja solo aparece con `provider_status === 'active'`. Un agente activo puede seguir haciendo retiros como cliente.
+- **Bloqueado en producción** porque Didit no está configurado (sección 1).
+
+**Pantallas del agente:**
+
+| Pantalla | Qué hace | Estado |
+|---|---|---|
+| Ajustes (`MerchantSettings`) | Comisión, montos mínimo y máximo, tope diario, zona con GPS y selector en el mapa, punto de encuentro, disponible o pausado | ✅ |
+| Bandeja (`MerchantInbox`) | Solicitudes con filtros por estado, si es depósito o retiro, y escáner de QR | ✅ Muestra retiros desde el backend `v13` (CASH-3) |
+| Retiro: escanear y liberar | Escanea el QR, confirma la entrega y libera | ✅ El bot lo probó con el mismo backend |
+| Depósito: bloquear | "Bloquear fondos" en `TradeDetail` | ✅ |
+| Depósito: confirmar el efectivo | — | ❌ No existe (sección 2) |
+
+---
+
+## 4. Bot agente de demostración
+
+- Código en `micopay/backend/scripts/demo-agent/` (`bot.ts` y `qr_from_phone.py`), **sin commit**.
+- Cuenta `agente_demo_rgjo`. Su llave está en `~/.micopay/demo-agent.json`, fuera del repo.
+- La activé como agente con un UPDATE directo en RDS, porque activarla por la API pide Didit.
+- Está ubicado unos 150 m al lado de donde estaba el teléfono (CDMX, 19.3568, -99.1659).
+- [ ] Si la demo es en otro lugar: conectar el teléfono y correr `npx tsx scripts/demo-agent/bot.ts setup`.
+- [ ] Decidir si el bot entra al repo.
+- Los 4 agentes sembrados siguen en Coatepec/Xalapa (`SEED_ORIGIN_LAT/LNG` = 19.1489, -96.9663) y no aceptan operaciones solos.
+
+---
+
+## 5. Backend y AWS
+
+- Desplegado el 2026-09-24: imagen `micopay-backend:v13`, task definition 15. El servicio corre sano.
+- [ ] **Alarma cuando no hay ninguna tarea corriendo** (`RunningTaskCount < 1`). En el despliegue de hoy la API estuvo caída unos 5 minutos porque ECS tardó en arrancar la tarea nueva, lo mismo que el 2026-09-05. Ver `DESPLIEGUE_ECS_2026-09-08.md` §3.1.
+- [ ] **Hacer bloqueantes las pruebas de vitest en el CI.** Hoy el paso lleva `continue-on-error: true` en `.github/workflows/ci.yml`. Va en su propio PR, separado del plan de orden de GitHub.
+- [ ] Los créditos de AWS se acaban alrededor del **2026-10-15**; después son unos $53 al mes. Es la estimación del 2026-09-01 y no se volvió a revisar.
+- Resuelto: `users.is_banned` y `users.is_admin` existen en producción y su migración (`20260903000000_add_is_banned_is_admin`, `26c3efd`) está en `main` desde el 2026-09-02, aplicada según `schema_migrations`.
+
+---
+
+## 6. Comisiones (H5), en pausa
+
+- Plan escrito en `PLAN_COMISIONES_EFECTIVO_2026-09-24.md`, **sin commit**, pendiente de la auditoría de Codex.
+- Decisiones abiertas:
+  1. ¿Los límites y el KYC se miden sobre el efectivo o sobre la cripto?
+  2. ¿Qué hace el servidor si el mapa no le manda el tipo de operación?
+  3. ¿Se despliegan el backend y el APK el mismo día?
+- Eric lo pospuso el 2026-09-24 para priorizar el APK de demos.
+
+---
+
+## 7. GitHub
+
+- micopay-protocol: **0 issues abiertos**. #371 y #375 se cerraron el 2026-09-24, sin comentario.
+- PRs abiertos:
+  - [ ] **#388**: KYC-1 (ver sección 1).
+  - [ ] **#373**: RED-1, de sasasamaes. Absorber o cerrar.
+  - [ ] **#374**: CASH-1, de canicefavour, sin actividad desde el 2026-08-31. Cerrar.
+- micopaybridge (GrantFox): siguen abiertos los issues #14, #18, #19, #32 y #33 y los PRs #25, #26, #29 y #41. No se tocaron.
+
+### Posible trabajo para Drips, si se reabre
+
+Solo complejidad baja o media y nada que toque dinero:
+- Revisar los textos sin traducir en toda la app.
+- Que los scripts de prueba del backend corran en Windows (`cross-env`). Hoy fallan con `"ALLOW_IN_MEMORY_DB" no se reconoce…`.
+- Reforzar las pruebas que no prueban nada (las 5 de discovery que vinieron en #373).
+- Arreglar `cashHandoff.test`, que falla contra PostgreSQL desde antes del 2026-09-14.
+
+Mantener interno: comisiones, escrow, CASH-8, KYC-2, SAFE-1, TRUST-1 y TRUST-2, lo de la demo y AWS.
+RED-2 **ya está hecho** (`d441ddb`).
