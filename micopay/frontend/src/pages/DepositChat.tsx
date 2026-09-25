@@ -45,6 +45,10 @@ const DepositChat = ({
     // WP-D: la operacion del servidor, para la cifra del escrow segun el rol.
     const [escrowTrade, setEscrowTrade] = useState<TradeData | null>(null);
     const displayLockTxHash = fetchedLockTxHash ?? lockTxHash;
+    // Los fondos siguen en garantia despues del bloqueo: cuando el agente
+    // confirma el efectivo la operacion pasa a `revealing`, y antes el aviso
+    // volvia a rojo ("NO entregues el efectivo") con el escrow ya bloqueado.
+    const fondosEnGarantia = escrowStatus === 'locked' || escrowStatus === 'revealing';
 
     // Auto-scroll to bottom when messages change
     useEffect(() => {
@@ -121,19 +125,19 @@ const DepositChat = ({
                             En la práctica bloquear tarda; anunciarlo antes de
                             tiempo puede hacer que alguien entregue efectivo
                             creyendo que hay garantía cuando no la hay. */}
-                        <div className={`w-10 h-10 rounded-sm flex items-center justify-center shrink-0 ${escrowStatus === 'locked' ? 'bg-primary/10 text-primary' : 'bg-naranja/10 text-naranja'}`}>
+                        <div className={`w-10 h-10 rounded-sm flex items-center justify-center shrink-0 ${fondosEnGarantia ? 'bg-primary/10 text-primary' : 'bg-naranja/10 text-naranja'}`}>
                             <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>
-                                {escrowStatus === 'locked' ? 'task_alt' : 'hourglass_top'}
+                                {fondosEnGarantia ? 'task_alt' : 'hourglass_top'}
                             </span>
                         </div>
                         <div className="flex flex-col gap-1 min-w-0">
-                            <p className={`text-sm font-bold font-headline ${escrowStatus === 'locked' ? 'text-primary' : 'text-naranja'}`}>
-                                {escrowStatus === 'locked'
+                            <p className={`text-sm font-bold font-headline ${fondosEnGarantia ? 'text-primary' : 'text-naranja'}`}>
+                                {fondosEnGarantia
                                     ? t('chatRoom.agentFoundTitle')
                                     : t('chatRoom.depositWaitingLockTitle')}
                             </p>
                             <p className="text-xs text-on-surface/60">
-                                {escrowStatus === 'locked'
+                                {fondosEnGarantia
                                     ? t('chatRoom.agentFoundDesc')
                                     : t('chatRoom.depositWaitingLockDesc')}
                             </p>
