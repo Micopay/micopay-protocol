@@ -37,7 +37,7 @@ La configuración del servidor (task definition 15) **no tiene ninguna variable 
 - `KYC_GATE_ENABLED=false`: no se le pide KYC a nadie para operar.
 
 **Pasos:**
-- [ ] Mergear el #388.
+- [x] Mergear el #388 (2026-09-25).
 - [ ] Guardar en AWS Secrets Manager la llave, el workflow y el secreto del webhook de Didit, y agregarlos a la task definition.
 - [ ] Registrar en Didit el webhook `https://api.micopay.app/defi/kyc/webhook/didit`.
 - [ ] Desplegar el backend.
@@ -53,7 +53,7 @@ El APK del 2026-09-14 está instalado en el teléfono (Xiaomi 2303ERA42L); el ha
 El 2026-09-24 se probaron un **retiro** y un **depósito** de $500 contra producción. Los dos se completaron.
 
 Corregir antes del próximo APK:
-- [x] **El aviso del depósito regresaba a rojo** después de que el agente confirmaba el efectivo (`revealing`) y seguía diciendo "NO entregues el efectivo". Corregido en `pages/DepositChat.tsx`, **sin commit**.
+- [x] **El aviso del depósito regresaba a rojo** después de que el agente confirmaba el efectivo (`revealing`) y seguía diciendo "NO entregues el efectivo". Corregido en `pages/DepositChat.tsx`, en el PR #390.
 - [ ] **"Completed" en inglés** en el recibo, en el campo Estado.
 - [ ] **El QR del depósito es decorativo.** Solo contiene `micopay://confirm?trade_id=…`, el servidor no lo pide y el escáner del agente no reconoce ese tipo de QR. Decidir: **quitarlo** y dejar "Confirma cuando hayas entregado el efectivo" (recomendado), o **hacerlo real** con cambios en el servidor.
 - [ ] **🔴 Con un agente real, el depósito se queda atorado.** Después de bloquear, la operación queda en `locked` y `TradeDetail` → `LockedView` le dice al agente "Esperando confirmación del vendedor", aunque el vendedor es él. No tiene ningún botón de **"Recibí el efectivo"**, que en el servidor es `POST /trades/:id/reveal`. Esa llamada solo existe en `QRReveal`, que usa el `activeTrade` del flujo del cliente, y el agente no llega ahí desde su bandeja. Sin esa confirmación el cliente no puede cerrar y la operación vence. El bot no sufre esto porque llama al servidor directamente. **Arreglo (solo app):** agregar "Recibí el efectivo" en `LockedView` cuando quien mira es el agente de un depósito. Se encontró leyendo el código, sin probarlo en el teléfono.
@@ -125,9 +125,9 @@ Revisado en el código el 2026-09-24. Ninguna de estas pantallas se probó en el
 
 - micopay-protocol: **0 issues abiertos**. #371 y #375 se cerraron el 2026-09-24, sin comentario.
 - PRs abiertos:
-  - [ ] **#388**: KYC-1 (ver sección 1).
-  - [ ] **#373**: RED-1, de sasasamaes. Absorber o cerrar.
-  - [ ] **#374**: CASH-1, de canicefavour, sin actividad desde el 2026-08-31. Cerrar.
+  - [x] **#388**: KYC-1 (ver sección 1). Mergeado el 2026-09-25.
+  - [x] **#373**: RED-1, de sasasamaes. Cerrado el 2026-09-25.
+  - [x] **#374**: CASH-1, de canicefavour. Cerrado el 2026-09-25.
 - micopaybridge (GrantFox): siguen abiertos los issues #14, #18, #19, #32 y #33 y los PRs #25, #26, #29 y #41. No se tocaron.
 
 ### Posible trabajo para Drips, si se reabre
@@ -140,3 +140,27 @@ Solo complejidad baja o media y nada que toque dinero:
 
 Mantener interno: comisiones, escrow, CASH-8, KYC-2, SAFE-1, TRUST-1 y TRUST-2, lo de la demo y AWS.
 RED-2 **ya está hecho** (`d441ddb`).
+
+---
+
+## 8. Agentes: inventario y liquidez
+
+Revisado en el código el 2026-09-25, sobre `main` (`df21dbb`).
+
+El agente es proveedor de liquidez por los dos lados: en un **depósito** bloquea su cripto y recibe efectivo; en un **retiro** entrega efectivo y recibe la cripto del cliente. Con el uso su inventario se carga hacia un lado y tiene que rebalancear.
+
+Lo que hoy existe para gestionarlo: comisión, montos mínimo y máximo, tope diario (se aplica en `trade.service.ts`), zona y punto de encuentro, y el interruptor en línea / pausa / desconectado. Nada más.
+
+- [ ] **Que el agente declare qué flujos atiende** (solo depósitos, solo retiros o ambos). El parámetro `flow` de `GET /merchants/available` existe, pero está marcado como "reservado" y no filtra nada (`merchant.service.ts`).
+- [ ] **Que la búsqueda tenga en cuenta el saldo en cripto del agente para depósitos.** No encontré ninguna comprobación de saldo en `merchant.service.ts`, `trade.service.ts` ni `routes/trades.ts`: un agente sin cripto aparece en el mapa para un depósito y el problema sale cuando le toca bloquear.
+- [ ] **Efectivo disponible para retiros.** El servidor no puede verlo; como mucho, que el agente lo declare o que baje su monto máximo. Decidir si vale la pena.
+- [ ] **Rebalanceo.** La app no ofrece nada para pasar de efectivo a cripto o al revés; el agente lo resuelve por fuera. Evaluar si se enlaza con la rampa (Etherfuse).
+- Relación con otras secciones: el alta real sigue bloqueada por Didit (sección 1), y la pregunta de si los límites se miden sobre el efectivo o la cripto está en comisiones (sección 6).
+
+---
+
+## Actualización 2026-09-25
+
+- Se ejecutó `PLAN_ORDEN_GITHUB_2026-09-24.md` (v1.3): #389 y **#388 mergeados** (`main` = `df21dbb`, por delante de producción), **#373 y #374 cerrados** sin comentario, ramas mergeadas borradas y `main` **protegido** (todo entra por PR con los 3 checks en verde).
+- El bot de demo (sección 4) quedó en `main` con #389.
+- El arreglo del aviso del depósito (sección 2) está en el **PR #390** (`fix/apk-demo`, `def77d2`), con CI verde y sin mergear.
