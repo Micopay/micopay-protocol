@@ -4,6 +4,7 @@
  * Supported formats:
  *   - micopay://release?trade_id=<uuid>&claim_token=<hex64>
  *   - micopay://claim?request_id=<id>&amount_mxn=<number>&htlc=<hash>
+ *   - micopay://confirm?trade_id=<uuid>
  *   - MICOPAY:<type>:<value>  (legacy demo format — demo builds only)
  *
  * Returns a typed result or an error describing what went wrong.
@@ -22,6 +23,18 @@ export interface QRPayloadRelease {
   claimToken: string;
 }
 
+/**
+ * QR del cliente en un depósito. Solo identifica la operación: no lleva
+ * secreto ni token, porque confirmar el efectivo lo autoriza el servidor
+ * (`POST /trades/:id/reveal` solo acepta al vendedor del escrow, con la
+ * operación en `locked`). Escanearlo es la forma tangible de decir
+ * "recibí el efectivo" frente al cliente.
+ */
+export interface QRPayloadConfirm {
+  type: 'confirm';
+  tradeId: string;
+}
+
 export interface QRPayloadClaim {
   type: 'claim';
   requestId: string;
@@ -35,7 +48,7 @@ export interface QRPayloadDemo {
   value: string;
 }
 
-export type ParsedQRPayload = QRPayloadRelease | QRPayloadClaim | QRPayloadDemo;
+export type ParsedQRPayload = QRPayloadRelease | QRPayloadConfirm | QRPayloadClaim | QRPayloadDemo;
 
 export interface QRParseSuccess {
   ok: true;
@@ -97,6 +110,17 @@ export function parseQRPayload(raw: string | null | undefined): QRParseResult {
           ok: true,
           payload: { type: 'release', tradeId, claimToken: claimToken.toLowerCase() },
         };
+      }
+
+      if (action === 'confirm') {
+        const tradeId = url.searchParams.get('trade_id');
+        if (!tradeId) {
+          return { ok: false, error: 'El QR no contiene un ID de trade válido' };
+        }
+        if (!isUuid(tradeId)) {
+          return { ok: false, error: 'El ID de trade no tiene un formato UUID válido' };
+        }
+        return { ok: true, payload: { type: 'confirm', tradeId } };
       }
 
       if (action === 'claim') {
