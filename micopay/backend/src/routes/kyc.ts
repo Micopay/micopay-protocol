@@ -39,13 +39,12 @@ function encodeVendorData(userId: string, level: number): string {
   return `${userId}:${level}`;
 }
 
-function parseVendorData(vendorData: string | undefined | null): { userId: string; level: number } | null {
-  if (!vendorData) return null;
-  const [userId, levelStr] = vendorData.split(':');
-  const level = Number(levelStr);
-  if (!userId || (level !== 1 && level !== 2)) return null;
-  return { userId, level };
-}
+// KYC-1: aqui vivia `parseVendorData`, que leia usuario y nivel del cuerpo
+// del webhook para decidir a quien verificar. Se retira a proposito: ese dato
+// vuelve del proveedor y no puede ser la fuente de la decision. Ahora el
+// `session_id` se resuelve contra `kyc_didit_sessions` y de ahi salen el
+// usuario y el nivel. `encodeVendorData` se conserva porque seguimos
+// enviandolo al crear la sesion; solo dejo de creerselo al volver.
 
 async function startEtherfuseKyc(request: any) {
   if (!process.env.ETHERFUSE_API_KEY) {
@@ -246,11 +245,48 @@ export async function kycRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const sessionId: string | undefined = json?.session_id;
-      const vendorData = parseVendorData(json?.vendor_data);
       const status = mapDiditStatus(json?.status);
 
-      if (!sessionId || !vendorData) {
-        request.log.warn({ body: json }, 'Didit webhook: missing session_id or unparseable vendor_data');
+      // KYC-1: nunca se loguea el cuerpo. Traia documentos y datos personales
+      // del proveedor, y aqui iba entero al log ante cualquier payload raro.
+      if (!sessionId) {
+        request.log.warn({ category: 'kyc.didit' }, 'Didit webhook: missing session_id');
+        return reply.status(200).send({ received: true });
+      }
+
+      // KYC-1: la decision se ata a NUESTRA fila, no a lo que venga en el
+      // cuerpo. Antes se tomaban `user_id` y `level` de `vendor_data`, o sea
+      // del propio payload: quien lograra una firma valida podia subirle el
+      // nivel a cualquier usuario. Ahora el payload solo dice QUE sesion y
+      // CON QUE resultado; a quien y a que nivel lo dice la base.
+      const session = await db.getOne<DiditSessionRow & { requested_level: number }>(
+        `SELECT session_id, user_id, requested_level, status
+         FROM kyc_didit_sessions WHERE session_id = $1`,
+        [sessionId],
+      );
+
+      if (!session) {
+        // Sesion desconocida: se ignora sin ruido y sin tocar a nadie.
+        request.log.warn({ session_id: sessionId, category: 'kyc.didit' }, 'Didit webhook: unknown session');
+        return reply.status(200).send({ received: true });
+      }
+
+      // Entrega duplicada: no se reescribe nada. Sin esto, cada reintento del
+      // proveedor refrescaba `kyc_level_verified_at` y estiraba la vigencia.
+      if (session.status === status) {
+        request.log.info(
+          { session_id: sessionId, status, category: 'kyc.didit' },
+          'Didit webhook: duplicate delivery ignored',
+        );
+        return reply.status(200).send({ received: true });
+      }
+
+      // Una sesion ya resuelta no vuelve atras.
+      if (session.status === 'approved' && status !== 'approved') {
+        request.log.warn(
+          { session_id: sessionId, from: session.status, to: status, category: 'kyc.didit' },
+          'Didit webhook: refusing to undo an approved session',
+        );
         return reply.status(200).send({ received: true });
       }
 
@@ -262,13 +298,21 @@ export async function kycRoutes(app: FastifyInstance): Promise<void> {
       );
 
       if (status === 'approved') {
+        // Monotonico: una aprobacion de nivel inferior no degrada un nivel
+        // mayor ya vigente. El WHERE lo resuelve la base, sin leer-comparar-
+        // escribir, que es donde se colaria una carrera.
         await db.execute(
-          `UPDATE users SET kyc_level = $1, kyc_provider = 'didit', kyc_level_verified_at = NOW() WHERE id = $2`,
-          [vendorData.level, vendorData.userId],
+          `UPDATE users
+           SET kyc_level = $1, kyc_provider = 'didit', kyc_level_verified_at = NOW()
+           WHERE id = $2 AND (kyc_level IS NULL OR kyc_level < $1)`,
+          [session.requested_level, session.user_id],
         );
       }
 
-      request.log.info({ sessionId, status, category: 'kyc.didit' }, 'Didit webhook processed');
+      request.log.info(
+        { session_id: sessionId, status, level: session.requested_level, category: 'kyc.didit' },
+        'Didit webhook processed',
+      );
       return reply.status(200).send({ received: true });
     });
   });

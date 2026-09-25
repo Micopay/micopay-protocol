@@ -74,14 +74,26 @@ export interface CurrentUserProfile {
   completion_rate?: number | null;
   /** Reputation tier: Nuevo | Bronce | Plata | Oro */
   reputation_tier?: string;
+
+  /**
+   * KYC-1: identidad real del KYC general. `Home` y `MerchantSettings` leían
+   * `verification_status`, un campo que no existe en la respuesta —el propio
+   * código lo casteaba con `as any`— así que su valor era siempre `undefined`.
+   */
+  kyc_level?: number | null;
+  kyc_provider?: 'didit' | 'etherfuse' | null;
+  kyc_level_verified_at?: string | null;
   /**
    * RED-1: pertenencia a Red MicoPay. Es un hecho aparte de tener sesión, de
    * estar verificado y de estar disponible ahora mismo. Ausente = no inscrito;
    * nunca se debe inferir de que haya sesión, que era el defecto anterior.
    */
   provider_status?: ProviderStatus | null;
-  /** Disponibilidad comercial actual. Solo significa algo si eres agente activo. */
-  availability?: string | null;
+  /**
+   * Disponibilidad comercial actual. Solo significa algo si eres agente activo.
+   * El KYC dice quién eres, no si estás atendiendo.
+   */
+  availability?: 'online' | 'offline' | 'paused' | null;
   merchant_available?: boolean | null;
 }
 
