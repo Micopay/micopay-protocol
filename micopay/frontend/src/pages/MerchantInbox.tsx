@@ -10,6 +10,7 @@ import {
   type MerchantConfirmResult,
 } from '../services/api';
 import { parseQRPayload } from '../utils/qrPayload';
+import { confirmCashReceived, cashConfirmErrorMessage } from '../utils/cashConfirm';
 import SupportLink from '../components/SupportLink';
 import { Pill } from '../components/ui';
 
@@ -40,7 +41,8 @@ type ScanView =
   | { type: 'loading' }
   | { type: 'parse_error'; message: string }
   | { type: 'api_error'; message: string; tradeId?: string }
-  | { type: 'confirmation'; data: MerchantConfirmResult };
+  | { type: 'confirmation'; data: MerchantConfirmResult }
+  | { type: 'cash_confirmed'; tradeId: string };
 
 // ── Trade confirmation screen ──────────────────────────────────────────────
 
@@ -312,44 +314,6 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
   // The polling fallback below (every 30s) covers trade updates in the meantime.
   const pushEnabled = false;
 
-  const handleScan = useCallback(async () => {
-    if (!token) return;
-    const { value, error } = await scan();
-
-    if (error) {
-      setScanView({ type: 'parse_error', message: error });
-      return;
-    }
-
-    // Parse the scanned QR into a typed MicoPay payload.
-    const parsed = parseQRPayload(value);
-    if (!parsed.ok) {
-      setScanView({ type: 'parse_error', message: parsed.error });
-      return;
-    }
-
-    // The merchant scans the buyer's release QR: trade_id + a one-time claim
-    // token. The HTLC preimage never travels in the QR (SEC-02).
-    const release = parsed.payload.type === 'release' ? parsed.payload : null;
-
-    if (!release) {
-      setScanView({ type: 'parse_error', message: 'No se encontró un ID de trade en el QR' });
-      return;
-    }
-
-    const tradeId = release.tradeId;
-
-    // Validate with backend.
-    setScanView({ type: 'loading' });
-
-    try {
-      const result = await merchantConfirmScan(tradeId, release.claimToken, token);
-      setScanView({ type: 'confirmation', data: result });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Error al verificar el intercambio';
-      setScanView({ type: 'api_error', message, tradeId });
-    }
-  }, [token, scan]);
 
   // ── Dismiss scan result ────────────────────────────────────────────────
   const dismissScan = useCallback(() => {
@@ -372,6 +336,61 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
     },
     [token],
   );
+
+  const handleScan = useCallback(async () => {
+    if (!token) return;
+    const { value, error } = await scan();
+
+    if (error) {
+      setScanView({ type: 'parse_error', message: error });
+      return;
+    }
+
+    // Parse the scanned QR into a typed MicoPay payload.
+    const parsed = parseQRPayload(value);
+    if (!parsed.ok) {
+      setScanView({ type: 'parse_error', message: parsed.error });
+      return;
+    }
+
+    // Depósito: el agente escanea el QR del cliente al recibir el efectivo.
+    // El QR solo trae el trade_id; el servidor decide si a este agente le
+    // toca confirmar (vendedor del escrow, operación en `locked`).
+    if (parsed.payload.type === 'confirm') {
+      const tradeId = parsed.payload.tradeId;
+      setScanView({ type: 'loading' });
+      try {
+        await confirmCashReceived(tradeId, token);
+        setScanView({ type: 'cash_confirmed', tradeId });
+        fetchTrades(activeFilter).catch(() => {});
+      } catch (e) {
+        setScanView({ type: 'api_error', message: cashConfirmErrorMessage(e), tradeId });
+      }
+      return;
+    }
+
+    // Cash-out: the merchant scans the buyer's release QR: trade_id + a
+    // one-time claim token. The HTLC preimage never travels in the QR (SEC-02).
+    const release = parsed.payload.type === 'release' ? parsed.payload : null;
+
+    if (!release) {
+      setScanView({ type: 'parse_error', message: 'No se encontró un ID de trade en el QR' });
+      return;
+    }
+
+    const tradeId = release.tradeId;
+
+    // Validate with backend.
+    setScanView({ type: 'loading' });
+
+    try {
+      const result = await merchantConfirmScan(tradeId, release.claimToken, token);
+      setScanView({ type: 'confirmation', data: result });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Error al verificar el intercambio';
+      setScanView({ type: 'api_error', message, tradeId });
+    }
+  }, [token, scan, activeFilter, fetchTrades]);
 
   // Main effect: fetch trades on filter change
   useEffect(() => {
@@ -480,6 +499,30 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
             <div className="mt-2 pl-9">
               <SupportLink tradeId={scanView.tradeId} state="error_escaneo" />
             </div>
+          </div>
+        )}
+
+        {scanView.type === 'cash_confirmed' && (
+          <div
+            role="status"
+            className="mb-4 rounded-sm p-4 bg-emerald-50 border border-emerald-200 flex items-start gap-3"
+          >
+            <span className="material-symbols-outlined text-emerald-600" style={{ fontVariationSettings: '"FILL" 1' }}>
+              task_alt
+            </span>
+            <div className="flex-1">
+              <p className="font-bold text-sm text-emerald-900">Efectivo confirmado</p>
+              <p className="text-xs text-emerald-700">
+                El cliente ya puede recibir sus activos. La operación se completa cuando los libere.
+              </p>
+            </div>
+            <button
+              onClick={dismissScan}
+              aria-label="Cerrar"
+              className="material-symbols-outlined text-on-surface-variant text-base"
+            >
+              close
+            </button>
           </div>
         )}
 

@@ -22,6 +22,7 @@ import { buildTxUrl } from '../utils/stellarExplorer';
 import { mapApiError } from '../utils/apiError';
 import { parseTradeState, type TradeState } from '../components/TradeStateBadge';
 import { resolveTradeActor, type TradeActor } from '../utils/tradeActor';
+import { canConfirmCashReceived, confirmCashReceived, cashConfirmErrorMessage } from '../utils/cashConfirm';
 
 type TradeDetailData = TradeDetailResponse['trade'] & {
   platform_fee_mxn?: number;
@@ -215,7 +216,85 @@ function PendingView({
   );
 }
 
-function LockedView({ trade }: { trade: TradeDetailData }) {
+interface CashConfirmProps {
+  /** Si a quien mira le toca confirmar el efectivo (agente de un depósito). */
+  canConfirm: boolean;
+  confirming: boolean;
+  error: string | null;
+  onConfirm: () => void;
+}
+
+function LockedView({ trade, cashConfirm }: { trade: TradeDetailData; cashConfirm?: CashConfirmProps }) {
+  // Segundo paso antes de confirmar: al confirmar, el cliente puede liberar la
+  // cripto del agente, así que un toque accidental le costaría sus fondos.
+  const [askingCash, setAskingCash] = useState(false);
+
+  if (cashConfirm?.canConfirm) {
+    return (
+      <div className="flex flex-col items-center text-center">
+        <div className="w-16 h-16 rounded-sm bg-blue-100 flex items-center justify-center mb-6">
+          <span className="material-symbols-outlined text-blue-600 text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
+            lock
+          </span>
+        </div>
+        <h2 className="text-2xl font-bold text-on-surface mb-2">Tus fondos están en garantía</h2>
+        <p className="text-on-surface-variant mb-6">
+          Cuando el cliente te entregue el efectivo, escanea su código desde tu bandeja o confírmalo aquí.
+        </p>
+
+        {trade.lock_tx_hash && (
+          <a
+            href={buildTxUrl(trade.lock_tx_hash)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary text-sm font-semibold hover:underline mb-6 flex items-center gap-1"
+          >
+            Ver transacción en Stellar
+            <span className="material-symbols-outlined text-sm">open_in_new</span>
+          </a>
+        )}
+
+        {cashConfirm.error && (
+          <p role="alert" className="w-full mb-4 p-3 bg-red-50 border border-red-200 rounded-sm text-red-700 text-sm font-medium">
+            {cashConfirm.error}
+          </p>
+        )}
+
+        {!askingCash ? (
+          <button
+            onClick={() => setAskingCash(true)}
+            disabled={cashConfirm.confirming}
+            className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
+          >
+            Recibí el efectivo
+          </button>
+        ) : (
+          <div className="w-full border-2 border-tinta rounded-sm p-4 text-left">
+            <p className="font-bold text-on-surface mb-1">¿Ya tienes el efectivo en la mano?</p>
+            <p className="text-sm text-on-surface-variant mb-4">
+              Al confirmar, el cliente podrá recibir los activos que bloqueaste. No se puede deshacer.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setAskingCash(false)}
+                disabled={cashConfirm.confirming}
+                className="flex-1 py-3 rounded-sm border-2 border-tinta font-semibold disabled:opacity-40"
+              >
+                Todavía no
+              </button>
+              <button
+                onClick={cashConfirm.onConfirm}
+                disabled={cashConfirm.confirming}
+                className="flex-1 py-3 rounded-sm bg-primary text-papel font-semibold disabled:opacity-40"
+              >
+                {cashConfirm.confirming ? 'Confirmando…' : 'Sí, lo recibí'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center text-center">
@@ -835,6 +914,8 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
   const [isSeller, setIsSeller] = useState(false);
   const [isLocking, setIsLocking] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
+  const [isConfirmingCash, setIsConfirmingCash] = useState(false);
+  const [cashError, setCashError] = useState<string | null>(null);
   // CASH-6: la elegibilidad la decide el servidor. La UI ofrecia el reembolso
   // solo con estado `expired`, que nunca se persiste, asi que una operacion
   // `locked` o `revealing` vencida quedaba sin salida visible.
@@ -954,6 +1035,26 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
     }
   };
 
+  // Depósito: el agente confirma que recibió el efectivo (`reveal`).
+  const handleConfirmCash = async () => {
+    if (!trade || isConfirmingCash) return;
+    const effectiveToken = token ?? (await getStoredToken());
+    if (!effectiveToken) {
+      setCashError('Tu sesión expiró. Vuelve a entrar para confirmar el efectivo.');
+      return;
+    }
+    setIsConfirmingCash(true);
+    setCashError(null);
+    try {
+      await confirmCashReceived(trade.id, effectiveToken);
+      fetchTrade();
+    } catch (e) {
+      setCashError(cashConfirmErrorMessage(e));
+    } finally {
+      setIsConfirmingCash(false);
+    }
+  };
+
   // Handle refund
   const handleRefundConfirm = async () => {
     if (!trade) return;
@@ -1070,7 +1171,17 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
             />
           );
         }
-        return <LockedView trade={trade} />;
+        return (
+          <LockedView
+            trade={trade}
+            cashConfirm={{
+              canConfirm: canConfirmCashReceived(actor, trade.status),
+              confirming: isConfirmingCash,
+              error: cashError,
+              onConfirm: handleConfirmCash,
+            }}
+          />
+        );
       case 'revealing':
         // CASH-6: igual que en `locked` — vencida con fondos dentro, la salida
         // es el reembolso y no la accion del flujo, que ya no puede completarse.

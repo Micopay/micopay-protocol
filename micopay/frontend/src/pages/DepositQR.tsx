@@ -50,8 +50,13 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
         };
     }, [activeTrade, buyerToken, keepPolling]);
 
+    // El agente confirma el efectivo escaneando este QR (o desde su pantalla
+    // de la operación). Hasta entonces el servidor rechaza la liberación, así
+    // que el botón espera a `revealing` en vez de fallar con un error.
+    const cashConfirmed = displayTrade?.status === 'revealing';
+
     const handleComplete = async () => {
-        if (!activeTrade || !buyerToken) return;
+        if (!activeTrade || !buyerToken || !cashConfirmed || isConfirming) return;
         setIsConfirming(true);
         setError(null);
         try {
@@ -148,7 +153,7 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
                 <div className="bg-surface-container-lowest rounded-sm p-4 flex gap-4 items-start border-2 border-tinta ">
                     <span className="material-symbols-outlined text-primary shrink-0">info</span>
                         <p className="text-[13px] leading-relaxed text-on-surface/80">
-                        El comerciante acreditará el saldo a tu billetera después de recibir el efectivo y escanear este código.
+                        Entrega el efectivo al agente. Al recibirlo, escaneará este código y entonces podrás recibir tus activos.
                     </p>
                 </div>
 
@@ -164,11 +169,11 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
                     {!isConfirming ? (
                         <button
                             onClick={handleComplete}
-                            disabled={!activeTrade || !buyerToken}
+                            disabled={!activeTrade || !buyerToken || !cashConfirmed}
                             className="w-full h-[52px] bg-primary text-papel font-bold rounded-sm flex items-center justify-center gap-2 active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-40"
                         >
                             <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>check_circle</span>
-                            Ya entregué el efectivo al agente
+                            {cashConfirmed ? 'Recibir mis activos' : 'Esperando que el agente confirme el efectivo…'}
                         </button>
                     ) : (
                         <div className="flex flex-col items-center gap-3 py-6">
@@ -180,7 +185,9 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
                         </div>
                     )}
                     <p className="text-[11px] text-gris text-center mt-4 leading-relaxed px-2">
-                        Solo confirma después de que el agente haya escaneado tu QR y hayas entregado el efectivo.
+                        {cashConfirmed
+                            ? 'El agente confirmó que recibió tu efectivo.'
+                            : 'El botón se activa cuando el agente escanea tu código.'}
                     </p>
                 </div>
             </main>
