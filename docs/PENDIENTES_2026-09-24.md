@@ -1,6 +1,54 @@
 # Pendientes · 2026-09-24
 
 Estado al cierre del 24 de septiembre de 2026. Rama `feat/red-1-onboarding-interno`, con push hasta `42d859a`.
+Actualizado el 2026-09-25; ver el final del documento.
+
+---
+
+## 0. Priorización (propuesta del 2026-09-25, para revisión de Codex)
+
+Las secciones 1 a 8 siguen siendo el detalle. Aquí va todo en un solo orden.
+
+**Criterios:**
+- **Importancia:** qué pasa si no se hace. Dinero atorado o una demo que falla pesa más que un texto.
+- **Utilidad:** a quién le sirve ya (demo, agentes reales, equipo).
+- **Prioridad:** importancia × utilidad, ajustada por dependencias y fechas.
+- **Dueño:** *Interno* si toca dinero, escrow, KYC, AWS o necesita decisión de Eric. *Drips* solo si es complejidad baja o media y no toca dinero (en la wave 8, los issues `low` salieron limpios y los `high` volvieron rotos).
+
+**Prioridades:** P0 = bloquea la demo o deja operaciones atoradas. P1 = necesario para operar con agentes reales o tiene fecha. P2 = mejora importante sin urgencia. P3 = cuando haya tiempo.
+
+| # | Pendiente | Sección | Prioridad | Dueño | Esfuerzo | Depende de |
+|---|---|---|---|---|---|---|
+| 1 | Depósito atorado con agente real: falta "Recibí el efectivo" (`reveal`) en `LockedView` | 2 | **P0** | Interno | Bajo | — |
+| 2 | Mergear #390 (aviso del depósito) | 2 | **P0** | Interno | Nulo | — |
+| 3 | QR del depósito decorativo: decidir quitarlo (recomendado) o hacerlo real | 2 | **P0** | Interno (decisión) | Bajo si se quita | — |
+| 4 | "Completed" en inglés en el recibo | 2 | P0 | Interno, en el lote del APK | Bajo | — |
+| 5 | Compilar el APK nuevo y volver a probar retiro y depósito en el teléfono | 2 | **P0** | Interno | Medio | 1–4 |
+| 6 | Créditos de AWS se acaban ~2026-10-15; decidir el recorte (ALB) | 5 | **P1** (fecha) | Interno | Medio | — |
+| 7 | Alarma `RunningTaskCount < 1` antes del próximo despliegue | 5 | P1 | Interno | Bajo | — |
+| 8 | Desplegar `main` (con KYC-1): hoy `main` va por delante de producción | 1 | P1 | Interno | Medio | 7 |
+| 9 | Configurar Didit en producción (secretos, webhook) y probar el alta de agente en el teléfono | 1 | P1 | Interno | Medio | 8 |
+| 10 | Agente declara qué flujos atiende; la búsqueda filtra por `flow` | 8 | P2 | Interno (diseño) → posible Drips | Medio | decisión 2 de la sección 6 |
+| 11 | Búsqueda de depósitos tiene en cuenta el saldo en cripto del agente | 8 | P2 | Interno | Medio | 10 |
+| 12 | Comisiones H5: auditoría de Codex y las 3 decisiones abiertas | 6 | P2 | Interno | Alto | pausado por Eric |
+| 13 | Vitest bloqueante en el CI | 5 | P2 | Interno | Bajo | — |
+| 14 | Comparar las 5 ramas conservadas (§4 del plan de GitHub) y borrar o rescatar | 7 | P2 | Interno | Medio | — |
+| 15 | Botón "Abrir chat con el vendedor" de `LockedView` sin `onClick` | 2 | P2 | **Drips** (o interno si entra en el APK) | Bajo | — |
+| 16 | Textos sin traducir en toda la app | 7 | P3 | **Drips** | Bajo–medio | — |
+| 17 | Scripts de prueba del backend en Windows (`cross-env`) | 7 | P3 | **Drips** | Bajo | — |
+| 18 | Reforzar las 5 pruebas de discovery que no prueban nada | 7 | P3 | **Drips** | Bajo–medio | — |
+| 19 | `cashHandoff.test` falla contra PostgreSQL | 7 | P3 | **Drips** | Medio | — |
+| 20 | Triage de micopaybridge (GrantFox): issues #14, #18, #19, #32, #33 y PRs #25, #26, #29, #41 | 7 | P3 | Interno (decisión) | Medio | — |
+| 21 | Efectivo disponible del agente y rebalanceo (¿enlazar con Etherfuse?) | 8 | P3 | Interno (exploración) | Alto | 10, 11 |
+
+**Candidatos a issues de Drips:** 15, 16, 17, 18 y 19. El 10 podría serlo cuando el diseño esté decidido. Ninguno toca dinero, escrow ni KYC.
+
+**Verificado en el código el 2026-09-25:** 1 (`revealTrade` solo se llama desde `QRReveal`), 15 (el botón no tiene `onClick`, `TradeDetail.tsx`) y 17 (`backend/package.json` no usa `cross-env`). El resto viene de la revisión del 2026-09-24 y no se volvió a comprobar; el 19 en particular conviene reproducirlo antes de publicar el issue.
+
+**Preguntas para Codex:**
+1. ¿El orden P0 → P1 es correcto, o el recorte de AWS (6) debería ir antes que el APK por la fecha?
+2. ¿Hay algo marcado como Drips que en realidad toque dinero o necesite contexto de fundador?
+3. ¿Los candidatos a Drips alcanzan para una wave, o conviene sumar el 10 ya con el diseño cerrado?
 
 ---
 
