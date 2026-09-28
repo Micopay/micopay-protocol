@@ -193,7 +193,7 @@ export default function ProviderOnboarding({
       lead: t('providerOnboarding.steps.checklist.lead'),
       body: (
         <>
-          {!readiness && !error && <StepText>Consultando tu estado…</StepText>}
+          {!readiness && !error && <StepText>{t('providerOnboarding.loadingStatus')}</StepText>}
           {readiness?.items.map((item) => (
             <ChecklistItem
               key={item.key}

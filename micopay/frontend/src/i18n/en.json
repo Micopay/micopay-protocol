@@ -248,7 +248,8 @@
         "pause": "Set yourself to <strong>pause</strong> when you can't serve. You'll still be an agent; you'll just stop appearing.",
         "profile": "Go to my profile"
       }
-    }
+    },
+    "loadingStatus": "Checking your status…"
   },
   "inbox": {
     "title": "Inbox",

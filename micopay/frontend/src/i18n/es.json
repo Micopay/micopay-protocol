@@ -248,7 +248,8 @@
         "pause": "Ponte en <strong>pausa</strong> cuando no puedas atender. Seguirás siendo agente; solo dejas de aparecer.",
         "profile": "Ir a mi perfil"
       }
-    }
+    },
+    "loadingStatus": "Consultando tu estado…"
   },
   "inbox": {
     "title": "Bandeja de entrada",
