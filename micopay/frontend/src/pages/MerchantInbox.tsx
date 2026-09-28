@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { useQRScanner } from '../hooks/useQRScanner';
 import { useCountdown } from '../hooks/useCountdown';
 import {
@@ -75,20 +75,20 @@ function TradeConfirmationCard({
       const { release_tx_hash } = await completeTrade(data.trade_id, token);
       // Éxito solo con un hash real persistido, nunca antes (criterio de #70).
       if (!release_tx_hash) {
-        setReleaseError('La liberación no devolvió un comprobante. Vuelve a intentarlo.');
+        setReleaseError(t('inbox.releaseNoReceipt'));
         return;
       }
       onReleased({ ...data, status: 'completed', release_tx_hash });
     } catch (e) {
       // La entrega quedó registrada en el servidor, así que reintentar retoma
       // desde ahí: no hace falta volver a escanear ni entregar efectivo otra vez.
-      setReleaseError(e instanceof Error ? e.message : 'No se pudo liberar. Reintenta.');
+      setReleaseError(e instanceof Error ? e.message : t('inbox.releaseFailed'));
     } finally {
       setReleasing(false);
     }
   };
   const { label: countdownLabel, expired } = useCountdown(data.expires_at);
-  const countdown = expired ? 'Expirado' : countdownLabel;
+  const countdown = expired ? t('inbox.expired') : countdownLabel;
   const statusColor = STATUS_COLORS[data.status] || 'bg-gray-100 text-gray-800';
   const statusLabel = t(`home.status.${data.status}`, { defaultValue: data.status });
   const statusIcon = STATUS_ICONS[data.status] || 'info';
@@ -106,12 +106,12 @@ function TradeConfirmationCard({
           </span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-sm text-emerald-900">QR verificado</p>
-          <p className="text-xs text-emerald-700">Trade confirmado por el servidor</p>
+          <p className="font-bold text-sm text-emerald-900">{t('inbox.qrVerified')}</p>
+          <p className="text-xs text-emerald-700">{t('inbox.tradeConfirmed')}</p>
         </div>
         <button
           onClick={onDismiss}
-          aria-label="Cerrar"
+          aria-label={t('a11y.close')}
           className="material-symbols-outlined text-emerald-600 text-base hover:bg-emerald-100 rounded-full p-1 transition-colors"
         >
           close
@@ -128,7 +128,7 @@ function TradeConfirmationCard({
           </p>
           {data.platform_fee_mxn > 0 && (
             <p className="text-xs text-gray-500 mt-1">
-              Comisión plataforma: ${data.platform_fee_mxn} MXN
+              {t('inbox.platformFee', { amount: data.platform_fee_mxn })}
             </p>
           )}
         </div>
@@ -154,11 +154,11 @@ function TradeConfirmationCard({
             </span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-gray-500">Expira en</span>
+            <span className="text-gray-500">{t('inbox.expiresIn')}</span>
             <span className="font-semibold text-primary">{countdown}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-gray-500">Creado</span>
+            <span className="text-gray-500">{t('inbox.created')}</span>
             <span className="text-on-surface">
               {new Date(data.created_at).toLocaleString('es-MX', {
                 dateStyle: 'short',
@@ -168,7 +168,7 @@ function TradeConfirmationCard({
           </div>
           {data.lock_tx_hash && (
             <div className="flex justify-between items-start">
-              <span className="text-gray-500">Lock TX</span>
+              <span className="text-gray-500">{t('inbox.lockTx')}</span>
               <span className="font-mono text-xs text-primary break-all text-right max-w-[180px]">
                 {data.lock_tx_hash.slice(0, 16)}…
               </span>
@@ -176,14 +176,14 @@ function TradeConfirmationCard({
           )}
           {data.release_tx_hash && (
             <div className="flex justify-between items-start">
-              <span className="text-gray-500">Release TX</span>
+              <span className="text-gray-500">{t('inbox.releaseTx')}</span>
               <span className="font-mono text-xs text-emerald-600 break-all text-right max-w-[180px]">
                 {data.release_tx_hash.slice(0, 16)}…
               </span>
             </div>
           )}
           <div className="flex justify-between items-center">
-            <span className="text-gray-500">Trade ID</span>
+            <span className="text-gray-500">{t('inbox.tradeId')}</span>
             <span className="font-mono text-xs text-gray-400">
               {data.trade_id.slice(0, 12)}…
             </span>
@@ -193,8 +193,10 @@ function TradeConfirmationCard({
         {/* Security note */}
         <div className="bg-blue-50 border border-blue-100 rounded-sm p-3">
           <p className="text-xs text-blue-800 leading-relaxed">
-            <span className="font-bold">🔒 Verificado on-chain.</span> La información fue
-            validada por el servidor. No muestra datos crudos del QR.
+            <Trans
+              i18nKey="inbox.verifiedOnchain"
+              components={{ strong: <span className="font-bold" /> }}
+            />
           </p>
         </div>
       </div>
@@ -204,8 +206,7 @@ function TradeConfirmationCard({
         <div className="px-5 pb-4 space-y-2">
           {data.resumed && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-sm px-3 py-2">
-              Ya habías confirmado la entrega de este intercambio. Puedes continuar
-              donde te quedaste sin volver a entregar efectivo.
+              {t('inbox.resumedTrade')}
             </p>
           )}
           {releaseError && (
@@ -218,7 +219,7 @@ function TradeConfirmationCard({
             disabled={releasing}
             className="w-full min-h-12 bg-naranja text-papel border-2 border-tinta shadow-solida font-bold py-3 rounded-sm transition-all active:translate-x-[3px] active:translate-y-[3px] active:shadow-solida-xs disabled:opacity-60"
           >
-            {releasing ? 'Liberando…' : 'Entregué el efectivo · liberar fondos'}
+            {releasing ? t('inbox.releasing') : t('inbox.releaseFunds')}
           </button>
         </div>
       )}
@@ -226,7 +227,7 @@ function TradeConfirmationCard({
       {yaLiberado && (
         <div className="px-5 pb-4">
           <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-sm px-3 py-2">
-            Fondos liberados. El comprobante on-chain está arriba.
+            {t('inbox.fundsReleased')}
           </p>
         </div>
       )}
@@ -250,6 +251,7 @@ function ScanErrorCard({
   tradeId?: string;
   onDismiss: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-papel rounded-sm border border-red-200 overflow-hidden">
       <div className="bg-red-50 px-5 py-4 flex items-center gap-3 border-b border-red-100">
@@ -262,11 +264,11 @@ function ScanErrorCard({
           </span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-sm text-red-900">Error al verificar QR</p>
+          <p className="font-bold text-sm text-red-900">{t('inbox.qrVerificationError')}</p>
         </div>
         <button
           onClick={onDismiss}
-          aria-label="Cerrar"
+          aria-label={t('a11y.close')}
           className="material-symbols-outlined text-red-600 text-base hover:bg-red-100 rounded-full p-1 transition-colors"
         >
           close
@@ -275,12 +277,13 @@ function ScanErrorCard({
       <div className="px-5 py-4 space-y-3">
         <p className="text-sm text-red-800 font-medium">{message}</p>
         {tradeId && (
-          <p className="text-xs text-gray-400 font-mono">Trade ID: {tradeId.slice(0, 12)}…</p>
+          <p className="text-xs text-gray-400 font-mono">
+            {t('inbox.tradeIdValue', { id: tradeId.slice(0, 12) })}
+          </p>
         )}
         <div className="bg-amber-50 border border-amber-100 rounded-sm p-3">
           <p className="text-xs text-amber-800 leading-relaxed">
-            Verifica que el código QR sea de MicoPay, que el intercambio no esté expirado y que
-            seas participante del trade.
+            {t('inbox.qrVerificationHint')}
           </p>
         </div>
       </div>
@@ -333,7 +336,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
     const release = parsed.payload.type === 'release' ? parsed.payload : null;
 
     if (!release) {
-      setScanView({ type: 'parse_error', message: 'No se encontró un ID de trade en el QR' });
+      setScanView({ type: 'parse_error', message: t('inbox.missingTradeId') });
       return;
     }
 
@@ -346,7 +349,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
       const result = await merchantConfirmScan(tradeId, release.claimToken, token);
       setScanView({ type: 'confirmation', data: result });
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Error al verificar el intercambio';
+      const message = e instanceof Error ? e.message : t('inbox.verificationFailed');
       setScanView({ type: 'api_error', message, tradeId });
     }
   }, [token, scan]);
@@ -413,7 +416,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
         <h1 className="font-headline font-bold text-lg flex-1">{t('inbox.title')}</h1>
         <button
           onClick={handleScan}
-          aria-label="Escanear QR del cliente"
+          aria-label={t('inbox.scanClientQr')}
           className="flex items-center gap-1 bg-primary text-papel min-h-12 px-3 rounded-sm text-xs font-bold active:translate-x-[2px] active:translate-y-[2px]"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-sm">
@@ -446,7 +449,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
         {scanView.type === 'loading' && (
           <div className="mb-4 rounded-sm p-4 bg-emerald-50 border border-emerald-200 flex items-center gap-3">
             <span className="material-symbols-outlined animate-spin text-emerald-600">progress_activity</span>
-            <p className="text-sm text-emerald-900 font-medium">Verificando QR con el servidor…</p>
+            <p className="text-sm text-emerald-900 font-medium">{t('inbox.verifyingQr')}</p>
           </div>
         )}
 
@@ -456,7 +459,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
             <p className="flex-1 text-sm text-red-800 font-medium">{scanView.message}</p>
             <button
               onClick={dismissScan}
-              aria-label="Cerrar"
+              aria-label={t('a11y.close')}
               className="material-symbols-outlined text-on-surface-variant text-base"
             >
               close
@@ -471,7 +474,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
               <p className="flex-1 text-sm text-red-800 font-medium">{scanView.message}</p>
               <button
                 onClick={dismissScan}
-                aria-label="Cerrar"
+                aria-label={t('a11y.close')}
                 className="material-symbols-outlined text-on-surface-variant text-base"
               >
                 close

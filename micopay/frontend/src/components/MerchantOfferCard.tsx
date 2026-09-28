@@ -17,6 +17,7 @@
  * no dos componentes.
  */
 
+import { useTranslation } from 'react-i18next';
 import { effectiveFeePercent, type AvailableMerchant } from '../services/api';
 import { PLATFORM_FEE_PERCENT } from '../constants/trade';
 
@@ -37,20 +38,21 @@ function EffectiveFeeNote({
   platformFeePct: number;
   maxPct: number;
 }) {
+  const { t } = useTranslation();
   const totalPct = effectiveFeePercent(commissionPct, platformFeePct);
   const exceeds = totalPct > maxPct;
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2 border-t border-linea pt-3">
         <span className="text-xs text-on-surface-variant font-label uppercase">
-          Costo total efectivo
+          {t('offerCard.effectiveCost')}
         </span>
         <span className={`text-sm font-bold tabular-nums ${exceeds ? 'text-error' : 'text-on-surface'}`}>
           {totalPct.toFixed(1)}%
         </span>
       </div>
       <p className="text-[11px] text-on-surface-variant">
-        Plataforma {platformFeePct}% + proveedor {commissionPct}%
+        {t('offerCard.feeBreakdown', { platformFeePct, commissionPct })}
       </p>
       {exceeds && (
         <div
@@ -59,7 +61,7 @@ function EffectiveFeeNote({
         >
           <span className="material-symbols-outlined text-error text-base leading-none">warning</span>
           <p className="text-[12px] font-medium text-error leading-snug">
-            El costo total supera el {maxPct}%. Compara con otra oferta antes de continuar.
+            {t('offerCard.feeExceeded', { maxPct })}
           </p>
         </div>
       )}
@@ -86,11 +88,17 @@ interface MerchantCardProps {
 }
 
 /** Que entrega y que recibe la persona, segun el flujo. */
-const EXCHANGE_LABELS: Record<OfferFlow, { gives: string; gets: string }> = {
+const EXCHANGE_LABEL_KEYS: Record<OfferFlow, { gives: string; gets: string }> = {
   // Entregas billetes al agente y tu saldo digital sube.
-  deposit: { gives: 'Entregas en efectivo', gets: 'Recibes en tu saldo' },
+  deposit: {
+    gives: 'offerCard.exchange.depositGives',
+    gets: 'offerCard.exchange.depositGets',
+  },
   // Entregas saldo digital y el agente te da billetes.
-  cashout: { gives: 'Entregas de tu saldo', gets: 'Recibes en efectivo' },
+  cashout: {
+    gives: 'offerCard.exchange.cashoutGives',
+    gets: 'offerCard.exchange.cashoutGets',
+  },
 };
 
 export default function MerchantOfferCard({
@@ -102,7 +110,8 @@ export default function MerchantOfferCard({
   maxEffectiveFeePercent,
   flow,
 }: MerchantCardProps) {
-  const labels = EXCHANGE_LABELS[flow];
+  const { t } = useTranslation();
+  const labelKeys = EXCHANGE_LABEL_KEYS[flow];
   const commissionMxn = (amount - merchant.payout_mxn).toFixed(2);
   const distanceLabel = formatDistance(merchant.distance_km);
   const platformFeePct = merchant.platform_fee_pct ?? PLATFORM_FEE_PERCENT;
@@ -112,7 +121,7 @@ export default function MerchantOfferCard({
       <div className="relative group">
         <div className="absolute -top-3 left-6 z-10">
           <span className="bg-naranja text-papel text-[10px] font-bold px-2 py-0.5 rounded-sm border-[1.5px] border-tinta uppercase tracking-[.1em] ">
-            Mejor oferta
+            {t('offerCard.bestOffer')}
           </span>
         </div>
         <div className="bg-papel rounded-sm border-2 border-tinta shadow-solida p-5 flex flex-col gap-5">
@@ -137,17 +146,23 @@ export default function MerchantOfferCard({
                   </span>
                 </div>
                 <div className="mt-1 text-sm text-on-surface-variant flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span>{merchant.completion_rate ? `${Math.round(merchant.completion_rate)}% completitud` : 'Sin historial'}</span>
+                  <span>
+                    {merchant.completion_rate
+                      ? t('map.completion', { pct: Math.round(merchant.completion_rate) })
+                      : t('map.noHistory')}
+                  </span>
                   <span>·</span>
-                  <span>{merchant.trades_completed ?? 0} ops</span>
+                  <span>{t('offerCard.completedOps', { count: merchant.trades_completed ?? 0 })}</span>
                   {merchant.tier && <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.1em] rounded-sm border-[1.5px] border-tinta bg-verde-suave text-verde">{merchant.tier}</span>}
                   <span className={`px-2 py-0.5 text-[11px] font-bold rounded-sm ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-tinta text-papel' : 'bg-papel text-tinta'}`}>
-                    {((merchant.seller_type === 'business') || merchant.is_business) ? 'Negocio' : 'Individuo'}
+                    {((merchant.seller_type === 'business') || merchant.is_business)
+                      ? t('map.business')
+                      : t('map.individual')}
                   </span>
                 </div>
                 <div className="flex items-center gap-1 text-on-surface-variant text-xs">
                   <span className="material-symbols-outlined text-xs">near_me</span>
-                  <span>{distanceLabel} de distancia</span>
+                  <span>{t('offerCard.distanceAway', { distance: distanceLabel })}</span>
                 </div>
                 {/* RED-3: aquí se pintaba `address_text`, texto libre que
                     podía ser un domicilio y que viajaba en un endpoint
@@ -163,24 +178,32 @@ export default function MerchantOfferCard({
               </div>
             </div>
             <div className="text-right flex-shrink-0">
-              <span className="block text-xs text-on-surface-variant font-label uppercase">Comisión</span>
-              <span className="num text-verde font-bold whitespace-nowrap">${commissionMxn} MXN</span>
+              <span className="block text-xs text-on-surface-variant font-label uppercase">
+                {t('offerCard.commission')}
+              </span>
+              <span className="num text-verde font-bold whitespace-nowrap">
+                {t('offerCard.amountMxn', { amount: commissionMxn })}
+              </span>
             </div>
           </div>
 
           <div className="bg-surface-container-low rounded-sm p-4 flex justify-between items-center">
             <div className="space-y-1">
-              <p className="text-[10px] text-gris uppercase font-bold tracking-[.1em]">{labels.gives}</p>
-              <p className="num font-bold text-naranja">${amount} MXN</p>
+              <p className="text-[10px] text-gris uppercase font-bold tracking-[.1em]">{t(labelKeys.gives)}</p>
+              <p className="num font-bold text-naranja">
+                {t('offerCard.amountMxn', { amount })}
+              </p>
             </div>
             <span className="material-symbols-outlined text-gris">trending_flat</span>
             <div className="space-y-1 text-right">
-              <p className="text-[10px] text-gris uppercase font-bold tracking-[.1em]">{labels.gets}</p>
+              <p className="text-[10px] text-gris uppercase font-bold tracking-[.1em]">{t(labelKeys.gets)}</p>
               {/* En MXN, no "MXNe": la cifra es el valor pactado en pesos. El
                   activo que respalda la operacion lo decide el escrow —hoy XLM—
                   y nombrarlo aqui seria adelantar un dato que ni siquiera era
                   cierto: decia MXNe cuando el escrow bloquea XLM. */}
-              <p className="num font-bold text-verde text-lg">${merchant.payout_mxn.toFixed(2)} MXN</p>
+              <p className="num font-bold text-verde text-lg">
+                {t('offerCard.amountMxn', { amount: merchant.payout_mxn.toFixed(2) })}
+              </p>
             </div>
           </div>
 
@@ -195,7 +218,9 @@ export default function MerchantOfferCard({
             disabled={loading}
             className="w-full h-[46px] bg-naranja text-papel border-2 border-tinta shadow-solida font-semibold rounded-sm active:translate-x-[3px] active:translate-y-[3px] active:shadow-solida-xs transition-[transform,box-shadow] disabled:opacity-50 disabled:cursor-wait"
           >
-            {loading ? 'Conectando con el agente…' : 'Elegir este agente'}
+            {loading
+              ? t('offerCard.connecting')
+              : t('offerCard.chooseAgent')}
           </button>
         </div>
       </div>
@@ -212,12 +237,18 @@ export default function MerchantOfferCard({
           <div className="min-w-0">
             <h3 className="font-bold text-lg truncate">{merchant.username}</h3>
             <div className="mt-1 text-sm text-on-surface-variant flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span>{merchant.completion_rate ? `${Math.round(merchant.completion_rate)}%` : 'Sin historial'}</span>
+              <span>
+                {merchant.completion_rate
+                  ? t('offerCard.completionShort', { pct: Math.round(merchant.completion_rate) })
+                  : t('map.noHistory')}
+              </span>
               <span>·</span>
-              <span>{merchant.trades_completed ?? 0} ops</span>
+              <span>{t('offerCard.completedOps', { count: merchant.trades_completed ?? 0 })}</span>
               {merchant.tier && <span className="px-2 py-0.5 text-[10px] rounded-sm bg-surface-container-high text-verde">{merchant.tier}</span>}
               <span className={`px-2 py-0.5 text-[10px] rounded-sm ${((merchant.seller_type === 'business') || merchant.is_business) ? 'bg-tinta text-papel' : 'bg-papel text-tinta'}`}>
-                {((merchant.seller_type === 'business') || merchant.is_business) ? 'Negocio' : 'Individuo'}
+                {((merchant.seller_type === 'business') || merchant.is_business)
+                  ? t('map.business')
+                  : t('map.individual')}
               </span>
             </div>
             <div className="flex items-center gap-1 text-on-surface-variant text-xs">
@@ -227,8 +258,12 @@ export default function MerchantOfferCard({
           </div>
         </div>
         <div className="text-right flex-shrink-0">
-          <span className="block text-xs text-on-surface-variant font-label uppercase">Recibes</span>
-          <span className="num text-on-surface font-bold whitespace-nowrap">${merchant.payout_mxn.toFixed(2)} MXN</span>
+          <span className="block text-xs text-on-surface-variant font-label uppercase">
+            {t('offerCard.receives')}
+          </span>
+          <span className="num text-on-surface font-bold whitespace-nowrap">
+            {t('offerCard.amountMxn', { amount: merchant.payout_mxn.toFixed(2) })}
+          </span>
         </div>
       </div>
       <EffectiveFeeNote
@@ -237,13 +272,15 @@ export default function MerchantOfferCard({
         maxPct={maxEffectiveFeePercent}
       />
       <div className="flex justify-between items-center border-t border-linea pt-4">
-        <p className="text-xs text-on-surface-variant">{distanceLabel} de distancia</p>
+        <p className="text-xs text-on-surface-variant">
+          {t('offerCard.distanceAway', { distance: distanceLabel })}
+        </p>
         <button
           onClick={() => onChoose(merchant)}
           disabled={loading}
           className="text-verde font-bold text-sm px-4 py-2 hover:bg-primary/5 rounded-sm transition-colors disabled:opacity-50"
         >
-          Ver detalles
+          {t('offerCard.details')}
         </button>
       </div>
     </div>
