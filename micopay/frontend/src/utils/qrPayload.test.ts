@@ -80,6 +80,23 @@ describe('parseQRPayload', () => {
   });
 
   // ── Claim format ───────────────────────────────────────────────────────
+  describe('micopay://confirm', () => {
+    it('parses the deposit QR into its trade id', () => {
+      const result = parseQRPayload(`micopay://confirm?trade_id=${TRADE_ID}`);
+      expect(result).toEqual({ ok: true, payload: { type: 'confirm', tradeId: TRADE_ID } });
+    });
+
+    it('rejects a confirm QR without trade_id', () => {
+      const result = parseQRPayload('micopay://confirm');
+      expect(result.ok).toBe(false);
+    });
+
+    it('rejects a confirm QR whose trade_id is not a UUID', () => {
+      const result = parseQRPayload('micopay://confirm?trade_id=abc-123');
+      expect(result.ok).toBe(false);
+    });
+  });
+
   describe('micopay://claim', () => {
     it('parses a valid claim QR', () => {
       const raw = `micopay://claim?request_id=mcr-req456&amount_mxn=500&htlc=${HTLC_TX_HASH}`;

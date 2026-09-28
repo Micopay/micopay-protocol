@@ -287,7 +287,9 @@
     "missingTradeId": "No trade ID was found in the QR",
     "verificationFailed": "Error verifying the trade",
     "scanClientQr": "Scan client's QR",
-    "verifyingQr": "Verifying QR with the server…"
+    "verifyingQr": "Verifying QR with the server…",
+    "cashConfirmedTitle": "Cash confirmed",
+    "cashConfirmedDesc": "The client can now receive their assets. The trade completes once they release them."
   },
   "tier": {
     "Nuevo": "New",
