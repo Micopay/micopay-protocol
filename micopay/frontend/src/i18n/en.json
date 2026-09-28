@@ -155,6 +155,101 @@
     "receiverWillReceive": "You will receive {{amount}} {{code}}.",
     "receiverReceived": "You received {{amount}} {{code}}."
   },
+  "depositMap": {
+    "title": "Deposit offers",
+    "loading": "Loading offers…",
+    "request": "Deposit request",
+    "amount": "${{amount}}",
+    "currency": "MXN",
+    "locatingAgents": "Finding agents near you...",
+    "locationNeeded": "We need your location",
+    "locationDescription": "To show nearby agents, enable location permission in your device Settings.",
+    "back": "Back",
+    "loadError": "We couldn't load the offers",
+    "checkConnection": "Check your connection and try again.",
+    "retry": "Retry",
+    "noAgents": "No agents available",
+    "noAgentsDescription": "There are no agents available in your area for ${{amount}} MXN right now. Try again later.",
+    "changeAmount": "Change amount",
+    "agentsNearbyOne": "{{count}} agent available near you.",
+    "agentsNearbyMany": "{{count}} agents available near you.",
+    "searchingAgents": "Looking for nearby agents and verified users.",
+    "infoNote": "Offers are based on the current exchange rate and how close agents are. All transactions are protected by MicoPay's escrow contract.",
+    "effectiveCost": "Total effective cost",
+    "feeBreakdown": "Platform {{platformFeePct}}% + provider {{commissionPct}}%",
+    "feeExceeded": "The total cost exceeds {{maxPct}}%. Compare with another offer before continuing."
+  },
+  "offerCard": {
+    "effectiveCost": "Total effective cost",
+    "feeBreakdown": "Platform {{platformFeePct}}% + provider {{commissionPct}}%",
+    "feeExceeded": "The total cost exceeds {{maxPct}}%. Compare with another offer before continuing.",
+    "bestOffer": "Best offer",
+    "commission": "Commission",
+    "amountMxn": "${{amount}} MXN",
+    "completedOps": "{{count}} ops",
+    "distanceAway": "{{distance}} away",
+    "completionShort": "{{pct}}%",
+    "receives": "You receive",
+    "connecting": "Connecting to agent…",
+    "chooseAgent": "Choose this agent",
+    "details": "View details",
+    "exchange": {
+      "depositGives": "You hand over cash",
+      "depositGets": "You receive in your balance",
+      "cashoutGives": "You hand over your balance",
+      "cashoutGets": "You receive cash"
+    }
+  },
+  "providerOnboarding": {
+    "itemTitles": {
+      "kyc": "Verify your identity",
+      "location": "Set your area",
+      "limits": "Set your commission and amounts"
+    },
+    "errors": {
+      "fetchStatus": "We couldn't check your status. Check your connection.",
+      "enroll": "We couldn't start your enrollment. Try again.",
+      "activate": "You still have steps left to become active."
+    },
+    "continue": "Continue",
+    "steps": {
+      "what": {
+        "title": "Join the MicoPay Network",
+        "lead": "Give cash to people who need it and earn a commission for doing so.",
+        "body": "Agents are what make cash available in MicoPay. When someone near you wants to convert crypto to bills, you hand them the cash and receive crypto plus your commission.",
+        "noBusiness": "<strong>You don't need to have a business.</strong> It can be a store, a stall, or an individual. We don't require business paperwork.",
+        "decisions": "You decide <strong>your commission, your amounts, and your schedule</strong>. No one assigns you trades: you accept the ones you want.",
+        "noMode": "You'll keep using MicoPay as usual. <strong>Being an agent doesn't put you in a separate mode</strong>: you can request a cash-out as a customer whenever you want.",
+        "join": "I want to join"
+      },
+      "expect": {
+        "title": "What it involves",
+        "lead": "It's worth knowing beforehand, not afterward.",
+        "identity": "You'll need to <strong>verify your identity</strong>. It's not optional: handling cash in exchange for digital assets requires it by law from the first peso.",
+        "area": "We'll publish <strong>your area</strong>, not your address. The exact meeting point is only visible to the other person once a trade is underway, and they stop seeing it when it ends.",
+        "cash": "You need to <strong>have cash available</strong> when you accept a trade. If you don't, pause: it takes one tap.",
+        "meetup": "You'll meet strangers in person. Choose a <strong>public, busy place</strong>."
+      },
+      "checklist": {
+        "title": "What's left",
+        "lead": "You can leave and come back: your progress is saved.",
+        "verify": "Verify me",
+        "configure": "Configure",
+        "refreshHint": "Once you complete all three items, you can activate. If you just finished one, return to this screen to refresh it.",
+        "activate": "Activate as an agent",
+        "suspended": "Your account is suspended. Contact us so we can review it.",
+        "blocked": "Complete the remaining items to become active."
+      },
+      "done": {
+        "title": "You're an agent!",
+        "lead": "There's one last step, and you decide when.",
+        "body": "You're already part of the MicoPay Network, but <strong>you don't appear on the map yet</strong>. We thought it was more honest not to publish you immediately: you choose when to start.",
+        "available": "When you have cash on hand, make yourself <strong>available</strong> from your profile and you'll start receiving requests.",
+        "pause": "Set yourself to <strong>pause</strong> when you can't serve. You'll still be an agent; you'll just stop appearing.",
+        "profile": "Go to my profile"
+      }
+    }
+  },
   "inbox": {
     "title": "Inbox",
     "scan": "Scan",
@@ -168,7 +263,30 @@
     "filterAll": "All",
     "withStatus": " with status \"{{status}}\"",
     "flowDeposit": "You receive cash",
-    "flowCashout": "You hand over cash"
+    "flowCashout": "You hand over cash",
+    "expired": "Expired",
+    "releaseNoReceipt": "The release did not return a receipt. Try again.",
+    "releaseFailed": "Could not release. Try again.",
+    "qrVerified": "QR verified",
+    "tradeConfirmed": "Trade confirmed by the server",
+    "platformFee": "Platform fee: ${{amount}} MXN",
+    "expiresIn": "Expires in",
+    "created": "Created",
+    "lockTx": "Lock TX",
+    "releaseTx": "Release TX",
+    "tradeId": "Trade ID",
+    "verifiedOnchain": "🔒 <strong>Verified on-chain.</strong> The information was validated by the server. It does not show raw QR data.",
+    "resumedTrade": "You had already confirmed delivery for this trade. You can continue where you left off without handing over cash again.",
+    "releasing": "Releasing…",
+    "releaseFunds": "I handed over the cash · release funds",
+    "fundsReleased": "Funds released. The on-chain receipt is above.",
+    "qrVerificationError": "Error verifying QR",
+    "tradeIdValue": "Trade ID: {{id}}…",
+    "qrVerificationHint": "Verify that the QR code is from MicoPay, that the trade has not expired, and that you are a participant in the trade.",
+    "missingTradeId": "No trade ID was found in the QR",
+    "verificationFailed": "Error verifying the trade",
+    "scanClientQr": "Scan client's QR",
+    "verifyingQr": "Verifying QR with the server…"
   },
   "tier": {
     "Nuevo": "New",

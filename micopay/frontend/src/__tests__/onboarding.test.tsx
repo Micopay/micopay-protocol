@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import i18n from '../i18n';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
@@ -33,10 +34,6 @@ vi.mock('../services/api', () => ({
   fetchProviderReadiness: (...a: unknown[]) => mockReadiness(...a),
   activateProvider: (...a: unknown[]) => mockActivate(...a),
 }));
-vi.mock('react-i18next', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react-i18next')>();
-  return { ...actual, useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'es' } }) };
-});
 
 function readiness(over: Partial<ProviderReadiness> = {}): ProviderReadiness {
   return {
@@ -65,7 +62,8 @@ const complete = readiness({
   ],
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  await i18n.changeLanguage('es');
   vi.clearAllMocks();
   mockEnroll.mockResolvedValue(readiness());
   mockReadiness.mockResolvedValue(readiness());
@@ -125,6 +123,16 @@ describe('el alta como agente', () => {
         onOpenSettings={() => {}}
       />,
     );
+
+  it('renderiza el copy de onboarding en inglés', async () => {
+    await i18n.changeLanguage('en');
+    renderFlow();
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Join the MicoPay Network' })).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/Give cash to people who need it/i)).toBeInTheDocument();
+  });
 
   it('no da de alta a nadie por abrir la pantalla', async () => {
     renderFlow();

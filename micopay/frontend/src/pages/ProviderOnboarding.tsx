@@ -18,6 +18,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import OnboardingFlow, {
   StepText,
   StepPoint,
@@ -42,10 +43,10 @@ interface Props {
   onActivated?: () => void;
 }
 
-const ITEM_TITLES: Record<string, string> = {
-  kyc: 'Verifica tu identidad',
-  location: 'Indica tu zona',
-  limits: 'Fija tu comisión y tus montos',
+const ITEM_TITLE_KEYS: Record<string, string> = {
+  kyc: 'providerOnboarding.itemTitles.kyc',
+  location: 'providerOnboarding.itemTitles.location',
+  limits: 'providerOnboarding.itemTitles.limits',
 };
 
 export default function ProviderOnboarding({
@@ -55,6 +56,7 @@ export default function ProviderOnboarding({
   onOpenSettings,
   onActivated,
 }: Props) {
+  const { t } = useTranslation();
   const [index, setIndex] = useState(0);
   const [readiness, setReadiness] = useState<ProviderReadiness | null>(null);
   const [busy, setBusy] = useState(false);
@@ -68,7 +70,7 @@ export default function ProviderOnboarding({
       setReadiness(await fetchProviderReadiness(token));
       setError(null);
     } catch {
-      setError('No pudimos consultar tu estado. Revisa tu conexión.');
+      setError(t('providerOnboarding.errors.fetchStatus'));
     }
   }, [token]);
 
@@ -95,7 +97,7 @@ export default function ProviderOnboarding({
       setError(null);
       setIndex((i) => i + 1);
     } catch (err) {
-      setError(messageFrom(err, 'No pudimos iniciar tu alta. Inténtalo de nuevo.'));
+      setError(messageFrom(err, t('providerOnboarding.errors.enroll')));
     } finally {
       setBusy(false);
     }
@@ -112,7 +114,7 @@ export default function ProviderOnboarding({
     } catch (err) {
       // La activación falla cerrada en el servidor. Si llega aquí es que la
       // lista cambió por debajo, así que se recarga en vez de insistir.
-      setError(messageFrom(err, 'Todavía te faltan pasos para activarte.'));
+      setError(messageFrom(err, t('providerOnboarding.errors.activate')));
       await refresh();
     } finally {
       setBusy(false);
@@ -122,62 +124,73 @@ export default function ProviderOnboarding({
   const steps: OnboardingStep[] = [
     {
       id: 'what',
-      title: 'Únete a Red MicoPay',
-      lead: 'Da efectivo a quien lo necesita y gana una comisión por hacerlo.',
+      title: t('providerOnboarding.steps.what.title'),
+      lead: t('providerOnboarding.steps.what.lead'),
       body: (
         <>
-          <StepText>
-            Los agentes son quienes hacen posible el efectivo en MicoPay. Cuando alguien cerca de
-            ti quiere convertir cripto a billetes, tú se los entregas en mano y recibes cripto más
-            tu comisión.
-          </StepText>
+          <StepText>{t('providerOnboarding.steps.what.body')}</StepText>
           <StepPoint icon="storefront">
-            <strong>No necesitas tener un negocio.</strong> Puede ser una tienda, un puesto o una
-            persona. No pedimos papeles de empresa.
+            <Trans
+              i18nKey="providerOnboarding.steps.what.noBusiness"
+              components={{ strong: <strong /> }}
+            />
           </StepPoint>
           <StepPoint icon="tune">
-            Tú decides <strong>tu comisión, tus montos y tu horario</strong>. Nadie te asigna
-            operaciones: aceptas las que quieras.
+            <Trans
+              i18nKey="providerOnboarding.steps.what.decisions"
+              components={{ strong: <strong /> }}
+            />
           </StepPoint>
           <StepPoint icon="swap_horiz">
-            Seguirás usando MicoPay como siempre.{' '}
-            <strong>Ser agente no te encierra en un modo aparte</strong>: puedes pedir un cash-out
-            como cliente cuando quieras.
+            <Trans
+              i18nKey="providerOnboarding.steps.what.noMode"
+              components={{ strong: <strong /> }}
+            />
           </StepPoint>
         </>
       ),
-      nextLabel: status === 'not_enrolled' ? 'Quiero unirme' : 'Continuar',
+      nextLabel:
+        status === 'not_enrolled'
+          ? t('providerOnboarding.steps.what.join')
+          : t('providerOnboarding.continue'),
     },
     {
       id: 'expect',
-      title: 'Lo que implica',
-      lead: 'Conviene saberlo antes, no después.',
+      title: t('providerOnboarding.steps.expect.title'),
+      lead: t('providerOnboarding.steps.expect.lead'),
       body: (
         <>
           <StepPoint icon="badge">
-            Tendrás que <strong>verificar tu identidad</strong>. No es opcional: manejar efectivo a
-            cambio de activos digitales lo exige la ley desde el primer peso.
+            <Trans
+              i18nKey="providerOnboarding.steps.expect.identity"
+              components={{ strong: <strong /> }}
+            />
           </StepPoint>
           <StepPoint icon="location_on">
-            Publicaremos <strong>tu zona</strong>, no tu dirección. El punto exacto de encuentro
-            solo lo ve la otra persona cuando ya hay una operación en marcha, y deja de verlo
-            cuando termina.
+            <Trans
+              i18nKey="providerOnboarding.steps.expect.area"
+              components={{ strong: <strong /> }}
+            />
           </StepPoint>
           <StepPoint icon="account_balance_wallet">
-            Necesitas <strong>tener efectivo disponible</strong> cuando aceptes una operación. Si
-            no lo tienes, ponte en pausa: se hace con un toque.
+            <Trans
+              i18nKey="providerOnboarding.steps.expect.cash"
+              components={{ strong: <strong /> }}
+            />
           </StepPoint>
           <StepPoint icon="schedule">
-            Quedarás con desconocidos en persona. Elige un{' '}
-            <strong>lugar público y concurrido</strong>.
+            <Trans
+              i18nKey="providerOnboarding.steps.expect.meetup"
+              components={{ strong: <strong /> }}
+            />
           </StepPoint>
         </>
       ),
     },
     {
       id: 'checklist',
-      title: 'Lo que falta',
-      lead: 'Puedes salir y volver: tu avance se guarda.',
+      title: t('providerOnboarding.steps.checklist.title'),
+      lead: t('providerOnboarding.steps.checklist.lead'),
       body: (
         <>
           {!readiness && !error && <StepText>Consultando tu estado…</StepText>}
@@ -185,50 +198,59 @@ export default function ProviderOnboarding({
             <ChecklistItem
               key={item.key}
               done={item.done}
-              title={ITEM_TITLES[item.key] ?? item.key}
+              title={t(ITEM_TITLE_KEYS[item.key] ?? item.key)}
               detail={item.detail}
-              actionLabel={item.key === 'kyc' ? 'Verificarme' : 'Configurar'}
+              actionLabel={
+                item.key === 'kyc'
+                  ? t('providerOnboarding.steps.checklist.verify')
+                  : t('providerOnboarding.steps.checklist.configure')
+              }
               onAction={item.key === 'kyc' ? onOpenKyc : onOpenSettings}
             />
           ))}
           {readiness && !readiness.can_activate && (
             <StepText>
-              Cuando completes los tres puntos podrás activarte. Si acabas de terminar alguno,
-              vuelve a esta pantalla para actualizarlo.
+              {t('providerOnboarding.steps.checklist.refreshHint')}
             </StepText>
           )}
         </>
       ),
-      nextLabel: 'Activarme como agente',
+      nextLabel: t('providerOnboarding.steps.checklist.activate'),
       // La app no deduce la elegibilidad sumando casillas: usa la decisión del
       // servidor, que es quien la va a aplicar de todos modos.
       canAdvance: readiness?.can_activate === true || status === 'active',
       blockedReason:
         status === 'suspended'
-          ? 'Tu cuenta está suspendida. Escríbenos para revisarlo.'
-          : 'Completa los puntos pendientes para activarte.',
+          ? t('providerOnboarding.steps.checklist.suspended')
+          : t('providerOnboarding.steps.checklist.blocked'),
     },
     {
       id: 'done',
-      title: '¡Ya eres agente!',
-      lead: 'Falta un último paso, y lo decides tú.',
+      title: t('providerOnboarding.steps.done.title'),
+      lead: t('providerOnboarding.steps.done.lead'),
       body: (
         <>
           <StepText>
-            Ya perteneces a Red MicoPay, pero <strong>todavía no apareces en el mapa</strong>. Nos
-            pareció más honesto no publicarte de golpe: tú eliges cuándo empiezas.
+            <Trans
+              i18nKey="providerOnboarding.steps.done.body"
+              components={{ strong: <strong /> }}
+            />
           </StepText>
           <StepPoint icon="toggle_on">
-            Cuando tengas efectivo a la mano, ponte <strong>disponible</strong> desde tu perfil y
-            empezarás a recibir solicitudes.
+            <Trans
+              i18nKey="providerOnboarding.steps.done.available"
+              components={{ strong: <strong /> }}
+            />
           </StepPoint>
           <StepPoint icon="pause_circle">
-            Ponte en <strong>pausa</strong> cuando no puedas atender. Seguirás siendo agente; solo
-            dejas de aparecer.
+            <Trans
+              i18nKey="providerOnboarding.steps.done.pause"
+              components={{ strong: <strong /> }}
+            />
           </StepPoint>
         </>
       ),
-      nextLabel: 'Ir a mi perfil',
+      nextLabel: t('providerOnboarding.steps.done.profile'),
     },
   ];
 
