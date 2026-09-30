@@ -4,6 +4,7 @@
  * Displays the current state of the offline queue to the user
  */
 
+import { useTranslation } from 'react-i18next';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
 
 interface OfflineQueueStatusProps {
@@ -15,6 +16,7 @@ export default function OfflineQueueStatus({
   token,
   compact = false,
 }: OfflineQueueStatusProps) {
+  const { t } = useTranslation();
   const offlineQueue = useOfflineQueue(token);
 
   // Don't show anything if online and no pending items
@@ -28,12 +30,12 @@ export default function OfflineQueueStatus({
         {!offlineQueue.isOnline ? (
           <>
             <span className="material-symbols-outlined text-sm">wifi_off</span>
-            Sin conexión
+            {t('offlineQueue.compactOffline')}
           </>
         ) : offlineQueue.hasPending ? (
           <>
             <span className="material-symbols-outlined text-sm">pending</span>
-            Pendiente de sincronizar
+            {t('offlineQueue.compactPending')}
           </>
         ) : null}
       </div>
@@ -47,9 +49,9 @@ export default function OfflineQueueStatus({
         <div className="flex items-center gap-3">
           <span className="material-symbols-outlined text-amber-600 text-xl">wifi_off</span>
           <div className="flex-1">
-            <h4 className="font-semibold text-amber-900">Sin conexión a Internet</h4>
+            <h4 className="font-semibold text-amber-900">{t('offlineQueue.offlineTitle')}</h4>
             <p className="text-sm text-amber-700">
-              Tus cambios se guardarán localmente y se sincronizarán automáticamente cuando se restaure la conexión.
+              {t('offlineQueue.offlineBody')}
             </p>
           </div>
         </div>
@@ -65,16 +67,16 @@ export default function OfflineQueueStatus({
             progress_activity
           </span>
           <div className="flex-1">
-            <h4 className="font-semibold text-blue-900">Pendiente de sincronizar</h4>
+            <h4 className="font-semibold text-blue-900">{t('offlineQueue.pendingTitle')}</h4>
             <p className="text-sm text-blue-700">
-              Tienes cambios esperando ser sincronizados con el servidor.
+              {t('offlineQueue.pendingBody')}
             </p>
           </div>
           <button
             onClick={() => offlineQueue.retryAsync(token)}
             className="ml-auto px-3 py-1 bg-blue-600 text-papel rounded text-sm font-medium hover:bg-blue-700"
           >
-            Reintentar
+            {t('offlineQueue.retry')}
           </button>
         </div>
       </div>
