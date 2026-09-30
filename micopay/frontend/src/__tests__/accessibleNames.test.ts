@@ -15,6 +15,11 @@ const SRC = join(__dirname, '..');
 // Chat surfaces are owned by APK-5 and excluded until it merges.
 const EXCLUDED = new Set(['ChatRoom.tsx', 'DepositChat.tsx']);
 
+/** Normalize a path to forward slashes so comparisons work on Windows. */
+function toPosix(p: string): string {
+  return p.replace(/\\/g, '/');
+}
+
 function tsxFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
     const full = join(dir, entry);
@@ -86,7 +91,7 @@ function hasAccessibleText(inner: string): boolean {
 
 describe('accessible names on buttons (APK-6)', () => {
   const all = tsxFiles(SRC).flatMap((f) =>
-    buttons(readFileSync(f, 'utf-8'), relative(SRC, f)),
+    buttons(readFileSync(f, 'utf-8'), toPosix(relative(SRC, f))),
   );
 
   it('finds buttons to check', () => {
@@ -116,8 +121,16 @@ describe('accessible names on buttons (APK-6)', () => {
   ];
 
   it('hides decorative icons from the name on the acceptance-criteria screens', () => {
-    const leaking = all
-      .filter((b) => AC_SCREENS.includes(b.file) && !b.openTag.includes('aria-label'))
+    const on = all.filter((b) => AC_SCREENS.includes(b.file));
+    // Guard against a silent pass: the comparison must actually match the
+    // expected screens, otherwise this test checks nothing.
+    expect(on.length).toBeGreaterThan(0);
+    for (const screen of AC_SCREENS) {
+      expect(on.some((b) => b.file === screen)).toBe(true);
+    }
+
+    const leaking = on
+      .filter((b) => !b.openTag.includes('aria-label'))
       .filter((b) =>
         (b.inner.match(ICON_SPAN) ?? []).some((span) => !/aria-hidden/.test(span)),
       )
