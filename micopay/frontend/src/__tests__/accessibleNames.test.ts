@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs'; 
 import { join, relative } from 'node:path';
 
 /**
@@ -7,13 +7,18 @@ import { join, relative } from 'node:path';
  *
  * Every <button> must expose an accessible name: either visible text, an
  * aria-label, or an sr-only span. An icon-only button with none of those is
- * announced as just "button" by TalkBack/VoiceOver, which is the bug this
- * suite exists to prevent from coming back.
+ * announced as just "button" by TalkBack/VoiceOver, which is the bug this suite
+ * exists to prevent from coming back.
  */
 
 const SRC = join(__dirname, '..');
 // Chat surfaces are owned by APK-5 and excluded until it merges.
 const EXCLUDED = new Set(['ChatRoom.tsx', 'DepositChat.tsx']);
+
+/** Normalize a path to forward slashes so comparisons work on Windows. */
+function toPosix(p: string): string {
+  return p.replace(/\\/g, '/');
+}
 
 function tsxFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -75,7 +80,7 @@ const ICON_SPAN = /<span[^>]*material-symbols[^>]*>[\s\S]*?<\/span>/g;
 /** Does anything inside the button produce text a screen reader announces? */
 function hasAccessibleText(inner: string): boolean {
   if (/sr-only/.test(inner)) return true;
-  const withoutIcons = inner.replace(ICON_SPAN, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+  const withoutIcons = inner.replace(ICON_SPAN, '').replace(/\{\/\*[\s\S]*?\*\/}/g, '');
   // A string literal inside an expression, e.g. {loading ? 'Saving…' : 'Save'}
   if (/\{[^{}]*?(?:'[^']{2,}'|"[^"]{2,}"|`[^`]{2,}`)[^{}]*?\}/.test(withoutIcons)) return true;
   if (/\bt\(/.test(withoutIcons)) return true;
@@ -86,7 +91,7 @@ function hasAccessibleText(inner: string): boolean {
 
 describe('accessible names on buttons (APK-6)', () => {
   const all = tsxFiles(SRC).flatMap((f) =>
-    buttons(readFileSync(f, 'utf-8'), relative(SRC, f)),
+    buttons(readFileSync(f, 'utf-8'), toPosix(relative(SRC, f))),
   );
 
   it('finds buttons to check', () => {
@@ -116,8 +121,16 @@ describe('accessible names on buttons (APK-6)', () => {
   ];
 
   it('hides decorative icons from the name on the acceptance-criteria screens', () => {
-    const leaking = all
-      .filter((b) => AC_SCREENS.includes(b.file) && !b.openTag.includes('aria-label'))
+    const on = all.filter((b) => AC_SCREENS.includes(b.file));
+    // Guard against a silent pass: the comparison must actually match the
+    // expected screens, otherwise this test checks nothing.
+    expect(on.length).toBeGreaterThan(0);
+    for (const screen of AC_SCREENS) {
+      expect(on.some((b) => b.file === screen)).toBe(true);
+    }
+
+    const leaking = on
+      .filter((b) => !b.openTag.includes('aria-label'))
       .filter((b) =>
         (b.inner.match(ICON_SPAN) ?? []).some((span) => !/aria-hidden/.test(span)),
       )
@@ -143,7 +156,7 @@ describe('a11y translation keys', () => {
   it('resolves every a11y key referenced in JSX, in both locales', () => {
     const used = new Set<string>();
     for (const file of tsxFiles(SRC)) {
-      for (const m of readFileSync(file, 'utf-8').matchAll(/t\(\s*'(a11y\.[\w.]+)'/g)) {
+      for (const m of readFileSync(file, 'utf-8').matchAll(/t\(\s*'(a11y\\.[\w.]+)'/g)) {
         used.add(m[1]);
       }
     }
