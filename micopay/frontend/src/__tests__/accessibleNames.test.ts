@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'node:fs'; 
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 /**
@@ -7,8 +7,8 @@ import { join, relative } from 'node:path';
  *
  * Every <button> must expose an accessible name: either visible text, an
  * aria-label, or an sr-only span. An icon-only button with none of those is
- * announced as just "button" by TalkBack/VoiceOver, which is the bug this suite
- * exists to prevent from coming back.
+ * announced as just "button" by TalkBack/VoiceOver, which is the bug this
+ * suite exists to prevent from coming back.
  */
 
 const SRC = join(__dirname, '..');
@@ -80,7 +80,7 @@ const ICON_SPAN = /<span[^>]*material-symbols[^>]*>[\s\S]*?<\/span>/g;
 /** Does anything inside the button produce text a screen reader announces? */
 function hasAccessibleText(inner: string): boolean {
   if (/sr-only/.test(inner)) return true;
-  const withoutIcons = inner.replace(ICON_SPAN, '').replace(/\{\/\*[\s\S]*?\*\/}/g, '');
+  const withoutIcons = inner.replace(ICON_SPAN, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
   // A string literal inside an expression, e.g. {loading ? 'Saving…' : 'Save'}
   if (/\{[^{}]*?(?:'[^']{2,}'|"[^"]{2,}"|`[^`]{2,}`)[^{}]*?\}/.test(withoutIcons)) return true;
   if (/\bt\(/.test(withoutIcons)) return true;
@@ -156,7 +156,7 @@ describe('a11y translation keys', () => {
   it('resolves every a11y key referenced in JSX, in both locales', () => {
     const used = new Set<string>();
     for (const file of tsxFiles(SRC)) {
-      for (const m of readFileSync(file, 'utf-8').matchAll(/t\(\s*'(a11y\\.[\w.]+)'/g)) {
+      for (const m of readFileSync(file, 'utf-8').matchAll(/t\(\s*'(a11y\.[\w.]+)'/g)) {
         used.add(m[1]);
       }
     }
