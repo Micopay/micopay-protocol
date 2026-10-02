@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 960" width="1600" height="960" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="1600" height="960" fill="#ffffff"/>
+
+  <!-- Título -->
+  <text x="20" y="44" font-size="28" font-weight="700" fill="#1f2937">Lean Canvas — MicoPay</text>
+  <text x="1580" y="44" font-size="16" fill="#6b7280" text-anchor="end">Cambiar dólares digitales por pesos en efectivo con alguien de tu colonia</text>
+
+  <g fill="#f9fafb" stroke="#374151" stroke-width="2">
+    <!-- fila superior: y 70–690 -->
+    <rect x="20"   y="70"  width="312" height="620"/>  <!-- Problema -->
+    <rect x="332"  y="70"  width="312" height="310"/>  <!-- Solución -->
+    <rect x="332"  y="380" width="312" height="310"/>  <!-- Métricas -->
+    <rect x="644"  y="70"  width="312" height="620" fill="#eef6ff"/>  <!-- PVU -->
+    <rect x="956"  y="70"  width="312" height="310"/>  <!-- Ventaja -->
+    <rect x="956"  y="380" width="312" height="310"/>  <!-- Canales -->
+    <rect x="1268" y="70"  width="312" height="620"/>  <!-- Segmentos -->
+    <!-- fila inferior: y 690–940 -->
+    <rect x="20"   y="690" width="780" height="250"/>  <!-- Costos -->
+    <rect x="800"  y="690" width="780" height="250"/>  <!-- Ingresos -->
+  </g>
+
+  <g font-size="19" font-weight="700" fill="#111827">
+    <text x="36"   y="102">1. Problema</text>
+    <text x="348"  y="102">4. Solución</text>
+    <text x="348"  y="412">8. Métricas clave</text>
+    <text x="660"  y="102">3. Propuesta de valor única</text>
+    <text x="972"  y="102">9. Ventaja diferencial</text>
+    <text x="972"  y="412">5. Canales</text>
+    <text x="1284" y="102">2. Segmento de usuarios</text>
+    <text x="36"   y="722">7. Estructura de costos</text>
+    <text x="816"  y="722">6. Fuentes de ingreso</text>
+  </g>
+
+  <g font-size="15" fill="#1f2937">
+    <!-- Problema -->
+    <text x="36" y="140">
+      <tspan x="36" dy="0">• Cobrar dólares digitales en</tspan>
+      <tspan x="36" dy="21">  efectivo cuesta 4–6% del monto</tspan>
+      <tspan x="36" dy="21">  y exige ir a una sucursal.</tspan>
+      <tspan x="36" dy="32">• Sin cuenta bancaria no hay</tspan>
+      <tspan x="36" dy="21">  alternativa formal.</tspan>
+      <tspan x="36" dy="32">• El cambio informal entre</tspan>
+      <tspan x="36" dy="21">  personas es barato, pero</tspan>
+      <tspan x="36" dy="21">  alguien tiene que confiar</tspan>
+      <tspan x="36" dy="21">  primero y no hay a quién</tspan>
+      <tspan x="36" dy="21">  reclamar.</tspan>
+      <tspan x="36" dy="40" font-weight="700">Alternativas hoy</tspan>
+      <tspan x="36" dy="23">Ventanilla de remesas u OXXO</tspan>
+      <tspan x="36" dy="21">(tope $3,000 MXN, vence en 48 h),</tspan>
+      <tspan x="36" dy="21">banco + cajero, cambio informal</tspan>
+      <tspan x="36" dy="21">en redes o grupos de mensajería.</tspan>
+    </text>
+
+    <!-- Solución -->
+    <text x="348" y="140">
+      <tspan x="348" dy="0">• Escrow en Stellar que retiene</tspan>
+      <tspan x="348" dy="21">  los USDC hasta la entrega</tspan>
+      <tspan x="348" dy="21">  del efectivo en mano.</tspan>
+      <tspan x="348" dy="28">• QR de un solo uso que libera</tspan>
+      <tspan x="348" dy="21">  el pago al comercio.</tspan>
+      <tspan x="348" dy="28">• Devolución automática si</tspan>
+      <tspan x="348" dy="21">  vence el plazo.</tspan>
+      <tspan x="348" dy="28">• Historial público de</tspan>
+      <tspan x="348" dy="21">  intercambios por comercio.</tspan>
+    </text>
+
+    <!-- Métricas -->
+    <text x="348" y="450">
+      <tspan x="348" dy="0">• Intercambios completados</tspan>
+      <tspan x="348" dy="21">  por semana.</tspan>
+      <tspan x="348" dy="28">• % de intercambios que</tspan>
+      <tspan x="348" dy="21">  terminan en devolución.</tspan>
+      <tspan x="348" dy="28">• Comercios que repiten</tspan>
+      <tspan x="348" dy="21">  operación.</tspan>
+      <tspan x="348" dy="28">• Tiempo del flujo completo</tspan>
+      <tspan x="348" dy="21">  (meta: menos de 10 min).</tspan>
+    </text>
+
+    <!-- PVU -->
+    <text x="660" y="150" font-size="22" font-weight="700" fill="#1e3a8a">
+      <tspan x="660" dy="0">Tu dinero, cerca de ti.</tspan>
+    </text>
+    <text x="660" y="196">
+      <tspan x="660" dy="0">Cambia dólares por efectivo con un</tspan>
+      <tspan x="660" dy="21">comercio de tu colonia sin que nadie</tspan>
+      <tspan x="660" dy="21">tenga que confiar primero.</tspan>
+      <tspan x="660" dy="34">• Comisión de 1.9–2.5% que fija cada</tspan>
+      <tspan x="660" dy="21">  comercio, frente a ~5.5% en</tspan>
+      <tspan x="660" dy="21">  ventanilla.</tspan>
+      <tspan x="660" dy="28">• Sin cuenta bancaria: billetera</tspan>
+      <tspan x="660" dy="21">  desde el teléfono.</tspan>
+      <tspan x="660" dy="28">• Si el comercio no cumple, tu</tspan>
+      <tspan x="660" dy="21">  dinero regresa solo.</tspan>
+      <tspan x="660" dy="40" font-weight="700">Concepto de alto nivel</tspan>
+      <tspan x="660" dy="23">El cambio entre vecinos, con la</tspan>
+      <tspan x="660" dy="21">seguridad de una ventanilla.</tspan>
+    </text>
+
+    <!-- Ventaja -->
+    <text x="972" y="140">
+      <tspan x="972" dy="0">• Red física de comercios de</tspan>
+      <tspan x="972" dy="21">  barrio con efectivo en caja,</tspan>
+      <tspan x="972" dy="21">  difícil de copiar desde una</tspan>
+      <tspan x="972" dy="21">  app.</tspan>
+      <tspan x="972" dy="28">• Reputación verificable que</tspan>
+      <tspan x="972" dy="21">  ninguna empresa puede editar</tspan>
+      <tspan x="972" dy="21">  ni borrar.</tspan>
+    </text>
+
+    <!-- Canales -->
+    <text x="972" y="450">
+      <tspan x="972" dy="0">• Comercios de barrio como</tspan>
+      <tspan x="972" dy="21">  punto de contacto.</tspan>
+      <tspan x="972" dy="28">• Recomendación entre familiares</tspan>
+      <tspan x="972" dy="21">  que envían remesas.</tspan>
+      <tspan x="972" dy="28">• Grupos de mensajería donde hoy</tspan>
+      <tspan x="972" dy="21">  se hace el cambio informal.</tspan>
+      <tspan x="972" dy="28">• Reclutamiento a mano en una</tspan>
+      <tspan x="972" dy="21">  zona piloto.</tspan>
+    </text>
+
+    <!-- Segmentos -->
+    <text x="1284" y="140">
+      <tspan x="1284" dy="0" font-weight="700">Demanda</tspan>
+      <tspan x="1284" dy="23">• Receptores de remesas en</tspan>
+      <tspan x="1284" dy="21">  México.</tspan>
+      <tspan x="1284" dy="28">• Personas sin cuenta bancaria</tspan>
+      <tspan x="1284" dy="21">  (37% de los adultos de 18 a 70).</tspan>
+      <tspan x="1284" dy="28">• Trabajadores independientes</tspan>
+      <tspan x="1284" dy="21">  que cobran en dólares.</tspan>
+      <tspan x="1284" dy="36" font-weight="700">Oferta</tspan>
+      <tspan x="1284" dy="23">• Tienditas, farmacias y cafés</tspan>
+      <tspan x="1284" dy="21">  con efectivo parado en caja.</tspan>
+      <tspan x="1284" dy="40" font-weight="700">Primeros usuarios</tspan>
+      <tspan x="1284" dy="23">Una zona piloto con comercios</tspan>
+      <tspan x="1284" dy="21">reclutados a mano y receptores</tspan>
+      <tspan x="1284" dy="21">de remesas de la misma colonia.</tspan>
+    </text>
+
+    <!-- Costos -->
+    <text x="36" y="760">
+      <tspan x="36" dy="0">• Desarrollo de la app y del backend.</tspan>
+      <tspan x="36" dy="26">• Desarrollo y auditoría del contrato de escrow.</tspan>
+      <tspan x="36" dy="26">• Comisiones de la red Stellar (fracciones de centavo por transacción).</tspan>
+      <tspan x="36" dy="26">• Reclutamiento y capacitación de comercios.</tspan>
+      <tspan x="36" dy="26">• Soporte a usuarios y comercios; cumplimiento regulatorio.</tspan>
+    </text>
+
+    <!-- Ingresos -->
+    <text x="816" y="760">
+      <tspan x="816" dy="0">• Comisión de plataforma de 0.8% por intercambio.</tspan>
+      <tspan x="816" dy="26">• El comercio cobra su propia comisión (1.9–2.5%) y la recibe en USDC.</tspan>
+      <tspan x="816" dy="26">• A futuro: ahorro en CETES tokenizados y otros productos financieros.</tspan>
+    </text>
+  </g>
+</svg>
