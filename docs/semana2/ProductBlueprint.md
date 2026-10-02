@@ -1,6 +1,6 @@
 # Product Blueprint
 
-**Nombre del proyecto:** MicoPay — cambiar dólares digitales por pesos en efectivo con alguien de tu colonia.
+**Nombre del proyecto:** MicoPay — cambiar dinero digital por pesos en efectivo con alguien de tu colonia, sin tener que confiar primero en un desconocido.
 
 **Repositorio (enlace obligatorio):** [Micopay/proyectobb101](https://github.com/Micopay/proyectobb101)
 
@@ -25,7 +25,7 @@
 
 | Prioridad | Historia | Propuesta por | Por qué entra al backlog |
 | :---: | --- | :---: | --- |
-| 1 | Como usuario que cambia dinero con un desconocido quiero que mis USDC queden retenidos en un escrow y solo se liberen al comercio cuando yo confirme que recibí el efectivo para no tener que confiar primero en la otra persona. | Raúl Vallejo | Imprescindible. Es la hipótesis central: elimina el riesgo del cambio informal. |
+| 1 | Como usuario que cambia dinero con un desconocido quiero que mis USDC queden retenidos en un escrow y solo se liberen al comercio cuando los dos confirmemos la entrega en persona (yo muestro mi QR al recibir el efectivo y el comercio lo escanea) para no tener que confiar primero en la otra persona. | Raúl Vallejo | Imprescindible. Es la hipótesis central: elimina el riesgo del cambio informal. |
 | 2 | Como receptor de remesas sin cuenta bancaria quiero cambiar mis USDC por pesos en efectivo en un comercio a pocas cuadras de mi casa para no ir a una sucursal ni perder cerca de 5% en comisiones. | Raúl Vallejo | Imprescindible. Es el resultado que busca el usuario principal. |
 | 3 | Como comerciante quiero escanear el código QR del usuario al entregar el efectivo para cobrar mis USDC en ese momento, sin conciliar pagos a mano. | Raúl Vallejo | Imprescindible. Cierra el intercambio del lado del comercio. |
 | 4 | Como usuario quiero que, si el comercio no me entrega el efectivo dentro del plazo, mis USDC regresen solos a mi billetera para no perder mi dinero. | Raúl Vallejo | Debería. Sin devolución automática el escrow solo traslada el riesgo. |
@@ -39,9 +39,9 @@
 
 **Usuario (del [Problem Brief](../semana1/ProblemBrief.md)):** persona que recibe dinero digital (una remesa o el pago de un cliente en el extranjero) y necesita pesos en efectivo para renta, mandado o transporte, muchas veces sin cuenta bancaria. Del otro lado, el comerciante de barrio con efectivo en caja.
 
-**Resultado que obtiene:** cambia sus dólares por efectivo a unas cuadras de su casa en unos minutos, pagando una comisión que fija cada comercio (2–4% según la validación del Problem Brief), en lugar de perder cerca de 5.5% entre tipo de cambio y comisiones en una ventanilla de remesas.
+**Resultado que obtiene:** cambia sus dólares por efectivo a unas cuadras de su casa en unos minutos, pagando una comisión conocida por adelantado: la que fija cada comercio (2–4% según la validación del Problem Brief) más 0.8% de la plataforma, en lugar de perder cerca de 5.5% entre tipo de cambio y comisiones en una ventanilla de remesas.
 
-**Por qué elegiría esta solución:** porque no tiene que confiar en nadie. Sus dólares quedan retenidos y solo pasan al comercio cuando él confirma que ya tiene el efectivo en la mano; si el comercio no cumple a tiempo, el dinero regresa solo. Además ve el historial de intercambios completados de cada comercio antes de elegir.
+**Por qué elegiría esta solución:** porque no tiene que confiar en nadie. Sus dólares quedan retenidos y solo pasan al comercio cuando los dos confirman la entrega en persona: él muestra su QR al recibir el efectivo y el comercio lo escanea; si el comercio no cumple a tiempo, el dinero regresa solo. Además ve el historial de intercambios completados de cada comercio antes de elegir.
 
 **En qué se diferencia de cómo lo resuelve hoy:** la ventanilla es segura pero cara, lejana y con topes y vencimientos (en OXXO, $3,000 MXN por referencia y 48 h). El banco exige una cuenta que este usuario no tiene. El cambio informal es barato pero obliga a una de las partes a mandar primero sin a quién reclamar. MicoPay mantiene el precio y la cercanía del cambio entre personas y le quita el riesgo. Para el comerciante, convierte el efectivo ocioso en ingreso por comisión sin comprar equipo ni pagar renta.
 
@@ -145,6 +145,6 @@ flowchart LR
 | --- | --- | --- |
 | Contrato inteligente en Soroban (escrow) | Retener los USDC del usuario y liberarlos solo con la confirmación de entrega, o devolverlos al vencer. | Reemplaza al intermediario de confianza: la regla está en código público y nadie, ni MicoPay, puede quedarse con los fondos. Una base de datos propia obligaría al usuario a confiar en la empresa. |
 | USDC en Stellar | El dólar digital que recibe el usuario y que cobra el comercio. | Es una stablecoin con reservas 1:1 y redención en dólares; el comercio cobra en un activo estable, no en una cripto volátil. |
-| Cuentas y firma en el dispositivo | Que cada persona controle su propia llave y autorice cada movimiento. | Permite operar sin cuenta bancaria; la billetera se crea en segundos desde el teléfono. |
+| Cuentas y firma en el dispositivo | Que cada persona controle su propia llave y autorice cada movimiento. | Permite operar sin cuenta bancaria; la billetera se crea en menos de un minuto desde el teléfono. |
 | Registro público de la red | Guardar cada intercambio completado como historial del comercio. | El historial no lo puede editar ni borrar ninguna empresa: es la reputación verificable entre desconocidos. |
 | Comisiones bajas y confirmación en segundos | Que el intercambio cueste centavos y se confirme mientras el usuario está en el mostrador. | En redes con comisiones altas o lentas, el costo de la transacción se comería el ahorro frente a la ventanilla de remesas. |
