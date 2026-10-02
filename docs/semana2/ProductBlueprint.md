@@ -39,7 +39,7 @@
 
 **Usuario (del [Problem Brief](../semana1/ProblemBrief.md)):** persona que recibe dinero digital (una remesa o el pago de un cliente en el extranjero) y necesita pesos en efectivo para renta, mandado o transporte, muchas veces sin cuenta bancaria. Del otro lado, el comerciante de barrio con efectivo en caja.
 
-**Resultado que obtiene:** cambia sus dólares por efectivo a unas cuadras de su casa en unos minutos, pagando una comisión de 1.9–2.5% que fija cada comercio, en lugar de perder cerca de 5.5% entre tipo de cambio y comisiones en una ventanilla de remesas.
+**Resultado que obtiene:** cambia sus dólares por efectivo a unas cuadras de su casa en unos minutos, pagando una comisión que fija cada comercio (2–4% según la validación del Problem Brief), en lugar de perder cerca de 5.5% entre tipo de cambio y comisiones en una ventanilla de remesas.
 
 **Por qué elegiría esta solución:** porque no tiene que confiar en nadie. Sus dólares quedan retenidos y solo pasan al comercio cuando él confirma que ya tiene el efectivo en la mano; si el comercio no cumple a tiempo, el dinero regresa solo. Además ve el historial de intercambios completados de cada comercio antes de elegir.
 
@@ -69,13 +69,18 @@ Flujo de cambio de USDC a efectivo (cash-out). Roles: **usuario** (vende USDC, r
 
 | Dentro del MVP (funcionalidad central) | Fuera del MVP (deseable, para después) |
 | --- | --- |
-| Billetera Stellar creada desde el teléfono, con saldo en USDC. | Flujo inverso: depositar efectivo para recibir USDC (cash-in, propuesta de Eric Mota). |
+| Billetera Stellar creada desde el teléfono, con saldo en USDC y respaldo guiado de la frase de recuperación. | Flujo inverso: depositar efectivo para recibir USDC (cash-in, propuesta de Eric Mota). |
 | Escrow en Soroban: bloqueo de USDC, liberación al comercio por QR y devolución automática al vencer. | Retiro a cuenta bancaria o SPEI mediante un anchor. |
-| Lista o mapa de comercios con comisión y conteo de intercambios completados. | Calificaciones, reseñas y resolución de disputas con un tercero. |
-| Comisión configurable por comercio (1.9–2.5%). | Panel del comercio con reportes, historial y notificaciones. |
-| Un solo par (USDC ↔ MXN) y una sola zona piloto. | Ahorro en CETES tokenizados y otros productos de inversión. |
+| Lista o mapa de comercios con comisión y conteo de intercambios completados. | Resolución de disputas con un tercero. |
+| Comisión configurable por comercio (2–4% según la validación). | Panel del comercio con reportes y notificaciones. |
+| Un solo par (USDC ↔ MXN) y una sola zona piloto. | Ahorro en CETES tokenizados. |
 
-**Por qué el recorte sigue entregando valor:** el MVP cubre completo el momento que hoy falla: dos personas que no se conocen cambian dólares por efectivo sin que ninguna tenga que confiar primero. Con eso ya se puede comprobar la hipótesis con usuarios reales: si el usuario completa el intercambio, si el comercio cobra al momento y si la devolución automática funciona cuando algo sale mal. El cash-in, la salida a banco y el ahorro amplían el mercado, pero no cambian la pregunta que hay que contestar primero; por eso el Problem Brief se enfoca en el retiro, donde hay más evidencia. El prototipo ya completó un retiro de $500 MXN en red de prueba (24 sep 2026). Una sola zona piloto permite reclutar a mano los primeros comercios y medir si vuelven a operar.
+**Riesgos del Problem Brief que atiende el MVP:**
+- *Pérdida de la llave (V-4, V-22):* al crear la billetera, la app guía el respaldo de la frase de recuperación y no deja continuar sin confirmarlo.
+- *Sin conexión al entregar (V-2, V-5):* el QR se genera antes y se muestra sin internet; si el escaneo no llega a la red, los fondos siguen bloqueados y el comercio reintenta antes del vencimiento.
+- *Disputas:* el QR se escanea frente a frente en el momento de la entrega y la devolución automática cubre la no entrega; el arbitraje con un tercero queda para cuando sepamos cuántos casos aparecen.
+
+**Por qué el recorte sigue entregando valor:** cubre completo el momento que hoy falla: dos desconocidos cambian dólares por efectivo sin que ninguno confíe primero. El cash-in, la salida a banco y el ahorro amplían el mercado, pero no cambian esa pregunta; por eso el Problem Brief se enfoca en el retiro. El prototipo ya completó un retiro de $500 MXN en red de prueba (24 sep 2026).
 
 ---
 

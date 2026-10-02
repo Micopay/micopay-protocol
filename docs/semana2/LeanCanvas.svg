@@ -84,7 +84,7 @@
       <tspan x="660" dy="0">Cambia dólares por efectivo con un</tspan>
       <tspan x="660" dy="21">comercio de tu colonia sin que nadie</tspan>
       <tspan x="660" dy="21">tenga que confiar primero.</tspan>
-      <tspan x="660" dy="34">• Comisión de 1.9–2.5% que fija cada</tspan>
+      <tspan x="660" dy="34">• Comisión de 2–4% que fija cada</tspan>
       <tspan x="660" dy="21">  comercio, frente a ~5.5% en</tspan>
       <tspan x="660" dy="21">  ventanilla.</tspan>
       <tspan x="660" dy="28">• Sin cuenta bancaria: billetera</tspan>
@@ -149,7 +149,7 @@
     <!-- Ingresos -->
     <text x="816" y="760">
       <tspan x="816" dy="0">• Comisión de plataforma de 0.8% por intercambio.</tspan>
-      <tspan x="816" dy="26">• El comercio cobra su propia comisión (1.9–2.5%) y la recibe en USDC.</tspan>
+      <tspan x="816" dy="26">• El comercio cobra su propia comisión (2–4% según la validación) y la recibe en USDC.</tspan>
       <tspan x="816" dy="26">• A futuro: ahorro en CETES tokenizados y otros productos financieros.</tspan>
     </text>
   </g>
