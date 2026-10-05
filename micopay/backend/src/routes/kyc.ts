@@ -6,6 +6,7 @@ import { UpstreamError, NotFoundError, BadRequestError } from '../utils/errors.j
 import { createOnboardingUrl, getKycStatus } from '../services/etherfuse.service.js';
 import { createDiditSession, mapDiditStatus } from '../services/didit.service.js';
 import { verifyDiditWebhookSignature } from '../lib/webhook-auth.js';
+import { CircuitOpenError, UpstreamTimeoutError } from '../lib/circuitBreaker.js';
 
 // Etherfuse uses a HOSTED onboarding flow: we generate customerId/bankAccountId
 // UUIDs and a presigned URL; the user completes identity verification, document
@@ -110,6 +111,8 @@ async function startEtherfuseKyc(request: any) {
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     return { onboardingUrl, expiresAt };
   } catch (err: any) {
+    // Upstream unavailable or timed out: keep its 503/504 and message.
+    if (err instanceof CircuitOpenError || err instanceof UpstreamTimeoutError) throw err;
     throw new UpstreamError(
       'ETHERFUSE_ONBOARDING_FAILED',
       'No se pudo iniciar la verificación de identidad. Intenta de nuevo en unos minutos.',
@@ -148,6 +151,8 @@ async function startDiditKyc(request: any) {
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     return { onboardingUrl: session.url, expiresAt };
   } catch (err: any) {
+    // Didit unavailable or timed out: keep its 503/504 and message.
+    if (err instanceof CircuitOpenError || err instanceof UpstreamTimeoutError) throw err;
     throw new UpstreamError(
       'DIDIT_ONBOARDING_FAILED',
       'No se pudo iniciar la verificación de identidad. Intenta de nuevo en unos minutos.',
@@ -171,6 +176,8 @@ async function getEtherfuseStatus(request: any) {
     await db.execute('UPDATE users SET kyc_status = $1 WHERE id = $2', [kyc.status, userId]);
     return { status: kyc.status, rejectionReason: kyc.currentRejectionReason };
   } catch (err: any) {
+    // Upstream unavailable or timed out: keep its 503/504 and message.
+    if (err instanceof CircuitOpenError || err instanceof UpstreamTimeoutError) throw err;
     throw new UpstreamError(
       'ETHERFUSE_KYC_STATUS_FAILED',
       'No se pudo consultar el estado de verificación. Intenta de nuevo en unos minutos.',
