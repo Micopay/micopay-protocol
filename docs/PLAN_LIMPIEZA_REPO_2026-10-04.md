@@ -1,8 +1,8 @@
 # Plan · Limpiar micopay-protocol: solo el APK y su infraestructura
 
-**Fecha:** 2026-10-04. **Versión:** 0.4. Incorpora tres revisiones de Codex.
+**Fecha:** 2026-10-04, actualizado el 2026-10-05. **Versión:** 0.5. Incorpora tres revisiones de Codex; desde el 2026-10-05 Codex no está disponible y los PRs se revisan con la misma lista de verificación, con la evidencia en cada PR.
 **Base revisada:** `main` en `e35f053`; bridge (`Micopay/micopaybridge`) en `f12ac556`.
-**Estado:** M1 y M2 hechos (§5). No se ha retirado nada.
+**Estado (2026-10-05):** hechos M1, M2, F1, R1, R3, R5, R6 y R7. Faltan D1 → F2 → R4 → R2, R8, R9 (D3), F3 y D2.
 
 ## 0. Alcance y criterio
 
@@ -44,13 +44,13 @@ Todo lo de esta sección es lectura de código en `e35f053`. Nada de esto se ha 
 - `AndroidManifest.xml:35-42` declara App Links para `https://app.micopay.xyz/claim/*` con `autoVerify`.
 - **No hay manejo de `appUrlOpen` ni `getLaunchUrl`** en la app. Dentro del APK, el `pathname` es el de la app local, no el del enlace: lo más probable es que un enlace abra la app en el inicio y no en `ClaimQR`. *Inferido del código, no probado.*
 - `ClaimQR.tsx:78` consulta `/api/v1/cash/request/:id` en `VITE_PROTOCOL_API_URL`, que no está definida en `.env.production`: **sin configuración adicional, cae en `http://localhost:3000`**. El APK publicado pudo recibir la URL al compilarse; **el artefacto publicado está pendiente de verificar.** `render.yaml:2-7` dice que `apps/api` no está desplegada.
-- No se comprobó si `https://app.micopay.xyz/.well-known/assetlinks.json` existe.
+- **`app.micopay.xyz` no existe en DNS** (NXDOMAIN, comprobado el 2026-10-05). Los App Links del `AndroidManifest` apuntan a un dominio que no resuelve: no hay `assetlinks.json` que verificar y un enlace `https://app.micopay.xyz/claim/...` no abre nada. F2 tiene que elegir un dominio real.
 
 **Otros:**
 - `scripts/agent-wallet.mjs` es la cuenta de un proveedor de efectivo por terminal ("Juanita Tienda"), que replica la cartera móvil. Calculaba su estado como `resolve(__dirname, '..')/.agent-wallet`: moverla cambiaba esa ubicación (resuelto en M1).
 - `src/utils/circuit-breaker.factory.ts` contiene solo un comentario. Existen la configuración (`src/config/circuit-breaker.config.ts`, 56 líneas) y pruebas que importan la fábrica. No hay circuit breakers en `micopay/backend`. `PENDIENTES_2026-09-24.md:66` lo daba por hecho.
 - La imagen del backend se construye con contexto `micopay/` y copia `sql` (`Dockerfile:50`) y `backend/public` (`:47`).
-- `render.yaml:2-7`: al 2026-06-30, el servicio de Render `micopay-api.onrender.com` corría el bloque `micopay-backend` y se gestionaba a mano. **No se comprobó si sigue activo** ni si algo lo usa.
+- `render.yaml:2-7`: al 2026-06-30, el servicio de Render `micopay-api.onrender.com` corría el bloque `micopay-backend` y se gestionaba a mano. **Comprobado el 2026-10-05:** sigue respondiendo (arranque en frío de 52 s), pero `/health` devuelve 503 con `dbConnected: false`. El APK no lo usa: `.env.production` apunta a `https://api.micopay.app`, que responde 200 con base de datos conectada.
 - Los contratos: `micopay/contracts/escrow` (APK, se queda, sin dependencia de `contracts/htlc-core`); `contracts/micopay-escrow` (protocolo x402); `contracts/delegated-release-htlc` (tercera variante, libera sin `require_auth`, depende de `htlc-core`; no sustituye al del APK). Los dos primeros paquetes se llaman igual.
 - **`apps/api` usa** `packages/sdk` y `packages/types` (`package.json:27-28`, `tsconfig.json:8-9`, `routes/swaps.ts:3`), `circuits/` (`cli/deploy-zk.ts:31-42`, `cli/rep-engine.ts:27`) y `contracts/zk-verifier` (`cli/deploy-zk.ts:257`). No usa `atomic-swap` ni `micopay-escrow`.
 - **Dependientes de `contracts/htlc-core`:** `atomic-swap`, `micopay-escrow` y `delegated-release-htlc`. `zk-verifier` y `micopay-badges` no lo usan.
@@ -63,11 +63,11 @@ Todo lo de esta sección es lectura de código en `e35f053`. Nada de esto se ha 
 |---|---|---|
 | D1 | **Frontera mínima del cobro por enlace.** `ClaimQR` se conserva en la app. Falta decidir dónde vive el endpoint de solicitudes de cobro que consulta: (a) en el backend del bridge, desplegado y con su URL configurada en el APK; o (b) un endpoint mínimo en `micopay/backend`. En ningún caso se copia toda la API del protocolo | Definirla con la lista exacta de endpoints que usan `ClaimQR` y el escaneo del agente |
 | D2 | **Mecanismo de reputación de proveedores** | Conservar `contracts/micopay-badges` hasta decidirlo |
-| D3 | **`render.yaml`** | Comprobar en Render si el servicio sigue activo antes de decidir |
+| D3 | **`render.yaml`** | Activo pero roto (sin base de datos) y sin uso del APK (§2). Recomendación: apagar el servicio en el panel de Render y retirar `render.yaml` (R9). Apagarlo es decisión de Eric |
 
 ## 4. Cambios funcionales (PRs propios, separados de movimientos y retiradas)
 
-**F1 · Resiliencia (circuit breakers).** Desarrollo, no limpieza; no bloquea el resto del plan.
+**F1 · Resiliencia (circuit breakers).** ✅ **Hecho: #417** (`cbde46a`). Breaker propio sin dependencias en `micopay/backend/src/lib/`, conectado a Didit, Etherfuse, Stellar RPC y al event listener; 25 pruebas (`test:circuit-breaker`, `test:upstream-resilience`) y comprobación por mutaciones. **Sin desplegar** y sin probar contra los servicios reales. Desarrollo, no limpieza; no bloquea el resto del plan.
 - Mover la configuración y las pruebas a `micopay/backend/src` y escribir la fábrica.
 - Conectarla a `didit.service.ts:11`, `etherfuse.service.ts:14` (y sus `fetch` de tasas en :228 y :236) y al acceso a Stellar RPC (`stellar.service.ts`, `event-listener.service.ts:217`, `routes/stellar.ts:46`).
 - Reglas: reintentar solo fallos transitorios y lecturas; **no duplicar órdenes ni transacciones** por una respuesta perdida (la creación de sesión de Didit es un POST); en envíos Stellar inciertos, **reconciliar por hash** antes de reintentar; timeouts con cancelación; el fallback nunca finge KYC aprobado, orden creada ni fondos bloqueados.
@@ -104,13 +104,13 @@ Antes de cada una, se registra en la descripción del PR: origen, destino y si c
 
 | PR | Qué se retira | Bloqueado hasta |
 |---|---|---|
-| R1 | `apps/agent/`, `contracts/atomic-swap/`, `contracts/micopay-escrow/` | Registro de equivalencia con el bridge; `contracts/Cargo.toml` y `Cargo.lock` actualizados para que ningún `member` apunte a algo borrado. `apps/api` no los referencia |
+| R1 ✅ #414 | `apps/agent/`, `contracts/atomic-swap/`, `contracts/micopay-escrow/` | Registro de equivalencia con el bridge; `contracts/Cargo.toml` y `Cargo.lock` actualizados para que ningún `member` apunte a algo borrado. `apps/api` no los referencia |
 | R2 | `packages/sdk/`, `packages/types/`, `circuits/`, `contracts/zk-verifier/` | **R4.** `apps/api` los usa: `package.json:27-28` y `tsconfig.json:8-9` (paquetes), `routes/swaps.ts:3` (tipos), `cli/deploy-zk.ts:31-42,257` y `cli/rep-engine.ts:27` (circuitos y verificador). Alternativa: trasladar antes esas herramientas de `apps/api` |
-| R3 | `apps/web/` | Registro de qué pantallas retail sustituye la app |
+| R3 ✅ #416 | `apps/web/` | Registro de qué pantallas retail sustituye la app |
 | R4 | `apps/api/` | **F2 terminado** (sin eso se rompe el cobro por enlace) |
-| R5 | Lo movido en M1 y M2, en su ubicación original | M1 y M2 terminados (ya lo están) |
-| R6 | `contracts/htlc-core/` | **R1 y M2**: dependen de él `atomic-swap` y `micopay-escrow` (R1) y `delegated-release-htlc` (M2). `zk-verifier` y `micopay-badges` no lo usan |
-| R7 | `src/` de la raíz | **F1 integrado** |
+| R5 ✅ #414 | Lo movido en M1 y M2, en su ubicación original | M1 y M2 terminados (ya lo están) |
+| R6 ✅ #415 | `contracts/htlc-core/` | **R1 y M2**: dependen de él `atomic-swap` y `micopay-escrow` (R1) y `delegated-release-htlc` (M2). `zk-verifier` y `micopay-badges` no lo usan |
+| R7 ✅ #418 | `src/` de la raíz | **F1 integrado** |
 | R8 | Configuración Node/Turbo de la raíz: `package.json`, `package-lock.json`, `turbo.json`, `tsconfig.base.json`, `.turbo/` | Al final, sin consumidores restantes (R1–R7) |
 | R9 | `render.yaml` | D3 |
 
@@ -119,11 +119,11 @@ Antes de cada una, se registra en la descripción del PR: origen, destino y si c
 ## 7. Orden de PRs
 
 1. ✅ **M1** (agent-wallet). Después, si hace falta, **F3**.
-2. **F1** (resiliencia), en paralelo; no es requisito para ordenar el resto.
+2. ✅ **F1** (resiliencia).
 3. ✅ **M2** (al bridge).
-4. **R1**, **R3**, **R5**, **R6**: retiradas sin bloqueos funcionales.
-5. **D1 → F2 → R4 → R2**: cobro por enlace completo, después retirar `apps/api` y, al final, lo que solo ella usaba.
-6. **R7** cuando F1 esté integrado.
+4. ✅ **R1** y **R5** (juntos, #414), ✅ **R3** (#416), ✅ **R6** (#415).
+5. **D1 → F2 → R4 → R2**: cobro por enlace completo, después retirar `apps/api` y, al final, lo que solo ella usaba. **Siguiente paso: D1.**
+6. ✅ **R7** (#418).
 7. **R8**, al final.
 8. **R9**, según D3.
 
@@ -154,4 +154,5 @@ Ninguna prueba se marca como hecha si solo se revisó código. "CI verde" no bas
 - **v0.2:** primera revisión de Codex: `ClaimQR` depende por HTTP de `apps/api`; `agent-wallet` es de la app; el bridge no es copia exacta; los circuit breakers se completan en vez de borrarse.
 - **v0.3:** segunda revisión de Codex: `ClaimQR` se conserva y su cobro por enlace hoy está incompleto (sin manejo de App Links, sin URL de API en producción, la bandeja rechaza el QR `claim`); se separan cambios funcionales, movimientos y retiradas; la documentación queda para después; se conservan PostgreSQL local, `render.yaml` y los badges hasta decidir.
 - **v0.4:** tercera revisión de Codex: R2 (`packages/*`) y los circuitos y el verificador ZK esperan a R4, porque `apps/api` los usa; el APK publicado puede tener la URL de la API (pendiente de verificar); F2 exige que un QR no cobre dos veces y que el servidor verifique monto, destinatario y autorización; M1 va primero. Después: M1 (#412) y M2 (`micopaybridge#47`) hechos.
+- **v0.5 (2026-10-05):** hechos R1+R5 (#414), R6 (#415), R3 (#416, con el registro de pantallas retail en el PR), F1 (#417) y R7 (#418). Hallazgos nuevos: `app.micopay.xyz` no existe en DNS; Render responde pero sin base de datos y el APK no lo usa. Los `package-lock.json` y `Cargo.lock` de la raíz se editaron a mano en cada retirada (sin regenerar), porque ya estaban desincronizados; se regeneran en R8.
 - **Nota:** el 2026-10-04 el archivo quedó vacío al llenarse el disco durante una escritura; se reconstruyó desde la conversación con el mismo contenido.
