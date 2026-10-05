@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "htlc-core",
     "micopay-badges",
     "zk-verifier",
 ]
