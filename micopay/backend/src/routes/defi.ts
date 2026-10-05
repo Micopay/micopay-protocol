@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { config } from '../config.js';
 import { UpstreamError, ValidationError } from '../utils/errors.js';
 import { getRampAssets } from '../services/etherfuse.service.js';
+import { CircuitOpenError, UpstreamTimeoutError } from '../lib/circuitBreaker.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 
 const CETES_APY = 5.6;
@@ -38,6 +39,8 @@ export async function defiRoutes(app: FastifyInstance) {
       const assets = await getRampAssets(wallet, currency);
       return assets;
     } catch (err: any) {
+      // Etherfuse unavailable or timed out: keep its 503/504 and message.
+      if (err instanceof CircuitOpenError || err instanceof UpstreamTimeoutError) throw err;
       throw new UpstreamError(
         'ETHERFUSE_ASSETS_FAILED',
         'No se pudieron obtener los activos disponibles.',

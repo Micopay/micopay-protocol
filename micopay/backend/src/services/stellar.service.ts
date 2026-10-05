@@ -1,7 +1,8 @@
 import { config } from '../config.js';
 import type { FastifyRequest } from 'fastify';
 import db from '../db/schema.js';
-import { ReplayError, UpstreamError, BadRequestError } from '../utils/errors.js';
+import { AppError, ReplayError, UpstreamError, BadRequestError } from '../utils/errors.js';
+import { rpcRead, submitSignedTx } from '../lib/stellarRpc.js';
 
 export async function assertNotReplayed(
   txHash: string,
@@ -114,7 +115,7 @@ async function pollForConfirmation(
   for (let i = 0; i < 15; i++) {
     await new Promise((r) => setTimeout(r, 2000));
     try {
-      const res = await fetch(horizonUrl);
+      const res = await fetch(horizonUrl, { signal: AbortSignal.timeout(5000) });
       if (res.ok) {
         const data = (await res.json()) as { successful: boolean };
         if (data.successful) {
@@ -155,7 +156,7 @@ export async function prepareLockTx(params: {
   timeoutMinutes?: number;
 }): Promise<{ xdr: string; networkPassphrase: string }> {
   const {
-    Contract, TransactionBuilder, Networks, nativeToScVal, Address, rpc: rpcModule,
+    Contract, TransactionBuilder, Networks, nativeToScVal, Address,
   } = await import('@stellar/stellar-sdk');
 
   const {
@@ -163,10 +164,9 @@ export async function prepareLockTx(params: {
     timeoutMinutes = DEFAULT_TIMEOUT_MINUTES,
   } = params;
 
-  const rpc = new rpcModule.Server(config.stellarRpcUrl);
   const networkPassphrase = getNetworkPassphrase(Networks);
 
-  const account = await rpc.getAccount(sellerAddress);
+  const account = await rpcRead(config.stellarRpcUrl, (s) => s.getAccount(sellerAddress));
   const contract = new Contract(config.escrowContractId);
 
   const secretHashBytes = Buffer.from(secretHash, 'hex');
@@ -188,8 +188,10 @@ export async function prepareLockTx(params: {
 
   let prepared;
   try {
-    prepared = await rpc.prepareTransaction(tx);
+    prepared = await rpcRead(config.stellarRpcUrl, (s) => s.prepareTransaction(tx));
   } catch (err: any) {
+    // Open circuit or timeout: keep its 503/504 instead of calling it a simulation failure.
+    if (err instanceof AppError) throw err;
     params.request.log.error({ err: err.message, category: 'stellar.tx' }, '[Stellar] Lock simulation failed');
     throw new Error(`Simulation failed: ${err.message}. Check if contract is deployed and parameters are correct.`);
   }
@@ -212,8 +214,7 @@ export async function submitLockTx(params: {
   platformFeeStroops: bigint;
   secretHash: string;
 }): Promise<{ txHash: string }> {
-  const { TransactionBuilder, Networks, rpc: rpcModule } = await import('@stellar/stellar-sdk');
-  const rpc = new rpcModule.Server(config.stellarRpcUrl);
+  const { TransactionBuilder, Networks } = await import('@stellar/stellar-sdk');
   const networkPassphrase = getNetworkPassphrase(Networks);
 
   const tx = TransactionBuilder.fromXDR(params.signedXdr, networkPassphrase);
@@ -230,7 +231,7 @@ export async function submitLockTx(params: {
     ],
   });
 
-  const sendResult = await rpc.sendTransaction(tx);
+  const sendResult = await submitSignedTx(config.stellarRpcUrl, tx);
   if (sendResult.status === 'ERROR') {
     params.request.log.error({ detail: sendResult.errorResult, category: 'stellar.tx' }, '[Stellar] Lock send failed');
     throw new BadRequestError('STELLAR_LOCK_SEND_FAILED', 'La transacción de bloqueo fue rechazada por la red.', `Send failed: ${JSON.stringify(sendResult.errorResult)}`);
@@ -258,14 +259,13 @@ export async function prepareReleaseTx(params: {
   tradeIdBytes: Buffer; // 32 bytes: sha256(secret_hash_bytes)
   secretBytes: Buffer; // 32 bytes: raw HTLC preimage
 }): Promise<{ xdr: string; networkPassphrase: string }> {
-  const { Contract, TransactionBuilder, Networks, nativeToScVal, rpc: rpcModule } = await import('@stellar/stellar-sdk');
+  const { Contract, TransactionBuilder, Networks, nativeToScVal } = await import('@stellar/stellar-sdk');
 
   const { buyerAddress, tradeIdBytes, secretBytes } = params;
 
-  const rpc = new rpcModule.Server(config.stellarRpcUrl);
   const networkPassphrase = getNetworkPassphrase(Networks);
 
-  const account = await rpc.getAccount(buyerAddress);
+  const account = await rpcRead(config.stellarRpcUrl, (s) => s.getAccount(buyerAddress));
   const contract = new Contract(config.escrowContractId);
 
   const tx = new TransactionBuilder(account, { fee: '1000000', networkPassphrase })
@@ -281,8 +281,10 @@ export async function prepareReleaseTx(params: {
 
   let prepared;
   try {
-    prepared = await rpc.prepareTransaction(tx);
+    prepared = await rpcRead(config.stellarRpcUrl, (s) => s.prepareTransaction(tx));
   } catch (err: any) {
+    // Open circuit or timeout: keep its 503/504 instead of calling it a simulation failure.
+    if (err instanceof AppError) throw err;
     params.request.log.error({ err: err.message, category: 'stellar.tx' }, '[Stellar] Release simulation failed');
     throw new Error(`Release simulation failed: ${err.message}. Check if trade exists in contract.`);
   }
@@ -302,8 +304,7 @@ export async function submitReleaseTx(params: {
   tradeIdBytes: Buffer;
   secretBytes: Buffer;
 }): Promise<{ txHash: string }> {
-  const { TransactionBuilder, Networks, rpc: rpcModule } = await import('@stellar/stellar-sdk');
-  const rpc = new rpcModule.Server(config.stellarRpcUrl);
+  const { TransactionBuilder, Networks } = await import('@stellar/stellar-sdk');
   const networkPassphrase = getNetworkPassphrase(Networks);
 
   const tx = TransactionBuilder.fromXDR(params.signedXdr, networkPassphrase);
@@ -313,7 +314,7 @@ export async function submitReleaseTx(params: {
     args: [params.tradeIdBytes, params.secretBytes],
   });
 
-  const sendResult = await rpc.sendTransaction(tx);
+  const sendResult = await submitSignedTx(config.stellarRpcUrl, tx);
   if (sendResult.status === 'ERROR') {
     params.request.log.error({ detail: sendResult.errorResult, category: 'stellar.tx' }, '[Stellar] Release send failed');
     throw new BadRequestError('STELLAR_RELEASE_SEND_FAILED', 'La transacción de liberación fue rechazada por la red.', `Release send failed: ${JSON.stringify(sendResult.errorResult)}`);
@@ -345,17 +346,16 @@ export async function callRefundOnChain(params: {
 }): Promise<{ txHash: string }> {
   const {
     Contract, TransactionBuilder, Networks, Keypair,
-    nativeToScVal, rpc: rpcModule,
+    nativeToScVal,
   } = await import('@stellar/stellar-sdk');
 
   const { tradeIdBytes } = params;
 
-  const rpc = new rpcModule.Server(config.stellarRpcUrl);
   const networkPassphrase = getNetworkPassphrase(Networks);
   const keypair = Keypair.fromSecret(config.platformSecretKey);
   const platformAddress = keypair.publicKey();
 
-  const account = await rpc.getAccount(platformAddress);
+  const account = await rpcRead(config.stellarRpcUrl, (s) => s.getAccount(platformAddress));
   const contract = new Contract(config.escrowContractId);
 
   const tx = new TransactionBuilder(account, { fee: '1000000', networkPassphrase })
@@ -367,15 +367,17 @@ export async function callRefundOnChain(params: {
 
   let prepared;
   try {
-    prepared = await rpc.prepareTransaction(tx);
+    prepared = await rpcRead(config.stellarRpcUrl, (s) => s.prepareTransaction(tx));
   } catch (err: any) {
+    // Open circuit or timeout: keep its 503/504 instead of calling it a simulation failure.
+    if (err instanceof AppError) throw err;
     params.request.log.error({ err: err.message, category: 'stellar.tx' }, '[Stellar] Refund simulation failed');
     throw new Error(`Refund simulation failed: ${err.message}. Check if trade exists in contract.`);
   }
 
   prepared.sign(keypair);
 
-  const sendResult = await rpc.sendTransaction(prepared);
+  const sendResult = await submitSignedTx(config.stellarRpcUrl, prepared);
   if (sendResult.status === 'ERROR') {
     params.request.log.error({ detail: sendResult.errorResult, category: 'stellar.tx' }, '[Stellar] Refund send failed');
     throw new Error(`Refund send failed: ${JSON.stringify(sendResult.errorResult)}`);

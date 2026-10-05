@@ -1,3 +1,6 @@
+import { breakers } from "../lib/breakers.js";
+import { breakerFetch, isIdempotentMethod } from "../lib/circuitBreaker.js";
+
 const ETHERFUSE_API = process.env.ETHERFUSE_API_URL ?? "https://api.etherfuse.com";
 
 export interface EtherfuseRampAsset {
@@ -17,14 +20,16 @@ function etherfuseRampClient(path: string, init: RequestInit = {}): Promise<Resp
     throw new Error("ETHERFUSE_API_KEY not configured");
   }
 
-  return fetch(`${ETHERFUSE_API}${path}`, {
+  // Quotes and orders are POSTs: never retried, so a lost response cannot
+  // turn into a duplicate order. Reads are retried.
+  return breakerFetch(breakers.etherfuse, `${ETHERFUSE_API}${path}`, {
     ...init,
     headers: {
       Authorization: apiKey,
       "Content-Type": "application/json",
       ...init.headers,
     },
-  });
+  }, { idempotent: isIdempotentMethod(init.method) });
 }
 
 // GET /ramp/assets requires blockchain, currency (sort priority), and a
@@ -225,7 +230,7 @@ export interface EtherfuseBondInfo {
 }
 
 export async function getCETESRate(): Promise<EtherfuseBondCost> {
-  const response = await fetch(`${ETHERFUSE_API}/lookup/bonds/cost/CETES`);
+  const response = await breakerFetch(breakers.etherfuse, `${ETHERFUSE_API}/lookup/bonds/cost/CETES`, {}, { idempotent: true });
   if (!response.ok) {
     throw new Error(`Etherfuse API error: ${response.status}`);
   }
@@ -233,7 +238,7 @@ export async function getCETESRate(): Promise<EtherfuseBondCost> {
 }
 
 export async function getAllBondCosts(): Promise<Record<string, EtherfuseBondCost>> {
-  const response = await fetch(`${ETHERFUSE_API}/lookup/bonds/cost`);
+  const response = await breakerFetch(breakers.etherfuse, `${ETHERFUSE_API}/lookup/bonds/cost`, {}, { idempotent: true });
   if (!response.ok) {
     throw new Error(`Etherfuse API error: ${response.status}`);
   }

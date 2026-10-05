@@ -35,7 +35,9 @@
     "test:demo-seed": "node --import tsx src/tests/demoSeedTrades.test.ts",
     "test:trade-asset": "cross-env ALLOW_IN_MEMORY_DB=true MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/tradeAsset.test.ts",
     "test:trade-asset-pg": "cross-env MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/tradeAssetPg.test.ts",
-    "test:provider-inbox": "cross-env ALLOW_IN_MEMORY_DB=true MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/providerInbox.test.ts"
+    "test:provider-inbox": "cross-env ALLOW_IN_MEMORY_DB=true MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/providerInbox.test.ts",
+    "test:circuit-breaker": "node --import tsx src/tests/circuitBreaker.test.ts",
+    "test:upstream-resilience": "node --import tsx src/tests/upstreamResilience.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^8.5.0",

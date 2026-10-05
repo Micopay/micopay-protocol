@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../middleware/auth.middleware.js';
-import { UpstreamError } from '../utils/errors.js';
+import { AppError, UpstreamError } from '../utils/errors.js';
+import { submitSignedTx } from '../lib/stellarRpc.js';
 
 export async function stellarRoutes(app: FastifyInstance) {
   /**
@@ -30,7 +31,7 @@ export async function stellarRoutes(app: FastifyInstance) {
     const { xdr } = request.body as { xdr: string };
 
     try {
-      const { TransactionBuilder, Networks, rpc: rpcModule } = await import('@stellar/stellar-sdk');
+      const { TransactionBuilder, Networks } = await import('@stellar/stellar-sdk');
       const { config } = await import('../config.js');
 
       if (config.mockStellar) {
@@ -43,11 +44,13 @@ export async function stellarRoutes(app: FastifyInstance) {
         config.stellarNetwork === 'TESTNET' ? Networks.TESTNET : Networks.PUBLIC;
 
       const tx = TransactionBuilder.fromXDR(xdr, networkPassphrase);
-      const rpc = new rpcModule.Server(config.stellarRpcUrl);
-      const result = await rpc.sendTransaction(tx);
+      const result = await submitSignedTx(config.stellarRpcUrl, tx);
 
       return { hash: result.hash, status: result.status };
     } catch (err: any) {
+      // Open circuit, timeout or uncertain submission: the error handler
+      // answers with its own status and a message the app can show.
+      if (err instanceof AppError) throw err;
       request.log.error({ err: err.message, category: 'stellar.tx' }, '[stellar] Submit failed');
       return reply.status(500).send({ error: err.message || 'Failed to submit transaction' });
     }

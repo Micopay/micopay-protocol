@@ -1,5 +1,6 @@
 import pino from 'pino';
 import type { RawContractEvent } from './event-dispatcher.service.js';
+import { rpcRead } from '../lib/stellarRpc.js';
 
 const logger = pino({ name: 'event-listener' });
 
@@ -212,14 +213,14 @@ export function createProductionListener(
   rpcUrl: string,
   opts: { pollIntervalMs?: number; healthStaleMs?: number } = {},
 ): EscrowEventListener {
+  // The listener has its own backoff loop, so these reads are not retried
+  // here; they still count towards the shared Stellar RPC breaker.
   const fetchEvents = async (startLedger: number): Promise<EventBatch> => {
-    const { rpc: rpcModule } = await import('@stellar/stellar-sdk');
-    const server = new rpcModule.Server(rpcUrl);
-    const res = await server.getEvents({
+    const res = await rpcRead(rpcUrl, (server) => server.getEvents({
       startLedger,
       filters: [{ type: 'contract', contractIds: [contractId] }],
       limit: EVENTS_PAGE_LIMIT,
-    });
+    }), { retry: false });
     return {
       events: res.events as unknown as RawContractEvent[],
       latestLedger: res.latestLedger,
@@ -227,9 +228,7 @@ export function createProductionListener(
   };
 
   const currentLedger = async (): Promise<number> => {
-    const { rpc: rpcModule } = await import('@stellar/stellar-sdk');
-    const server = new rpcModule.Server(rpcUrl);
-    const info = await server.getLatestLedger();
+    const info = await rpcRead(rpcUrl, (server) => server.getLatestLedger(), { retry: false });
     return info.sequence;
   };
 

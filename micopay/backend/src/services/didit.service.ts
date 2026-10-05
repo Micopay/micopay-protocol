@@ -6,6 +6,9 @@
 // a real Didit sandbox account — confirm the shapes here against your own
 // sandbox (docs.didit.me) before relying on this in production, and adjust
 // this file only (the rest of the integration is provider-agnostic).
+import { breakers } from "../lib/breakers.js";
+import { breakerFetch, isIdempotentMethod } from "../lib/circuitBreaker.js";
+
 const DIDIT_API = process.env.DIDIT_API_URL ?? "https://verification.didit.me";
 
 function diditClient(path: string, init: RequestInit = {}): Promise<Response> {
@@ -14,14 +17,16 @@ function diditClient(path: string, init: RequestInit = {}): Promise<Response> {
     throw new Error("DIDIT_API_KEY not configured");
   }
 
-  return fetch(`${DIDIT_API}${path}`, {
+  // Session creation is a POST: never retried, so a lost response cannot
+  // open a second session behind the user's back.
+  return breakerFetch(breakers.didit, `${DIDIT_API}${path}`, {
     ...init,
     headers: {
       "x-api-key": apiKey,
       "Content-Type": "application/json",
       ...init.headers,
     },
-  });
+  }, { idempotent: isIdempotentMethod(init.method) });
 }
 
 export interface CreateDiditSessionParams {
