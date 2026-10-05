@@ -8,11 +8,11 @@
  * (git-ignored), outside the repo's tracked files.
  *
  * Usage:
- *   node scripts/agent-wallet.mjs register [username]
- *   node scripts/agent-wallet.mjs login
- *   node scripts/agent-wallet.mjs whoami
- *   node scripts/agent-wallet.mjs trustline <ASSET_CODE> <ISSUER>
- *   node scripts/agent-wallet.mjs release <tradeId>
+ *   node micopay/backend/scripts/agent-wallet.mjs register [username]
+ *   node micopay/backend/scripts/agent-wallet.mjs login
+ *   node micopay/backend/scripts/agent-wallet.mjs whoami
+ *   node micopay/backend/scripts/agent-wallet.mjs trustline <ASSET_CODE> <ISSUER>
+ *   node micopay/backend/scripts/agent-wallet.mjs release <tradeId>
  *
  * Env overrides:
  *   AGENT_API_URL    backend base URL (default http://localhost:3002)
@@ -34,7 +34,9 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, '..');
+// El script vive en micopay/backend/scripts/, pero su estado sigue en la raiz
+// del repo (.agent-wallet/), donde ya existe la cuenta: subir tres niveles.
+const ROOT = resolve(__dirname, '..', '..', '..');
 const STATE_DIR = resolve(ROOT, '.agent-wallet');
 const STATE_PATH = resolve(STATE_DIR, 'juanita.json');
 
@@ -250,11 +252,11 @@ async function main() {
 function __filename_usage() {
   return [
     'Usage:',
-    '  node scripts/agent-wallet.mjs register [username]',
-    '  node scripts/agent-wallet.mjs login',
-    '  node scripts/agent-wallet.mjs whoami',
-    '  node scripts/agent-wallet.mjs trustline <ASSET_CODE> <ISSUER>',
-    '  node scripts/agent-wallet.mjs release <tradeId>',
+    '  node micopay/backend/scripts/agent-wallet.mjs register [username]',
+    '  node micopay/backend/scripts/agent-wallet.mjs login',
+    '  node micopay/backend/scripts/agent-wallet.mjs whoami',
+    '  node micopay/backend/scripts/agent-wallet.mjs trustline <ASSET_CODE> <ISSUER>',
+    '  node micopay/backend/scripts/agent-wallet.mjs release <tradeId>',
   ].join('\n');
 }
 
