@@ -31,7 +31,12 @@
 | 4 | Como usuario quiero que, si el comercio no me entrega el efectivo dentro del plazo, mis USDC regresen solos a mi billetera para no perder mi dinero. | Raúl Vallejo | Debería. Sin devolución automática el escrow solo traslada el riesgo. |
 | 5 | Como usuario quiero ver los comercios cercanos con su comisión y su historial de intercambios completados para elegir el más barato y confiable. | Raúl Vallejo | Debería. Da la reputación verificable que permite elegir entre desconocidos. |
 
-*(Pendiente: sumar las historias de Anna Medina y Eric Mota Tejeda y repriorizar en conjunto.)*
+| 6 | Como usuaria quiero ver el tipo de cambio final y cuántos pesos voy a recibir antes de bloquear mis USDC para comparar ofertas y saber que el margen es justo. | Anna Medina | Debería. Hace real la "comisión conocida por adelantado" de la propuesta de valor. |
+| 7 | Como turista extranjera que llega a México con USDC y sin cuenta bancaria local quiero cambiarlos por efectivo con un proveedor verificado cerca de donde me hospedo para pagar en mercados, taxis y comercios que solo aceptan efectivo. | Anna Medina | Debería. Amplía el segmento sin cambiar el flujo central. |
+| 8 | Como persona con efectivo disponible (no necesariamente un comercio) quiero publicar mi propio tipo de cambio y el monto máximo que puedo entregar para ganar un margen. | Anna Medina | Podría. Multiplica los puntos de cambio; en el piloto se recluta a mano. |
+| 9 | Como usuario que deposita efectivo quiero que el comercio deje bloqueado en un escrow el dinero digital que me corresponde antes de entregarle mis billetes para no tener que confiar en que me pagará después. | Eric Mota Tejeda | Podría (fuera del MVP). Es el flujo inverso (cash-in); usa el mismo escrow y se habilita después del retiro. |
+
+Historias de cada integrante: [Raúl Vallejo](RaulVallejo.md), [Anna Medina](AnnaMedina.md) y [Eric Mota Tejeda](EricMota.md).
 
 ---
 
@@ -77,10 +82,10 @@ Flujo de cambio de USDC a efectivo (cash-out). Roles: **usuario** (vende USDC, r
 
 **Riesgos del Problem Brief que atiende el MVP:**
 - *Pérdida de la llave (V-4, V-22):* al crear la billetera, la app guía el respaldo de la frase de recuperación y no deja continuar sin confirmarlo.
-- *Sin conexión al entregar (V-2, V-5):* el QR se genera antes y se muestra sin internet; si el escaneo no llega a la red, los fondos siguen bloqueados y el comercio reintenta antes del vencimiento.
+- *Sin conexión al entregar (V-2, V-5):* si el escaneo no llega a la red, los fondos siguen bloqueados y el comercio reintenta antes del vencimiento. Hoy el QR se pide al servidor en el momento; generarlo antes para mostrarlo sin internet es una mejora del MVP.
 - *Disputas:* el QR se escanea frente a frente en el momento de la entrega y la devolución automática cubre la no entrega; el arbitraje con un tercero queda para cuando sepamos cuántos casos aparecen.
 
-**Por qué el recorte sigue entregando valor:** cubre completo el momento que hoy falla: dos desconocidos cambian dólares por efectivo sin que ninguno confíe primero. El cash-in, la salida a banco y el ahorro amplían el mercado, pero no cambian esa pregunta; por eso el Problem Brief se enfoca en el retiro. El prototipo ya completó un retiro de $500 MXN en red de prueba (24 sep 2026).
+**Por qué el recorte sigue entregando valor:** cubre completo el momento que hoy falla: dos desconocidos cambian dólares por efectivo sin que ninguno confíe primero. El cash-in, la salida a banco y el ahorro amplían el mercado, pero no cambian esa pregunta; por eso el Problem Brief se enfoca en el retiro. El prototipo ya completó un retiro y un depósito de $500 MXN en red de prueba (24 sep 2026), con el escrow en XLM; el MVP pasa a USDC.
 
 ---
 
@@ -129,7 +134,7 @@ flowchart LR
 
 | Capa | Componente | Qué hace |
 | :---: | --- | --- |
-| Interfaz | App móvil web (usuario y comercio) | Muestra el mapa, captura el monto, firma con la llave que vive en el teléfono, muestra y escanea el QR. |
+| Interfaz | App móvil Android (usuario y comercio) | Muestra el mapa, captura el monto, firma con la llave que vive en el teléfono, muestra y escanea el QR. |
 | Lógica | Backend (API) y base de datos | Guarda comercios, comisiones e intercambios; calcula montos; genera el QR de un solo uso; arma las transacciones sin firmar y las envía a la red. No custodia fondos. |
 | Stellar | Contrato de escrow en Soroban, activo USDC, cuentas Stellar | Retiene los USDC, los libera al comercio o los devuelve al usuario al vencer, y deja el registro público de cada intercambio. |
 
@@ -146,5 +151,5 @@ flowchart LR
 | Contrato inteligente en Soroban (escrow) | Retener los USDC del usuario y liberarlos solo con la confirmación de entrega, o devolverlos al vencer. | Reemplaza al intermediario de confianza: la regla está en código público y nadie, ni MicoPay, puede quedarse con los fondos. Una base de datos propia obligaría al usuario a confiar en la empresa. |
 | USDC en Stellar | El dólar digital que recibe el usuario y que cobra el comercio. | Es una stablecoin con reservas 1:1 y redención en dólares; el comercio cobra en un activo estable, no en una cripto volátil. |
 | Cuentas y firma en el dispositivo | Que cada persona controle su propia llave y autorice cada movimiento. | Permite operar sin cuenta bancaria; la billetera se crea en menos de un minuto desde el teléfono. |
-| Registro público de la red | Guardar cada intercambio completado como historial del comercio. | El historial no lo puede editar ni borrar ninguna empresa: es la reputación verificable entre desconocidos. |
+| Registro público de la red | Guardar cada intercambio completado como historial del comercio. Hoy el historial se calcula en la base de datos; llevarlo a la red es parte del MVP. | El historial no lo puede editar ni borrar ninguna empresa: es la reputación verificable entre desconocidos. |
 | Comisiones bajas y confirmación en segundos | Que el intercambio cueste centavos y se confirme mientras el usuario está en el mostrador. | En redes con comisiones altas o lentas, el costo de la transacción se comería el ahorro frente a la ventanilla de remesas. |
