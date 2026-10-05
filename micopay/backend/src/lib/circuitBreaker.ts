@@ -74,7 +74,8 @@ export class TransientHttpError extends Error {
 
 const TRANSIENT_CODES = new Set([
   'ECONNRESET', 'ECONNREFUSED', 'ECONNABORTED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN',
-  'EPIPE', 'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT',
+  // ERR_NETWORK: axios (the Stellar SDK's HTTP client) when no response arrived.
+  'EPIPE', 'ERR_NETWORK', 'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT',
 ]);
 
 /**

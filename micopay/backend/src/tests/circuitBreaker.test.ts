@@ -198,6 +198,7 @@ await test('never retries or counts an answer that is not a failure of the upstr
 await test('classifies transient errors', async () => {
   ok(isTransientError(networkError()));
   ok(isTransientError({ code: 'ETIMEDOUT' }));
+  ok(isTransientError({ code: 'ERR_NETWORK' }), 'axios network error (Stellar SDK)');
   ok(isTransientError({ response: { status: 503 } }));
   ok(isTransientError({ response: { status: 429 } }));
   ok(!isTransientError({ response: { status: 404 } }));
