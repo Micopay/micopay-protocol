@@ -754,5 +754,14 @@
     "notifications": "Notificaciones",
     "notificationsPending": "Notificaciones, {{count}} pendientes",
     "userAvatar": "Foto de perfil"
+  },
+  "offlineQueue": {
+    "compactOffline": "Sin conexión",
+    "compactPending": "Pendiente de sincronizar",
+    "offlineTitle": "Sin conexión a Internet",
+    "offlineBody": "Tus cambios se guardarán localmente y se sincronizarán automáticamente cuando se restaure la conexión.",
+    "pendingTitle": "Pendiente de sincronizar",
+    "pendingBody": "Tienes cambios esperando ser sincronizados con el servidor.",
+    "retry": "Reintentar"
   }
 }

@@ -36,14 +36,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "atomic-swap"
-version = "0.1.0"
-dependencies = [
- "htlc-core",
- "soroban-sdk",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -310,15 +302,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "delegated-release-htlc"
-version = "0.1.0"
-dependencies = [
- "htlc-core",
- "soroban-sdk",
- "soroban-token-sdk",
-]
-
-[[package]]
 name = "der"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -559,13 +542,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "htlc-core"
-version = "0.1.0"
-dependencies = [
- "soroban-sdk",
-]
-
-[[package]]
 name = "iana-time-zone"
 version = "0.1.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -699,15 +675,6 @@ name = "micopay-badges"
 version = "0.1.0"
 dependencies = [
  "soroban-sdk",
-]
-
-[[package]]
-name = "micopay-escrow"
-version = "0.2.0"
-dependencies = [
- "htlc-core",
- "soroban-sdk",
- "soroban-token-sdk",
 ]
 
 [[package]]
@@ -1271,15 +1238,6 @@ dependencies = [
  "stellar-xdr",
  "syn",
  "thiserror",
-]
-
-[[package]]
-name = "soroban-token-sdk"
-version = "21.7.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cef8fc7824bc08813ac12ed3af9a73fc1921873b480fff66c7b768c4d40da659"
-dependencies = [
- "soroban-sdk",
 ]
 
 [[package]]

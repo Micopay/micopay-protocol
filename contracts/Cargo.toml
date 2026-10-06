@@ -1,11 +1,7 @@
 [workspace]
 members = [
-    "htlc-core",
-    "atomic-swap",
-    "micopay-escrow",
     "micopay-badges",
     "zk-verifier",
-    "delegated-release-htlc",
 ]
 resolver = "2"
 
