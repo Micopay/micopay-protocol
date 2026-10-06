@@ -221,7 +221,7 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
 
                 <div className="flex justify-between items-center">
                     <span className="text-on-surface-variant text-xs">{t('success.status')}</span>
-                    <span className="text-xs font-semibold text-on-surface capitalize">{trade.status}</span>
+                    <span className="text-xs font-semibold text-on-surface"><ReceiptStatus status={trade.status} /></span>
                 </div>
 
                 {lockTxHash && (

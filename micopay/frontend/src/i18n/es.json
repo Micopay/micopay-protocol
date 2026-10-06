@@ -28,7 +28,9 @@
       "revealing": "Revelando",
       "pending": "Pendiente",
       "cancelled": "Cancelado",
-      "refunded": "Reembolsado"
+      "refunded": "Reembolsado",
+      "expired": "Expirado",
+      "unknown": "Estado desconocido"
     },
     "seeAllActivity": "Ver todo el historial"
   },
@@ -266,9 +268,6 @@
     "flowDeposit": "Recibes efectivo",
     "flowCashout": "Entregas efectivo",
     "expired": "Expirado",
-    "unknown": "Estado desconocido",
-    "expired": "Expired",
-    "unknown": "Unknown status",  
     "releaseNoReceipt": "La liberación no devolvió un comprobante. Vuelve a intentarlo.",
     "releaseFailed": "No se pudo liberar. Reintenta.",
     "qrVerified": "QR verificado",
