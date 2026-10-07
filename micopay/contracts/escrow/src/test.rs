@@ -170,3 +170,31 @@ fn test_double_initialize_fails() {
     let result = escrow.try_initialize(&admin, &token_id, &platform_wallet);
     assert!(result.is_err());
 }
+
+#[test]
+fn test_lock_rejects_reused_secret_hash() {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+
+    let attacker = Address::generate(&env);
+    token::StellarAssetClient::new(&env, &token_id).mint(&attacker, &10);
+
+    let (secret, secret_hash) = make_secret(&env);
+    let amount: i128 = 1_000_000_000;
+    let trade_id = escrow.lock(&seller, &buyer, &amount, &0i128, &secret_hash, &30u32);
+
+    // El secret_hash es publico: repetirlo con 1 stroop no debe pisar la operacion.
+    let result = escrow.try_lock(&attacker, &attacker, &1i128, &0i128, &secret_hash, &1u32);
+    assert_eq!(result, Err(Ok(EscrowError::TradeAlreadyExists)));
+    assert_eq!(token_client.balance(&attacker), 10);
+
+    let trade = escrow.get_trade(&trade_id);
+    assert_eq!(trade.seller, seller);
+    assert_eq!(trade.amount, amount);
+
+    // La operacion original se sigue liberando con normalidad.
+    escrow.release(&trade_id, &secret);
+    assert_eq!(token_client.balance(&buyer), amount);
+    assert_eq!(token_client.balance(&contract_id), 0);
+}

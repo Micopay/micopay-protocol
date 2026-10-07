@@ -76,13 +76,22 @@ impl EscrowFactory {
             .get(&DataKey::TokenId)
             .ok_or(EscrowError::NotInitialized)?;
 
+        // trade_id depende solo de secret_hash, que es publico en cadena. Sin esta
+        // revision, cualquiera podia repetir el hash con 1 stroop y sobrescribir
+        // una operacion bloqueada: los fondos originales quedaban atrapados.
+        let trade_id = compute_trade_id(&env, &seller, &buyer, &secret_hash);
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::Trade(trade_id.clone()))
+        {
+            return Err(EscrowError::TradeAlreadyExists);
+        }
+
         // Transfer total (amount + platform_fee) from seller to this contract
         let total = amount + platform_fee;
         let token_client = token::Client::new(&env, &token_id);
         token_client.transfer(&seller, &env.current_contract_address(), &total);
-
-        // Compute trade_id
-        let trade_id = compute_trade_id(&env, &seller, &buyer, &secret_hash);
 
         // Calculate timeout as absolute ledger number
         // ~12 ledgers per minute (5s per ledger)
