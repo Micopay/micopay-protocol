@@ -141,6 +141,8 @@ export const config = {
   stellarNetwork: process.env.STELLAR_NETWORK || 'TESTNET',
   platformSecretKey: process.env.PLATFORM_SECRET_KEY || '',
   escrowContractId: process.env.ESCROW_CONTRACT_ID || '',
+  // Token que bloquea esa instancia del escrow (ver assetRate.service).
+  escrowAsset: process.env.ESCROW_ASSET || 'XLM',
   mxneContractId: process.env.MXNE_CONTRACT_ID || '',
   mxneIssuerAddress: process.env.MXNE_ISSUER_ADDRESS || '',
 
@@ -283,14 +285,10 @@ export function validateConfig() {
       }
     }
 
-    // MXNE Contract ID validation
-    if (!config.mxneContractId) {
-      errors.push("MXNE_CONTRACT_ID is missing (required when MOCK_STELLAR=false).");
-    } else {
-      const stellarContractRegex = /^C[A-Z2-7]{55}$/;
-      if (!stellarContractRegex.test(config.mxneContractId)) {
-        errors.push("MXNE_CONTRACT_ID is invalid. It must be a valid Stellar contract ID (56 characters starting with 'C').");
-      }
+    // MXNE_CONTRACT_ID es opcional: ningun flujo lo usa (el escrow toma su
+    // token de initialize). Si viene, que al menos tenga forma valida.
+    if (config.mxneContractId && !/^C[A-Z2-7]{55}$/.test(config.mxneContractId)) {
+      errors.push("MXNE_CONTRACT_ID is invalid. It must be a valid Stellar contract ID (56 characters starting with 'C').");
     }
   }
 

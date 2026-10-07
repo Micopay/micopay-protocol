@@ -14,6 +14,7 @@ import { mapApiError, type MappedApiError } from '../utils/apiError';
 import { useWalletBalance } from '../hooks/useWalletBalance';
 import BetaBanner from '../components/BetaBanner';
 import { getPendingSignatureRequests, SignatureRequest } from '../services/signRequestService';
+import { STELLAR_NETWORK_LABEL } from '../utils/stellarExplorer';
 
 const EXPLORER = "https://stellar.expert/explorer/testnet/tx";
 
@@ -319,7 +320,7 @@ const Home = ({
         <MoneyBlock
           className="mb-8"
           onClick={loadBalance}
-          etiqueta={t('home.totalValue')}
+          etiqueta={t('home.totalValue', { network: STELLAR_NETWORK_LABEL.toUpperCase() })}
           cifra={balanceLoading ? t('home.loadingBalance') : walletBalanceError ? '--' : mxnBalance}
           pie={
             walletBalanceError

@@ -33,6 +33,7 @@
 import type { FastifyRequest } from 'fastify';
 import { AppError, BadRequestError, ValidationError } from '../utils/errors.js';
 import { getRateMxn } from '../routes/rate.js';
+import { config } from '../config.js';
 
 /** Decimales de un token Soroban estandar (y de XLM). */
 const SCALE = 10_000_000n;
@@ -66,22 +67,37 @@ const ASSETS = {
 
 export type SupportedAsset = keyof typeof ASSETS;
 
-export const DEFAULT_ASSET: SupportedAsset = 'XLM';
-
 export function isSupportedAsset(code: string): code is SupportedAsset {
   return Object.prototype.hasOwnProperty.call(ASSETS, code);
 }
 
 /**
+ * El activo que bloquea el contrato de `ESCROW_CONTRACT_ID`. Cada instancia del
+ * escrow guarda UN token (`initialize`), y cada backend apunta a una instancia,
+ * asi que el activo es configuracion del despliegue: XLM en testnet, USDC en
+ * mainnet. Un valor desconocido tumba el arranque en vez de aceptar operaciones
+ * que el contrato no podria bloquear.
+ */
+function resolveDeployedEscrowAsset(raw: string): SupportedAsset {
+  const code = raw.trim().toUpperCase();
+  if (!isSupportedAsset(code)) {
+    throw new Error(`ESCROW_ASSET invalido: "${raw}". Valores posibles: ${Object.keys(ASSETS).join(', ')}`);
+  }
+  return code;
+}
+
+export const DEFAULT_ASSET: SupportedAsset = resolveDeployedEscrowAsset(config.escrowAsset);
+
+/**
  * Activos con los que se puede OPERAR hoy: los que tienen un escrow desplegado.
  *
  * No confundir con `isSupportedAsset`. Aquel dice que la aritmetica sabe
- * convertir el activo; este, que existe un contrato capaz de bloquearlo. USDC y
- * MXNE estan en el primero y no en este: una operacion en USDC se crearia con
- * montos correctos y luego se intentaria bloquear en el contrato del XLM
- * nativo. Un activo entra aqui cuando WP3 despliega su instancia.
+ * convertir el activo; este, que existe un contrato capaz de bloquearlo: el
+ * unico activo de la instancia configurada (`ESCROW_ASSET`). Si se aceptara
+ * otro, la operacion se crearia con montos correctos y luego se intentaria
+ * bloquear en un contrato de otro token.
  */
-export const ENABLED_ESCROW_ASSETS: readonly SupportedAsset[] = ['XLM'];
+export const ENABLED_ESCROW_ASSETS: readonly SupportedAsset[] = [DEFAULT_ASSET];
 
 /** Longitud de `trades.asset_code` (VARCHAR(12)). */
 export const ASSET_CODE_MAX_LENGTH = 12;
