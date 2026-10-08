@@ -21,7 +21,7 @@ const OLD_C = 'C' + 'D'.repeat(55);
 
 function probe(env: Record<string, string>, code: string): any {
   const out = execFileSync(process.execPath, ['--import', 'tsx', '-e', code], {
-    env: { ...process.env, NODE_ENV: 'production', DATABASE_URL: '', ESCROW_CONTRACTS: '', ESCROW_CONTRACT_ID: '', ESCROW_ASSET: '', ...env },
+    env: { ...process.env, NODE_ENV: 'production', DATABASE_URL: '', ESCROW_CONTRACTS: '', ESCROW_CONTRACT_ID: '', ESCROW_ASSET: '', ESCROW_LEGACY_CONTRACT_ID: '', ...env },
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -64,6 +64,17 @@ function testContractForTrade() {
   console.log('  ✓ lock/release/refund van al contrato de la operacion');
 }
 
+function testLegacyContractForOldTrades() {
+  const code = `import('./src/services/escrowContract.ts').then(m => console.log(JSON.stringify({
+    old: m.escrowContractForTrade({ escrow_contract_id: null, asset_code: 'XLM' }),
+    nuevo: m.escrowContractForTrade({ escrow_contract_id: '${XLM_C}', asset_code: 'XLM' }),
+  })))`;
+  const r = probe({ ESCROW_CONTRACTS: `XLM=${XLM_C}`, ESCROW_LEGACY_CONTRACT_ID: OLD_C }, code);
+  strictEqual(r.old, OLD_C, 'una operacion sin contrato congelado va al contrato anterior');
+  strictEqual(r.nuevo, XLM_C);
+  console.log('  ✓ las operaciones viejas van a ESCROW_LEGACY_CONTRACT_ID');
+}
+
 function testBadMapFailsBoot() {
   let failed = false;
   try {
@@ -80,5 +91,6 @@ testMapEnablesItsAssets();
 testDefaultFallsBackToFirstDeployed();
 testLegacyEnv();
 testContractForTrade();
+testLegacyContractForOldTrades();
 testBadMapFailsBoot();
 console.log('\nAll escrow contract tests passed.\n');

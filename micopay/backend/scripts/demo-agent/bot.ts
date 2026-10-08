@@ -21,6 +21,7 @@
  * Mainnet: `MICOPAY_NETWORK=mainnet`. La llave va en demo-agent-mainnet.json y
  * no hay friendbot: el setup imprime la direccion para fondearla con XLM y, ya
  * fondeada, crea la trustline de USDC (el bot recibe USDC en el release).
+ * En testnet, `USDC_ISSUER=G...` hace lo mismo con el USDC del escrow de testnet.
  */
 import { Asset, Horizon, Keypair, Networks, Operation, TransactionBuilder } from '@stellar/stellar-sdk';
 import { execFileSync } from 'node:child_process';
@@ -34,8 +35,10 @@ const MAINNET = (process.env.MICOPAY_NETWORK ?? 'testnet').toLowerCase() === 'ma
 const STATE_FILE = join(homedir(), '.micopay', MAINNET ? 'demo-agent-mainnet.json' : 'demo-agent.json');
 const HORIZON = MAINNET ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
 const EXPLORER = `https://stellar.expert/explorer/${MAINNET ? 'public' : 'testnet'}/tx`;
-// USDC de Circle en mainnet: el activo de la instancia del escrow de mainnet.
-const USDC = new Asset('USDC', 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN');
+// Emisor del USDC que recibe el bot en el release. En mainnet, Circle; en
+// testnet solo si se define USDC_ISSUER (el del escrow USDC de testnet).
+const USDC_ISSUER = process.env.USDC_ISSUER ?? (MAINNET ? 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' : '');
+const USDC = USDC_ISSUER ? new Asset('USDC', USDC_ISSUER) : null;
 const ADB = process.env.ADB ?? join(process.env.LOCALAPPDATA ?? '', 'Android', 'Sdk', 'platform-tools', 'adb.exe');
 const QR_HELPER = join(dirname(fileURLToPath(import.meta.url)), 'qr_from_phone.py');
 const POLL_MS = 3000;
@@ -124,7 +127,7 @@ async function setup(argLat?: string, argLng?: string) {
     log(`Cuenta registrada: ${username}`);
   }
 
-  if (MAINNET && !(await ensureUsdcTrustline(kp))) return;
+  if (USDC && !(await ensureUsdcTrustline(kp, USDC))) return;
 
   const token = await login(kp);
   const pos = argLat && argLng ? { lat: Number(argLat), lng: Number(argLng) } : phoneLocation();
@@ -152,22 +155,22 @@ async function setup(argLat?: string, argLng?: string) {
  * Mainnet: la cuenta debe existir (fondeada con XLM) y tener trustline de USDC,
  * o el release no puede pagarle. Devuelve false si aun falta fondearla.
  */
-async function ensureUsdcTrustline(kp: Keypair): Promise<boolean> {
+async function ensureUsdcTrustline(kp: Keypair, usdc: Asset): Promise<boolean> {
   const server = new Horizon.Server(HORIZON);
   let account;
   try {
     account = await server.loadAccount(kp.publicKey());
   } catch {
-    log(`La cuenta ${kp.publicKey()} no existe en mainnet.`);
+    log(`La cuenta ${kp.publicKey()} no existe en la red.`);
     log('Mándale ~3 XLM y vuelve a correr setup.');
     return false;
   }
   const has = account.balances.some(
-    (b: any) => b.asset_code === USDC.code && b.asset_issuer === USDC.issuer,
+    (b: any) => b.asset_code === usdc.code && b.asset_issuer === usdc.issuer,
   );
   if (has) return true;
-  const tx = new TransactionBuilder(account, { fee: '10000', networkPassphrase: Networks.PUBLIC })
-    .addOperation(Operation.changeTrust({ asset: USDC }))
+  const tx = new TransactionBuilder(account, { fee: '10000', networkPassphrase: MAINNET ? Networks.PUBLIC : Networks.TESTNET })
+    .addOperation(Operation.changeTrust({ asset: usdc }))
     .setTimeout(120)
     .build();
   tx.sign(kp);

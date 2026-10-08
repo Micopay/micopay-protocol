@@ -71,33 +71,45 @@ export function isSupportedAsset(code: string): code is SupportedAsset {
   return Object.prototype.hasOwnProperty.call(ASSETS, code);
 }
 
-/**
- * El activo que bloquea el contrato de `ESCROW_CONTRACT_ID`. Cada instancia del
- * escrow guarda UN token (`initialize`), y cada backend apunta a una instancia,
- * asi que el activo es configuracion del despliegue: XLM en testnet, USDC en
- * mainnet. Un valor desconocido tumba el arranque en vez de aceptar operaciones
- * que el contrato no podria bloquear.
- */
-function resolveDeployedEscrowAsset(raw: string): SupportedAsset {
+function toSupportedAsset(raw: string, origin: string): SupportedAsset {
   const code = raw.trim().toUpperCase();
   if (!isSupportedAsset(code)) {
-    throw new Error(`ESCROW_ASSET invalido: "${raw}". Valores posibles: ${Object.keys(ASSETS).join(', ')}`);
+    throw new Error(`${origin} invalido: "${raw}". Valores posibles: ${Object.keys(ASSETS).join(', ')}`);
   }
   return code;
 }
 
-export const DEFAULT_ASSET: SupportedAsset = resolveDeployedEscrowAsset(config.escrowAsset);
+/**
+ * Los activos con escrow desplegado en esta red: las claves de
+ * `ESCROW_CONTRACTS` (cada instancia del contrato guarda un solo token). Un
+ * activo desconocido tumba el arranque en vez de aceptar operaciones que
+ * ningun contrato podria bloquear.
+ */
+const DEPLOYED_ESCROW_ASSETS: readonly SupportedAsset[] = Object.keys(config.escrowContracts).map((a) =>
+  toSupportedAsset(a, 'ESCROW_CONTRACTS'),
+);
+
+/**
+ * El activo de una operacion que no lo pide: `ESCROW_ASSET` si tiene contrato,
+ * si no el primero desplegado. Con MOCK_STELLAR no hay contratos y se usa
+ * `ESCROW_ASSET` tal cual.
+ */
+export const DEFAULT_ASSET: SupportedAsset = (() => {
+  const wanted = toSupportedAsset(config.escrowAsset, 'ESCROW_ASSET');
+  if (DEPLOYED_ESCROW_ASSETS.length === 0 || DEPLOYED_ESCROW_ASSETS.includes(wanted)) return wanted;
+  return DEPLOYED_ESCROW_ASSETS[0];
+})();
 
 /**
  * Activos con los que se puede OPERAR hoy: los que tienen un escrow desplegado.
  *
  * No confundir con `isSupportedAsset`. Aquel dice que la aritmetica sabe
- * convertir el activo; este, que existe un contrato capaz de bloquearlo: el
- * unico activo de la instancia configurada (`ESCROW_ASSET`). Si se aceptara
- * otro, la operacion se crearia con montos correctos y luego se intentaria
- * bloquear en un contrato de otro token.
+ * convertir el activo; este, que existe un contrato capaz de bloquearlo (las
+ * claves de `ESCROW_CONTRACTS`). Si se aceptara otro, la operacion se crearia
+ * con montos correctos y no habria contrato donde bloquearla.
  */
-export const ENABLED_ESCROW_ASSETS: readonly SupportedAsset[] = [DEFAULT_ASSET];
+export const ENABLED_ESCROW_ASSETS: readonly SupportedAsset[] =
+  DEPLOYED_ESCROW_ASSETS.length > 0 ? DEPLOYED_ESCROW_ASSETS : [DEFAULT_ASSET];
 
 /** Longitud de `trades.asset_code` (VARCHAR(12)). */
 export const ASSET_CODE_MAX_LENGTH = 12;

@@ -3,7 +3,25 @@
 Canonical IDs for the **mobile stack** (micopay-backend + micopay/frontend).
 The `micopay-api` x402 service uses a separate escrow contract; do not mix them.
 
-## Contract IDs
+## Escrow multiactivo (desde 2026-10-08)
+
+Instancias con el fix de `lock` (#420), una por activo. Las despliega
+`deploy-mainnet.sh` con las variables de testnet (ver MAINNET.md).
+
+| Activo | Escrow | Token (SAC) |
+|---|---|---|
+| USDC (emisor propio de pruebas `GADK7SUS7NHIGERQBKF7R67A5DNIEFWG4YKNHLTQM5JN4KP2QISMJSHG`) | `CDUI253FSVVVXUBI4SU3PEQIDNCYWGABGUOCRBIINRCJ4SJ5XVKWYGAX` | `CCVAWF4XCJ5DLXHOFGO4TDEQBR6VJTIE5JYCZTXHCDULZ4XYH4GCVD23` |
+| XLM | `CBFDXYUPL4Q37JP3JD6JHFG6BQGNG6VOTTGMBTTPE5TYDHOVRY5UNQWE` | `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` |
+
+- Admin y wallet de plataforma de ambas: `GBD4V322KREETWAVJXMYUJP6CIWFKBEYT6L4NAXTXLQ7XNY535QQEGMQ`
+  (alias `ensayo-mainnet-script` del CLI `stellar`, solo testnet).
+- El USDC de testnet es un activo propio, no el de Circle: asi se puede emitir
+  a las billeteras de demo sin depender del faucet. La llave del emisor esta en
+  `~/.micopay/ensayo-usdc.json` (PC de Eric).
+- Backend: `ESCROW_CONTRACTS=USDC=CDUI…,XLM=CBFD…` y
+  `ESCROW_LEGACY_CONTRACT_ID=CB4M…` para las operaciones anteriores.
+
+## Contract IDs (instancia original, solo XLM, sin el fix de #420)
 
 | Contract | ID |
 |----------|----|

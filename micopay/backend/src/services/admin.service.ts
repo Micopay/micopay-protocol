@@ -3,6 +3,7 @@ import db from '../db/schema.js';
 import { getTradeAuditTrail as getTradeAuditTrailRows, insertTradeAuditEvent } from '../db/audit-log.model.js';
 import { logAuditEvent } from './audit.service.js';
 import { callRefundOnChain } from './stellar.service.js';
+import { escrowContractForTrade } from './escrowContract.js';
 import { config } from '../config.js';
 import { NotFoundError, ConflictError, ValidationError, UpstreamError } from '../utils/errors.js';
 
@@ -265,6 +266,7 @@ export async function resolveAdminDispute(input: ResolveDisputeInput) {
       const tradeIdBytes = createHash('sha256').update(secretHashBytes).digest();
       const onChainResult = await callRefundOnChain({
         request: { log: fallbackLogger },
+        contractId: escrowContractForTrade(trade),
         tradeIdBytes,
       });
       releaseTxHash = onChainResult.txHash;
