@@ -81,7 +81,12 @@
     "copy": "Copiar",
     "copied": "¡Copiada!",
     "accepts": "Acepta:",
-    "scanTip": "Muestra este QR o copia tu dirección."
+    "scanTip": "Muestra este QR o copia tu dirección.",
+    "activate": "Activar {{code}}",
+    "activating": "Activando…",
+    "active": "activo",
+    "activateHint": "Para recibir {{code}}, tu cuenta lo habilita una sola vez (reserva de 0.5 XLM).",
+    "activateFailed": "No se pudo activar {{code}}."
   },
   "profile": {
     "title": "Perfil",

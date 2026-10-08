@@ -81,7 +81,12 @@
     "copy": "Copy",
     "copied": "Copied!",
     "accepts": "Accepts:",
-    "scanTip": "Show this QR or copy your address."
+    "scanTip": "Show this QR or copy your address.",
+    "activate": "Enable {{code}}",
+    "activating": "Enabling…",
+    "active": "enabled",
+    "activateHint": "To receive {{code}}, your account enables it once (0.5 XLM reserve).",
+    "activateFailed": "Could not enable {{code}}."
   },
   "profile": {
     "title": "Profile",

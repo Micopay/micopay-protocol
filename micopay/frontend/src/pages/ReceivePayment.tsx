@@ -1,7 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
-import { ASSETS } from '../constants/assets';
+import { ASSETS, SENDABLE_ASSETS } from '../constants/assets';
+import { ensureTrustline, hasTrustline } from '../services/payment';
+import { ESCROW_ASSET_OPTIONS } from '../constants/escrowAssets';
+
+type TrustState = 'checking' | 'active' | 'inactive' | 'activating';
+
+/**
+ * Activos emitidos que se pueden usar en el escrow de este build: los que el
+ * usuario necesita recibir para retirar efectivo. Cada uno pide trustline.
+ */
+const ESCROW_CODES = ESCROW_ASSET_OPTIONS.filter((o) => o.enabled).map((o) => o.code.toUpperCase());
+const ISSUED_ASSETS = SENDABLE_ASSETS.filter((a) => !a.native && ESCROW_CODES.includes(a.code.toUpperCase()));
 
 interface ReceivePaymentProps {
   address: string | null;
@@ -11,6 +22,36 @@ interface ReceivePaymentProps {
 const ReceivePayment = ({ address, onBack }: ReceivePaymentProps) => {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  // Un activo emitido (USDC) solo se puede recibir con trustline. Sin este
+  // boton la app no tenia donde crearla, asi que nadie podia recibir USDC.
+  const [trust, setTrust] = useState<Record<string, TrustState>>({});
+  const [trustError, setTrustError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!address) return;
+    let active = true;
+    for (const a of ISSUED_ASSETS) {
+      setTrust((t) => ({ ...t, [a.code]: 'checking' }));
+      hasTrustline(a.code)
+        .then((ok) => active && setTrust((t) => ({ ...t, [a.code]: ok ? 'active' : 'inactive' })))
+        .catch(() => active && setTrust((t) => ({ ...t, [a.code]: 'inactive' })));
+    }
+    return () => {
+      active = false;
+    };
+  }, [address]);
+
+  const activate = async (code: string) => {
+    setTrustError(null);
+    setTrust((t) => ({ ...t, [code]: 'activating' }));
+    try {
+      await ensureTrustline(code);
+      setTrust((t) => ({ ...t, [code]: 'active' }));
+    } catch (e) {
+      setTrust((t) => ({ ...t, [code]: 'inactive' }));
+      setTrustError(e instanceof Error && e.message ? e.message : t('receive.activateFailed', { code }));
+    }
+  };
 
   const handleCopy = async () => {
     if (!address) return;
@@ -76,6 +117,24 @@ const ReceivePayment = ({ address, onBack }: ReceivePaymentProps) => {
           <p className="text-[11px] text-gris mt-3 leading-relaxed">
             {t('receive.scanTip')}
           </p>
+          {address && ISSUED_ASSETS.map((a) => {
+            const state = trust[a.code];
+            if (state === 'active' || state === undefined || state === 'checking') return null;
+            return (
+              <div key={a.code} className="mt-4 border-t-2 border-tinta pt-4">
+                <p className="text-[11px] text-gris mb-2 leading-relaxed">{t('receive.activateHint', { code: a.code })}</p>
+                <button
+                  onClick={() => activate(a.code)}
+                  disabled={state === 'activating'}
+                  className="w-full h-12 border-2 border-tinta bg-papel text-tinta font-bold rounded-sm flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  <span className="material-symbols-outlined text-lg">add_link</span>
+                  {state === 'activating' ? t('receive.activating') : t('receive.activate', { code: a.code })}
+                </button>
+              </div>
+            );
+          })}
+          {trustError && <p role="alert" className="text-[11px] text-error mt-2">{trustError}</p>}
         </div>
       </main>
     </div>
