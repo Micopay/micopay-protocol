@@ -15,6 +15,7 @@
  *   npx tsx scripts/ensayo-usdc/ensayo.ts flow    el retiro por la API
  *   ASSET=XLM npx tsx scripts/ensayo-usdc/ensayo.ts flow   el mismo retiro en XLM
  *   (con ESCROW_CONTRACTS=USDC=...,XLM=... los dos van al mismo backend)
+ *   npx tsx scripts/ensayo-usdc/ensayo.ts fund G... 100   manda USDC de pruebas
  *
  * El estado (llaves de testnet desechables) vive en ~/.micopay/ensayo-usdc.json.
  */
@@ -200,8 +201,30 @@ async function flow() {
   log(`https://stellar.expert/explorer/testnet/tx/${done.release_tx_hash}`);
 }
 
+/**
+ * Manda USDC de pruebas (testnet) a una billetera, p. ej. la del telefono de la
+ * demo. La billetera debe haber activado USDC antes (Recibir -> Activar USDC).
+ */
+async function fund(destination?: string, amount = '100') {
+  if (!destination) throw new Error('Uso: ensayo.ts fund <direccion G...> [monto]');
+  if (!existsSync(STATE_FILE)) throw new Error('Primero corre `chain`.');
+  const s: State = JSON.parse(readFileSync(STATE_FILE, 'utf8'));
+  const issuer = Keypair.fromSecret(s.issuer);
+  const usdc = new Asset('USDC', issuer.publicKey());
+  const before = await balanceOf(destination, usdc).catch(() => '(cuenta sin fondos)');
+  if (before === '(sin trustline)' || before === '(cuenta sin fondos)') {
+    throw new Error(`La billetera ${destination} no puede recibir USDC: ${before}. Activalo en la app (Recibir).`);
+  }
+  const res = await submit(issuer, [Operation.payment({ destination, asset: usdc, amount })]);
+  log(`Enviados ${amount} USDC. Saldo: ${before} -> ${await balanceOf(destination, usdc)}`);
+  log(`https://stellar.expert/explorer/testnet/tx/${res.hash}`);
+}
+
 const cmd = process.argv[2];
-(cmd === 'chain' ? chain() : cmd === 'flow' ? flow() : Promise.reject(new Error('Uso: ensayo.ts chain|flow')))
+(cmd === 'chain' ? chain()
+  : cmd === 'flow' ? flow()
+  : cmd === 'fund' ? fund(process.argv[3], process.argv[4])
+  : Promise.reject(new Error('Uso: ensayo.ts chain|flow|fund')))
   .catch((e) => {
     console.error(e.message ?? e);
     process.exit(1);
