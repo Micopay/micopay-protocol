@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import {
   ESCROW_ASSET_OPTIONS,
+  VISIBLE_ESCROW_ASSET_OPTIONS,
   getEscrowAssetOption,
   type EscrowAssetOption,
 } from '../constants/escrowAssets';
@@ -73,7 +74,7 @@ export default function AssetSelector({ flow, amountMxn, value, onChange, fetchR
     <fieldset className="flex flex-col gap-2">
       <legend className="mb-2 text-[13px] font-bold text-gris">{title}</legend>
       <div className="flex flex-col divide-y-2 divide-tinta rounded-sm border-2 border-tinta bg-papel">
-        {ESCROW_ASSET_OPTIONS.map((option) => {
+        {VISIBLE_ESCROW_ASSET_OPTIONS.map((option) => {
           const id = `escrow-asset-${option.key.replace(':', '-')}`;
           const checked = option.key === value;
           return (

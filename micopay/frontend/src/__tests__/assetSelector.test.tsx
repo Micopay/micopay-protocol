@@ -38,10 +38,10 @@ describe('AssetSelector', () => {
     render(<AssetSelector flow="cashout" amountMxn={500} value={XLM} onChange={() => {}} fetchRate={async () => ({ rate: 3.263255 })} />);
     expect(radio(XLM).checked).toBe(true);
     expect(radio(XLM).disabled).toBe(false);
-    for (const key of ['stellar:USDC', 'stellar:MXNE', 'xrpl:XRP', 'solana:USDC']) {
+    for (const key of ['stellar:USDC', 'stellar:MXNE']) {
       expect(radio(key).disabled).toBe(true);
     }
-    expect(screen.getAllByText('Próximamente')).toHaveLength(4);
+    expect(screen.getAllByText('Próximamente')).toHaveLength(2);
     await screen.findByTestId('asset-estimate');
   });
 
@@ -54,7 +54,7 @@ describe('AssetSelector', () => {
   it('disabled options are natively disabled and ignore clicks on radio or label', async () => {
     const onChange = vi.fn();
     render(<AssetSelector flow="cashout" amountMxn={500} value={XLM} onChange={onChange} fetchRate={async () => ({ rate: 3.26 })} />);
-    for (const key of ['stellar:USDC', 'solana:USDC']) {
+    for (const key of ['stellar:USDC', 'stellar:MXNE']) {
       const input = radio(key);
       expect(input).toHaveAttribute('disabled');
       fireEvent.click(input);
@@ -62,6 +62,15 @@ describe('AssetSelector', () => {
     }
     expect(onChange).not.toHaveBeenCalled();
     expect(radio(XLM).checked).toBe(true);
+    await screen.findByTestId('asset-estimate');
+  });
+
+  it('does not show XRP or Solana yet', async () => {
+    render(<AssetSelector flow="cashout" amountMxn={500} value={XLM} onChange={() => {}} fetchRate={async () => ({ rate: 3 })} />);
+    expect(screen.queryByDisplayValue('xrpl:XRP')).toBeNull();
+    expect(screen.queryByDisplayValue('solana:USDC')).toBeNull();
+    expect(screen.queryByText('XRPL')).toBeNull();
+    expect(screen.queryByText('Solana')).toBeNull();
     await screen.findByTestId('asset-estimate');
   });
 
