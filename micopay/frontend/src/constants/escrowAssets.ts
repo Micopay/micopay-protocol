@@ -66,6 +66,15 @@ export const ESCROW_ASSET_OPTIONS: readonly EscrowAssetOption[] = (
   ] as const
 ).map((o) => ({ ...o, enabled: isDeployed(o.network, o.code) }));
 
+/**
+ * Las opciones que el selector MUESTRA. XRP y Solana siguen en el catalogo
+ * (son la hoja de ruta) pero, por decision de Eric del 2026-10-08, no se
+ * ensenan todavia: solo las de Stellar, habilitadas o en "Proximamente".
+ */
+export const VISIBLE_ESCROW_ASSET_OPTIONS: readonly EscrowAssetOption[] = ESCROW_ASSET_OPTIONS.filter(
+  (o) => o.network === 'stellar',
+);
+
 export const DEFAULT_ESCROW_ASSET_KEY = `stellar:${DEPLOYED_ESCROW_ASSET}`;
 
 export function getEscrowAssetOption(key: string): EscrowAssetOption | undefined {

@@ -128,7 +128,7 @@ const ReceivePayment = ({ address, onBack }: ReceivePaymentProps) => {
                   disabled={state === 'activating'}
                   className="w-full h-12 border-2 border-tinta bg-papel text-tinta font-bold rounded-sm flex items-center justify-center gap-2 disabled:opacity-60"
                 >
-                  <span className="material-symbols-outlined text-lg">add_link</span>
+                  <span className="material-symbols-outlined text-lg">add_circle</span>
                   {state === 'activating' ? t('receive.activating') : t('receive.activate', { code: a.code })}
                 </button>
               </div>
