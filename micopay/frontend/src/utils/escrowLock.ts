@@ -11,7 +11,7 @@ import { getEscrowAssetOption } from '../constants/escrowAssets';
  * eso antes de que el guard del backend pudiera decir nada.
  *
  * El cliente no envia ninguna transaccion previa al bloqueo:
- *   - el activo de la instancia desplegada: nada que preparar (XLM no usa
+ *   - un activo con escrow desplegado: nada que preparar (XLM no usa
  *     trustline, y quien bloquea USDC ya la tiene porque ya tiene USDC);
  *   - sin `asset_code` (respuesta antigua): nada que preparar; el backend
  *     decide con su guard (409 ASSET_ESCROW_MISMATCH) y el cliente no inventa;
@@ -30,7 +30,7 @@ export class EscrowAssetNotLockableError extends Error {
 
 export function assertNoClientPreparationForLock(assetCode: string | null | undefined): void {
   if (!assetCode) return;
-  // El activo de la instancia desplegada (XLM en testnet, USDC en mainnet).
+  // Un activo con escrow desplegado en esta red (VITE_ESCROW_ASSETS).
   // Quien bloquea un activo emitido ya lo tiene, asi que ya tiene su
   // trustline: tampoco hay nada que preparar.
   if (getEscrowAssetOption(`stellar:${assetCode.toUpperCase()}`)?.enabled) return;

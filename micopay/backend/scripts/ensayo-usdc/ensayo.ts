@@ -13,6 +13,8 @@
  *   (desplegar el escrow con contracts/deploy-mainnet.sh y las variables
  *    que imprime `chain`, y arrancar el backend local con ESCROW_ASSET=USDC)
  *   npx tsx scripts/ensayo-usdc/ensayo.ts flow    el retiro por la API
+ *   ASSET=XLM npx tsx scripts/ensayo-usdc/ensayo.ts flow   el mismo retiro en XLM
+ *   (con ESCROW_CONTRACTS=USDC=...,XLM=... los dos van al mismo backend)
  *
  * El estado (llaves de testnet desechables) vive en ~/.micopay/ensayo-usdc.json.
  */
@@ -31,6 +33,8 @@ const STATE_FILE = join(homedir(), '.micopay', 'ensayo-usdc.json');
 const LAT = 19.4326;
 const LNG = -99.1332;
 const AMOUNT_MXN = 500;
+/** Activo del retiro: USDC (emitido, el caso de mainnet) o XLM. */
+const ASSET = (process.env.ASSET ?? 'USDC').toUpperCase();
 
 type State = { issuer: string; customer: string; agent: string; sac?: string };
 const server = new Horizon.Server(HORIZON);
@@ -55,7 +59,9 @@ async function submit(kp: Keypair, ops: any[]) {
 
 async function balanceOf(pub: string, asset: Asset): Promise<string> {
   const acc = await server.loadAccount(pub);
-  const b = acc.balances.find((x: any) => x.asset_code === asset.code && x.asset_issuer === asset.issuer);
+  const b = asset.isNative()
+    ? acc.balances.find((x: any) => x.asset_type === 'native')
+    : acc.balances.find((x: any) => x.asset_code === asset.code && x.asset_issuer === asset.issuer);
   return (b as any)?.balance ?? '(sin trustline)';
 }
 
@@ -134,7 +140,7 @@ async function flow() {
   const s: State = JSON.parse(readFileSync(STATE_FILE, 'utf8'));
   const customer = Keypair.fromSecret(s.customer);
   const agent = Keypair.fromSecret(s.agent);
-  const usdc = new Asset('USDC', Keypair.fromSecret(s.issuer).publicKey());
+  const usdc = ASSET === 'XLM' ? Asset.native() : new Asset('USDC', Keypair.fromSecret(s.issuer).publicKey());
   const platformPub = Keypair.fromSecret(PLATFORM_SECRET).publicKey();
 
   const before = {
@@ -162,11 +168,11 @@ async function flow() {
   await api('POST', '/merchants/me/activate', {}, agentToken);
   await api('PATCH', '/users/me/availability', { availability: 'online' }, agentToken);
 
-  log('Cliente: busca agentes y crea el retiro en USDC…');
+  log(`Cliente: busca agentes y crea el retiro en ${ASSET}…`);
   const { merchants } = await api('GET', `/merchants/available?lat=${LAT}&lng=${LNG}&amount_mxn=${AMOUNT_MXN}&flow=cashout`);
   const merchant = merchants.find((m: any) => m.username === agentName) ?? merchants[0];
   if (!merchant) throw new Error('No aparecio ningun agente.');
-  const { trade } = await api('POST', '/trades', { counterparty_id: merchant.seller_id, amount_mxn: AMOUNT_MXN, flow: 'cashout', asset_code: 'USDC' }, customerToken);
+  const { trade } = await api('POST', '/trades', { counterparty_id: merchant.seller_id, amount_mxn: AMOUNT_MXN, flow: 'cashout', asset_code: ASSET }, customerToken);
   log(`Operacion ${trade.id}: ${trade.asset_code}, tasa ${trade.rate_mxn}, stroops ${trade.amount_stroops ?? '?'}`);
 
   log('Cliente: bloquea (firma con su llave)…');

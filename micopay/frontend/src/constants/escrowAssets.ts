@@ -5,8 +5,8 @@
  * catalogo de la cartera (`constants/assets.ts`): aquel lista lo que la cartera
  * tiene y envia, incluido CETES; este, lo que un escrow puede bloquear.
  *
- * Solo se habilita el activo de la instancia desplegada (`VITE_ESCROW_ASSET_CODE`).
- * La misma politica vive en el backend (`ESCROW_ASSET`), que rechaza con
+ * Solo se habilitan los activos con escrow desplegado (`VITE_ESCROW_ASSETS`).
+ * La misma politica vive en el backend (`ESCROW_CONTRACTS`), que rechaza con
  * 422 cualquier otro activo; `enabled` aqui solo decide que se puede elegir en
  * la pantalla, nunca que se pueda operar.
  *
@@ -38,14 +38,22 @@ export interface EscrowAssetOption {
 }
 
 /**
- * El activo que bloquea la instancia del escrow a la que apunta este build:
- * XLM en testnet, USDC en mainnet. Es el mismo valor que `ESCROW_ASSET` en el
- * backend; cada instancia del contrato guarda un solo token.
+ * Los activos con escrow desplegado en la red de este build: las claves de
+ * `ESCROW_CONTRACTS` en el backend (una instancia del contrato por activo).
+ * `VITE_ESCROW_ASSETS=USDC,XLM`; sin ella, solo `VITE_ESCROW_ASSET_CODE`.
+ * El default es `VITE_ESCROW_ASSET_CODE` (el primero de la lista si falta).
  */
-const DEPLOYED_ESCROW_ASSET = (import.meta.env.VITE_ESCROW_ASSET_CODE || 'XLM').toUpperCase();
+const DEPLOYED_ESCROW_ASSETS = (
+  import.meta.env.VITE_ESCROW_ASSETS || import.meta.env.VITE_ESCROW_ASSET_CODE || 'XLM'
+)
+  .split(',')
+  .map((c: string) => c.trim().toUpperCase())
+  .filter(Boolean);
+const DEFAULT_CODE = (import.meta.env.VITE_ESCROW_ASSET_CODE || DEPLOYED_ESCROW_ASSETS[0]).toUpperCase();
+const DEPLOYED_ESCROW_ASSET = DEPLOYED_ESCROW_ASSETS.includes(DEFAULT_CODE) ? DEFAULT_CODE : DEPLOYED_ESCROW_ASSETS[0];
 
 function isDeployed(network: EscrowNetwork, code: string): boolean {
-  return network === 'stellar' && code.toUpperCase() === DEPLOYED_ESCROW_ASSET;
+  return network === 'stellar' && DEPLOYED_ESCROW_ASSETS.includes(code.toUpperCase());
 }
 
 export const ESCROW_ASSET_OPTIONS: readonly EscrowAssetOption[] = (

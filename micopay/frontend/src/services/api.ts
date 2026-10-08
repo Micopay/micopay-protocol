@@ -605,9 +605,10 @@ export async function getXlmMxnRate(): Promise<XlmMxnRate> {
   return res.data;
 }
 
-/** Tasas por `code` de `ESCROW_ASSET_OPTIONS`. Solo activos habilitados. */
+/** Tasas por `code` de `ESCROW_ASSET_OPTIONS`. Solo activos con escrow. */
 const ESCROW_RATE_FETCHERS: Record<string, () => Promise<XlmMxnRate>> = {
   XLM: getXlmMxnRate,
+  USDC: getUsdcMxnRate,
 };
 
 /**
