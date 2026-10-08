@@ -294,7 +294,9 @@
     "scanClientQr": "Scan client's QR",
     "verifyingQr": "Verifying QR with the server…",
     "cashConfirmedTitle": "Cash confirmed",
-    "cashConfirmedDesc": "The client can now receive their assets. The trade completes once they release them."
+    "cashConfirmedDesc": "The client can now receive their assets. The trade completes once they release them.",
+    "cashToHand": "You hand over ${{amount}} in cash · your fee: ${{fee}}",
+    "cashToReceive": "You receive ${{amount}} in cash · your fee: ${{fee}}"
   },
   "tier": {
     "Nuevo": "New",
@@ -445,7 +447,11 @@
     "exceedsWarning": "Total effective cost ({{pct}}%) exceeds the recommended {{maxPct}}%. Review before confirming, or go back to the map to pick another offer.",
     "creating": "Creating trade…",
     "confirmBtn": "Confirm",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "cashReceived": "You receive in cash",
+    "cashGiven": "You hand over in cash",
+    "balanceDebited": "Debited from your balance",
+    "balanceReceived": "You receive in your balance"
   },
   "chatRoom": {
     "verified": "Verified",

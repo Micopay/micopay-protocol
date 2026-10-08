@@ -1677,6 +1677,8 @@ export interface MerchantConfirmResult {
    * proveedor ES el comprador, la pantalla le mostraba su propio nombre.
    */
   client_handle: string;
+  /** H5: la comision del agente, para que vea lo que gana con esta entrega. */
+  provider_fee_mxn: number;
   expires_at: string;
   expired: boolean;
   created_at: string;
@@ -1855,6 +1857,7 @@ async function buildConfirmResult(
     amount_mxn: Number(trade.amount_mxn),
     platform_fee_mxn: Number(trade.platform_fee_mxn ?? 0),
     client_handle: client?.username ?? 'Usuario MicoPay',
+    provider_fee_mxn: Number(trade.provider_fee_mxn ?? 0),
     expires_at: trade.expires_at,
     expired: new Date(trade.expires_at) < new Date(),
     created_at: trade.created_at,
