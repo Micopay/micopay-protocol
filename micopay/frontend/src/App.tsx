@@ -298,6 +298,7 @@ function MapDepositRoute() {
                 merchantId: offer.id,
                 merchantName: offer.name,
                 receiveMxn: offer.receiveMxn,
+                clientPaysMxn: offer.clientPaysMxn,
                 commissionPct: offer.commissionPct,
                 amountMxn: activeAmount,
                 platformFeeMxn: offer.platformFeeMxn,
@@ -337,6 +338,7 @@ function MapRoute() {
                 merchantId: offer.id,
                 merchantName: offer.name,
                 receiveMxn: offer.receiveMxn,
+                clientPaysMxn: offer.clientPaysMxn,
                 commissionPct: offer.commissionPct,
                 amountMxn: activeAmount,
                 platformFeeMxn: offer.platformFeeMxn,
@@ -370,6 +372,8 @@ function ConfirmRoute() {
     merchantName: string;
     merchantId: string;
     receiveMxn: number;
+    /** H5: lo que le cuesta al cliente (servidor). */
+    clientPaysMxn?: number;
     commissionPct: number;
     amountMxn: number;
     // Desglose que ya calculo el servidor en el descubrimiento: se arrastra
@@ -394,6 +398,7 @@ function ConfirmRoute() {
       merchantName={state.merchantName}
       merchantId={state.merchantId}
       receiveMxn={state.receiveMxn}
+      clientPaysMxn={state.clientPaysMxn}
       commissionPct={state.commissionPct}
       amountMxn={state.amountMxn}
       platformFeeMxn={state.platformFeeMxn}

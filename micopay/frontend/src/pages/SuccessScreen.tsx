@@ -19,8 +19,10 @@ export interface SuccessReceipt
     completed_at: string | null;
     platform_fee_mxn: number | null;
     provider_fee_mxn: number | null;
-    /** Lo que recibe el cliente, ya descontadas las dos comisiones. */
+    /** Lo que recibe el cliente: efectivo en retiro, saldo en deposito. */
     payout_mxn: number | null;
+    /** H5: lo que pago el cliente (saldo en retiro). Null en operaciones anteriores. */
+    client_pays_mxn: number | null;
 }
 
 type ServerTrade = TradeData & Partial<Omit<TradeDetailResponse['trade'], keyof TradeData>>;
@@ -52,6 +54,7 @@ export function receiptFromServer(
         platform_fee_mxn: numOrNull(trade.platform_fee_mxn),
         provider_fee_mxn: numOrNull(trade.provider_fee_mxn),
         payout_mxn: numOrNull(trade.payout_mxn),
+        client_pays_mxn: numOrNull(trade.client_pays_mxn),
     };
 }
 
@@ -72,7 +75,12 @@ function isMockHash(hash: string | null | undefined): boolean {
 
 const SuccessScreen = ({ type, trade, viewerId, agentName, onHome }: SuccessScreenProps) => {
     const { t } = useTranslation();
-    const amount = trade.amount_mxn.toFixed(2);
+    // H5: en un retiro `cash_in_hand` lo que salio del saldo es el monto mas
+    // las comisiones; el efectivo recibido es el monto. Sin ese dato (operacion
+    // anterior) se muestra el monto, como antes.
+    const amount = (type === 'cashout' && trade.client_pays_mxn !== null
+        ? trade.client_pays_mxn
+        : trade.amount_mxn).toFixed(2);
     // Las dos comisiones y el neto salen de la operacion. Antes el neto era
     // `monto - comision de plataforma`, que ignoraba la del agente.
     const commission =

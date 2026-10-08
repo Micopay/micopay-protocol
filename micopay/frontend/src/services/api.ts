@@ -170,6 +170,15 @@ export interface TradeData {
   amount_stroops?: string | null;
   platform_fee_stroops?: string | null;
   total_locked_stroops?: string | null;
+  /**
+   * H5: `cash_in_hand` = el monto es el efectivo que cambia de mano. Las
+   * anteriores (`amount_is_escrow`) no traen el desglose del cliente.
+   */
+  fee_model?: string | null;
+  /** Lo que paga el cliente: saldo en retiro (monto + comisiones), efectivo en deposito. */
+  client_pays_mxn?: number | null;
+  /** Lo que recibe el cliente: efectivo en retiro, saldo en deposito. */
+  client_receives_mxn?: number | null;
 }
 
 export interface TradeDetailResponse {
@@ -836,8 +845,10 @@ export interface AvailableMerchant {
   /** RED-3: solo si el proveedor consintio publicar su local. */
   storefront_address: string | null;
   distance_km: number;
-  /** Payout the buyer receives for the requested amount. */
+  /** Lo que recibe el cliente: efectivo en retiro, saldo en deposito (H5). */
   payout_mxn: number;
+  /** Lo que le cuesta al cliente: saldo en retiro (monto + comisiones), efectivo en deposito. */
+  client_pays_mxn?: number;
   /** Reputation: fraction 0..1 of completed trades (optional) */
   completion_rate?: number;
   /** Total completed trades (optional) */
@@ -909,6 +920,8 @@ export interface MerchantConfirmResult {
   flow: TradeFlow;
   amount_mxn: number;
   platform_fee_mxn: number;
+  /** H5: comision del agente en esta operacion. */
+  provider_fee_mxn?: number;
   /**
    * CASH-4: la contraparte de quien escanea, es decir el cliente. Antes era
    * `buyer_handle` y en un cash-out el proveedor ES el comprador, así que la

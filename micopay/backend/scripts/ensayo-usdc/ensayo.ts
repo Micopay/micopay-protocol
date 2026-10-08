@@ -15,6 +15,7 @@
  *   npx tsx scripts/ensayo-usdc/ensayo.ts flow    el retiro por la API
  *   ASSET=XLM npx tsx scripts/ensayo-usdc/ensayo.ts flow   el mismo retiro en XLM
  *   (con ESCROW_CONTRACTS=USDC=...,XLM=... los dos van al mismo backend)
+ *   npx tsx scripts/ensayo-usdc/ensayo.ts deposit  un deposito (el otro flujo)
  *   npx tsx scripts/ensayo-usdc/ensayo.ts fund G... 100   manda USDC de pruebas
  *
  * El estado (llaves de testnet desechables) vive en ~/.micopay/ensayo-usdc.json.
@@ -202,6 +203,51 @@ async function flow() {
 }
 
 /**
+ * El otro flujo: un DEPOSITO. El cliente entrega efectivo; el agente bloquea
+ * el activo, confirma que recibio los billetes (reveal) y el cliente libera
+ * hacia su saldo. Requiere haber corrido `flow` antes (agente ya dado de alta).
+ */
+async function deposit() {
+  if (!existsSync(STATE_FILE)) throw new Error('Primero corre `chain` y `flow`.');
+  const s: State = JSON.parse(readFileSync(STATE_FILE, 'utf8'));
+  const customer = Keypair.fromSecret(s.customer);
+  const agent = Keypair.fromSecret(s.agent);
+  const usdc = ASSET === 'XLM' ? Asset.native() : new Asset('USDC', Keypair.fromSecret(s.issuer).publicKey());
+  const platformPub = Keypair.fromSecret(PLATFORM_SECRET).publicKey();
+  const balances = async () => ({
+    customer: await balanceOf(customer.publicKey(), usdc),
+    agent: await balanceOf(agent.publicKey(), usdc),
+    platform: await balanceOf(platformPub, usdc),
+  });
+  log(`Saldos antes: ${JSON.stringify(await balances())}`);
+
+  const agentName = `ensayo_agente_${agent.publicKey().slice(-4).toLowerCase()}`;
+  const agentToken = await registerAndLogin(agent, agentName);
+  const customerToken = await registerAndLogin(customer, `ensayo_cliente_${customer.publicKey().slice(-4).toLowerCase()}`);
+  const { merchants } = await api('GET', `/merchants/available?lat=${LAT}&lng=${LNG}&amount_mxn=${AMOUNT_MXN}&flow=deposit`);
+  const merchant = merchants.find((m: any) => m.username === agentName);
+  if (!merchant) throw new Error('El agente del ensayo no aparecio; corre `flow` primero.');
+  log(`Mapa: entregas $${merchant.client_pays_mxn}, recibes $${merchant.client_receives_mxn}`);
+
+  const { trade } = await api('POST', '/trades', { counterparty_id: merchant.seller_id, amount_mxn: AMOUNT_MXN, flow: 'deposit', asset_code: ASSET }, customerToken);
+  log(`Operacion ${trade.id}: ${trade.asset_code}, tasa ${trade.rate_mxn}, escrow $${trade.escrow_amount_mxn}`);
+
+  log('Agente: bloquea…');
+  const lockPrep = await api('POST', `/trades/${trade.id}/lock/prepare`, {}, agentToken);
+  const locked = await api('POST', `/trades/${trade.id}/lock`, { signed_xdr: sign(agent, lockPrep) }, agentToken);
+  log(`  lock ${locked.lock_tx_hash}`);
+
+  log('Agente: recibio los billetes (reveal)…');
+  await api('POST', `/trades/${trade.id}/reveal`, undefined, agentToken);
+
+  log('Cliente: libera hacia su saldo…');
+  const relPrep = await api('POST', `/trades/${trade.id}/complete/prepare`, {}, customerToken);
+  const done = await api('POST', `/trades/${trade.id}/complete`, { signed_xdr: sign(customer, relPrep) }, customerToken);
+  log(`  release ${done.release_tx_hash} · estado ${done.status}`);
+  log(`Saldos despues: ${JSON.stringify(await balances())}`);
+}
+
+/**
  * Manda USDC de pruebas (testnet) a una billetera, p. ej. la del telefono de la
  * demo. La billetera debe haber activado USDC antes (Recibir -> Activar USDC).
  */
@@ -223,8 +269,9 @@ async function fund(destination?: string, amount = '100') {
 const cmd = process.argv[2];
 (cmd === 'chain' ? chain()
   : cmd === 'flow' ? flow()
+  : cmd === 'deposit' ? deposit()
   : cmd === 'fund' ? fund(process.argv[3], process.argv[4])
-  : Promise.reject(new Error('Uso: ensayo.ts chain|flow|fund')))
+  : Promise.reject(new Error('Uso: ensayo.ts chain|flow|deposit|fund')))
   .catch((e) => {
     console.error(e.message ?? e);
     process.exit(1);
