@@ -1,6 +1,6 @@
 import db from '../db/schema.js';
 import { BadRequestError, NotFoundError } from '../utils/errors.js';
-import { computeTradeFees } from './tradeFees.js';
+import { computeTradeFees, normalizeFeeFlow } from './tradeFees.js';
 
 export const GLOBAL_MIN_AMOUNT_MXN = 100;
 export const GLOBAL_MAX_AMOUNT_MXN = 50000;
@@ -39,8 +39,12 @@ export interface AvailableMerchant {
   /** RED-3: solo si el proveedor consintio publicar su local. */
   storefront_address: string | null;
   distance_km: number;
-  /** Lo que el cliente recibe limpio, ya descontadas AMBAS comisiones. */
+  /** Lo que recibe el cliente: efectivo en retiro, saldo en deposito (H5). */
   payout_mxn: number;
+  /** Lo que le cuesta al cliente: saldo en retiro (monto + comisiones), efectivo en deposito. */
+  client_pays_mxn: number;
+  /** Igual a `payout_mxn`. */
+  client_receives_mxn: number;
   /** Comision del agente en MXN, para este monto. */
   provider_fee_mxn: number;
   /** Comision de MicoPay en MXN, para este monto. */
@@ -60,7 +64,7 @@ export interface AvailableMerchantsQuery {
   lng: number;
   radius_km: number;
   amount_mxn: number;
-  /** 'cashout' | 'deposit' — reserved for future flow-specific filtering */
+  /** 'cashout' | 'deposit'. Decide hacia donde van las comisiones; sin el, deposito. */
   flow?: string;
 }
 
@@ -185,7 +189,7 @@ export async function updateMerchantConfig(userId: string, input: UpdateMerchant
 export async function getAvailableMerchants(
   query: AvailableMerchantsQuery,
 ): Promise<AvailableMerchant[]> {
-  const { lat, lng, radius_km, amount_mxn } = query;
+  const { lat, lng, radius_km, amount_mxn, flow } = query;
 
   const rows = await db.getMany<{
     seller_id: string;
@@ -248,7 +252,9 @@ export async function getAvailableMerchants(
     // plataforma, asi que el mapa prometia un neto que la operacion no cumplia.
     // Ahora sale del mismo modulo que usa `createTrade`, para que la cifra que
     // se ve al elegir agente sea exactamente la que se cobra al aceptar.
-    const fees = computeTradeFees(amount_mxn, ratePercent);
+    // El mismo modulo y el mismo flujo que `createTrade` (H5): la cifra del mapa
+    // es la que se liquida.
+    const fees = computeTradeFees(amount_mxn, ratePercent, normalizeFeeFlow(flow));
     const payoutMxn = fees.payoutMxn;
     const completed = parseInt(r.trades_completed as unknown as string, 10) || 0;
     const terminal = parseInt(r.trades_terminal as unknown as string, 10) || 0;
@@ -278,6 +284,9 @@ export async function getAvailableMerchants(
       provider_fee_mxn: fees.providerFeeMxn,
       platform_fee_mxn: fees.platformFeeMxn,
       effective_fee_percent: fees.effectivePercent,
+      // H5: retiro = paga de su saldo / recibe en efectivo; deposito = al reves.
+      client_pays_mxn: fees.clientPaysMxn,
+      client_receives_mxn: fees.clientReceivesMxn,
       trades_completed: completed,
       completion_rate: completionRate,
       tier,

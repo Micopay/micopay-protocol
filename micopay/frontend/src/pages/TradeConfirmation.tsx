@@ -10,8 +10,15 @@ import { formatEstimateUnits, useEscrowAssetEstimate } from '../hooks/useEscrowA
 export interface TradeConfirmationPageProps {
   merchantName: string;
   merchantId: string;
+  /** Lo que recibe el cliente: efectivo en retiro, saldo en deposito (servidor). */
   receiveMxn: number;
+  /**
+   * H5: lo que le cuesta al cliente, calculado por el servidor. En retiro es lo
+   * que sale de su saldo (monto + comisiones); en deposito, los billetes.
+   */
+  clientPaysMxn?: number;
   commissionPct: number;
+  /** El efectivo que cambia de mano: lo que la persona escribio. */
   amountMxn: number;
   /**
    * Desglose calculado por el servidor. Llega entero para que la pantalla no
@@ -40,6 +47,7 @@ export interface TradeConfirmationPageProps {
 export default function TradeConfirmationPage({
   merchantName,
   receiveMxn,
+  clientPaysMxn,
   commissionPct,
   amountMxn,
   platformFeeMxn,
@@ -56,7 +64,14 @@ export default function TradeConfirmationPage({
 }: TradeConfirmationPageProps) {
   const { t, i18n } = useTranslation();
   const asset = assetKey ? getEscrowAssetOption(assetKey) : undefined;
-  const estimate = useEscrowAssetEstimate(asset?.enabled ? asset.code : null, amountMxn, fetchRate);
+  // H5: el monto escrito es el efectivo. En retiro las comisiones van encima
+  // (sale de tu saldo `clientPays`); en deposito se descuentan (recibes
+  // `receiveMxn` en tu saldo). El estimado en el activo es de lo que se mueve
+  // en tu saldo, no del efectivo.
+  const isCashout = flow === 'cashout';
+  const clientPays = clientPaysMxn ?? (isCashout ? null : amountMxn);
+  const balanceMxn = isCashout ? clientPays : receiveMxn;
+  const estimate = useEscrowAssetEstimate(asset?.enabled ? asset.code : null, balanceMxn ?? amountMxn, fetchRate);
   // Antes la parte del agente se DEDUCIA restando: `receiveMxn` venia del
   // descubrimiento descontando solo la tarifa del agente, y a ese total se le
   // restaba la comision de plataforma. Resultado: un agente al 1.5% aparecia
@@ -136,11 +151,19 @@ export default function TradeConfirmationPage({
             ) : null}
 
             <div className="flex justify-between gap-4 border-t border-linea pt-3">
-              <dt className="text-on-surface-variant">{t('confirm.youReceive')}</dt>
-              <dd className="font-bold text-lg text-verde">
-                ${receiveMxn.toFixed(2)} MXN
+              <dt className="text-on-surface-variant">{isCashout ? t('confirm.cashReceived') : t('confirm.cashGiven')}</dt>
+              <dd className="font-bold text-lg text-verde" data-testid="confirm-cash">
+                ${(isCashout ? receiveMxn : amountMxn).toFixed(2)} MXN
               </dd>
             </div>
+            {balanceMxn !== null ? (
+              <div className="flex justify-between gap-4">
+                <dt className="text-on-surface-variant">{isCashout ? t('confirm.balanceDebited') : t('confirm.balanceReceived')}</dt>
+                <dd className="font-semibold text-right" data-testid="confirm-balance">
+                  ${balanceMxn.toFixed(2)} MXN
+                </dd>
+              </div>
+            ) : null}
 
             <div className="flex justify-between gap-4">
               <dt className="num text-on-surface-variant">{t('confirm.totalFee')}</dt>

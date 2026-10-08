@@ -240,6 +240,35 @@ export function assertLockableEscrowAsset(trade: { id?: string; asset_code?: unk
  *
  * Con datos incompletos devuelve `null` en lugar de adivinar.
  */
+/**
+ * H5 · lo que paga y recibe el CLIENTE, calculado por el servidor para que la
+ * app no reste nada. Solo para operaciones `cash_in_hand`: las anteriores se
+ * liquidaron con otro modelo y sus cifras no admiten esta lectura (null).
+ *
+ *   retiro:   paga monto + comisiones de su saldo; recibe el monto en efectivo
+ *   deposito: paga el monto en efectivo; recibe lo que libera el escrow
+ */
+export function cashBreakdownForTrade(trade: {
+  fee_model?: unknown;
+  flow?: unknown;
+  amount_mxn?: unknown;
+  provider_fee_mxn?: unknown;
+  platform_fee_mxn?: unknown;
+  escrow_amount_mxn?: unknown;
+}): { client_pays_mxn: number | null; client_receives_mxn: number | null } {
+  if (trade.fee_model !== 'cash_in_hand') return { client_pays_mxn: null, client_receives_mxn: null };
+  const amount = Number(trade.amount_mxn);
+  const provider = Number(trade.provider_fee_mxn ?? 0);
+  const platform = Number(trade.platform_fee_mxn ?? 0);
+  const escrow = Number(trade.escrow_amount_mxn);
+  if (![amount, provider, platform, escrow].every(Number.isFinite)) {
+    return { client_pays_mxn: null, client_receives_mxn: null };
+  }
+  return trade.flow === 'cashout'
+    ? { client_pays_mxn: amount + provider + platform, client_receives_mxn: amount }
+    : { client_pays_mxn: amount, client_receives_mxn: escrow };
+}
+
 export function escrowAmountsForTrade(trade: {
   asset_code?: unknown;
   amount_stroops?: unknown;
@@ -368,15 +397,6 @@ export async function createTrade(input: CreateTradeInput) {
   // Generate HTLC secret
   const { secret, secretHash } = generateTradeSecret();
 
-  // El peso es la denominacion del acuerdo; el activo es solo el vehiculo. La
-  // conversion vive en UN sitio (`assetRate.service`) y la tasa se congela aqui.
-  //
-  // Antes esto era `amountMxn * 10^7`, o sea 1 MXN = 1 unidad del activo. Con el
-  // escrow bloqueando XLM a ~3.13 MXN, una operacion de 500 pesos bloqueaba 500
-  // XLM = ~1 563 pesos: el cliente entregaba 3.13 veces lo que valia.
-  const conversion = await convertMxnToAsset(amountMxn, assetCode, request);
-  const amountStroops = conversion.stroops;
-
   // La tarifa del agente se congela AQUI. `merchant_configs.rate_percent` es
   // configuracion mutable: si se leyera al liquidar, un agente podria cambiar
   // retroactivamente lo que cobro por operaciones ya pactadas.
@@ -384,8 +404,27 @@ export async function createTrade(input: CreateTradeInput) {
     'SELECT rate_percent FROM merchant_configs WHERE user_id = $1',
     [providerId],
   );
-  const fees = computeTradeFees(amountMxn, Number(providerConfig?.rate_percent ?? 0));
-  const { providerFeeMxn, platformFeeMxn, payoutMxn } = fees;
+  // H5: el monto escrito es el efectivo que cambia de mano, y lo que va al
+  // contrato es lo que recibe el comprador del escrow (`escrowAmountMxn`), que
+  // ya lleva la comision del agente segun el flujo. Ver `tradeFees.ts`.
+  const fees = computeTradeFees(amountMxn, Number(providerConfig?.rate_percent ?? 0), flow);
+  const { providerFeeMxn, platformFeeMxn, payoutMxn, escrowAmountMxn } = fees;
+  if (escrowAmountMxn < 1) {
+    throw new ValidationError(
+      'AMOUNT_BELOW_FEES',
+      'El monto no alcanza para cubrir las comisiones.',
+      `escrow amount ${escrowAmountMxn} MXN after fees on ${amountMxn} MXN`,
+    );
+  }
+
+  // El peso es la denominacion del acuerdo; el activo es solo el vehiculo. La
+  // conversion vive en UN sitio (`assetRate.service`) y la tasa se congela aqui.
+  //
+  // Antes esto era `amountMxn * 10^7`, o sea 1 MXN = 1 unidad del activo. Con el
+  // escrow bloqueando XLM a ~3.13 MXN, una operacion de 500 pesos bloqueaba 500
+  // XLM = ~1 563 pesos: el cliente entregaba 3.13 veces lo que valia.
+  const conversion = await convertMxnToAsset(escrowAmountMxn, assetCode, request);
+  const amountStroops = conversion.stroops;
 
   // Encrypt and store secret immediately (Option A from spec)
   const { encrypted, nonce } = encryptSecret(secret);
@@ -400,8 +439,9 @@ export async function createTrade(input: CreateTradeInput) {
       (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn,
        provider_fee_mxn, provider_rate_percent, payout_mxn,
        asset_code, rate_mxn, rate_source, rate_locked_at,
-       secret_hash, secret_enc, secret_nonce, status, expires_at, escrow_contract_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'pending', $18, $19)
+       secret_hash, secret_enc, secret_nonce, status, expires_at, escrow_contract_id,
+       fee_model, escrow_amount_mxn)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'pending', $18, $19, $20, $21)
      RETURNING *`;
   // En el MISMO orden que las columnas de arriba. El store en memoria parsea el
   // SQL posicionalmente, asi que intercalar los marcadores lo rompia — y el
@@ -431,6 +471,8 @@ export async function createTrade(input: CreateTradeInput) {
     // El contrato donde se bloqueara, congelado como la tasa: lock, release y
     // refund van a este aunque cambie ESCROW_CONTRACTS. Null con MOCK_STELLAR.
     config.escrowContracts[conversion.assetCode] ?? null,
+    'cash_in_hand',
+    escrowAmountMxn,
   ];
 
   let result: any;
@@ -1635,6 +1677,8 @@ export interface MerchantConfirmResult {
    * proveedor ES el comprador, la pantalla le mostraba su propio nombre.
    */
   client_handle: string;
+  /** H5: la comision del agente, para que vea lo que gana con esta entrega. */
+  provider_fee_mxn: number;
   expires_at: string;
   expired: boolean;
   created_at: string;
@@ -1813,6 +1857,7 @@ async function buildConfirmResult(
     amount_mxn: Number(trade.amount_mxn),
     platform_fee_mxn: Number(trade.platform_fee_mxn ?? 0),
     client_handle: client?.username ?? 'Usuario MicoPay',
+    provider_fee_mxn: Number(trade.provider_fee_mxn ?? 0),
     expires_at: trade.expires_at,
     expired: new Date(trade.expires_at) < new Date(),
     created_at: trade.created_at,

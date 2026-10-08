@@ -347,6 +347,7 @@ const DepositMap = ({
                       id: m.seller_id,
                       name: m.username,
                       receiveMxn: m.payout_mxn,
+                      clientPaysMxn: m.client_pays_mxn,
                       commissionPct: m.rate_percent,
                       platformFeeMxn: m.platform_fee_mxn,
                       providerFeeMxn: m.provider_fee_mxn,

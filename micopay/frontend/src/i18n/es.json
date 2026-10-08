@@ -294,7 +294,9 @@
     "scanClientQr": "Escanear QR del cliente",
     "verifyingQr": "Verificando QR con el servidor…",
     "cashConfirmedTitle": "Efectivo confirmado",
-    "cashConfirmedDesc": "El cliente ya puede recibir sus activos. La operación se completa cuando los libere."
+    "cashConfirmedDesc": "El cliente ya puede recibir sus activos. La operación se completa cuando los libere.",
+    "cashToHand": "Entregas ${{amount}} en efectivo · tu comisión: ${{fee}}",
+    "cashToReceive": "Recibes ${{amount}} en efectivo · tu comisión: ${{fee}}"
   },
   "tier": {
     "Nuevo": "Nuevo",
@@ -445,7 +447,11 @@
     "exceedsWarning": "El costo total efectivo ({{pct}}%) supera el {{maxPct}}% recomendado. Revísalo antes de confirmar, o vuelve al mapa para elegir otra oferta.",
     "creating": "Creando operación…",
     "confirmBtn": "Confirmar",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "cashReceived": "Recibes en efectivo",
+    "cashGiven": "Entregas en efectivo",
+    "balanceDebited": "Sale de tu saldo",
+    "balanceReceived": "Recibes en tu saldo"
   },
   "chatRoom": {
     "verified": "Verificado",

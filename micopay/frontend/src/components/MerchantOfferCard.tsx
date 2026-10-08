@@ -112,7 +112,15 @@ export default function MerchantOfferCard({
 }: MerchantCardProps) {
   const { t } = useTranslation();
   const labelKeys = EXCHANGE_LABEL_KEYS[flow];
-  const commissionMxn = (amount - merchant.payout_mxn).toFixed(2);
+  // H5: en retiro el cliente recibe el monto completo y las comisiones van
+  // encima, asi que `monto - payout` daria 0. El desglose viene del servidor.
+  const commissionMxn =
+    merchant.provider_fee_mxn !== undefined && merchant.platform_fee_mxn !== undefined
+      ? (merchant.provider_fee_mxn + merchant.platform_fee_mxn).toFixed(2)
+      : Math.abs(amount - merchant.payout_mxn).toFixed(2);
+  // Lo que entrega el cliente: en retiro sale de su saldo (monto + comisiones);
+  // en deposito son los billetes que escribio.
+  const givesMxn = flow === 'cashout' && merchant.client_pays_mxn !== undefined ? merchant.client_pays_mxn : amount;
   const distanceLabel = formatDistance(merchant.distance_km);
   const platformFeePct = merchant.platform_fee_pct ?? PLATFORM_FEE_PERCENT;
 
@@ -191,7 +199,7 @@ export default function MerchantOfferCard({
             <div className="space-y-1">
               <p className="text-[10px] text-gris uppercase font-bold tracking-[.1em]">{t(labelKeys.gives)}</p>
               <p className="num font-bold text-naranja">
-                {t('offerCard.amountMxn', { amount })}
+                {t('offerCard.amountMxn', { amount: givesMxn.toFixed(2) })}
               </p>
             </div>
             <span className="material-symbols-outlined text-gris">trending_flat</span>

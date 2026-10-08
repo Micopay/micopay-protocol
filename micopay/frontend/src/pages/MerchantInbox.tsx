@@ -128,11 +128,19 @@ function TradeConfirmationCard({
             ${data.amount_mxn.toLocaleString('es-MX')}{' '}
             <span className="text-base font-medium text-gray-400">MXN</span>
           </p>
-          {data.platform_fee_mxn > 0 && (
+          {/* H5: el monto es el efectivo que cambia de mano. Lo que le importa
+              al agente es su comision; la de plataforma la paga el cliente. */}
+          {data.provider_fee_mxn !== undefined ? (
+            <p className="text-xs text-gray-500 mt-1">
+              {data.flow === 'cashout'
+                ? t('inbox.cashToHand', { amount: data.amount_mxn, fee: data.provider_fee_mxn })
+                : t('inbox.cashToReceive', { amount: data.amount_mxn, fee: data.provider_fee_mxn })}
+            </p>
+          ) : data.platform_fee_mxn > 0 ? (
             <p className="text-xs text-gray-500 mt-1">
               {t('inbox.platformFee', { amount: data.platform_fee_mxn })}
             </p>
-          )}
+          ) : null}
         </div>
 
         {/* Details */}

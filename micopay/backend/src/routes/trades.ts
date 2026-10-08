@@ -92,7 +92,7 @@ export async function tradeRoutes(app: FastifyInstance) {
     const { secret_enc, secret_nonce, ...safeTrade } = trade;
 
     reply.status(201);
-    return { trade: { ...safeTrade, ...tradeService.escrowAmountsForTrade(trade) } };
+    return { trade: { ...safeTrade, ...tradeService.escrowAmountsForTrade(trade), ...tradeService.cashBreakdownForTrade(trade) } };
   });
 
   /**
@@ -155,7 +155,7 @@ export async function tradeRoutes(app: FastifyInstance) {
 
     const { secret_enc, secret_nonce, ...safeTrade } = trade;
     return {
-      trade: { ...safeTrade, ...tradeService.escrowAmountsForTrade(trade) },
+      trade: { ...safeTrade, ...tradeService.escrowAmountsForTrade(trade), ...tradeService.cashBreakdownForTrade(trade) },
       merchant_unavailable,
       seller_username,
       buyer_username,
