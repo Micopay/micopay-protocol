@@ -15,6 +15,7 @@ import { generateTradeSecret, encryptSecret, decryptSecret } from './secret.serv
 import { createHash, randomBytes } from 'crypto';
 import type { FastifyRequest } from 'fastify';
 import { prepareLockTx, submitLockTx, prepareReleaseTx, submitReleaseTx, callRefundOnChain, verifyLockOnChain, assertNotReplayed } from './stellar.service.js';
+import { escrowContractForTrade } from './escrowContract.js';
 import { AppError, NotFoundError, ForbiddenError, ConflictError, BadRequestError, AuthError, ValidationError, TradeStateError, MerchantLimitError, KycMonthlyCapExceededError } from '../utils/errors.js';
 import {
   getTradeAuditTrail as getTradeAuditTrailRows,
@@ -399,8 +400,8 @@ export async function createTrade(input: CreateTradeInput) {
       (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn,
        provider_fee_mxn, provider_rate_percent, payout_mxn,
        asset_code, rate_mxn, rate_source, rate_locked_at,
-       secret_hash, secret_enc, secret_nonce, status, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'pending', $18)
+       secret_hash, secret_enc, secret_nonce, status, expires_at, escrow_contract_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'pending', $18, $19)
      RETURNING *`;
   // En el MISMO orden que las columnas de arriba. El store en memoria parsea el
   // SQL posicionalmente, asi que intercalar los marcadores lo rompia — y el
@@ -427,6 +428,9 @@ export async function createTrade(input: CreateTradeInput) {
     encrypted,
     nonce,
     expiresAt,
+    // El contrato donde se bloqueara, congelado como la tasa: lock, release y
+    // refund van a este aunque cambie ESCROW_CONTRACTS. Null con MOCK_STELLAR.
+    config.escrowContracts[conversion.assetCode] ?? null,
   ];
 
   let result: any;
@@ -676,6 +680,7 @@ export async function prepareLockTrade(
 
   const { xdr, networkPassphrase } = await prepareLockTx({
     request,
+    contractId: escrowContractForTrade(trade),
     sellerAddress: seller.stellar_address,
     buyerAddress: buyer.stellar_address,
     amountStroops: BigInt(trade.amount_stroops),
@@ -724,6 +729,7 @@ export async function lockTrade(
 
       const result = await submitLockTx({
         request,
+        contractId: escrowContractForTrade(trade),
         signedXdr,
         sellerAddress: seller.stellar_address,
         buyerAddress: buyer.stellar_address,
@@ -997,6 +1003,7 @@ export async function prepareReleaseTrade(request: FastifyRequest, tradeId: stri
 
   const { xdr, networkPassphrase } = await prepareReleaseTx({
     request,
+    contractId: escrowContractForTrade(trade),
     buyerAddress: buyer.stellar_address,
     tradeIdBytes,
     secretBytes,
@@ -1067,7 +1074,7 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
       const tradeIdBytes = createHash('sha256').update(secretHashBytes).digest();
       const secretBytes = Buffer.from(secret, 'hex');
 
-      const result = await submitReleaseTx({ request, signedXdr, tradeIdBytes, secretBytes });
+      const result = await submitReleaseTx({ request, contractId: escrowContractForTrade(trade), signedXdr, tradeIdBytes, secretBytes });
       releaseTxHash = result.txHash;
     } else {
       // Con MOCK_STELLAR el hash lo inventa el backend. Usar solo Date.now()
@@ -1298,7 +1305,7 @@ export interface RefundTradeResult {
 async function executeRefundOnChain(
   request: Pick<FastifyRequest, 'log'>,
   tradeId: string,
-  trade: { status: string; secret_hash: string },
+  trade: { status: string; secret_hash: string; asset_code?: string | null; escrow_contract_id?: string | null },
   actorUserId: string,
   extraMetadata: Record<string, unknown> = {},
 ): Promise<RefundTradeResult> {
@@ -1308,7 +1315,7 @@ async function executeRefundOnChain(
     const secretHashBytes = Buffer.from(trade.secret_hash, 'hex');
     const tradeIdBytes = createHash('sha256').update(secretHashBytes).digest();
 
-    const result = await callRefundOnChain({ request, tradeIdBytes });
+    const result = await callRefundOnChain({ request, contractId: escrowContractForTrade(trade), tradeIdBytes });
     refundTxHash = result.txHash;
   } else {
     refundTxHash = `mock_refund_${Date.now()}_${randomBytes(4).toString('hex')}`;
@@ -1484,7 +1491,7 @@ export async function sweepPendingRefunds(
   const candidates = await db.getMany<{
     id: string; status: string; secret_hash: string; seller_id: string; expires_at: string;
   }>(
-    `SELECT id, status, secret_hash, seller_id, expires_at FROM trades
+    `SELECT id, status, secret_hash, seller_id, expires_at, asset_code, escrow_contract_id FROM trades
      WHERE status = 'cancelled'
        AND lock_tx_hash IS NOT NULL
        AND release_tx_hash IS NULL

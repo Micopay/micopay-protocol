@@ -11,7 +11,9 @@ necesita fondos ya está hecho y probado (ver "Ensayo").
 | USDC (Circle) | `USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN` |
 | SAC de USDC | `CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75` (verificado en cadena 2026-10-07) |
 | RPC | `https://mainnet.sorobanrpc.com` (respaldo: `https://soroban-rpc.mainnet.stellar.gateway.fm`, `https://rpc.lightsail.network`) |
-| Escrow (mainnet) | _pendiente: lo imprime `deploy-mainnet.sh`_ |
+| SAC de XLM | `CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA` (derivado con el SDK) |
+| Escrow USDC (mainnet) | _pendiente: `TOKEN=USDC bash deploy-mainnet.sh`_ |
+| Escrow XLM (mainnet) | _pendiente: `TOKEN=XLM bash deploy-mainnet.sh`_ |
 
 ## 1. Contrato
 
@@ -19,7 +21,8 @@ Requiere el fix de `lock` (PR #420) en main.
 
 ```bash
 cd micopay/contracts
-bash deploy-mainnet.sh   # trustline USDC de la plataforma, deploy, initialize
+TOKEN=USDC bash deploy-mainnet.sh   # trustline USDC de la plataforma, deploy, initialize
+TOKEN=XLM  bash deploy-mainnet.sh   # segunda instancia, para XLM
 ```
 
 ## 2. Backend (dos servicios, la misma imagen)
@@ -30,12 +33,15 @@ bash deploy-mainnet.sh   # trustline USDC de la plataforma, deploy, initialize
 | Base | `micopay` (la actual) | `micopay_mainnet` (mismo RDS) |
 | `STELLAR_NETWORK` | `TESTNET` | `PUBLIC` |
 | `STELLAR_RPC_URL` | `https://soroban-testnet.stellar.org` | RPC de arriba |
-| `ESCROW_CONTRACT_ID` | `CB4M…LO3HZ` | el del paso 1 |
-| `ESCROW_ASSET` | `XLM` | `USDC` |
+| `ESCROW_CONTRACTS` | `USDC=CDUI…,XLM=CBFD…` (ver TESTNET.md) | `USDC=<paso 1>,XLM=<paso 1>` |
+| `ESCROW_LEGACY_CONTRACT_ID` | `CB4M…LO3HZ` | — |
+| `ESCROW_ASSET` (default) | `XLM` | `USDC` |
 | `SEED_DEMO_DATA` | `true` | `false` |
 | Secretos SSM | `/micopay/prod/*` | `/micopay/mainnet/*`: `DATABASE_URL`, `JWT_SECRET` y `SECRET_ENCRYPTION_KEY` nuevos, `PLATFORM_SECRET_KEY` de mainnet |
 
-`MXNE_CONTRACT_ID` ya es opcional. Pasos: crear la base y migrarla, los
+`MXNE_CONTRACT_ID` ya es opcional. Cada operacion congela su contrato en
+`trades.escrow_contract_id` (migracion `20261007120000`): no cambiar el contrato
+de un activo mientras haya operaciones abiertas en el anterior. Pasos: crear la base y migrarla, los
 parametros SSM, la task definition `micopay-backend-mainnet`, el target group
 y la regla por host en el listener 443 de `micopay-alb`, el servicio, y el DNS
 de `api-testnet` en Cloudflare.
@@ -53,7 +59,7 @@ MICOPAY_NETWORK=mainnet npx tsx scripts/demo-agent/bot.ts run
 ## 4. APK
 
 `npm run build:mainnet` en `micopay/frontend` (`.env.mainnet`: `PUBLIC`,
-`VITE_ESCROW_ASSET_CODE=USDC`, `api.micopay.app`). La billetera del cliente
+`VITE_ESCROW_ASSETS=USDC,XLM` con USDC por defecto, `api.micopay.app`). La billetera del cliente
 necesita XLM, trustline de USDC y los USDC a retirar.
 
 ## Ensayo (testnet, 2026-10-07)
@@ -67,3 +73,8 @@ Release: https://stellar.expert/explorer/testnet/tx/2e54495a55d108ca12b77623106b
 
 Pendiente conocido: H5, el contrato no cobra la comision del agente
 (`docs/PLAN_COMISIONES_EFECTIVO_2026-09-24.md`).
+
+Ensayo multiactivo (mismo dia): un backend con `ESCROW_CONTRACTS=USDC=CDUI…,XLM=CBFD…`
+cerro un retiro en USDC y otro en XLM; cada operacion quedo con su contrato en
+`escrow_contract_id`. Release XLM:
+https://stellar.expert/explorer/testnet/tx/dab63527af17a85c1b354d0d944d484130b71bab31b45178b54ed886576b123c

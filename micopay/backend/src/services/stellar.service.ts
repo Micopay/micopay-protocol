@@ -46,7 +46,7 @@ function getHorizonUrl(): string {
  */
 async function assertInvocationMatches(
   tx: import('@stellar/stellar-sdk').Transaction | import('@stellar/stellar-sdk').FeeBumpTransaction,
-  expected: { functionName: string; args: unknown[] },
+  expected: { contractId: string; functionName: string; args: unknown[] },
 ) {
   const { Address, scValToNative, FeeBumpTransaction } = await import('@stellar/stellar-sdk');
 
@@ -66,8 +66,8 @@ async function assertInvocationMatches(
 
   const invocation = hostFn.invokeContract();
   const contractId = Address.fromScAddress(invocation.contractAddress()).toString();
-  if (contractId !== config.escrowContractId) {
-    throw new BadRequestError('TX_CONTRACT_MISMATCH', 'La transacción firmada no corresponde al contrato de escrow.', `Expected contract ${config.escrowContractId}, got ${contractId}`);
+  if (contractId !== expected.contractId) {
+    throw new BadRequestError('TX_CONTRACT_MISMATCH', 'La transacción firmada no corresponde al contrato de escrow.', `Expected contract ${expected.contractId}, got ${contractId}`);
   }
 
   const functionName = invocation.functionName().toString();
@@ -142,6 +142,8 @@ async function pollForConfirmation(
  */
 export async function prepareLockTx(params: {
   request: FastifyRequest;
+  /** Contrato del escrow de la operacion (`escrowContractForTrade`). */
+  contractId: string;
   sellerAddress: string;
   buyerAddress: string;
   amountStroops: bigint;
@@ -167,7 +169,7 @@ export async function prepareLockTx(params: {
   const networkPassphrase = getNetworkPassphrase(Networks);
 
   const account = await rpcRead(config.stellarRpcUrl, (s) => s.getAccount(sellerAddress));
-  const contract = new Contract(config.escrowContractId);
+  const contract = new Contract(params.contractId);
 
   const secretHashBytes = Buffer.from(secretHash, 'hex');
 
@@ -207,6 +209,8 @@ export async function prepareLockTx(params: {
  */
 export async function submitLockTx(params: {
   request: FastifyRequest;
+  /** Contrato del escrow de la operacion (`escrowContractForTrade`). */
+  contractId: string;
   signedXdr: string;
   sellerAddress: string;
   buyerAddress: string;
@@ -220,6 +224,7 @@ export async function submitLockTx(params: {
   const tx = TransactionBuilder.fromXDR(params.signedXdr, networkPassphrase);
 
   await assertInvocationMatches(tx, {
+    contractId: params.contractId,
     functionName: 'lock',
     args: [
       params.sellerAddress,
@@ -255,6 +260,8 @@ export async function submitLockTx(params: {
  */
 export async function prepareReleaseTx(params: {
   request: FastifyRequest;
+  /** Contrato del escrow de la operacion (`escrowContractForTrade`). */
+  contractId: string;
   buyerAddress: string;
   tradeIdBytes: Buffer; // 32 bytes: sha256(secret_hash_bytes)
   secretBytes: Buffer; // 32 bytes: raw HTLC preimage
@@ -266,7 +273,7 @@ export async function prepareReleaseTx(params: {
   const networkPassphrase = getNetworkPassphrase(Networks);
 
   const account = await rpcRead(config.stellarRpcUrl, (s) => s.getAccount(buyerAddress));
-  const contract = new Contract(config.escrowContractId);
+  const contract = new Contract(params.contractId);
 
   const tx = new TransactionBuilder(account, { fee: '1000000', networkPassphrase })
     .addOperation(
@@ -300,6 +307,8 @@ export async function prepareReleaseTx(params: {
  */
 export async function submitReleaseTx(params: {
   request: FastifyRequest;
+  /** Contrato del escrow de la operacion (`escrowContractForTrade`). */
+  contractId: string;
   signedXdr: string;
   tradeIdBytes: Buffer;
   secretBytes: Buffer;
@@ -310,6 +319,7 @@ export async function submitReleaseTx(params: {
   const tx = TransactionBuilder.fromXDR(params.signedXdr, networkPassphrase);
 
   await assertInvocationMatches(tx, {
+    contractId: params.contractId,
     functionName: 'release',
     args: [params.tradeIdBytes, params.secretBytes],
   });
@@ -342,6 +352,8 @@ export async function submitReleaseTx(params: {
  */
 export async function callRefundOnChain(params: {
   request: { log: { info: (...args: any[]) => void; error: (...args: any[]) => void; [key: string]: any } };
+  /** Contrato del escrow de la operacion (`escrowContractForTrade`). */
+  contractId: string;
   tradeIdBytes: Buffer;
 }): Promise<{ txHash: string }> {
   const {
@@ -356,7 +368,7 @@ export async function callRefundOnChain(params: {
   const platformAddress = keypair.publicKey();
 
   const account = await rpcRead(config.stellarRpcUrl, (s) => s.getAccount(platformAddress));
-  const contract = new Contract(config.escrowContractId);
+  const contract = new Contract(params.contractId);
 
   const tx = new TransactionBuilder(account, { fee: '1000000', networkPassphrase })
     .addOperation(
