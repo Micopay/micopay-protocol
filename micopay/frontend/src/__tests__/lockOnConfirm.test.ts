@@ -101,8 +101,13 @@ describe('el activo del escrow', () => {
   });
 
   it('está declarado explícitamente en el entorno de testnet', () => {
-    // Heredarlo de `.env` en silencio fue como se coló el USDC.
-    expect(read('.env.testnet')).toMatch(/VITE_ESCROW_ASSET_CODE=XLM/);
+    // Heredarlo de `.env` en silencio fue como se coló el USDC. Hoy testnet
+    // tiene escrow de USDC y de XLM (contracts/TESTNET.md), y los dos se
+    // declaran a la vista, junto con el emisor del USDC de pruebas.
+    const env = read('.env.testnet');
+    expect(env).toMatch(/^VITE_ESCROW_ASSET_CODE=USDC$/m);
+    expect(env).toMatch(/^VITE_ESCROW_ASSETS=USDC,XLM$/m);
+    expect(env).toMatch(/^VITE_USDC_ISSUER=GADK7SUS7NHIGERQBKF7R67A5DNIEFWG4YKNHLTQM5JN4KP2QISMJSHG$/m);
   });
 });
 

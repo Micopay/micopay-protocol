@@ -453,6 +453,15 @@ export async function completeTrade(
     tradeId: string,
     token: string,
 ): Promise<CompleteTradeResponse> {
+  // Quien recibe un activo emitido (USDC) necesita su trustline ANTES del
+  // prepare: sin ella la simulacion del release falla. El activo sale de la
+  // operacion, no de la configuracion del APK. XLM no necesita nada.
+  const trade = await getTrade(tradeId, token);
+  if (trade.asset_code && trade.asset_code.toUpperCase() !== 'XLM') {
+    const { ensureTrustline } = await import('./payment');
+    await ensureTrustline(trade.asset_code);
+  }
+
   const prepareRes = await http.post(`/trades/${tradeId}/complete/prepare`, {}, authHeaders(token));
   const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
   const signedXdr =
@@ -596,9 +605,10 @@ export async function getXlmMxnRate(): Promise<XlmMxnRate> {
   return res.data;
 }
 
-/** Tasas por `code` de `ESCROW_ASSET_OPTIONS`. Solo activos habilitados. */
+/** Tasas por `code` de `ESCROW_ASSET_OPTIONS`. Solo activos con escrow. */
 const ESCROW_RATE_FETCHERS: Record<string, () => Promise<XlmMxnRate>> = {
   XLM: getXlmMxnRate,
+  USDC: getUsdcMxnRate,
 };
 
 /**

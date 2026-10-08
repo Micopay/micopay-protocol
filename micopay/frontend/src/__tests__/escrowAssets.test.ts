@@ -96,8 +96,8 @@ describe('escrow asset rate', () => {
     await expect(getEscrowAssetRate('XLM')).rejects.toThrow(/Invalid escrow asset rate/);
   });
 
-  it('has no rate source for disabled assets', async () => {
-    await expect(getEscrowAssetRate('USDC')).rejects.toThrow(/No rate source/);
+  it('has no rate source for assets without escrow (MXNe)', async () => {
+    await expect(getEscrowAssetRate('MXNe')).rejects.toThrow(/No rate source/);
     expect(get).not.toHaveBeenCalled();
   });
 });

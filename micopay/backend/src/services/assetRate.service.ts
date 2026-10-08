@@ -33,6 +33,7 @@
 import type { FastifyRequest } from 'fastify';
 import { AppError, BadRequestError, ValidationError } from '../utils/errors.js';
 import { getRateMxn } from '../routes/rate.js';
+import { config } from '../config.js';
 
 /** Decimales de un token Soroban estandar (y de XLM). */
 const SCALE = 10_000_000n;
@@ -66,22 +67,49 @@ const ASSETS = {
 
 export type SupportedAsset = keyof typeof ASSETS;
 
-export const DEFAULT_ASSET: SupportedAsset = 'XLM';
-
 export function isSupportedAsset(code: string): code is SupportedAsset {
   return Object.prototype.hasOwnProperty.call(ASSETS, code);
 }
+
+function toSupportedAsset(raw: string, origin: string): SupportedAsset {
+  const code = raw.trim().toUpperCase();
+  if (!isSupportedAsset(code)) {
+    throw new Error(`${origin} invalido: "${raw}". Valores posibles: ${Object.keys(ASSETS).join(', ')}`);
+  }
+  return code;
+}
+
+/**
+ * Los activos con escrow desplegado en esta red: las claves de
+ * `ESCROW_CONTRACTS` (cada instancia del contrato guarda un solo token). Un
+ * activo desconocido tumba el arranque en vez de aceptar operaciones que
+ * ningun contrato podria bloquear.
+ */
+const DEPLOYED_ESCROW_ASSETS: readonly SupportedAsset[] = Object.keys(config.escrowContracts).map((a) =>
+  toSupportedAsset(a, 'ESCROW_CONTRACTS'),
+);
+
+/**
+ * El activo de una operacion que no lo pide: `ESCROW_ASSET` si tiene contrato,
+ * si no el primero desplegado. Con MOCK_STELLAR no hay contratos y se usa
+ * `ESCROW_ASSET` tal cual.
+ */
+export const DEFAULT_ASSET: SupportedAsset = (() => {
+  const wanted = toSupportedAsset(config.escrowAsset, 'ESCROW_ASSET');
+  if (DEPLOYED_ESCROW_ASSETS.length === 0 || DEPLOYED_ESCROW_ASSETS.includes(wanted)) return wanted;
+  return DEPLOYED_ESCROW_ASSETS[0];
+})();
 
 /**
  * Activos con los que se puede OPERAR hoy: los que tienen un escrow desplegado.
  *
  * No confundir con `isSupportedAsset`. Aquel dice que la aritmetica sabe
- * convertir el activo; este, que existe un contrato capaz de bloquearlo. USDC y
- * MXNE estan en el primero y no en este: una operacion en USDC se crearia con
- * montos correctos y luego se intentaria bloquear en el contrato del XLM
- * nativo. Un activo entra aqui cuando WP3 despliega su instancia.
+ * convertir el activo; este, que existe un contrato capaz de bloquearlo (las
+ * claves de `ESCROW_CONTRACTS`). Si se aceptara otro, la operacion se crearia
+ * con montos correctos y no habria contrato donde bloquearla.
  */
-export const ENABLED_ESCROW_ASSETS: readonly SupportedAsset[] = ['XLM'];
+export const ENABLED_ESCROW_ASSETS: readonly SupportedAsset[] =
+  DEPLOYED_ESCROW_ASSETS.length > 0 ? DEPLOYED_ESCROW_ASSETS : [DEFAULT_ASSET];
 
 /** Longitud de `trades.asset_code` (VARCHAR(12)). */
 export const ASSET_CODE_MAX_LENGTH = 12;

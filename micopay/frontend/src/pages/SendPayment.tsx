@@ -4,6 +4,7 @@ import { SENDABLE_ASSETS, getAsset } from '../constants/assets';
 import { useWalletBalance } from '../hooks/useWalletBalance';
 import { useQRScanner } from '../hooks/useQRScanner';
 import { sendPayment, isValidStellarAddress, PaymentError, type SendResult } from '../services/payment';
+import { STELLAR_NETWORK_LABEL } from '../utils/stellarExplorer';
 
 interface SendPaymentProps {
   onBack: () => void;
@@ -222,7 +223,7 @@ const SendPayment = ({ onBack, onDone }: SendPaymentProps) => {
               <div className="h-0.5 bg-linea" />
               <Row label={t('send.to')} value={`${destination.slice(0, 8)}…${destination.slice(-6)}`} mono />
               {memo.trim() && <Row label={t('send.note')} value={memo.trim()} />}
-              <Row label={t('send.network')} value={t('send.networkName')} />
+              <Row label={t('send.network')} value={t('send.networkName', { network: STELLAR_NETWORK_LABEL })} />
               <Row label={t('send.fee')} value={t('send.feeValue')} />
             </div>
             <p className="text-[11px] text-gris text-center px-4">

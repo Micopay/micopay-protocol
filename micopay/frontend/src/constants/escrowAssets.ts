@@ -5,8 +5,8 @@
  * catalogo de la cartera (`constants/assets.ts`): aquel lista lo que la cartera
  * tiene y envia, incluido CETES; este, lo que un escrow puede bloquear.
  *
- * Solo XLM en Stellar esta habilitado: es el unico con escrow desplegado. La
- * misma politica vive en el backend (`ENABLED_ESCROW_ASSETS`), que rechaza con
+ * Solo se habilitan los activos con escrow desplegado (`VITE_ESCROW_ASSETS`).
+ * La misma politica vive en el backend (`ESCROW_CONTRACTS`), que rechaza con
  * 422 cualquier otro activo; `enabled` aqui solo decide que se puede elegir en
  * la pantalla, nunca que se pueda operar.
  *
@@ -37,15 +37,36 @@ export interface EscrowAssetOption {
   displayDecimals: number;
 }
 
-export const ESCROW_ASSET_OPTIONS: readonly EscrowAssetOption[] = [
-  { key: 'stellar:XLM', code: 'XLM', network: 'stellar', networkLabel: 'Stellar', enabled: true, displayDecimals: 2 },
-  { key: 'stellar:USDC', code: 'USDC', network: 'stellar', networkLabel: 'Stellar', enabled: false, displayDecimals: 2 },
-  { key: 'stellar:MXNE', code: 'MXNe', network: 'stellar', networkLabel: 'Stellar', enabled: false, displayDecimals: 2 },
-  { key: 'xrpl:XRP', code: 'XRP', network: 'xrpl', networkLabel: 'XRPL', enabled: false, displayDecimals: 2 },
-  { key: 'solana:USDC', code: 'USDC', network: 'solana', networkLabel: 'Solana', enabled: false, displayDecimals: 2 },
-];
+/**
+ * Los activos con escrow desplegado en la red de este build: las claves de
+ * `ESCROW_CONTRACTS` en el backend (una instancia del contrato por activo).
+ * `VITE_ESCROW_ASSETS=USDC,XLM`; sin ella, solo `VITE_ESCROW_ASSET_CODE`.
+ * El default es `VITE_ESCROW_ASSET_CODE` (el primero de la lista si falta).
+ */
+const DEPLOYED_ESCROW_ASSETS = (
+  import.meta.env.VITE_ESCROW_ASSETS || import.meta.env.VITE_ESCROW_ASSET_CODE || 'XLM'
+)
+  .split(',')
+  .map((c: string) => c.trim().toUpperCase())
+  .filter(Boolean);
+const DEFAULT_CODE = (import.meta.env.VITE_ESCROW_ASSET_CODE || DEPLOYED_ESCROW_ASSETS[0]).toUpperCase();
+const DEPLOYED_ESCROW_ASSET = DEPLOYED_ESCROW_ASSETS.includes(DEFAULT_CODE) ? DEFAULT_CODE : DEPLOYED_ESCROW_ASSETS[0];
 
-export const DEFAULT_ESCROW_ASSET_KEY = 'stellar:XLM';
+function isDeployed(network: EscrowNetwork, code: string): boolean {
+  return network === 'stellar' && DEPLOYED_ESCROW_ASSETS.includes(code.toUpperCase());
+}
+
+export const ESCROW_ASSET_OPTIONS: readonly EscrowAssetOption[] = (
+  [
+    { key: 'stellar:XLM', code: 'XLM', network: 'stellar', networkLabel: 'Stellar', displayDecimals: 2 },
+    { key: 'stellar:USDC', code: 'USDC', network: 'stellar', networkLabel: 'Stellar', displayDecimals: 2 },
+    { key: 'stellar:MXNE', code: 'MXNe', network: 'stellar', networkLabel: 'Stellar', displayDecimals: 2 },
+    { key: 'xrpl:XRP', code: 'XRP', network: 'xrpl', networkLabel: 'XRPL', displayDecimals: 2 },
+    { key: 'solana:USDC', code: 'USDC', network: 'solana', networkLabel: 'Solana', displayDecimals: 2 },
+  ] as const
+).map((o) => ({ ...o, enabled: isDeployed(o.network, o.code) }));
+
+export const DEFAULT_ESCROW_ASSET_KEY = `stellar:${DEPLOYED_ESCROW_ASSET}`;
 
 export function getEscrowAssetOption(key: string): EscrowAssetOption | undefined {
   return ESCROW_ASSET_OPTIONS.find((o) => o.key === key);

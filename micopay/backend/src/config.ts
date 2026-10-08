@@ -132,6 +132,38 @@ function parseKycMonthlyVolumeCeilings(json: string | undefined): Record<number,
   }
 }
 
+/**
+ * Instancias del escrow, una por activo: cada contrato guarda UN token desde
+ * `initialize`. Formato `ESCROW_CONTRACTS=USDC=C...,XLM=C...`.
+ * Sin esa variable se usa la forma anterior (`ESCROW_ASSET` + `ESCROW_CONTRACT_ID`),
+ * para que un despliegue viejo siga arrancando igual.
+ */
+function parseEscrowContracts(
+  raw: string | undefined,
+  legacyContractId: string,
+  legacyAsset: string,
+): Record<string, string> {
+  if (!raw || !raw.trim()) {
+    return legacyContractId ? { [legacyAsset.trim().toUpperCase()]: legacyContractId } : {};
+  }
+  const map: Record<string, string> = {};
+  for (const pair of raw.split(',')) {
+    const [asset, contractId] = pair.split('=').map((x) => x?.trim());
+    if (!asset || !contractId) {
+      throw new Error(`ESCROW_CONTRACTS mal formado: "${pair}". Se espera ACTIVO=CONTRATO.`);
+    }
+    map[asset.toUpperCase()] = contractId;
+  }
+  return map;
+}
+
+const ESCROW_ASSET_ENV = process.env.ESCROW_ASSET || 'XLM';
+const ESCROW_CONTRACTS = parseEscrowContracts(
+  process.env.ESCROW_CONTRACTS,
+  process.env.ESCROW_CONTRACT_ID || '',
+  ESCROW_ASSET_ENV,
+);
+
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   databaseUrl: process.env.DATABASE_URL || 'postgresql://localhost:5432/micopay_dev',
@@ -140,7 +172,23 @@ export const config = {
   stellarRpcUrl: process.env.STELLAR_RPC_URL || 'https://soroban-testnet.stellar.org',
   stellarNetwork: process.env.STELLAR_NETWORK || 'TESTNET',
   platformSecretKey: process.env.PLATFORM_SECRET_KEY || '',
-  escrowContractId: process.env.ESCROW_CONTRACT_ID || '',
+  /** Activo -> contrato del escrow (ver parseEscrowContracts). */
+  escrowContracts: ESCROW_CONTRACTS as Readonly<Record<string, string>>,
+  /**
+   * Contrato de las operaciones creadas antes de `escrow_contract_id`. Si se
+   * redespliega un activo (p. ej. XLM de testnet tras el fix de #420), las
+   * operaciones viejas siguen bloqueadas en el contrato anterior: sin esto, su
+   * refund iria al contrato nuevo, que no las conoce.
+   */
+  escrowLegacyContractId: process.env.ESCROW_LEGACY_CONTRACT_ID || '',
+  /** Activo por defecto de las operaciones nuevas (ver assetRate.service). */
+  escrowAsset: ESCROW_ASSET_ENV,
+  /**
+   * Contrato del activo por defecto. Lo usan el listener de eventos y /health;
+   * las operaciones usan el contrato congelado en cada una.
+   */
+  escrowContractId:
+    ESCROW_CONTRACTS[ESCROW_ASSET_ENV.trim().toUpperCase()] ?? Object.values(ESCROW_CONTRACTS)[0] ?? '',
   mxneContractId: process.env.MXNE_CONTRACT_ID || '',
   mxneIssuerAddress: process.env.MXNE_ISSUER_ADDRESS || '',
 
@@ -273,24 +321,21 @@ export function validateConfig() {
       }
     }
 
-    // Escrow Contract ID validation
-    if (!config.escrowContractId) {
-      errors.push("ESCROW_CONTRACT_ID is missing (required when MOCK_STELLAR=false).");
-    } else {
-      const stellarContractRegex = /^C[A-Z2-7]{55}$/;
-      if (!stellarContractRegex.test(config.escrowContractId)) {
-        errors.push("ESCROW_CONTRACT_ID is invalid. It must be a valid Stellar contract ID (56 characters starting with 'C').");
+    // Escrow contracts validation (one per asset)
+    const escrowEntries = Object.entries(config.escrowContracts);
+    if (escrowEntries.length === 0) {
+      errors.push("ESCROW_CONTRACTS (or ESCROW_CONTRACT_ID) is missing (required when MOCK_STELLAR=false).");
+    }
+    for (const [asset, contractId] of escrowEntries) {
+      if (!/^C[A-Z2-7]{55}$/.test(contractId)) {
+        errors.push(`Escrow contract for ${asset} is invalid. It must be a valid Stellar contract ID (56 characters starting with 'C').`);
       }
     }
 
-    // MXNE Contract ID validation
-    if (!config.mxneContractId) {
-      errors.push("MXNE_CONTRACT_ID is missing (required when MOCK_STELLAR=false).");
-    } else {
-      const stellarContractRegex = /^C[A-Z2-7]{55}$/;
-      if (!stellarContractRegex.test(config.mxneContractId)) {
-        errors.push("MXNE_CONTRACT_ID is invalid. It must be a valid Stellar contract ID (56 characters starting with 'C').");
-      }
+    // MXNE_CONTRACT_ID es opcional: ningun flujo lo usa (el escrow toma su
+    // token de initialize). Si viene, que al menos tenga forma valida.
+    if (config.mxneContractId && !/^C[A-Z2-7]{55}$/.test(config.mxneContractId)) {
+      errors.push("MXNE_CONTRACT_ID is invalid. It must be a valid Stellar contract ID (56 characters starting with 'C').");
     }
   }
 

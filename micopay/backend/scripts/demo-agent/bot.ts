@@ -14,11 +14,16 @@
  *   npx tsx scripts/demo-agent/bot.ts run               atiende operaciones
  *   npx tsx scripts/demo-agent/bot.ts status            muestra cuenta y operaciones
  *
- * La llave del bot vive en ~/.micopay/demo-agent.json, fuera del repo. Solo
- * testnet. La cuenta queda en `pending_verification` tras el setup: activarla
- * requiere KYC de Didit, asi que se activa aparte en la base de datos.
+ * La llave del bot vive en ~/.micopay/demo-agent.json, fuera del repo. La cuenta
+ * queda en `pending_verification` tras el setup: activarla requiere KYC de
+ * Didit, asi que se activa aparte en la base de datos.
+ *
+ * Mainnet: `MICOPAY_NETWORK=mainnet`. La llave va en demo-agent-mainnet.json y
+ * no hay friendbot: el setup imprime la direccion para fondearla con XLM y, ya
+ * fondeada, crea la trustline de USDC (el bot recibe USDC en el release).
+ * En testnet, `USDC_ISSUER=G...` hace lo mismo con el USDC del escrow de testnet.
  */
-import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
+import { Asset, Horizon, Keypair, Networks, Operation, TransactionBuilder } from '@stellar/stellar-sdk';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -26,7 +31,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const API = process.env.MICOPAY_API ?? 'https://api.micopay.app';
-const STATE_FILE = join(homedir(), '.micopay', 'demo-agent.json');
+const MAINNET = (process.env.MICOPAY_NETWORK ?? 'testnet').toLowerCase() === 'mainnet';
+const STATE_FILE = join(homedir(), '.micopay', MAINNET ? 'demo-agent-mainnet.json' : 'demo-agent.json');
+const HORIZON = MAINNET ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
+const EXPLORER = `https://stellar.expert/explorer/${MAINNET ? 'public' : 'testnet'}/tx`;
+// Emisor del USDC que recibe el bot en el release. En mainnet, Circle; en
+// testnet solo si se define USDC_ISSUER (el del escrow USDC de testnet).
+const USDC_ISSUER = process.env.USDC_ISSUER ?? (MAINNET ? 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' : '');
+const USDC = USDC_ISSUER ? new Asset('USDC', USDC_ISSUER) : null;
 const ADB = process.env.ADB ?? join(process.env.LOCALAPPDATA ?? '', 'Android', 'Sdk', 'platform-tools', 'adb.exe');
 const QR_HELPER = join(dirname(fileURLToPath(import.meta.url)), 'qr_from_phone.py');
 const POLL_MS = 3000;
@@ -101,9 +113,11 @@ async function setup(argLat?: string, argLng?: string) {
 
   if (!state) {
     const username = `agente_demo_${kp.publicKey().slice(-4).toLowerCase()}`;
-    log(`Fondeando ${kp.publicKey()} con friendbot…`);
-    const fb = await fetch(`https://friendbot.stellar.org/?addr=${kp.publicKey()}`);
-    if (!fb.ok) throw new Error(`friendbot ${fb.status}`);
+    if (!MAINNET) {
+      log(`Fondeando ${kp.publicKey()} con friendbot…`);
+      const fb = await fetch(`https://friendbot.stellar.org/?addr=${kp.publicKey()}`);
+      if (!fb.ok) throw new Error(`friendbot ${fb.status}`);
+    }
 
     const { challenge, signature } = await signedChallenge(kp);
     await api('POST', '/users/register', { stellar_address: kp.publicKey(), username, challenge, signature });
@@ -112,6 +126,8 @@ async function setup(argLat?: string, argLng?: string) {
     writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
     log(`Cuenta registrada: ${username}`);
   }
+
+  if (USDC && !(await ensureUsdcTrustline(kp, USDC))) return;
 
   const token = await login(kp);
   const pos = argLat && argLng ? { lat: Number(argLat), lng: Number(argLng) } : phoneLocation();
@@ -133,6 +149,34 @@ async function setup(argLat?: string, argLng?: string) {
   const readiness = await api('POST', '/merchants/me/enroll', {}, token);
   log(`Ubicación ${(pos.lat + 0.001).toFixed(5)}, ${(pos.lng + 0.001).toFixed(5)} · estado ${readiness.status}`);
   for (const item of readiness.items ?? []) log(`  ${item.done ? '✓' : '✗'} ${item.key}${item.detail ? ` — ${item.detail}` : ''}`);
+}
+
+/**
+ * Mainnet: la cuenta debe existir (fondeada con XLM) y tener trustline de USDC,
+ * o el release no puede pagarle. Devuelve false si aun falta fondearla.
+ */
+async function ensureUsdcTrustline(kp: Keypair, usdc: Asset): Promise<boolean> {
+  const server = new Horizon.Server(HORIZON);
+  let account;
+  try {
+    account = await server.loadAccount(kp.publicKey());
+  } catch {
+    log(`La cuenta ${kp.publicKey()} no existe en la red.`);
+    log('Mándale ~3 XLM y vuelve a correr setup.');
+    return false;
+  }
+  const has = account.balances.some(
+    (b: any) => b.asset_code === usdc.code && b.asset_issuer === usdc.issuer,
+  );
+  if (has) return true;
+  const tx = new TransactionBuilder(account, { fee: '10000', networkPassphrase: MAINNET ? Networks.PUBLIC : Networks.TESTNET })
+    .addOperation(Operation.changeTrust({ asset: usdc }))
+    .setTimeout(120)
+    .build();
+  tx.sign(kp);
+  const res = await server.submitTransaction(tx);
+  log(`Trustline de USDC creada. tx ${res.hash}`);
+  return true;
 }
 
 async function readQrFromPhone(tradeId: string): Promise<string | null> {
@@ -157,7 +201,7 @@ async function release(kp: Keypair, token: string, id: string) {
   const body = 'mock' in prepared ? {} : { signed_xdr: signXdr(kp, prepared) };
   const { release_tx_hash } = await api('POST', `/trades/${id}/complete`, body, token);
   log(`  ✅ Fondos liberados. tx ${release_tx_hash}`);
-  log(`     https://stellar.expert/explorer/testnet/tx/${release_tx_hash}`);
+  log(`     ${EXPLORER}/${release_tx_hash}`);
 }
 
 async function handleCashout(kp: Keypair, token: string, t: any, done: Set<string>) {

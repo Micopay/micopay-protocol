@@ -8,7 +8,7 @@ import ErrorBanner from '../components/ErrorBanner';
 import SupportLink from '../components/SupportLink';
 import { mapApiError, type MappedApiError } from '../utils/apiError';
 import { getDemoQrPayload, IS_DEMO_MODE } from '../utils/demoMode';
-import { buildTxUrl } from '../utils/stellarExplorer';
+import { buildTxUrl, STELLAR_NETWORK_LABEL } from '../utils/stellarExplorer';
 import { useCountdown } from '../hooks/useCountdown';
 import TradeEscrowSummary from '../components/TradeEscrowSummary';
 import { assertNoClientPreparationForLock } from '../utils/escrowLock';
@@ -274,7 +274,7 @@ const QRReveal = ({ activeTrade, token, viewerId, counterpartyName, ownName, onB
                                 )}
                                 {secretLoaded && (
                                     <p className="text-[10px] text-primary mt-1 font-mono opacity-70">
-                                        {t('qrReveal.htlcTestnet')}
+                                        {t('qrReveal.htlcTestnet', { network: STELLAR_NETWORK_LABEL })}
                                     </p>
                                 )}
                                 {lockTxHash && (

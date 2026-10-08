@@ -1,3 +1,5 @@
+import { getEscrowAssetOption } from '../constants/escrowAssets';
+
 /**
  * H3 (docs/AUDITORIA_IMPLEMENTACION_SELECTOR_ACTIVO_2026-09-14.md) · que puede
  * hacer el cliente ANTES de pedir el bloqueo.
@@ -8,13 +10,15 @@
  * innecesario (pidiendo huella, pagando comision y reserva) o fallaba, y todo
  * eso antes de que el guard del backend pudiera decir nada.
  *
- * Hoy el unico activo con escrow es XLM nativo, que no necesita trustline. Asi
- * que el cliente no envia ninguna transaccion previa al bloqueo:
- *   - XLM: nada que preparar;
+ * El cliente no envia ninguna transaccion previa al bloqueo:
+ *   - un activo con escrow desplegado: nada que preparar (XLM no usa
+ *     trustline, y quien bloquea USDC ya la tiene porque ya tiene USDC);
  *   - sin `asset_code` (respuesta antigua): nada que preparar; el backend
  *     decide con su guard (409 ASSET_ESCROW_MISMATCH) y el cliente no inventa;
- *   - cualquier otro activo: se detiene aqui, sin firmar nada. Habilitar
- *     activos emitidos (issuer/contrato, trustline) es WP3.
+ *   - cualquier otro activo: se detiene aqui, sin firmar nada.
+ *
+ * La trustline que si hace falta es la de quien RECIBE en el release; esa la
+ * crea `completeTrade` antes de firmar.
  */
 
 export class EscrowAssetNotLockableError extends Error {
@@ -26,6 +30,9 @@ export class EscrowAssetNotLockableError extends Error {
 
 export function assertNoClientPreparationForLock(assetCode: string | null | undefined): void {
   if (!assetCode) return;
-  if (assetCode === 'XLM') return;
+  // Un activo con escrow desplegado en esta red (VITE_ESCROW_ASSETS).
+  // Quien bloquea un activo emitido ya lo tiene, asi que ya tiene su
+  // trustline: tampoco hay nada que preparar.
+  if (getEscrowAssetOption(`stellar:${assetCode.toUpperCase()}`)?.enabled) return;
   throw new EscrowAssetNotLockableError(assetCode);
 }
