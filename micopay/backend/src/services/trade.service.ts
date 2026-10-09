@@ -16,6 +16,7 @@ import { createHash, randomBytes } from 'crypto';
 import type { FastifyRequest } from 'fastify';
 import { prepareLockTx, submitLockTx, prepareReleaseTx, submitReleaseTx, callRefundOnChain, verifyLockOnChain, assertNotReplayed } from './stellar.service.js';
 import { escrowContractForTrade } from './escrowContract.js';
+import { assertReceiverCanReceive } from './receiverReadiness.service.js';
 import { AppError, NotFoundError, ForbiddenError, ConflictError, BadRequestError, AuthError, ValidationError, TradeStateError, MerchantLimitError, KycMonthlyCapExceededError } from '../utils/errors.js';
 import {
   getTradeAuditTrail as getTradeAuditTrailRows,
@@ -391,6 +392,16 @@ export async function createTrade(input: CreateTradeInput) {
   if (!buyer) {
     throw new NotFoundError('USER_NOT_FOUND', 'El usuario comprador no existe', 'Buyer not found');
   }
+
+  // El buyer del escrow es quien firma `release` y quien recibe el activo. Si
+  // no puede, la operacion vence y el contrato devuelve los fondos a quien
+  // bloqueo, despues de que el efectivo ya cambio de mano. Ver
+  // receiverReadiness.service.ts.
+  await assertReceiverCanReceive({
+    stellarAddress: buyer.stellar_address,
+    assetCode,
+    receiverIsCaller: buyerId === (request as any).user?.id,
+  });
 
   await validateAgainstMerchantLimits(sellerId, amountMxn);
 
