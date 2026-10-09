@@ -49,6 +49,10 @@ export function useCameraPermission() {
   return { state, check, request, openSettings: openAppSettings };
 }
 
+// Solo el alias `coarseLocation`: `location` incluye ACCESS_FINE_LOCATION, que
+// T-19 retiró del manifiesto, y un alias con un permiso no declarado nunca se
+// concede. Es el mismo arreglo que ya tenía useMerchantsAvailable; aquí quedó
+// pendiente y el agente no podía fijar su ubicación en el APK.
 export function useLocationPermission() {
   const [state, setState] = useState<PermState>('unknown');
 
@@ -58,8 +62,8 @@ export function useLocationPermission() {
       const { Geolocation } = await import('@capacitor/geolocation');
       const result = await Geolocation.checkPermissions();
       const next: PermState =
-        result.location === 'granted' ? 'granted' :
-        result.location === 'denied' ? 'permanently_denied' : 'prompt';
+        result.coarseLocation === 'granted' ? 'granted' :
+        result.coarseLocation === 'denied' ? 'permanently_denied' : 'prompt';
       setState(next);
       return next;
     } catch { return 'unknown'; }
@@ -70,11 +74,11 @@ export function useLocationPermission() {
     try {
       const { Geolocation } = await import('@capacitor/geolocation');
       const checked = await Geolocation.checkPermissions();
-      if (checked.location === 'granted') { setState('granted'); return 'granted'; }
+      if (checked.coarseLocation === 'granted') { setState('granted'); return 'granted'; }
       // Capacitor reports 'denied' when "Don't ask again" is checked on Android
-      if (checked.location === 'denied') { setState('permanently_denied'); return 'permanently_denied'; }
-      const req = await Geolocation.requestPermissions();
-      const next: PermState = req.location === 'granted' ? 'granted' : 'denied';
+      if (checked.coarseLocation === 'denied') { setState('permanently_denied'); return 'permanently_denied'; }
+      const req = await Geolocation.requestPermissions({ permissions: ['coarseLocation'] });
+      const next: PermState = req.coarseLocation === 'granted' ? 'granted' : 'denied';
       setState(next);
       return next;
     } catch { setState('unknown'); return 'unknown'; }
