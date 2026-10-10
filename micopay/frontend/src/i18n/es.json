@@ -28,7 +28,9 @@
       "revealing": "Revelando",
       "pending": "Pendiente",
       "cancelled": "Cancelado",
-      "refunded": "Reembolsado"
+      "refunded": "Reembolsado",
+      "expired": "Expirado",
+      "unknown": "Estado desconocido"
     },
     "seeAllActivity": "Ver todo el historial"
   },

@@ -8,6 +8,20 @@ import TradeEscrowSummary from '../components/TradeEscrowSummary';
  * WP-D: el recibo, con datos del servidor. Lo que no llega es `null` y la
  * pantalla lo oculta; nunca se rellena con estado local ni con porcentajes.
  */
+
+
+const KNOWN_STATUSES = [
+  'completed', 'locked', 'revealing', 'pending',
+  'cancelled', 'refunded', 'expired',
+] as const;
+
+export function ReceiptStatus({ status }: { status: string }) {
+  const { t } = useTranslation();
+  const key = (KNOWN_STATUSES as readonly string[]).includes(status) ? status : 'unknown';
+  return <>{t(`home.status.${key}`)}</>;
+}
+
+
 export interface SuccessReceipt
   extends Pick<
     TradeData,
@@ -215,7 +229,7 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
 
                 <div className="flex justify-between items-center">
                     <span className="text-on-surface-variant text-xs">{t('success.status')}</span>
-                    <span className="text-xs font-semibold text-on-surface capitalize">{trade.status}</span>
+                    <span className="text-xs font-semibold text-on-surface"><ReceiptStatus status={trade.status} /></span>
                 </div>
 
                 {lockTxHash && (
