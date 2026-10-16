@@ -81,6 +81,13 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
 
+  // Didit captura selfie y rostro: datos biometricos, sensibles segun la
+  // LFPDPPP, que solo se tratan con consentimiento expreso. Sin la casilla
+  // marcada no se abre el flujo de Didit.
+  const needsBiometricConsent = provider === 'didit';
+  const [biometricConsent, setBiometricConsent] = useState(false);
+  const blockedByConsent = needsBiometricConsent && !biometricConsent;
+
   /**
    * KYC-1: la cache local mejora el arranque, pero NO decide.
    *
@@ -123,6 +130,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
   }, [token, provider]);
 
   const handleOpenHostedFlow = async (emailOverride?: string) => {
+    if (blockedByConsent) return;
     if (!token) {
       setStatusPollingError(t('kyc.sessionError'));
       return;
@@ -294,6 +302,20 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
         </section>
 
         <div className="mt-6 space-y-4">
+          {needsBiometricConsent && status !== 'approved' && (
+            <label className="flex items-start gap-3 bg-papel border-2 border-tinta rounded-sm p-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={biometricConsent}
+                onChange={(e) => setBiometricConsent(e.target.checked)}
+                className="mt-0.5 h-5 w-5 shrink-0 accent-verde"
+              />
+              <span className="text-xs text-on-surface leading-relaxed">
+                {t('kyc.biometricConsent', { provider: providerName })}
+              </span>
+            </label>
+          )}
+
           {needsEmail ? (
             <div className="bg-papel border-2 border-tinta rounded-sm p-5 space-y-3">
               <div>
@@ -332,7 +354,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
           ) : (
             <button
               onClick={() => void handleOpenHostedFlow()}
-              disabled={loading}
+              disabled={loading || blockedByConsent}
               className="w-full bg-verde text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
             >
               {loading ? (
@@ -352,7 +374,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
           {status === 'rejected' && (
             <button
               onClick={() => void handleOpenHostedFlow()}
-              disabled={loading}
+              disabled={loading || blockedByConsent}
               className="w-full bg-papel border border-error/30 text-error font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
             >
               <span className="material-symbols-outlined">refresh</span>
