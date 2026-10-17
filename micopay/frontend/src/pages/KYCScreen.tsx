@@ -44,6 +44,10 @@ function StatusLine({ status }: { status: KYCStatus }) {
       </div>
     );
   }
+  // El backend tambien responde un estado de "nunca empezo" que no esta en
+  // KYCStatus. Antes caia aqui y mostraba "No se pudo verificar" a quien ni
+  // siquiera habia abierto la verificacion. Solo un rechazo real lo muestra.
+  if (status !== 'rejected') return null;
   return (
     <div className="flex items-center gap-3 bg-error/10 border border-error/20 rounded-sm px-4 py-3">
       <span className="material-symbols-outlined text-error">error</span>

@@ -47,6 +47,16 @@ describe('KYCScreen — consentimiento biométrico', () => {
     await waitFor(() => expect(mockStartKYC).toHaveBeenCalledWith('t', 'didit', undefined));
   });
 
+  it('quien nunca empezó no ve "No se pudo verificar"', async () => {
+    vi.mocked(api.getKYCStatus).mockResolvedValue({ status: 'not_started' } as any);
+    render(<KYCScreen onApproved={vi.fn()} token="t" provider="didit" />);
+
+    await waitFor(() => expect(api.getKYCStatus).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByText('kyc.verifyingIdentity')).not.toBeInTheDocument());
+    expect(screen.queryByText('kyc.couldNotVerify')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /kyc.retryVerification/ })).not.toBeInTheDocument();
+  });
+
   it('Etherfuse no muestra la casilla', () => {
     render(<KYCScreen onApproved={vi.fn()} token="t" provider="etherfuse" />);
 
