@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { ApiErrorAction } from '../utils/apiError';
 import SupportLink from './SupportLink';
 
@@ -25,11 +26,22 @@ export default function ErrorBanner({
   variant = 'banner',
   className = '',
 }: ErrorBannerProps) {
+  const { t } = useTranslation();
+  const isChooseAgent = action === 'choose_agent';
   const showRetry = action === 'retry' && onRetry;
-  const showSupport = action === 'support' || !showRetry;
+  const showSupport = !isChooseAgent && (action === 'support' || !showRetry);
 
   const actions = (
     <div className="flex flex-wrap items-center gap-3 justify-end">
+      {isChooseAgent && onDismiss ? (
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-xs font-semibold text-primary underline hover:no-underline"
+        >
+          {t('confirm.chooseAnotherAgent', 'Elegir otro agente')}
+        </button>
+      ) : null}
       {showRetry ? (
         <button
           type="button"
@@ -42,7 +54,7 @@ export default function ErrorBanner({
       {showSupport ? (
         <SupportLink tradeId={supportTradeId} state={supportState} />
       ) : null}
-      {onDismiss ? (
+      {!isChooseAgent && onDismiss ? (
         <button
           type="button"
           onClick={onDismiss}

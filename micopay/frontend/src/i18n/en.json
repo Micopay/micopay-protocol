@@ -447,6 +447,7 @@
     "exceedsWarning": "Total effective cost ({{pct}}%) exceeds the recommended {{maxPct}}%. Review before confirming, or go back to the map to pick another offer.",
     "creating": "Creating trade…",
     "confirmBtn": "Confirm",
+    "chooseAnotherAgent": "Choose another agent",
     "cancel": "Cancel",
     "cashReceived": "You receive in cash",
     "cashGiven": "You hand over in cash",

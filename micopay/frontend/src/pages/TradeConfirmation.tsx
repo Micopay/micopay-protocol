@@ -33,6 +33,8 @@ export interface TradeConfirmationPageProps {
   onConfirm: () => Promise<boolean>;
   loading?: boolean;
   errorMessage?: string | null;
+  errorAction?: string | null;
+  onChooseAnotherAgent?: () => void;
   /** Effective-fee threshold (%) above which a warning is shown. Defaults to the shared guardrail. */
   maxEffectiveFeePercent?: number;
   /**
@@ -58,17 +60,20 @@ export default function TradeConfirmationPage({
   onConfirm,
   loading = false,
   errorMessage,
+  errorAction,
+  onChooseAnotherAgent,
   maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
   assetKey,
   fetchRate,
 }: TradeConfirmationPageProps) {
   const { t, i18n } = useTranslation();
+  const isCashout = flow === 'cashout';
+  const isChooseAgentAction = isCashout && errorAction === 'choose_agent';
   const asset = assetKey ? getEscrowAssetOption(assetKey) : undefined;
   // H5: el monto escrito es el efectivo. En retiro las comisiones van encima
   // (sale de tu saldo `clientPays`); en deposito se descuentan (recibes
   // `receiveMxn` en tu saldo). El estimado en el activo es de lo que se mueve
   // en tu saldo, no del efectivo.
-  const isCashout = flow === 'cashout';
   const clientPays = clientPaysMxn ?? (isCashout ? null : amountMxn);
   const balanceMxn = isCashout ? clientPays : receiveMxn;
   const estimate = useEscrowAssetEstimate(asset?.enabled ? asset.code : null, balanceMxn ?? amountMxn, fetchRate);
@@ -211,9 +216,19 @@ export default function TradeConfirmationPage({
           </div>
         )}
 
+        {isChooseAgentAction ? (
+          <button
+            type="button"
+            onClick={onChooseAnotherAgent || onBack}
+            className="w-full rounded-sm bg-verde py-3.5 text-sm font-semibold text-on-primary hover:opacity-95 transition-opacity"
+          >
+            {t('confirm.chooseAnotherAgent', 'Elegir otro agente')}
+          </button>
+        ) : null}
+
         <button
           type="button"
-          disabled={loading}
+          disabled={loading || isChooseAgentAction}
           onClick={async () => { await onConfirm(); }}
           className="w-full rounded-sm bg-verde py-3.5 text-sm font-semibold text-on-primary hover:opacity-95 disabled:opacity-50 transition-opacity"
         >

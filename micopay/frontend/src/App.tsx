@@ -408,7 +408,15 @@ function ConfirmRoute() {
       assetKey={activeAssetKey}
       loading={tradeLoading}
       errorMessage={tradeError?.message ?? null}
-      onBack={() => navigate(-1)}
+      errorAction={tradeError?.action ?? null}
+      onChooseAnotherAgent={() => {
+        clearTradeError();
+        navigate('/map');
+      }}
+      onBack={() => {
+        clearTradeError();
+        navigate(-1);
+      }}
       onConfirm={async () => {
         const ok = isDeposit
           ? await handleDepositOfferSelected(state.merchantId)
