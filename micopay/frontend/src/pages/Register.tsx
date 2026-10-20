@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { registerUser, getAuthToken, getCurrentUser, UserData } from '../services/api';
 import { generateAndStoreKeypair, getPublicKey, revealSecretKey, keypairExists } from '../lib/keystore';
+import { requireUserPresence, PresenceDeniedError } from '../lib/userPresence';
 import { setBackupConfirmed, writeJSON } from '../services/secureStorage';
 import { ApiError } from '../utils/apiError';
 import { hashPhone } from '../lib/phoneHash';
@@ -86,14 +87,16 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
   };
 
   /**
-   * Entra a la cuenta que ya existe en este dispositivo. No pide nada más
-   * porque no hace falta: el servidor identifica la cuenta por la firma de la
-   * llave del teléfono, no por el nombre de usuario.
+   * Entra a la cuenta que ya existe en este dispositivo. No pide nombre de
+   * usuario: el servidor identifica la cuenta por la firma de la llave del
+   * teléfono. Sí pide huella o PIN, igual que Login; sin eso esta sería una
+   * puerta lateral para entrar sin probar que el teléfono es tuyo.
    */
   const handleUseExistingAccount = async () => {
     setError(null);
     setLoading(true);
     try {
+      await requireUserPresence('login', true);
       const token = await getAuthToken();
       const profile = await getCurrentUser(token);
       const user: UserData = { id: profile.id, username: profile.username, token };
@@ -101,6 +104,10 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
       onLoginSuccess?.(user, null);
       navigate('/', { replace: true });
     } catch (e: unknown) {
+      if (e instanceof PresenceDeniedError) {
+        setError('Necesitamos confirmar que eres tú para entrar.');
+        return;
+      }
       const msg = e instanceof Error ? e.message : 'No se pudo entrar a la cuenta';
       setError(`No se pudo entrar a la cuenta de este dispositivo: ${msg}`);
     } finally {

@@ -47,6 +47,7 @@ location_on
 lock
 lock_open
 lock_person
+login
 logout
 mail
 military_tech

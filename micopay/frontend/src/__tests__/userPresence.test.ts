@@ -73,6 +73,15 @@ describe('la compuerta antes de firmar', () => {
     expect(opts.reason).not.toBe(opts2.reason);
   });
 
+  it('al volver a entrar dice que es para entrar, aunque haya una firma reciente', async () => {
+    const { requireUserPresence } = await freshModule();
+    await requireUserPresence('payment');
+    await requireUserPresence('login', true);
+    expect(mockAuthenticate).toHaveBeenCalledTimes(2);
+    const opts = mockAuthenticate.mock.calls[1][0] as { reason: string };
+    expect(opts.reason).toBe('Confirma que eres tú para entrar');
+  });
+
   it('una negativa CANCELA: no se firma igual', async () => {
     const { requireUserPresence, PresenceDeniedError } = await freshModule();
     mockAuthenticate.mockRejectedValue(new Error('user cancelled'));
