@@ -635,6 +635,7 @@ const KYC_RETURN_DESTINATIONS = {
   explore: '/explore',
   inbox: '/inbox',
   profile: '/profile',
+  joinNetwork: '/join-network',
 } as const;
 
 type KycReturnKey = keyof typeof KYC_RETURN_DESTINATIONS;
@@ -732,14 +733,14 @@ function WelcomeRoute() {
 }
 
 /** Incorporacion de agente. Esta SI cambia estado real en el servidor. */
-function ProviderOnboardingRoute() {
+export function ProviderOnboardingRoute() {
   const navigate = useNavigate();
   const { sessionUser, refreshProviderStatus } = useAppCtx();
   return (
       <ProviderOnboarding
           token={sessionUser?.token ?? ''}
           onExit={() => navigate('/profile')}
-          onOpenKyc={() => navigate('/kyc')}
+          onOpenKyc={() => navigate('/kyc/didit?return=joinNetwork')}
           onOpenSettings={() => navigate('/merchant-settings')}
           onActivated={() => { void refreshProviderStatus(); }}
       />

@@ -4,8 +4,8 @@
 // POST /v3/session/, estados con mayusculas y espacios exactos, y el motivo de
 // rechazo dentro de los `warnings` de cada modulo de `decision`.
 //
-// ⚠️ Cotejado contra la documentacion, todavia NO contra un sandbox real.
-// Confirmar con una sesion de sandbox antes de producir.
+// Probado de punta a punta contra el sandbox de Didit (2026-10-16/17): sesion,
+// webhook firmado y nivel 1 y 2 grabados en Postgres.
 import { breakers } from "../lib/breakers.js";
 import { breakerFetch, isIdempotentMethod } from "../lib/circuitBreaker.js";
 

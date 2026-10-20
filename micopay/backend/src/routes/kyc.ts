@@ -155,18 +155,14 @@ async function startDiditKyc(request: any) {
     const session = await createDiditSession({ vendorData: userId, workflowId });
 
     // Didit devuelve la misma sesion si la persona tiene una sin terminar en
-    // ese workflow. Ya esta registrada: no se inserta dos veces.
-    const existing = await db.getOne<{ session_id: string }>(
-      'SELECT session_id FROM kyc_didit_sessions WHERE session_id = $1',
-      [session.sessionId],
+    // ese workflow. Ya esta registrada: no se inserta dos veces. En una sola
+    // sentencia, para que un doble toque simultaneo no choque con el UNIQUE.
+    await db.execute(
+      `INSERT INTO kyc_didit_sessions (session_id, user_id, requested_level, status)
+       VALUES ($1, $2, $3, 'pending')
+       ON CONFLICT (session_id) DO NOTHING`,
+      [session.sessionId, userId, level],
     );
-    if (!existing) {
-      await db.execute(
-        `INSERT INTO kyc_didit_sessions (session_id, user_id, requested_level, status)
-         VALUES ($1, $2, $3, 'pending')`,
-        [session.sessionId, userId, level],
-      );
-    }
 
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     return { onboardingUrl: session.url, expiresAt };
