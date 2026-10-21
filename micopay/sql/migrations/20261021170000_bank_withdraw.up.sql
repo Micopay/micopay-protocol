@@ -44,6 +44,12 @@ ALTER TABLE ramp_orders
 
 CREATE INDEX IF NOT EXISTS idx_ramp_orders_status ON ramp_orders (status, status_updated_at DESC);
 
+-- kyc_status existente (20260630220000) sigue siendo el estado de Didit; para
+-- Etherfuse se usa una columna aparte, porque un usuario con Didit aprobado
+-- todavia puede estar en revision en Etherfuse. Valores:
+-- 'not_started' | 'review' | 'approved' | 'action_required' | 'rejected'.
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS etherfuse_wallet_account_id UUID,
-  ADD COLUMN IF NOT EXISTS etherfuse_kyc_updated_at    TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS etherfuse_kyc_status        VARCHAR(20) NOT NULL DEFAULT 'not_started',
+  ADD COLUMN IF NOT EXISTS etherfuse_kyc_updated_at    TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS clabe_last4                 CHAR(4);
