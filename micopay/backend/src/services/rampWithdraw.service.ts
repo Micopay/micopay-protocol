@@ -1,19 +1,25 @@
 // Orquesta "Retirar a banco" (SPEI) usando el cliente v2 de Etherfuse.
 // Este archivo pega las piezas: crea la personal org del usuario, le envia los
 // datos de verificacion, registra la CLABE y la wallet como cuentas de pago,
-// y re-lee de Etherfuse cuando llega un webhook. No cotiza ni crea ordenes;
-// eso llega en el siguiente slice.
+// cotiza, crea la orden y re-lee cuando llega un webhook.
 //
 // Decisiones base en docs/PLAN_RETIRO_BANCO_2026-10-20.md.
 
 import db from '../db/schema.js';
 import {
   EtherfuseV2Error,
+  type FundingInstructions,
   type LaunchForm,
+  type Order,
+  type OrderStatus,
   type PaymentAccount,
+  type Quote,
   type VerificationStatus,
   buildLaunchForm,
+  createOrder,
   createPersonalOrg,
+  createQuote,
+  getOrder,
   getPaymentAccount,
   getVerificationStatus,
   registerPaymentAccount,
@@ -295,4 +301,205 @@ export async function applyPaymentAccountUpdate(customerOrgId: string, paymentAc
   );
   if (!user) return null;
   return getPaymentAccount(customerOrgId, paymentAccountId);
+}
+
+// ---- Quotes y orders ----------------------------------------------------
+
+export type WithdrawAsset = 'USDC';
+// XLM va a entrar cuando este resuelta la ruta DEX en una sola transaccion
+// (plan WP2). De momento, lo que Etherfuse ve siempre es USDC; si el usuario
+// paga desde XLM, la conversion la hace la app en la misma tx que paga.
+
+export interface CreateWithdrawQuoteRequest {
+  asset: WithdrawAsset;
+  /** Monto que sale de la cuenta del usuario, en el activo (USDC) a 7 decimales. */
+  amount: string;
+}
+
+export interface WithdrawQuote {
+  quoteId: string;
+  sourceAmount: string;
+  sourceAsset: string;
+  destinationAmount: string;
+  destinationAsset: 'MXN';
+  feeBps: number;
+  feeAmount: string;
+  expiresAt: string;
+  /** CLABE enmascarada que va a recibir. */
+  clabeMasked: string;
+}
+
+function etherfuseUsdcAsset(): string {
+  // "USDC:ISSUER" tal como Etherfuse lo acepta en Stellar. Env var distinta de
+  // la que ya existe (USDC_ISSUER puede ser el de la app, no el de Etherfuse).
+  return process.env.ETHERFUSE_USDC_ASSET
+    ?? 'USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
+}
+
+/**
+ * Cotiza un retiro de USDC a MXN. Guarda la cotizacion en ramp_quotes para que
+ * la orden posterior (confirmWithdrawOrder) use el mismo quoteId sin que el
+ * cliente pueda alterar lo cotizado.
+ *
+ * Precondiciones: etherfuse_customer_id, etherfuse_wallet_account_id y
+ * etherfuse_bank_account_id poblados (ver getBankWithdrawStatus === 'ready').
+ */
+export async function createWithdrawQuote(userId: string, req: CreateWithdrawQuoteRequest): Promise<WithdrawQuote> {
+  if (req.asset !== 'USDC') {
+    throw new EtherfuseV2Error(400, 'unsupported-asset', `asset ${req.asset} no esta disponible todavia`);
+  }
+  const u = await loadUser(userId);
+  if (!u.etherfuse_customer_id || !u.etherfuse_wallet_account_id || !u.etherfuse_bank_account_id) {
+    throw new EtherfuseV2Error(409, 'not-ready', 'faltan pasos previos (KYC o CLABE)');
+  }
+
+  const sourceAsset = etherfuseUsdcAsset();
+  const q: Quote = await createQuote(u.etherfuse_customer_id, {
+    source: { type: 'stored', id: u.etherfuse_wallet_account_id },
+    destination: { type: 'stored', id: u.etherfuse_bank_account_id },
+    sourceAmount: req.amount,
+    sourceAsset,
+    destinationAsset: 'MXN',
+  });
+
+  await db.execute(
+    `INSERT INTO ramp_quotes
+       (quote_id, user_id, asset, send_code, send_issuer, send_max,
+        pay_code, pay_issuer, pay_amount, destination_mxn, fee_amount, expires_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+     ON CONFLICT (quote_id) DO NOTHING`,
+    [
+      q.quoteId,
+      userId,
+      'USDC',
+      'USDC',
+      sourceAsset.split(':')[1] ?? '',
+      q.sourceAmount,
+      'MXN',
+      '',
+      q.destinationAmount,  // pay_amount: para USDC directo es igual al source menos fee
+      q.destinationAmount,
+      q.feeAmount,
+      q.expiresAt,
+    ],
+  );
+
+  return {
+    quoteId: q.quoteId,
+    sourceAmount: q.sourceAmount,
+    sourceAsset: q.sourceAsset,
+    destinationAmount: q.destinationAmount,
+    destinationAsset: 'MXN',
+    feeBps: q.feeBps,
+    feeAmount: q.feeAmount,
+    expiresAt: q.expiresAt,
+    clabeMasked: (await loadClabeMask(userId)) ?? '',
+  };
+}
+
+export interface WithdrawOrderResult {
+  orderId: string;
+  status: OrderStatus;
+  fundingInstructions?: FundingInstructions;
+  /** Para USDC directo, Etherfuse puede devolver una preparedTransaction;
+   *  la app la revisa (decisión 7) antes de firmarla. */
+  preparedTransaction?: unknown;
+}
+
+/**
+ * Convierte un quote en una orden. Idempotente: Etherfuse responde 200 con la
+ * misma orden si se reenvia el mismo quoteId.
+ */
+export async function confirmWithdrawOrder(userId: string, quoteId: string): Promise<WithdrawOrderResult> {
+  const u = await loadUser(userId);
+  if (!u.etherfuse_customer_id) throw new EtherfuseV2Error(409, 'not-ready', 'falta etherfuse_customer_id');
+
+  const q = await db.getOne<{ user_id: string; expires_at: string | null }>(
+    `SELECT user_id, expires_at FROM ramp_quotes WHERE quote_id = $1`,
+    [quoteId],
+  );
+  if (!q || q.user_id !== userId) {
+    throw new EtherfuseV2Error(404, 'quote-not-found', 'la cotizacion no es tuya o no existe');
+  }
+  if (q.expires_at && new Date(q.expires_at).getTime() < Date.now()) {
+    throw new EtherfuseV2Error(409, 'quote-expired', 'la cotizacion vencio; pide una nueva');
+  }
+
+  const order: Order = await createOrder(u.etherfuse_customer_id, { quoteId });
+
+  await db.execute(
+    `INSERT INTO ramp_orders (order_id, user_id, quote_id, status, status_updated_at)
+     VALUES ($1,$2,$3,$4,NOW())
+     ON CONFLICT (order_id) DO UPDATE
+       SET status = EXCLUDED.status,
+           status_updated_at = EXCLUDED.status_updated_at`,
+    [order.id, userId, quoteId, order.status],
+  );
+
+  return {
+    orderId: order.id,
+    status: order.status,
+    fundingInstructions: order.fundingInstructions,
+    // La API no documenta preparedTransaction en el schema de Order; lo que
+    // Etherfuse manda en el campo depende del rail. Lo propagamos tal cual si
+    // viene, la app sabe que esperarlo para rails tipo wallet.
+    preparedTransaction: (order as unknown as { preparedTransaction?: unknown }).preparedTransaction,
+  };
+}
+
+/**
+ * Llamado por el webhook orderUpdated. Re-lee la orden desde Etherfuse (no
+ * confia en el body) y actualiza el estado. Devuelve la orden actualizada
+ * para que el handler del webhook decida si mandar push ("Tu retiro llegó").
+ */
+export async function applyOrderUpdate(customerOrgId: string, orderId: string): Promise<{ order: Order; userId: string; previousStatus: OrderStatus | null } | null> {
+  const row = await db.getOne<{ user_id: string; status: OrderStatus | null }>(
+    `SELECT user_id, status FROM ramp_orders WHERE order_id = $1`,
+    [orderId],
+  );
+  if (!row) return null;
+
+  const order = await getOrder(customerOrgId, orderId);
+  await db.execute(
+    `UPDATE ramp_orders SET status = $1, status_updated_at = NOW() WHERE order_id = $2`,
+    [order.status, orderId],
+  );
+  return { order, userId: row.user_id, previousStatus: row.status };
+}
+
+export interface UserWithdrawOrderSummary {
+  orderId: string;
+  status: OrderStatus;
+  destinationMxn: string | null;
+  createdAt: string;
+  statusUpdatedAt: string | null;
+}
+
+/**
+ * Lista los retiros del usuario (los ultimos 50). Solo mira la base; el estado
+ * puede estar atrasado respecto a Etherfuse hasta que llegue el webhook.
+ */
+export async function listUserWithdrawOrders(userId: string): Promise<UserWithdrawOrderSummary[]> {
+  const rows = await db.getMany<{
+    order_id: string;
+    status: OrderStatus;
+    destination_mxn: string | null;
+    created_at: string;
+    status_updated_at: string | null;
+  }>(
+    `SELECT o.order_id, o.status, q.destination_mxn, o.created_at, o.status_updated_at
+       FROM ramp_orders o
+       LEFT JOIN ramp_quotes q ON q.quote_id = o.quote_id
+      WHERE o.user_id = $1
+      ORDER BY o.created_at DESC
+      LIMIT 50`,
+    [userId],
+  );
+  return rows.map((r) => ({
+    orderId: r.order_id,
+    status: r.status,
+    destinationMxn: r.destination_mxn,
+    createdAt: r.created_at,
+    statusUpdatedAt: r.status_updated_at,
+  }));
 }
