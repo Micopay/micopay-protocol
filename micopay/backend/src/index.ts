@@ -21,6 +21,7 @@ import { paymentRoutes } from './routes/payments.js';
 import { clientErrorRoutes } from './routes/client-errors.js';
 import { jwksRoutes } from './routes/jwks.js';
 import { bankWithdrawRoutes } from './routes/bank-withdraw.js';
+import { bankWithdrawWebhookRoutes } from './routes/bank-withdraw-webhooks.js';
 import { AppError } from './utils/errors.js';
 import { Keypair } from '@stellar/stellar-sdk';
 import fastifyStatic from '@fastify/static';
@@ -260,6 +261,7 @@ app.register(paymentRoutes, { prefix: '' });
 app.register(clientErrorRoutes, { prefix: '' });
 app.register(jwksRoutes, { prefix: '' });
 app.register(bankWithdrawRoutes, { prefix: '' });
+app.register(bankWithdrawWebhookRoutes, { prefix: '' });
 
 // --- Start server ---
 
