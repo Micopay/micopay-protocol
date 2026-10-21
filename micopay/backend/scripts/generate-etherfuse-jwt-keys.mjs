@@ -17,6 +17,9 @@
 
 import { generateKeyPairSync, createHash, createPublicKey } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const env = process.argv[2];
 if (!['sandbox', 'prod'].includes(env ?? '')) {
@@ -39,18 +42,26 @@ const canonical = `{"e":"${jwk.e}","kty":"RSA","n":"${jwk.n}"}`;
 const kid = createHash('sha256').update(canonical).digest('base64url');
 
 function putParameter(name, value, type) {
-  // Pasamos el valor por stdin (--value file://-) para que no aparezca en
-  // la linea de comando ni en el historial del shell.
-  const r = spawnSync(
-    'aws',
-    ['ssm', 'put-parameter', '--name', name, '--type', type, '--overwrite', '--value', 'file:///dev/stdin'],
-    { input: value, encoding: 'utf-8' }
-  );
-  if (r.status !== 0) {
-    console.error(`FALLO ssm put-parameter ${name}: ${r.stderr}`);
-    process.exit(1);
+  // El valor va por archivo temporal (--value file://<path>) para que no
+  // aparezca en argv ni en el historial del shell. El dir es de este usuario
+  // (tmpdir) y se borra justo despues del put.
+  const dir = mkdtempSync(join(tmpdir(), 'etherfuse-jwt-'));
+  const file = join(dir, 'v');
+  try {
+    writeFileSync(file, value, { mode: 0o600 });
+    const r = spawnSync(
+      'aws',
+      ['ssm', 'put-parameter', '--name', name, '--type', type, '--overwrite', '--value', `file://${file}`],
+      { encoding: 'utf-8' }
+    );
+    if (r.status !== 0) {
+      console.error(`FALLO ssm put-parameter ${name}: ${r.stderr}`);
+      process.exit(1);
+    }
+    console.log(`OK ${name}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
-  console.log(`OK ${name}`);
 }
 
 putParameter(privateParam, privateKey, 'SecureString');
