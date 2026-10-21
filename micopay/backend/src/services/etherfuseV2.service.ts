@@ -8,6 +8,7 @@
 // mandar los datos de verificacion y leer el estado. Payment accounts, quotes
 // y orders llegan en el siguiente slice.
 
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { breakers } from '../lib/breakers.js';
 import { breakerFetch, isIdempotentMethod } from '../lib/circuitBreaker.js';
 import { signLaunchToken } from '../lib/etherfuseJwt.js';
@@ -183,6 +184,247 @@ export function buildLaunchForm(
   };
   if (returnUrl) fields.return_url = returnUrl;
   return { url: `${V2_APP.replace(/\/$/, '')}/auth/launch`, fields };
+}
+
+// ---- Payment Accounts ---------------------------------------------------
+
+export type PaymentAccountKind = 'bank' | 'wallet' | 'embeddedWallet' | 'debitCard' | 'cash';
+export type PaymentAccountStatus = 'pending' | 'ready' | 'rejected' | 'disabled';
+
+export type WalletDetails = { kind: 'address'; address: string; chain: 'stellar' | 'ethereum' | 'solana' };
+export type ClabeDetails = { kind: 'clabe'; clabe: string };
+export type AccountDetails = WalletDetails | ClabeDetails;
+
+export interface RegistrationInfo {
+  accountHolderName?: string;
+  taxId?: string;
+  curp?: string;
+  firstName?: string;
+  paternalLastName?: string;
+  maternalLastName?: string;
+  dateOfBirth?: string;
+  countryOfBirth?: string;
+}
+
+export interface RegisterPaymentAccountRequest {
+  kind: PaymentAccountKind;
+  label: string;
+  /** ISO 3166-1 alpha-2 (bank only). */
+  country?: string;
+  /** ISO 4217 (bank only). */
+  currency?: string;
+  accountDetails: AccountDetails;
+  registrationInfo?: RegistrationInfo;
+}
+
+export interface PaymentAccountRail {
+  currency?: string;
+  source: { isDefault: boolean; status: PaymentAccountStatus; minAmount?: string; maxAmount?: string; rejection?: { code: string; message: string } } | null;
+  destination: { isDefault: boolean; status: PaymentAccountStatus; minAmount?: string; maxAmount?: string; rejection?: { code: string; message: string } } | null;
+}
+
+export interface PaymentAccount {
+  id: string;
+  status: PaymentAccountStatus;
+  label: string;
+  rails: Record<string, PaymentAccountRail>;
+  createdAt: string;
+}
+
+export async function registerPaymentAccount(customerOrgId: string, req: RegisterPaymentAccountRequest): Promise<PaymentAccount> {
+  return v2Json<PaymentAccount>(`/organization/${encodeURIComponent(customerOrgId)}/payment_account`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
+}
+
+export async function getPaymentAccount(customerOrgId: string, id: string): Promise<PaymentAccount> {
+  return v2Json<PaymentAccount>(`/organization/${encodeURIComponent(customerOrgId)}/payment_account/${encodeURIComponent(id)}`);
+}
+
+export async function listPaymentAccounts(customerOrgId: string): Promise<PaymentAccount[]> {
+  const r = await v2Json<{ data?: PaymentAccount[] } | PaymentAccount[]>(`/organization/${encodeURIComponent(customerOrgId)}/payment_account`);
+  return Array.isArray(r) ? r : (r.data ?? []);
+}
+
+// ---- Quotes -------------------------------------------------------------
+
+export interface PaymentAccountRef {
+  type: 'stored';
+  id: string;
+}
+
+export interface CreateQuoteRequest {
+  source: PaymentAccountRef;
+  destination: PaymentAccountRef;
+  /** Decimal string positivo. */
+  sourceAmount: string;
+  /** "USDC:ISSUER", "XLM" o "MXN". */
+  sourceAsset: string;
+  destinationAsset: string;
+  sourceRail?: string;
+  destinationRail?: string;
+  /** 0..500. */
+  partnerFeeBpsOverride?: number;
+}
+
+export interface Quote {
+  quoteId: string;
+  sourceAmount: string;
+  destinationAmount: string;
+  sourceAsset: string;
+  destinationAsset: string;
+  sourceRail: string;
+  destinationRail: string;
+  rateBeforeFees: string;
+  rateAfterFees: string;
+  feeBps: number;
+  feeAmount: string;
+  fees: Array<{ type: string; amount: string; asset: string }>;
+  createdAt: string;
+  /** Vence a los 2 minutos. */
+  expiresAt: string;
+}
+
+export async function createQuote(customerOrgId: string, req: CreateQuoteRequest): Promise<Quote> {
+  return v2Json<Quote>(`/organization/${encodeURIComponent(customerOrgId)}/quote`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
+}
+
+// ---- Orders -------------------------------------------------------------
+
+export type OrderStatus =
+  | 'created'
+  | 'funded'
+  | 'claimable'
+  | 'completed'
+  | 'failed'
+  | 'canceled'
+  | 'refunded';
+
+export interface OrderAmount {
+  asset: string;
+  rail: string;
+  amount: string;
+}
+
+export interface FundingInstructions {
+  rail: string;
+  reference: string;
+  fundingDeadline: string;
+  destination?: {
+    /** Para rails de banco. */
+    clabe?: string;
+    bankName?: string;
+    recipientName?: string;
+    /** Para rails de wallet (Stellar). */
+    address?: string;
+    memo?: string;
+    chain?: string;
+  };
+}
+
+export interface Order {
+  id: string;
+  organizationId: string;
+  status: OrderStatus;
+  memo: string | null;
+  source: OrderAmount;
+  destination: OrderAmount;
+  fees?: Array<{ type: string; amount: string; asset: string }>;
+  fundingInstructions?: FundingInstructions;
+  claimInstructions?: unknown | null;
+  authorization?: unknown | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+}
+
+export interface CreateOrderRequest {
+  quoteId: string;
+  memo?: string;
+}
+
+export async function createOrder(customerOrgId: string, req: CreateOrderRequest): Promise<Order> {
+  // Reenviar el mismo quoteId devuelve 200 con la misma orden; esta operacion
+  // es idempotente desde ambos lados.
+  return v2Json<Order>(`/organization/${encodeURIComponent(customerOrgId)}/order`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
+}
+
+export async function getOrder(customerOrgId: string, id: string): Promise<Order> {
+  return v2Json<Order>(`/organization/${encodeURIComponent(customerOrgId)}/order/${encodeURIComponent(id)}`);
+}
+
+export async function refreshFundingInstructions(customerOrgId: string, id: string): Promise<Order> {
+  return v2Json<Order>(`/organization/${encodeURIComponent(customerOrgId)}/order/${encodeURIComponent(id)}/refresh_funding_instructions`, {
+    method: 'POST',
+    body: '{}',
+  });
+}
+
+// ---- Webhook subscriptions ----------------------------------------------
+
+export type WebhookEventType =
+  | 'orderUpdated'
+  | 'paymentAccountUpdated'
+  | 'kycUpdated'
+  | 'kybUpdated';
+
+export interface WebhookSubscription {
+  id: string;
+  eventType: WebhookEventType;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Solo se devuelve al crear; guardar en SSM, no en logs. */
+  secret?: string;
+}
+
+export async function createWebhookSubscription(
+  customerOrgId: string,
+  req: { url: string; eventType: WebhookEventType }
+): Promise<WebhookSubscription> {
+  return v2Json<WebhookSubscription>(`/organization/${encodeURIComponent(customerOrgId)}/webhook_subscription`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
+}
+
+export async function listWebhookSubscriptions(customerOrgId: string): Promise<WebhookSubscription[]> {
+  const r = await v2Json<{ data?: WebhookSubscription[] } | WebhookSubscription[]>(`/organization/${encodeURIComponent(customerOrgId)}/webhook_subscription`);
+  return Array.isArray(r) ? r : (r.data ?? []);
+}
+
+/**
+ * Verifica la firma de un webhook de Etherfuse. Header: `X-Signature: sha256=<hex>`.
+ * HMAC-SHA256 sobre el body **crudo** (bytes tal como llegaron) con el secret
+ * decodificado desde base64url. El route handler debe preservar el raw body;
+ * ver docs/webhooks de Etherfuse (RFC 8785 canonicalizado del lado del emisor).
+ *
+ * Devuelve `true` solo si la firma coincide; `false` sin lanzar en todos los
+ * casos de error (header ausente, mal formato, etc.) para que la ruta pueda
+ * responder 401 uniformemente.
+ */
+export function verifyWebhookSignature(rawBody: Buffer | string, headerValue: string | undefined, base64urlSecret: string): boolean {
+  if (!headerValue || !base64urlSecret) return false;
+  const m = /^sha256=([0-9a-fA-F]+)$/.exec(headerValue.trim());
+  if (!m) return false;
+  const providedHex = m[1].toLowerCase();
+  let secret: Buffer;
+  try {
+    secret = Buffer.from(base64urlSecret, 'base64url');
+  } catch { return false; }
+  const bodyBuf = typeof rawBody === 'string' ? Buffer.from(rawBody) : rawBody;
+  const expectedHex = createHmac('sha256', secret).update(bodyBuf).digest('hex');
+  if (expectedHex.length !== providedHex.length) return false;
+  const a = Buffer.from(expectedHex);
+  const b = Buffer.from(providedHex);
+  return timingSafeEqual(a, b);
 }
 
 // Para pruebas: permite inyectar hosts sin tocar process.env.
