@@ -1,13 +1,25 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  confirmBankWithdrawOrder,
+  createBankWithdrawQuote,
+  fetchBankWithdrawOrders,
   fetchBankWithdrawStatus,
   registerBankAccount,
   startBankKyc,
   type BankKycLaunchForm,
+  type BankWithdrawOrder,
+  type BankWithdrawOrderSummary,
+  type BankWithdrawQuote,
   type BankWithdrawStatusResponse,
   type StartBankKycRequest,
 } from '../services/api';
 import { extractApiErrorPayload } from '../utils/apiError';
+import { getPublicKey } from '../lib/keystore';
+import {
+  signAndSubmitPreparedWithdrawTx,
+  WithdrawTxMismatchError,
+  type ExpectedBankWithdraw,
+} from '../services/stellarRamp';
 
 interface BankWithdrawScreenProps {
   onBack: () => void;
@@ -135,16 +147,7 @@ function StageView({
     case 'needs_bank':
       return <BankAccountForm userToken={userToken} onDone={onChanged} />;
     case 'ready':
-      return (
-        <section className="p-4 border-2 border-tinta bg-crema">
-          <h2 className="font-bold mb-2">Listo para retirar</h2>
-          <p>
-            Tu cuenta: {status.clabeMasked ?? '•••'}. En el siguiente paso
-            escribes cuanto USDC quieres cambiar y los MXN te llegan por SPEI.
-          </p>
-          <p className="mt-4 text-sm opacity-70">(Pantalla de retiro proxima)</p>
-        </section>
-      );
+      return <WithdrawForm userToken={userToken} clabeMasked={status.clabeMasked} />;
   }
 }
 
@@ -450,5 +453,202 @@ function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void 
         se pedira dentro de su pagina si la necesitan.
       </p>
     </form>
+  );
+}
+
+// ---- Retiro: monto, cotizacion, firma y seguimiento ---------------------
+
+type WithdrawStage =
+  | { kind: 'idle' }
+  | { kind: 'quoted'; quote: BankWithdrawQuote }
+  | { kind: 'signing'; order: BankWithdrawOrder; quote: BankWithdrawQuote }
+  | { kind: 'tracking'; orderId: string; status: BankWithdrawOrderSummary['status']; destinationMxn: string | null };
+
+function useCountdown(targetIso?: string): number {
+  const target = targetIso ? new Date(targetIso).getTime() : 0;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!target) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [target]);
+  return target ? Math.max(0, Math.floor((target - now) / 1000)) : 0;
+}
+
+function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMasked?: string }) {
+  const [amount, setAmount] = useState('');
+  const [stage, setStage] = useState<WithdrawStage>({ kind: 'idle' });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const quote = stage.kind === 'quoted' ? stage.quote : (stage.kind === 'signing' ? stage.quote : null);
+  const secondsLeft = useCountdown(quote?.expiresAt);
+  const expired = quote !== null && secondsLeft === 0;
+
+  const amountOk = /^[0-9]+(\.[0-9]{1,7})?$/.test(amount) && Number(amount) > 0;
+
+  const requestQuote = async () => {
+    if (!amountOk) return;
+    try {
+      setBusy(true); setError(null);
+      const q = await createBankWithdrawQuote(userToken, { asset: 'USDC', amount });
+      setStage({ kind: 'quoted', quote: q });
+    } catch (e) {
+      setError(extractApiErrorPayload(e).message ?? 'No pudimos cotizar');
+    } finally { setBusy(false); }
+  };
+
+  const confirmAndSign = async () => {
+    if (stage.kind !== 'quoted') return;
+    const q = stage.quote;
+    try {
+      setBusy(true); setError(null);
+      const order = await confirmBankWithdrawOrder(userToken, q.quoteId);
+      setStage({ kind: 'signing', order, quote: q });
+
+      const dest = order.fundingInstructions?.destination;
+      if (!order.preparedTransaction || !dest?.address) {
+        throw new Error('Etherfuse no devolvio una transaccion para firmar');
+      }
+      const pub = await getPublicKey();
+      if (!pub) throw new Error('No encontramos tu llave en el telefono');
+
+      // sourceAsset del quote viene como "USDC:ISSUER".
+      const [, issuer = ''] = q.sourceAsset.split(':');
+      const expected: ExpectedBankWithdraw = {
+        fromAddress: pub,
+        toAddress: dest.address,
+        memo: dest.memo ?? null,
+        assetCode: 'USDC',
+        assetIssuer: issuer,
+        amount: q.sourceAmount,
+      };
+      await signAndSubmitPreparedWithdrawTx(order.preparedTransaction, expected);
+
+      setStage({
+        kind: 'tracking',
+        orderId: order.orderId,
+        status: order.status,
+        destinationMxn: q.destinationAmount,
+      });
+    } catch (e) {
+      if (e instanceof WithdrawTxMismatchError) {
+        setError(`La transaccion no coincide con la orden (${e.reason}). No se firmo.`);
+      } else {
+        setError(extractApiErrorPayload(e).message ?? (e as Error).message);
+      }
+      setStage({ kind: 'idle' });
+    } finally { setBusy(false); }
+  };
+
+  // Mientras hacemos seguimiento, consultamos /orders cada 10 s.
+  useEffect(() => {
+    if (stage.kind !== 'tracking') return;
+    const orderId = stage.orderId;
+    const t = setInterval(async () => {
+      try {
+        const orders = await fetchBankWithdrawOrders(userToken);
+        const found = orders.find((o) => o.orderId === orderId);
+        if (found) {
+          setStage((s) => s.kind === 'tracking' && s.orderId === orderId
+            ? { ...s, status: found.status, destinationMxn: found.destinationMxn ?? s.destinationMxn }
+            : s);
+        }
+      } catch { /* seguimos intentando */ }
+    }, 10_000);
+    return () => clearInterval(t);
+  }, [stage.kind === 'tracking' ? stage.orderId : null, userToken]);
+
+  if (stage.kind === 'tracking') {
+    const title = stage.status === 'completed'
+      ? 'Tu retiro llegó'
+      : stage.status === 'failed' || stage.status === 'refunded' || stage.status === 'canceled'
+        ? 'El retiro no se completo'
+        : 'Procesando tu retiro';
+    const detail = stage.status === 'completed'
+      ? `$${stage.destinationMxn ?? '--'} MXN a tu cuenta ${clabeMasked ?? ''}`
+      : `Estado: ${stage.status}`;
+    return (
+      <section className="p-4 border-2 border-tinta bg-amarillo">
+        <h2 className="font-bold mb-2">{title}</h2>
+        <p>{detail}</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="p-4 border-2 border-tinta bg-crema flex flex-col gap-4">
+      <h2 className="font-bold">Retirar a {clabeMasked ?? 'tu cuenta'}</h2>
+
+      <label className="flex flex-col gap-1">
+        <span className="font-bold">Monto en USDC</span>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+          className="border-2 border-tinta p-2 bg-white"
+          placeholder="0.00"
+          disabled={stage.kind !== 'idle'}
+        />
+      </label>
+
+      {stage.kind === 'idle' && (
+        <button
+          type="button"
+          onClick={requestQuote}
+          disabled={!amountOk || busy}
+          className="min-h-12 bg-tinta text-crema font-bold disabled:opacity-50"
+        >
+          {busy ? 'Cotizando…' : 'Cotizar'}
+        </button>
+      )}
+
+      {stage.kind === 'quoted' && (
+        <div className="flex flex-col gap-3 border-2 border-tinta p-3 bg-amarillo">
+          <p>Te llegan <strong>${stage.quote.destinationAmount} MXN</strong></p>
+          <p className="text-sm">Comisión {stage.quote.feeAmount} USDC ({stage.quote.feeBps / 100}%)</p>
+          <p className="text-sm">
+            {expired
+              ? 'La cotización vencio; pide una nueva.'
+              : `La cotizacion vence en ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}.`}
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setStage({ kind: 'idle' })}
+              className="flex-1 min-h-12 border-2 border-tinta font-bold"
+            >
+              Cancelar
+            </button>
+            {expired ? (
+              <button
+                type="button"
+                onClick={requestQuote}
+                disabled={busy}
+                className="flex-1 min-h-12 bg-tinta text-crema font-bold disabled:opacity-50"
+              >
+                Nueva cotización
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={confirmAndSign}
+                disabled={busy}
+                className="flex-1 min-h-12 bg-tinta text-crema font-bold disabled:opacity-50"
+              >
+                {busy ? 'Firmando…' : 'Confirmar y firmar'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {stage.kind === 'signing' && (
+        <p className="text-sm">Firmando y enviando a la red…</p>
+      )}
+
+      {error && <p className="text-red-600 font-bold">{error}</p>}
+    </section>
   );
 }
