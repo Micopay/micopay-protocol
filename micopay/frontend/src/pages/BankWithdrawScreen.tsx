@@ -2,7 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   fetchBankWithdrawStatus,
   registerBankAccount,
+  startBankKyc,
+  type BankKycLaunchForm,
   type BankWithdrawStatusResponse,
+  type StartBankKycRequest,
 } from '../services/api';
 import { extractApiErrorPayload } from '../utils/apiError';
 
@@ -118,16 +121,7 @@ function StageView({
         </section>
       );
     case 'needs_kyc':
-      return (
-        <section className="p-4 border-2 border-tinta bg-crema">
-          <h2 className="font-bold mb-2">Un paso mas</h2>
-          <p>
-            Etherfuse pide tu RFC, tu constancia de situación fiscal y una
-            selfie corta antes del primer retiro.
-          </p>
-          <p className="mt-4 text-sm opacity-70">(Formulario proximo)</p>
-        </section>
-      );
+      return <KycForm userToken={userToken} onDone={onChanged} />;
     case 'kyc_review':
       return (
         <section className="p-4 border-2 border-tinta bg-amarillo">
@@ -242,6 +236,219 @@ function BankAccountForm({ userToken, onDone }: { userToken: string; onDone: () 
       >
         {submitting ? 'Guardando…' : 'Guardar cuenta'}
       </button>
+    </form>
+  );
+}
+
+// ---- KYC: formulario y launch de /idv -----------------------------------
+
+/**
+ * Abre /auth/launch de Etherfuse con un POST (como pide la especificacion de
+ * JWT bearer). Crea un <form> en el DOM, lo submitea con target="_blank" para
+ * que el navegador del sistema se encargue, y lo limpia enseguida. En
+ * Capacitor el WebView delega a Chrome Custom Tabs / Safari View Controller.
+ */
+function submitLaunchForm(launch: BankKycLaunchForm) {
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = launch.url;
+  form.target = '_blank';
+  form.rel = 'noopener';
+  for (const [k, v] of Object.entries(launch.fields)) {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = k;
+    input.value = v;
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+  try { form.submit(); } finally { form.remove(); }
+}
+
+const RFC_RE = /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/;
+
+function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void }) {
+  const [fullName, setFullName] = useState('');
+  const [dob, setDob] = useState('');
+  const [rfc, setRfc] = useState('');
+  const [street, setStreet] = useState('');
+  const [city, setCity] = useState('');
+  const [postalCode, setPostal] = useState('');
+  const [email, setEmail] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [launched, setLaunched] = useState(false);
+
+  const nameParts = fullName.trim().split(/\s+/);
+  const firstName = nameParts.slice(0, nameParts.length > 2 ? -2 : -1).join(' ') || nameParts[0] || '';
+  const lastName = nameParts.length > 1 ? nameParts.slice(nameParts.length > 2 ? -2 : -1).join(' ') : '';
+  const canSubmit =
+    firstName.trim().length > 0 &&
+    lastName.trim().length > 0 &&
+    /^\d{4}-\d{2}-\d{2}$/.test(dob) &&
+    RFC_RE.test(rfc.trim().toUpperCase()) &&
+    street.trim().length > 0 &&
+    city.trim().length > 0 &&
+    email.includes('@');
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    const req: StartBankKycRequest = {
+      firstName,
+      lastName,
+      dateOfBirth: dob,
+      taxId: rfc.trim().toUpperCase(),
+      country: 'MEX',
+      address: {
+        street: street.trim(),
+        city: city.trim(),
+        country: 'MEX',
+        postalCode: postalCode.trim() || undefined,
+      },
+      email: email.trim(),
+      displayName: fullName.trim(),
+    };
+    try {
+      setSubmitting(true);
+      setError(null);
+      const res = await startBankKyc(userToken, req);
+      submitLaunchForm(res.launch);
+      setLaunched(true);
+      // El webhook kycUpdated marca el estado desde el backend; mientras tanto
+      // onDone trae needs_kyc -> kyc_review y empieza el polling de 10 s.
+      setTimeout(onDone, 1500);
+    } catch (e) {
+      setError(extractApiErrorPayload(e).message ?? 'No pudimos iniciar el KYC');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (launched) {
+    return (
+      <section className="p-4 border-2 border-tinta bg-amarillo flex flex-col gap-3">
+        <h2 className="font-bold">Abrimos el verificador</h2>
+        <p>
+          Haz la selfie y acepta el contrato en la pestana que se abrio.
+          Cuando termines, regresa aqui: en unos segundos esta pantalla
+          cambia sola.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="p-4 border-2 border-tinta bg-crema flex flex-col gap-3">
+      <h2 className="font-bold">Un paso para habilitar el retiro</h2>
+      <p className="text-sm">
+        Etherfuse pide estos datos la primera vez. Despues de guardarlos
+        abriremos su pagina para que te tomes una selfie y aceptes su
+        contrato.
+      </p>
+
+      <label className="flex flex-col gap-1">
+        <span className="font-bold">Nombre completo (como en tu INE)</span>
+        <input
+          type="text"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          className="border-2 border-tinta p-2 bg-white"
+          autoComplete="name"
+          maxLength={120}
+        />
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="font-bold">Fecha de nacimiento</span>
+        <input
+          type="date"
+          value={dob}
+          onChange={(e) => setDob(e.target.value)}
+          className="border-2 border-tinta p-2 bg-white"
+          max={new Date(Date.now() - 568_000_000_000).toISOString().slice(0, 10) /* ~18 anos */}
+        />
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="font-bold">RFC con homoclave</span>
+        <input
+          type="text"
+          value={rfc}
+          onChange={(e) => setRfc(e.target.value.toUpperCase())}
+          className="border-2 border-tinta p-2 bg-white uppercase"
+          maxLength={13}
+          placeholder="HEGL900101AB1"
+        />
+        {rfc.length > 0 && !RFC_RE.test(rfc.trim().toUpperCase()) && (
+          <span className="text-sm">El RFC debe tener 12 o 13 caracteres (4 letras, 6 numeros, 3 alfanumericos).</span>
+        )}
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="font-bold">Correo</span>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="border-2 border-tinta p-2 bg-white"
+          autoComplete="email"
+          maxLength={254}
+        />
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="font-bold">Calle y numero</span>
+        <input
+          type="text"
+          value={street}
+          onChange={(e) => setStreet(e.target.value)}
+          className="border-2 border-tinta p-2 bg-white"
+          autoComplete="address-line1"
+          maxLength={200}
+        />
+      </label>
+
+      <div className="grid grid-cols-2 gap-2">
+        <label className="flex flex-col gap-1">
+          <span className="font-bold">Ciudad</span>
+          <input
+            type="text"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            className="border-2 border-tinta p-2 bg-white"
+            autoComplete="address-level2"
+            maxLength={100}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="font-bold">CP (opcional)</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={postalCode}
+            onChange={(e) => setPostal(e.target.value.replace(/[^0-9]/g, ''))}
+            className="border-2 border-tinta p-2 bg-white"
+            maxLength={5}
+          />
+        </label>
+      </div>
+
+      {error && <p className="text-red-600 font-bold">{error}</p>}
+
+      <button
+        type="submit"
+        disabled={!canSubmit || submitting}
+        className="min-h-12 bg-tinta text-crema font-bold disabled:opacity-50"
+      >
+        {submitting ? 'Enviando…' : 'Continuar con la selfie'}
+      </button>
+
+      <p className="text-xs opacity-70">
+        Los datos van directo a Etherfuse. La constancia de situacion fiscal
+        se pedira dentro de su pagina si la necesitan.
+      </p>
     </form>
   );
 }
