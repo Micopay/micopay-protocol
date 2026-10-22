@@ -17,7 +17,11 @@ import { rateRoutes } from './routes/rate.js';
 import { kycRoutes } from './routes/kyc.js';
 import { rampRoutes } from './routes/ramp.js';
 import { signRequestsRoutes } from './routes/sign-requests.js';
+import { paymentRoutes } from './routes/payments.js';
 import { clientErrorRoutes } from './routes/client-errors.js';
+import { jwksRoutes } from './routes/jwks.js';
+import { bankWithdrawRoutes } from './routes/bank-withdraw.js';
+import { bankWithdrawWebhookRoutes } from './routes/bank-withdraw-webhooks.js';
 import { AppError } from './utils/errors.js';
 import { Keypair } from '@stellar/stellar-sdk';
 import fastifyStatic from '@fastify/static';
@@ -250,10 +254,14 @@ app.register(rateRoutes, { prefix: '' });
 app.register(kycRoutes, { prefix: '' });
 app.register(rampRoutes, { prefix: '' });
 app.register(signRequestsRoutes, { prefix: '' });
+app.register(paymentRoutes, { prefix: '' });
 // El ErrorBoundary del frontend postea aquí; la ruta existía sin registrar, así
 // que hasta ahora todo reporte de crash caía en un 404
 // (docs/AUDIT_MOBILE_MAINNET.md §6, "Ruta backend definida pero no registrada").
 app.register(clientErrorRoutes, { prefix: '' });
+app.register(jwksRoutes, { prefix: '' });
+app.register(bankWithdrawRoutes, { prefix: '' });
+app.register(bankWithdrawWebhookRoutes, { prefix: '' });
 
 // --- Start server ---
 
