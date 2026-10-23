@@ -454,6 +454,7 @@
     "exceedsWarning": "El costo total efectivo ({{pct}}%) supera el {{maxPct}}% recomendado. Revísalo antes de confirmar, o vuelve al mapa para elegir otra oferta.",
     "creating": "Creando operación…",
     "confirmBtn": "Confirmar",
+    "chooseAnotherAgent": "Elegir otro agente",
     "cancel": "Cancelar",
     "cashReceived": "Recibes en efectivo",
     "cashGiven": "Entregas en efectivo",

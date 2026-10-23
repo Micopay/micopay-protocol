@@ -73,7 +73,7 @@ export function extractApiErrorPayload(err: unknown): ApiErrorPayload {
   return { message: resolveErrorMessage(undefined).message };
 }
 
-export type ApiErrorAction = 'retry' | 'support';
+export type ApiErrorAction = 'retry' | 'support' | 'choose_agent';
 
 export interface MappedApiError {
   message: string;
@@ -87,6 +87,18 @@ export function mapApiError(err: unknown): MappedApiError {
   if (axios.isAxiosError(err)) {
     const status = err.response?.status;
     const { message, error } = extractApiErrorPayload(err);
+
+    if (error === 'RECEIVER_NOT_READY') {
+      const serverMsg = typeof (err.response?.data as any)?.message === 'string'
+        ? (err.response?.data as any).message
+        : message;
+      return {
+        message: serverMsg,
+        error,
+        action: 'choose_agent',
+        status,
+      };
+    }
 
     if (!err.response) {
       return {
