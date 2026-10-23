@@ -3,7 +3,7 @@
 
 import { createHmac, randomBytes } from 'node:crypto';
 import { ok, strictEqual } from 'node:assert';
-import { canonicalJson, mapEtherfuseKyc, verifyWebhookSignature } from '../services/etherfuseV2.service.js';
+import { canonicalJson, mapEtherfuseKyc, mapEtherfuseKycDetailed, verifyWebhookSignature } from '../services/etherfuseV2.service.js';
 
 function sign(body: string, secret: Buffer): string {
   return 'sha256=' + createHmac('sha256', secret).update(body).digest('hex');
@@ -78,6 +78,21 @@ async function run() {
   strictEqual(mapEtherfuseKyc('inProgress', false), 'review');
   strictEqual(mapEtherfuseKyc('submitted', false), 'review');
   strictEqual(mapEtherfuseKyc('notStarted', false), 'not_started');
+
+  console.log(' 13. mapEtherfuseKycDetailed: pending o actionRequired en inProgress es turno del usuario');
+  const req = (status: 'pending' | 'awaitingReview' | 'satisfied' | 'actionRequired', requiresLaunch = false) =>
+    ({ type: 'x', status, requiresLaunch });
+  // El caso real del sandbox: todo satisfied menos personalData.
+  strictEqual(mapEtherfuseKycDetailed({ status: 'inProgress', needsWork: false, requirements: [req('actionRequired'), req('satisfied', true)] }), 'action_required');
+  // Cerro la pestana antes de la selfie.
+  strictEqual(mapEtherfuseKycDetailed({ status: 'inProgress', needsWork: false, requirements: [req('satisfied'), req('pending', true)] }), 'action_required');
+  // Todo enviado, esperando revision.
+  strictEqual(mapEtherfuseKycDetailed({ status: 'inProgress', needsWork: false, requirements: [req('awaitingReview'), req('satisfied', true)] }), 'review');
+  strictEqual(mapEtherfuseKycDetailed({ status: 'submitted', needsWork: false, requirements: [req('awaitingReview')] }), 'review');
+  // Sin lista (Etherfuse aun no enruta al pais): igual que el mapa simple.
+  strictEqual(mapEtherfuseKycDetailed({ status: 'inProgress', needsWork: false }), 'review');
+  strictEqual(mapEtherfuseKycDetailed({ status: 'approved', needsWork: false, requirements: [req('pending')] }), 'approved');
+  strictEqual(mapEtherfuseKycDetailed({ status: 'denied', needsWork: false, requirements: [] }), 'rejected');
 
   console.log('\nAll Etherfuse v2 webhook signature tests passed.');
   strictEqual(true, true);

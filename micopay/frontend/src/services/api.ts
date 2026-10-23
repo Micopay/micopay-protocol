@@ -1136,6 +1136,7 @@ export type BankWithdrawStage =
   | 'needs_didit'
   | 'needs_kyc'
   | 'kyc_review'
+  | 'kyc_action'
   | 'needs_bank'
   | 'ready';
 
@@ -1145,10 +1146,27 @@ export interface BankWithdrawStatusResponse {
   kycMessage?: string | null;
 }
 
-export async function fetchBankWithdrawStatus(token: string): Promise<BankWithdrawStatusResponse> {
+/**
+ * `detail` pide al backend los requisitos de Etherfuse (mas lento): al abrir la
+ * pantalla y al volver de /idv, no en el polling.
+ */
+export async function fetchBankWithdrawStatus(token: string, opts: { detail?: boolean } = {}): Promise<BankWithdrawStatusResponse> {
   try {
-    const res = await http.get('/defi/bank-withdraw/status', authHeaders(token));
+    const res = await http.get('/defi/bank-withdraw/status', {
+      ...authHeaders(token),
+      params: opts.detail ? { detail: '1' } : undefined,
+    });
     return res.data as BankWithdrawStatusResponse;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+/** Launch form nuevo para volver a /idv sin reenviar los datos. */
+export async function relaunchBankKyc(token: string): Promise<BankKycLaunchForm> {
+  try {
+    const res = await http.post('/defi/bank-withdraw/kyc/launch', {}, authHeaders(token));
+    return (res.data as { launch: BankKycLaunchForm }).launch;
   } catch (e) {
     throw toApiError(extractApiErrorPayload(e));
   }

@@ -157,6 +157,19 @@ export function mapEtherfuseKyc(status: KycOverallStatus, needsWork: boolean): E
   return 'review';
 }
 
+/**
+ * Igual que mapEtherfuseKyc, pero mira los requisitos (`?requirements=true`).
+ * En `inProgress` un requisito `pending` o `actionRequired` significa que el
+ * usuario tiene que volver a /idv (terminar o corregir): no es "en revision".
+ * Sin la lista de requisitos devuelve lo mismo que mapEtherfuseKyc.
+ */
+export function mapEtherfuseKycDetailed(kyc: Pick<KycStatus, 'status' | 'needsWork' | 'requirements'>): EtherfuseKycStatus {
+  const base = mapEtherfuseKyc(kyc.status, kyc.needsWork);
+  if (base !== 'review' || kyc.status !== 'inProgress') return base;
+  const userOwes = kyc.requirements?.some((r) => r.status === 'pending' || r.status === 'actionRequired');
+  return userOwes ? 'action_required' : base;
+}
+
 /** El POST responde 202: aceptado, no aplicado. El resultado llega por kycUpdated. */
 export interface SubmitVerificationResponse {
   organizationId: string;
