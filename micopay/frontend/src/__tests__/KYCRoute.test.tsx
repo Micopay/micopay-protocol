@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { KYCRoute, AppContext, type AppCtx } from '../App';
+import { KYCRoute, DiditKYCRoute, ProviderOnboardingRoute, AppContext, type AppCtx } from '../App';
 import * as api from '../services/api';
 import * as secureStorage from '../services/secureStorage';
 
@@ -21,9 +21,26 @@ vi.mock('react-i18next', async (importOriginal) => {
   };
 });
 
+// Estas pruebas son del build interno, con CETES abierto. El build de Play
+// (CETES cerrado) se prueba al final: ahi el KYC vuelve al inicio.
+const features = vi.hoisted(() => ({ cetes: true }));
+vi.mock('../constants/features', () => ({
+  get CETES_AVAILABLE() { return features.cetes; },
+  get BLEND_AVAILABLE() { return features.cetes; },
+  get DEFI_TRADING_ENABLED() { return features.cetes; },
+  SPEI_RAMP_ENABLED: false,
+}));
+
 vi.mock('../services/api', () => ({
   startKYC: vi.fn(),
   getKYCStatus: vi.fn(),
+}));
+
+// El onboarding real consulta al servidor; aquí solo importa su botón de KYC.
+vi.mock('../pages/ProviderOnboarding', () => ({
+  default: ({ onOpenKyc }: { onOpenKyc: () => void }) => (
+    <button onClick={onOpenKyc}>open-kyc</button>
+  ),
 }));
 
 vi.mock('../services/secureStorage', () => ({
@@ -217,6 +234,42 @@ describe('KYCRoute — HashRouter and URL hash integrity', () => {
 });
 
 /**
+ * Un agente nuevo se verifica con Didit desde "Unirse a la Red", no con
+ * Etherfuse, y al aprobar vuelve al onboarding.
+ */
+describe('ProviderOnboardingRoute — KYC del agente', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockReadJSON.mockResolvedValue(null);
+    mockGetKYCStatus.mockResolvedValue({ status: 'pending' });
+  });
+
+  it('abre Didit y al aprobar vuelve a /join-network', async () => {
+    render(
+      <AppContext.Provider value={createMockAppCtx({ refreshProviderStatus: vi.fn() } as any)}>
+        <MemoryRouter initialEntries={['/join-network']}>
+          <LocationTracker />
+          <Routes>
+            <Route path="/join-network" element={<ProviderOnboardingRoute />} />
+            <Route path="/kyc/didit" element={<DiditKYCRoute />} />
+            <Route path="/kyc" element={<div data-testid="etherfuse-kyc">Etherfuse</div>} />
+          </Routes>
+        </MemoryRouter>
+      </AppContext.Provider>
+    );
+
+    mockGetKYCStatus.mockResolvedValue({ status: 'approved' });
+    fireEvent.click(screen.getByRole('button', { name: 'open-kyc' }));
+
+    await waitFor(() => expect(mockGetKYCStatus).toHaveBeenCalledWith('mock-session-token', 'didit'));
+    await waitFor(() => {
+      expect(screen.getByTestId('location-path')).toHaveTextContent('/join-network');
+    });
+    expect(screen.queryByTestId('etherfuse-kyc')).not.toBeInTheDocument();
+  });
+});
+
+/**
  * KYC-1 · La caché no puede desbloquear por sí sola.
  *
  * Es el criterio "a stale local `approved` cache cannot navigate as verified
@@ -266,6 +319,39 @@ describe('KYC-1 — la caché local no manda', () => {
     );
 
     await waitFor(() => expect(mockGetKYCStatus).toHaveBeenCalled());
+    expect(screen.queryByTestId('cetes-screen')).not.toBeInTheDocument();
+  });
+});
+
+describe('KYCRoute — build de Play (CETES "Próximamente")', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    features.cetes = false;
+  });
+  afterEach(() => {
+    features.cetes = true;
+  });
+
+  it('al aprobar vuelve al inicio, no a una pantalla cerrada', async () => {
+    mockReadJSON.mockResolvedValue({ status: 'approved' });
+    mockGetKYCStatus.mockResolvedValue({ status: 'approved' });
+
+    render(
+      <AppContext.Provider value={createMockAppCtx()}>
+        <MemoryRouter initialEntries={['/kyc']}>
+          <LocationTracker />
+          <Routes>
+            <Route path="/kyc" element={<KYCRoute />} />
+            <Route path="/cetes" element={<div data-testid="cetes-screen">CETES Screen Content</div>} />
+            <Route path="/" element={<div data-testid="home-screen">Home Screen</div>} />
+          </Routes>
+        </MemoryRouter>
+      </AppContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-screen')).toBeInTheDocument();
+    });
     expect(screen.queryByTestId('cetes-screen')).not.toBeInTheDocument();
   });
 });

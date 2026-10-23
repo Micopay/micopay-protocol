@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
+import { useTranslation } from "react-i18next";
 import { generateAndStoreKeypair, keypairExists, getPublicKey, revealSecretKey } from './lib/keystore';
 import {
   HashRouter,
@@ -28,6 +29,9 @@ import QRReveal from "./pages/QRReveal";
 import DepositQR from "./pages/DepositQR";
 import SuccessScreen, { receiptFromServer, type SuccessReceipt } from "./pages/SuccessScreen";
 import Explore from "./pages/Explore";
+import ComingSoon from "./pages/ComingSoon";
+import { CETES_AVAILABLE, BLEND_AVAILABLE, DEFI_TRADING_ENABLED, SPEI_RAMP_ENABLED, BANK_WITHDRAW_ENABLED } from "./constants/features";
+import BankWithdrawScreen from "./pages/BankWithdrawScreen";
 import History from "./pages/History";
 import TradeDetail from "./pages/TradeDetail";
 import CETESScreen from "./pages/CETESScreen";
@@ -58,6 +62,8 @@ import {
   getCurrentUser,
   lockTrade,
   setAvailability,
+  registerPushToken,
+  notifyPaymentSent,
   type ProviderStatus,
   createTrade,
   fetchTradeDetail,
@@ -70,6 +76,7 @@ import { readJSON, writeJSON, removeKey, isBackupConfirmed, setBackupConfirmed }
 import { ApiError, mapApiError, type MappedApiError } from "./utils/apiError";
 import { IS_DEMO_MODE } from "./utils/demoMode";
 import { DEFAULT_ESCROW_ASSET_KEY, getEscrowAssetOption } from "./constants/escrowAssets";
+import { startPush, PUSH_PERMISSION_GRANTED_EVENT } from "./lib/push";
 
 const USERS_STORAGE_KEY = "micopay_user";
 /**
@@ -180,6 +187,7 @@ function HomeRoute() {
           onNavigateCashout={() => { setFlow('cashout'); navigate('/cashout'); }}
           onNavigateDeposit={() => { setFlow('deposit'); navigate('/deposit'); }}
           onNavigateHistory={() => navigate('/history')}
+          onNavigateBankWithdraw={BANK_WITHDRAW_ENABLED ? () => navigate('/retirar-banco') : undefined}
           token={sessionUser?.token ?? null}
           merchantToken={sessionUser?.token ?? null}
           onNavigateInbox={() => navigate('/inbox')}
@@ -251,10 +259,15 @@ function PayHubRoute() {
 
 function SendPaymentRoute() {
   const navigate = useNavigate();
+  const { sessionUser } = useAppCtx();
   return (
       <SendPayment
           onBack={() => navigate('/pay')}
           onDone={() => navigate('/')}
+          onSent={(r) => {
+            // El pago ya salio; si el aviso falla no se le dice nada a quien envio.
+            if (sessionUser?.token) notifyPaymentSent(r.hash, sessionUser.token).catch(() => {});
+          }}
       />
   );
 }
@@ -600,14 +613,9 @@ function ExploreRoute() {
       <Explore
           onBack={() => navigate('/')}
           onNavigate={(page) => navigate(navMap[page] ?? '/')}
-          // CETES buy/sell and Blend supply/borrow don't move real user funds yet
-          // (platform-key-only simulation on mainnet, audit finding B2) — hidden
-          // until a real user-signed implementation lands. Opt in with
-          // VITE_ENABLE_DEFI_TRADING=true for internal/demo builds.
-          // SPEI ramp (KYC + onramp + offramp) moves real funds (device keypair) —
-          // enabled independently via VITE_ENABLE_SPEI_RAMP=true.
-          showSpeiRamp={import.meta.env.VITE_ENABLE_SPEI_RAMP === 'true'}
-          showDefi={import.meta.env.VITE_ENABLE_DEFI_TRADING === 'true'}
+          // Apagados se muestran como "Próximamente" (constants/features.ts).
+          cetesAvailable={CETES_AVAILABLE}
+          blendAvailable={BLEND_AVAILABLE}
       />
   );
 }
@@ -615,6 +623,12 @@ function ExploreRoute() {
 function CetesRoute() {
   const navigate = useNavigate();
   const { sessionUser } = useAppCtx();
+  const { t } = useTranslation();
+  // Tambien se llega por la barra inferior ("Invertir"), por URL y por el
+  // regreso del KYC: todas pasan por aqui.
+  if (!CETES_AVAILABLE) {
+    return <ComingSoon title={t('exploreScreen.investCetes')} icon="trending_up" onBack={() => navigate('/explore')} />;
+  }
   return (
       <CETESScreen
           onBack={() => navigate('/explore')}
@@ -624,10 +638,19 @@ function CetesRoute() {
           // there by mistake.
           onBanco={() => navigate('/kyc')}
           userToken={sessionUser?.token}
-          showDefi={import.meta.env.VITE_ENABLE_DEFI_TRADING === 'true'}
-          showSpeiRamp={import.meta.env.VITE_ENABLE_SPEI_RAMP === 'true'}
+          showDefi={DEFI_TRADING_ENABLED}
+          showSpeiRamp={SPEI_RAMP_ENABLED}
       />
   );
+}
+
+function BankWithdrawRoute() {
+  const navigate = useNavigate();
+  const { sessionUser } = useAppCtx();
+  if (!BANK_WITHDRAW_ENABLED || !sessionUser?.token) {
+    return <ComingSoon title="Retirar a banco" icon="account_balance" onBack={() => navigate('/')} />;
+  }
+  return <BankWithdrawScreen onBack={() => navigate('/')} userToken={sessionUser.token} />;
 }
 
 /**
@@ -643,6 +666,7 @@ const KYC_RETURN_DESTINATIONS = {
   explore: '/explore',
   inbox: '/inbox',
   profile: '/profile',
+  joinNetwork: '/join-network',
 } as const;
 
 type KycReturnKey = keyof typeof KYC_RETURN_DESTINATIONS;
@@ -685,7 +709,8 @@ export function KYCRoute() {
   const navigate = useNavigate();
   const { sessionUser } = useAppCtx();
   const [params] = useSearchParams();
-  const destination = resolveKycReturn(params.get('return'), 'cetes');
+  // Sin CETES abierto no hay a donde volver ahi: se vuelve al inicio.
+  const destination = resolveKycReturn(params.get('return'), CETES_AVAILABLE ? 'cetes' : 'home');
   return (
       <KYCScreen
           token={sessionUser?.token ?? null}
@@ -699,9 +724,9 @@ export function KYCRoute() {
 
 function KYCApprovedNextRoute() {
   const navigate = useNavigate();
-  // After approved, continue to CETES + deposit flow.
+  // Tras aprobar, sigue a CETES si esta abierto; si no, al inicio.
   useEffect(() => {
-    navigate('/cetes');
+    navigate(CETES_AVAILABLE ? '/cetes' : '/');
   }, [navigate]);
   return null;
 }
@@ -710,6 +735,10 @@ function KYCApprovedNextRoute() {
 function BlendRoute() {
   const navigate = useNavigate();
   const { sessionUser } = useAppCtx();
+  const { t } = useTranslation();
+  if (!BLEND_AVAILABLE) {
+    return <ComingSoon title={t('exploreScreen.requestLoan')} icon="account_balance" onBack={() => navigate('/explore')} />;
+  }
   return (
       <BlendScreen
           onBack={() => navigate('/explore')}
@@ -740,14 +769,14 @@ function WelcomeRoute() {
 }
 
 /** Incorporacion de agente. Esta SI cambia estado real en el servidor. */
-function ProviderOnboardingRoute() {
+export function ProviderOnboardingRoute() {
   const navigate = useNavigate();
   const { sessionUser, refreshProviderStatus } = useAppCtx();
   return (
       <ProviderOnboarding
           token={sessionUser?.token ?? ''}
           onExit={() => navigate('/profile')}
-          onOpenKyc={() => navigate('/kyc')}
+          onOpenKyc={() => navigate('/kyc/didit?return=joinNetwork')}
           onOpenSettings={() => navigate('/merchant-settings')}
           onActivated={() => { void refreshProviderStatus(); }}
       />
@@ -906,6 +935,52 @@ function BottomNavAdapter() {
           showProviderTab={providerStatus === 'active'}
       />
   );
+}
+
+// ── Push notifications ───────────────────────────────────────────────────────
+// Con sesion, registra el telefono para recibir avisos y abre la pantalla del
+// aviso que se toco. El permiso se pide aqui, una vez, al entrar; si se niega,
+// la bandeja del agente explica como activarlo.
+function PushNotificationsBridge() {
+  const { sessionUser } = useAppCtx();
+  const navigate = useNavigate();
+  const token = sessionUser?.token ?? null;
+  // Sube cuando la persona da permiso desde la bandeja: vuelve a registrar.
+  const [permissionTick, setPermissionTick] = useState(0);
+
+  useEffect(() => {
+    const onGranted = () => setPermissionTick((n) => n + 1);
+    window.addEventListener(PUSH_PERMISSION_GRANTED_EVENT, onGranted);
+    return () => window.removeEventListener(PUSH_PERMISSION_GRANTED_EVENT, onGranted);
+  }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    let cleanup = () => {};
+    startPush({
+      askPermission: permissionTick === 0,
+      onToken: (pushToken) => {
+        // Si falla, se reintenta la proxima vez que abra la app: el token se
+        // vuelve a entregar en cada registro.
+        registerPushToken(pushToken, token).catch((err) => {
+          console.warn('[push] No se pudo guardar el token', err);
+        });
+      },
+      onOpen: (route) => navigate(route),
+    })
+      .then((stop) => {
+        if (cancelled) stop();
+        else cleanup = stop;
+      })
+      .catch((err) => console.warn('[push] No se pudieron activar los avisos', err));
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
+  }, [token, navigate, permissionTick]);
+
+  return null;
 }
 
 // ── Connection banner host ───────────────────────────────────────────────────
@@ -1382,6 +1457,7 @@ function App() {
               <ConnectionBannerHost />
               {/* Se oculta solo cuando hay conexión y no hay nada pendiente. */}
               <OfflineQueueStatus token={sessionUser?.token ?? null} />
+              <PushNotificationsBridge />
               <Routes>
                 <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
                 <Route path="/register" element={<Register onLoginSuccess={handleLoginSuccess} />} />
@@ -1405,6 +1481,7 @@ function App() {
                 <Route path="/success" element={<ProtectedRoute><SuccessRoute /></ProtectedRoute>} />
                 <Route path="/explore" element={<ProtectedRoute><ExploreRoute /></ProtectedRoute>} />
                 <Route path="/cetes" element={<ProtectedRoute><CetesRoute /></ProtectedRoute>} />
+                <Route path="/retirar-banco" element={<ProtectedRoute><BankWithdrawRoute /></ProtectedRoute>} />
                 {/* KYC-1: rutas explicitas por proposito. `/kyc` sigue
                     siendo el del anchor para no romper enlaces existentes. */}
                 <Route path="/kyc" element={<ProtectedRoute><KYCRoute /></ProtectedRoute>} />

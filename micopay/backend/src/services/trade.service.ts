@@ -40,7 +40,7 @@ import {
   reserveVolume,
   getMonthlyReservedMxn,
 } from './kycVolumeLedger.service.js';
-import { sendTradeNotificationToMerchant } from './push.service.js';
+import { sendTradeNotificationToMerchant, sendTradeUpdateNotification, type TradeUpdatePayload } from './push.service.js';
 
 const logger = pino({ name: 'trade.service' });
 
@@ -48,6 +48,17 @@ const logger = pino({ name: 'trade.service' });
 
 /** Trade states where the buyer still depends on the merchant before cash handoff / release (#31). */
 const MERCHANT_DEPENDENT_STATUSES = ['pending', 'locked', 'revealing'] as const;
+
+/**
+ * Avisa a la contraparte de quien movio la operacion. Va despues de guardar el
+ * cambio y no se espera: un aviso que falla no deshace ni frena la operacion.
+ */
+function notifyTradeUpdate(userId: string | null | undefined, payload: TradeUpdatePayload) {
+  if (!userId) return;
+  sendTradeUpdateNotification(userId, payload).catch((err: unknown) => {
+    logger.error({ err, trade_id: payload.tradeId, kind: payload.kind, category: 'trade.lifecycle' }, '[trade] Push notification failed silently');
+  });
+}
 
 async function getSellerMerchantRow(sellerId: string) {
   return db.getOne<{ username: string; merchant_available: boolean | null }>(
@@ -630,15 +641,23 @@ export async function getActiveTrades(userId: string) {
   );
 }
 
+/**
+ * Stored states of a trade that is still open. Only these can expire: a
+ * `completed`, `cancelled` or `refunded` trade is finished, whatever its
+ * `expires_at` says.
+ */
+const OPEN_TRADE_STATUSES = ['pending', 'locked', 'revealing'] as const;
+
 export async function getTradeHistory(userId: string, status?: string, page = 1, limit = 20) {
-  // 'expired' is a derived status (not stored) — computed from expires_at,
-  // same rule as before, just pushed into SQL instead of filtered client-side.
+  // 'expired' is a derived status (never stored): a trade that is still open
+  // and past its deadline. A refunded trade is not expired, it is finished.
   const conditions = ['(t.seller_id = $1 OR t.buyer_id = $1)'];
   const params: unknown[] = [userId];
 
   if (status && status !== 'all') {
     if (status === 'expired') {
-      conditions.push(`t.status NOT IN ('completed', 'cancelled') AND t.expires_at < NOW()`);
+      const open = OPEN_TRADE_STATUSES.map((s) => `'${s}'`).join(', ');
+      conditions.push(`(t.status IN (${open}) AND t.expires_at < NOW())`);
     } else {
       params.push(status);
       conditions.push(`t.status = $${params.length}`);
@@ -838,6 +857,9 @@ export async function lockTrade(
         stellar_trade_id: stellarTradeId,
       },
     });
+
+    // Bloquea el vendedor; el aviso es para el comprador.
+    notifyTradeUpdate(trade.buyer_id, { tradeId, kind: 'locked', amountMxn: Number(trade.amount_mxn) });
 
     return { status: 'locked', lock_tx_hash: lockTxHash };
   } catch (error) {
@@ -1164,6 +1186,9 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
       },
     });
 
+    // Libera el comprador; el aviso es para el vendedor.
+    notifyTradeUpdate(trade.seller_id, { tradeId, kind: 'completed', amountMxn: Number(trade.amount_mxn) });
+
     return { status: 'completed', release_tx_hash: releaseTxHash };
   } catch (error) {
     await logTransitionFailure({
@@ -1284,6 +1309,15 @@ export async function cancelTrade(
         sellerId: trade.seller_id,
         cancelledBy: userId,
       });
+      // El aviso es para la otra parte. Si es quien bloqueo los fondos, se le
+      // dice desde cuando regresan: es lo primero que va a preguntar.
+      const recipient = userId === trade.seller_id ? trade.buyer_id : trade.seller_id;
+      notifyTradeUpdate(recipient, {
+        tradeId,
+        kind: 'cancelled',
+        amountMxn: Number(trade.amount_mxn),
+        refundAvailableAt: recipient === trade.seller_id ? result.refund_available_at : null,
+      });
       return result;
     };
 
@@ -1396,6 +1430,13 @@ async function executeRefundOnChain(
       ...extraMetadata,
     },
   });
+
+  // El contrato siempre reembolsa al vendedor, la llame quien la llame (incluido
+  // el sweep, que corre sin nadie mirando la pantalla).
+  const refunded = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (refunded) {
+    notifyTradeUpdate(refunded.seller_id, { tradeId, kind: 'refunded', amountMxn: Number(refunded.amount_mxn) });
+  }
 
   return { status: 'refunded', refund_tx_hash: refundTxHash };
 }

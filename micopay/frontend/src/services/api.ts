@@ -540,9 +540,31 @@ export async function getMerchantTrades(
 
 export async function getTradeHistory(
     token: string,
+    status?: string,
 ): Promise<TradeHistoryItem[]> {
-  const res = await http.get("/trades/history", authHeaders(token));
+  const res = await http.get("/trades/history", {
+    ...authHeaders(token),
+    // The server filters; 'all' (or nothing) means no filter.
+    params: status && status !== "all" ? { status } : undefined,
+  });
   return res.data.trades;
+}
+
+/** Transferencia de la cuenta leida de la red (Enviar pago, pagos de fuera). */
+export interface PaymentHistoryItem {
+  id: string;
+  tx_hash: string;
+  created_at: string;
+  direction: 'in' | 'out';
+  amount: string;
+  asset: string;
+  counterparty: string;
+  counterparty_username: string | null;
+}
+
+export async function getPaymentHistory(token: string): Promise<PaymentHistoryItem[]> {
+  const res = await http.get("/payments/history", authHeaders(token));
+  return res.data.payments;
 }
 
 export async function getCurrentUser(
@@ -576,6 +598,19 @@ export type Availability = 'online' | 'offline' | 'paused';
 
 export async function setAvailability(availability: Availability, token: string): Promise<void> {
   await http.patch('/users/me/availability', { availability }, authHeaders(token));
+}
+
+/** Guarda el token de Firebase del telefono para que el backend pueda avisar. */
+export async function registerPushToken(pushToken: string, token: string): Promise<void> {
+  await http.patch('/users/me/push_token', { push_token: pushToken }, authHeaders(token));
+}
+
+/**
+ * Despues de "Enviar pago": el backend lee la transaccion en la red y, si quien
+ * recibe es usuario de MicoPay, le avisa al telefono.
+ */
+export async function notifyPaymentSent(txHash: string, token: string): Promise<void> {
+  await http.post('/payments/notify', { tx_hash: txHash }, authHeaders(token));
 }
 
 // ─── DeFi: CETES ──────────────────────────────────────────────────────────
@@ -663,7 +698,7 @@ export async function getCETESRate(amount = "100"): Promise<CETESRate> {
 
 export async function buyCETES(
     amount: string,
-    sourceAsset: "XLM" | "USDC" | "MXNe",
+    sourceAsset: "XLM" | "USDC",
 ): Promise<CETESTxResult> {
   const res = await http.post("/defi/cetes/buy", { amount, sourceAsset });
   return res.data;
@@ -671,7 +706,7 @@ export async function buyCETES(
 
 export async function sellCETES(
     amount: string,
-    destAsset: "XLM" | "USDC" | "MXNe",
+    destAsset: "XLM" | "USDC",
 ): Promise<CETESTxResult> {
   const res = await http.post("/defi/cetes/sell", { amount, destAsset });
   return res.data;
@@ -1096,4 +1131,169 @@ export async function fetchRefundEligibility(
 ): Promise<RefundEligibility> {
   const res = await http.get(`/trades/${tradeId}/refund-eligibility`, authHeaders(token));
   return res.data as RefundEligibility;
+}
+
+// ─── Retirar a banco (SPEI, via Etherfuse v2) ──────────────────────────────
+// Un metodo por ruta de /defi/bank-withdraw/*. El backend las resuelve contra
+// Etherfuse y preserva el estado en la base; la app solo pinta.
+
+export type BankWithdrawStage =
+  | 'needs_didit'
+  | 'needs_kyc'
+  | 'kyc_review'
+  | 'needs_bank'
+  | 'ready';
+
+export interface BankWithdrawStatusResponse {
+  stage: BankWithdrawStage;
+  clabeMasked?: string;
+  kycMessage?: string | null;
+}
+
+export async function fetchBankWithdrawStatus(token: string): Promise<BankWithdrawStatusResponse> {
+  try {
+    const res = await http.get('/defi/bank-withdraw/status', authHeaders(token));
+    return res.data as BankWithdrawStatusResponse;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+export interface StartBankKycRequest {
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;    // YYYY-MM-DD
+  taxId: string;          // RFC
+  country: string;        // ISO alpha-3 ("MEX")
+  address: {
+    street: string;
+    city: string;
+    country: string;
+    region?: string;
+    postalCode?: string;
+    buildingNumber?: string;
+    flatNumber?: string;
+  };
+  email: string;
+  displayName: string;
+}
+
+export interface BankKycLaunchForm {
+  /** URL a abrir con POST desde el navegador del telefono. */
+  url: string;
+  fields: Record<string, string>;
+}
+
+export interface StartBankKycResponse {
+  customerOrgId: string;
+  verification: { overall: string; userMessage?: string | null };
+  launch: BankKycLaunchForm;
+}
+
+export async function startBankKyc(token: string, req: StartBankKycRequest): Promise<StartBankKycResponse> {
+  try {
+    const res = await http.post('/defi/bank-withdraw/kyc', req, authHeaders(token));
+    return res.data as StartBankKycResponse;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+export interface RegisterBankAccountRequest {
+  clabe: string;              // 18 digitos
+  accountHolderName: string;
+  taxId: string;              // RFC
+}
+
+export interface RegisterBankAccountResponse {
+  paymentAccountId: string;
+  status: 'pending' | 'ready' | 'rejected' | 'disabled';
+}
+
+export async function registerBankAccount(
+  token: string,
+  req: RegisterBankAccountRequest,
+): Promise<RegisterBankAccountResponse> {
+  try {
+    const res = await http.post('/defi/bank-withdraw/bank-account', req, authHeaders(token));
+    return res.data as RegisterBankAccountResponse;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+export interface BankWithdrawQuote {
+  quoteId: string;
+  sourceAmount: string;
+  sourceAsset: string;        // "USDC:ISSUER"
+  destinationAmount: string;  // MXN
+  destinationAsset: 'MXN';
+  feeBps: number;
+  feeAmount: string;
+  expiresAt: string;
+  clabeMasked: string;
+}
+
+export async function createBankWithdrawQuote(
+  token: string,
+  req: { asset: 'USDC'; amount: string },
+): Promise<BankWithdrawQuote> {
+  try {
+    const res = await http.post('/defi/bank-withdraw/quote', req, authHeaders(token));
+    return res.data as BankWithdrawQuote;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+export type BankOrderStatus =
+  | 'created' | 'funded' | 'claimable' | 'completed' | 'failed' | 'canceled' | 'refunded';
+
+export interface BankWithdrawOrder {
+  orderId: string;
+  status: BankOrderStatus;
+  fundingInstructions?: {
+    rail: string;
+    reference: string;
+    fundingDeadline: string;
+    destination?: {
+      address?: string;
+      memo?: string;
+      chain?: string;
+      clabe?: string;
+      bankName?: string;
+      recipientName?: string;
+    };
+  };
+  /** XDR sin firmar; la app lo valida con validatePreparedWithdrawTx. */
+  preparedTransaction?: string;
+}
+
+export async function confirmBankWithdrawOrder(
+  token: string,
+  quoteId: string,
+): Promise<BankWithdrawOrder> {
+  try {
+    const res = await http.post('/defi/bank-withdraw/order', { quoteId }, authHeaders(token));
+    return res.data as BankWithdrawOrder;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+export interface BankWithdrawOrderSummary {
+  orderId: string;
+  status: BankOrderStatus;
+  destinationMxn: string | null;
+  createdAt: string;
+  statusUpdatedAt: string | null;
+}
+
+export async function fetchBankWithdrawOrders(token: string): Promise<BankWithdrawOrderSummary[]> {
+  try {
+    const res = await http.get('/defi/bank-withdraw/orders', authHeaders(token));
+    return (res.data as { orders: BankWithdrawOrderSummary[] }).orders;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
 }
