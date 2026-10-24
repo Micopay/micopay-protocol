@@ -1,36 +1,27 @@
-# MicoPay Team Docs
+# MicoPay documentation
 
-This folder contains the working documents for the next phase of MicoPay.
+**Stellar Drips Wave 10 has been completed.** This folder includes both working
+references and historical plans. A document mentioning a Wave is not evidence
+that its findings remain open or that its campaign is accepting contributions.
 
-## Current Wave focus
+## Start here
 
-The team's priority for Drips Wave 4 is **Core Retail Flow** — making one complete cash-in / cash-out flow trustworthy end to end, not broadening into new integrations. Every other milestone exists to reinforce that flow.
+1. [Project README](../README.md): current app scope and feature limitations.
+2. [Contributing](../CONTRIBUTING.md): setup, issue selection, and PR expectations.
+3. [Current issues](https://github.com/Micopay/micopay-protocol/issues): scope,
+   assignment, acceptance criteria, and campaign eligibility for each contribution.
+4. [UX manifesto](./UX_MANIFESTO.md): product and interface principles.
 
-See [open milestones](https://github.com/ericmt-98/micopay-protocol/milestones) for the live backlog.
+## Supporting references
 
-## Reading order
+- [Drips team guide](./DRIPS_TEAM_GUIDE.md): maintainer planning and review practices.
+- [APK release checklist](./RELEASE_APK_CHECKLIST.md): release preparation.
+- [Product scope](./PRODUCT_SCOPE.md) and [retail roadmap](./RETAIL_ROADMAP.md):
+  planning context; confirm status against current issues and implementation.
 
-If the team needs one place to start, read these in order:
+## Historical material
 
-1. `PRODUCT_SCOPE.md`
-2. `RETAIL_ROADMAP.md`
-3. `UX_MANIFESTO.md`
-4. `DRIPS_TEAM_GUIDE.md`
-5. `STORE_COMPLIANCE.md`
-
-Document purpose:
-
-- `PRODUCT_SCOPE.md`: defines what MicoPay is building now, what is out of scope, and what success looks like.
-- `RETAIL_ROADMAP.md`: turns the product direction into a phased execution plan.
-- `UX_MANIFESTO.md`: gives product, design, and engineering a shared UX and psychology framework.
-- `DRIPS_TEAM_GUIDE.md`: explains how the team should prepare the repo, create issues, review PRs, and operate during a Drips Wave.
-- `STORE_COMPLIANCE.md`: tracks Apple and Google store requirements for crypto-adjacent financial apps.
-
-Tooling:
-
-- [`../.claude/skills/README.md`](../.claude/skills/README.md): Claude Code skills for this repo and `verify.sh`, the pre-PR check anyone can run.
-
-Why these docs exist:
-
-- Vision documents explain why MicoPay matters.
-- These docs explain what to build next, how to work together, and how to win in Drips without losing focus.
+[Wave 6 APK audit](./AUDIT_APK_WAVE6.md) records the June 2026 review.
+It is preserved for traceability, not as the onboarding guide or current backlog.
+Other dated audits and plans should be read with the same distinction.
+ZK, AI-agent, and x402 documents describe projects moved to another repository.
