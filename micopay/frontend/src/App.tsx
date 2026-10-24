@@ -650,7 +650,13 @@ function BankWithdrawRoute() {
   if (!BANK_WITHDRAW_ENABLED || !sessionUser?.token) {
     return <ComingSoon title="Retirar a banco" icon="account_balance" onBack={() => navigate('/')} />;
   }
-  return <BankWithdrawScreen onBack={() => navigate('/')} userToken={sessionUser.token} />;
+  return (
+    <BankWithdrawScreen
+      onBack={() => navigate('/')}
+      onVerifyIdentity={() => navigate('/kyc/didit?return=bankWithdraw')}
+      userToken={sessionUser.token}
+    />
+  );
 }
 
 /**
@@ -667,6 +673,7 @@ const KYC_RETURN_DESTINATIONS = {
   inbox: '/inbox',
   profile: '/profile',
   joinNetwork: '/join-network',
+  bankWithdraw: '/retirar-banco',
 } as const;
 
 type KycReturnKey = keyof typeof KYC_RETURN_DESTINATIONS;
