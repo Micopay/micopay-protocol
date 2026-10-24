@@ -152,7 +152,9 @@ Useful references:
 ## Background
 
 MicoPay began at Código Alebrije in Mexico City and has participated in Stellar
-Drips and the PULSO Hackathon. The current focus is making the mobile wallet and
+Drips and the PULSO Hackathon. **Stellar Drips Wave 10 has been completed.**
+For new contributions, start with [CONTRIBUTING.md](./CONTRIBUTING.md) and the current
+issues rather than the historical Wave 6 audit. The current focus is making the mobile wallet and
 cash exchange experience usable and reliable.
 
 ## License
