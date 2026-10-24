@@ -10,6 +10,23 @@ This repository focuses on the **MicoPay mobile app and its supporting backend**
 The ZK, AI-agent, and x402 projects have moved to a separate repository. Historical
 code and documents may remain here, but those projects are outside the current app scope.
 
+### Future integration possibilities
+
+Connecting the app's cash network to AI assistants, bots, or paid APIs is a possible
+future development direction. The related x402, ZK, atomic-swap, and cross-chain
+work lives in the separate project. **The combined agent-to-cash experience is not
+fully implemented or available end to end in these early stages of the app.**
+Individual prototypes or components do not establish that the complete integration
+works with the mobile wallet and real cash providers.
+
+For example, an assistant could eventually help a user request MXN cash, discover
+a provider, and follow an escrow-backed exchange. This is an illustrative scenario,
+not a currently supported single API call. Provider names, distances, reputation
+scores, and transaction counts in earlier examples were illustrative, not evidence
+of a live network or verified on-chain reputation. Cross-chain funding and automated
+coordination would require further integration and validation. Escrow also cannot
+guarantee that neither participant can cheat during physical cash handover.
+
 ## What is in the app?
 
 | Area | Current scope |
