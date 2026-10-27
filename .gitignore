@@ -44,3 +44,8 @@ walkthrough.md
 
 
 __pycache__/
+
+# Local release APKs, audit evidence, and temporary investigation work.
+# Keep them on the workstation; do not publish them with source changes.
+artifacts/
+tmp/
