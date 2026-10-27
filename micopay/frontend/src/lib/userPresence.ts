@@ -11,15 +11,10 @@
  *
  * LO QUE ESTO ES, Y LO QUE NO
  * ---------------------------
- * Esto es una **compuerta de intencion**, no custodia de la llave. La llave
- * Ed25519 sigue siendo legible por el codigo de la app; la biometria protege el
- * camino de la interfaz, no el material criptografico.
- *
- * Decirlo importa: vender esto como "tu llave esta protegida con tu huella"
- * seria exagerar. Para eso hace falta envolver la llave con una clave del
- * keystore creada con `setUserAuthenticationRequired(true)`, de modo que
- * descifrarla exija autenticacion a nivel del sistema operativo. Es el
- * siguiente paso, y necesita un plugin nativo propio.
+ * En Android, la custodia real vive ahora en `StellarKeyVaultPlugin`: la seed
+ * esta cifrada con una clave AES no extraible del Android Keystore y descifrarla
+ * exige autenticacion del sistema. Este modulo conserva la compuerta para web y
+ * para compatibilidad; no sustituye las garantias del plugin nativo.
  *
  * (La tercera via —passkeys y smart accounts, donde la llave nunca existe en
  * memoria— esta descartada para retail: una direccion `C…` no puede recibir un
@@ -28,10 +23,8 @@
  *
  * POR QUE NO SE BLOQUEA A QUIEN NO TIENE BIOMETRIA
  * ------------------------------------------------
- * Si el telefono no tiene huella ni PIN configurados, se permite firmar. Estos
- * fondos son de la persona: dejarla fuera de su propio dinero por no haber
- * configurado un bloqueo de pantalla seria un fallo peor que el que se intenta
- * evitar. Se registra el caso y se sigue.
+ * El fallback web mantiene el comportamiento historico. El plugin Android, en
+ * cambio, falla cerrado si el dispositivo no tiene bloqueo seguro configurado.
  */
 
 import { Capacitor } from '@capacitor/core';
@@ -40,6 +33,7 @@ import { Capacitor } from '@capacitor/core';
 export type PresenceReason =
   | 'lock'
   | 'release'
+  | 'decline'
   | 'payment'
   | 'reveal_key'
   | 'sign_request';
@@ -47,6 +41,7 @@ export type PresenceReason =
 const PROMPTS: Record<PresenceReason, string> = {
   lock: 'Confirma para bloquear tu dinero en garantía',
   release: 'Confirma para liberar el dinero',
+  decline: 'Confirma para devolver los fondos',
   payment: 'Confirma para enviar el pago',
   reveal_key: 'Confirma para ver tu llave secreta',
   sign_request: 'Confirma para autorizar esta operación',

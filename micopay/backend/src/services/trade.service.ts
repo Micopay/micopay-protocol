@@ -14,8 +14,8 @@ import pino from 'pino';
 import { generateTradeSecret, encryptSecret, decryptSecret } from './secret.service.js';
 import { createHash, randomBytes } from 'crypto';
 import type { FastifyRequest } from 'fastify';
-import { prepareLockTx, submitLockTx, prepareReleaseTx, submitReleaseTx, callRefundOnChain, verifyLockOnChain, assertNotReplayed } from './stellar.service.js';
-import { escrowContractForTrade } from './escrowContract.js';
+import { prepareLockTx, submitLockTx, prepareReleaseTx, submitReleaseTx, prepareDeclineTx, submitDeclineTx, callRefundOnChain, verifyLockOnChain, assertNotReplayed } from './stellar.service.js';
+import { escrowContractForTrade, escrowContractSupportsDecline } from './escrowContract.js';
 import { assertReceiverCanReceive } from './receiverReadiness.service.js';
 import { AppError, NotFoundError, ForbiddenError, ConflictError, BadRequestError, AuthError, ValidationError, TradeStateError, MerchantLimitError, KycMonthlyCapExceededError } from '../utils/errors.js';
 import {
@@ -61,8 +61,8 @@ function notifyTradeUpdate(userId: string | null | undefined, payload: TradeUpda
 }
 
 async function getSellerMerchantRow(sellerId: string) {
-  return db.getOne<{ username: string; merchant_available: boolean | null }>(
-    'SELECT username, merchant_available FROM users WHERE id = $1',
+  return db.getOne<{ username: string; stellar_address: string; merchant_available: boolean | null }>(
+    'SELECT username, stellar_address, merchant_available FROM users WHERE id = $1',
     [sellerId],
   );
 }
@@ -618,16 +618,28 @@ export async function getTradeDetailForParticipant(tradeId: string, userId: stri
   const trade = await getTradeById(tradeId, userId);
   const seller = await getSellerMerchantRow(trade.seller_id);
   const merchant_unavailable = isMerchantUnavailableForTrade(trade, seller);
-  const buyer = await db.getOne<{ username: string | null }>(
-    'SELECT username FROM users WHERE id = $1',
+  const buyer = await db.getOne<{ username: string | null; stellar_address: string }>(
+    'SELECT username, stellar_address FROM users WHERE id = $1',
     [trade.buyer_id],
   );
+  const handoff = trade.lock_tx_hash && !trade.release_tx_hash
+    ? await getCashHandoff(tradeId)
+    : null;
+  const decline_available = trade.buyer_id === userId
+    && Boolean(trade.lock_tx_hash)
+    && !trade.release_tx_hash
+    && ['locked', 'revealing', 'cancelled'].includes(trade.status)
+    && !handoff
+    && escrowContractSupportsDecline(trade);
 
   return {
     trade,
+    decline_available,
     merchant_unavailable,
     seller_username: seller?.username ?? null,
     buyer_username: buyer?.username ?? null,
+    seller_stellar_address: seller?.stellar_address ?? null,
+    buyer_stellar_address: buyer?.stellar_address ?? null,
   };
 }
 
@@ -1136,12 +1148,24 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
       if (!signedXdr) {
         throw new BadRequestError('SIGNED_XDR_REQUIRED', 'Falta la transacción firmada.', 'signed_xdr is required when MOCK_STELLAR=false');
       }
+      const buyer = await db.getOne<{ stellar_address: string }>(
+        'SELECT stellar_address FROM users WHERE id = $1',
+        [userId],
+      );
+      if (!buyer) throw new NotFoundError('Buyer not found');
       const secret = decryptSecret(trade.secret_enc, trade.secret_nonce);
       const secretHashBytes = Buffer.from(trade.secret_hash, 'hex');
       const tradeIdBytes = createHash('sha256').update(secretHashBytes).digest();
       const secretBytes = Buffer.from(secret, 'hex');
 
-      const result = await submitReleaseTx({ request, contractId: escrowContractForTrade(trade), signedXdr, tradeIdBytes, secretBytes });
+      const result = await submitReleaseTx({
+        request,
+        contractId: escrowContractForTrade(trade),
+        signedXdr,
+        buyerAddress: buyer.stellar_address,
+        tradeIdBytes,
+        secretBytes,
+      });
       releaseTxHash = result.txHash;
     } else {
       // Con MOCK_STELLAR el hash lo inventa el backend. Usar solo Date.now()
@@ -1193,6 +1217,163 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
   }
 }
 
+const DECLINEABLE_STATES = new Set(['locked', 'revealing', 'cancelled']);
+
+async function getDeclineableTrade(tradeId: string, userId: string) {
+  const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (!trade) throw new NotFoundError('Trade not found');
+  if (trade.buyer_id !== userId) {
+    throw new ForbiddenError(
+      'ONLY_BUYER_CAN_DECLINE',
+      'Solo quien recibiría los fondos puede autorizar la devolución inmediata.',
+      `User ${userId} is not buyer of trade ${tradeId}`,
+    );
+  }
+  if (!escrowContractSupportsDecline(trade)) {
+    throw new ConflictError(
+      'DECLINE_NOT_SUPPORTED',
+      'Esta operación usa una versión anterior del contrato. El reembolso estará disponible al vencer el plazo.',
+      `Contract ${escrowContractForTrade(trade)} does not advertise decline support`,
+    );
+  }
+  if (!trade.lock_tx_hash) {
+    throw new ConflictError(
+      'TRADE_NOT_LOCKED',
+      'La operación todavía no tiene fondos bloqueados.',
+      `Trade ${tradeId} has no lock transaction`,
+    );
+  }
+  if (!DECLINEABLE_STATES.has(trade.status)) {
+    throw new ConflictError(
+      'TRADE_NOT_DECLINEABLE',
+      `No se puede devolver una operación en estado ${trade.status}.`,
+      `Trade ${tradeId} is ${trade.status}`,
+    );
+  }
+  if (trade.release_tx_hash) {
+    throw new ConflictError(
+      'TRADE_ALREADY_SETTLED',
+      'La operación ya fue liquidada.',
+      `Trade ${tradeId} already has settlement ${trade.release_tx_hash}`,
+    );
+  }
+
+  const handoff = await getCashHandoff(tradeId);
+  if (handoff) {
+    throw new ConflictError(
+      'CASH_HANDOFF_CONFIRMED',
+      'La entrega de efectivo ya fue confirmada. Completa la operación o abre soporte.',
+      `Trade ${tradeId} has a confirmed cash handoff by ${handoff.provider_id}`,
+    );
+  }
+
+  return trade;
+}
+
+/** Build the unsigned buyer-authorized early return transaction. */
+export async function prepareDeclineTrade(request: FastifyRequest, tradeId: string, userId: string) {
+  const trade = await getDeclineableTrade(tradeId, userId);
+  if (config.mockStellar) return { mock: true as const };
+
+  const buyer = await db.getOne<{ stellar_address: string }>(
+    'SELECT stellar_address FROM users WHERE id = $1',
+    [userId],
+  );
+  if (!buyer) throw new NotFoundError('Buyer not found');
+
+  const tradeIdBytes = createHash('sha256').update(Buffer.from(trade.secret_hash, 'hex')).digest();
+  const { xdr, networkPassphrase } = await prepareDeclineTx({
+    request,
+    contractId: escrowContractForTrade(trade),
+    buyerAddress: buyer.stellar_address,
+    tradeIdBytes,
+  });
+
+  return { xdr, network_passphrase: networkPassphrase };
+}
+
+export interface DeclineTradeResult {
+  status: 'refunded';
+  refund_tx_hash: string;
+}
+
+/** Submit decline() and only then record that funds were returned. */
+export async function declineTrade(
+  request: FastifyRequest,
+  tradeId: string,
+  userId: string,
+  signedXdr?: string,
+): Promise<DeclineTradeResult> {
+  const existing = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (!existing) throw new NotFoundError('Trade not found');
+  if (existing.buyer_id !== userId) throw new ForbiddenError('Only the buyer can decline');
+  if (existing.status === 'refunded' && existing.release_tx_hash) {
+    return { status: 'refunded', refund_tx_hash: existing.release_tx_hash };
+  }
+
+  const trade = await getDeclineableTrade(tradeId, userId);
+  let refundTxHash: string;
+  if (config.mockStellar) {
+    refundTxHash = `mock_decline_${Date.now()}_${randomBytes(4).toString('hex')}`;
+  } else {
+    if (!signedXdr) {
+      throw new BadRequestError(
+        'SIGNED_XDR_REQUIRED',
+        'Falta la transacción firmada.',
+        'signed_xdr is required when MOCK_STELLAR=false',
+      );
+    }
+    const buyer = await db.getOne<{ stellar_address: string }>(
+      'SELECT stellar_address FROM users WHERE id = $1',
+      [userId],
+    );
+    if (!buyer) throw new NotFoundError('Buyer not found');
+    const tradeIdBytes = createHash('sha256').update(Buffer.from(trade.secret_hash, 'hex')).digest();
+    const result = await submitDeclineTx({
+      request,
+      contractId: escrowContractForTrade(trade),
+      signedXdr,
+      buyerAddress: buyer.stellar_address,
+      tradeIdBytes,
+    });
+    refundTxHash = result.txHash;
+  }
+
+  await assertNotReplayed(refundTxHash, 'trade/decline', userId);
+  await db.execute(
+    `UPDATE trades
+     SET status = 'refunded',
+         release_tx_hash = $2,
+         completed_at = NOW(),
+         secret_enc = NULL,
+         secret_nonce = NULL
+     WHERE id = $1
+       AND status NOT IN ('completed', 'refunded')`,
+    [tradeId, refundTxHash],
+  );
+
+  await insertTradeAuditEvent({
+    tradeId,
+    fromState: trade.status,
+    toState: 'refunded',
+    actor: userId,
+    requestId: getRequestId(request),
+    metadata: {
+      success: true,
+      settlement: 'decline',
+      refund_tx_hash: refundTxHash,
+    },
+  });
+
+  notifyTradeUpdate(trade.seller_id, {
+    tradeId,
+    kind: 'refunded',
+    amountMxn: Number(trade.amount_mxn),
+  });
+
+  return { status: 'refunded', refund_tx_hash: refundTxHash };
+}
+
 /** Response shape for POST /trades/:id/cancel — drives refund copy on the client (#20). */
 export interface CancelTradeResult {
   status: 'cancelled';
@@ -1207,6 +1388,8 @@ export interface CancelTradeResult {
   /** CASH-2: a partir de cuando se puede reclamar. `null` si no hay fondos. */
   refund_available_at: string | null;
   lock_tx_hash: string | null;
+  /** The authenticated actor is the buyer and may sign decline() now. */
+  decline_available: boolean;
 }
 
 async function finalizeTradeCancellation(tradeId: string) {
@@ -1290,6 +1473,9 @@ export async function cancelTrade(
       refund_expected: Boolean(lockTx),
       refund_available_at: lockTx ? trade.expires_at : null,
       lock_tx_hash: lockTx,
+      decline_available: Boolean(lockTx)
+        && trade.buyer_id === userId
+        && escrowContractSupportsDecline(trade),
     });
 
     const finishCancel = async () => {

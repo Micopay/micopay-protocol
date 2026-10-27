@@ -44,7 +44,16 @@ describe('KYCScreen — consentimiento biométrico', () => {
     fireEvent.click(screen.getByRole('checkbox'));
     expect(verify).toBeEnabled();
     fireEvent.click(verify);
-    await waitFor(() => expect(mockStartKYC).toHaveBeenCalledWith('t', 'didit', undefined));
+    await waitFor(() => expect(mockStartKYC).toHaveBeenCalledWith('t', 'didit', undefined, 1));
+  });
+
+  it('Nivel 2 consulta e inicia el workflow de nivel 2', async () => {
+    render(<KYCScreen onApproved={vi.fn()} token="t" provider="didit" level={2} />);
+
+    await waitFor(() => expect(api.getKYCStatus).toHaveBeenCalledWith('t', 'didit', 2));
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: /kyc.verifyIdentity/ }));
+    await waitFor(() => expect(mockStartKYC).toHaveBeenCalledWith('t', 'didit', undefined, 2));
   });
 
   it('quien nunca empezó no ve "No se pudo verificar"', async () => {

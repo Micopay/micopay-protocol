@@ -13,6 +13,7 @@ public class MainActivity extends BridgeActivity {
         // desde capacitor.plugins.json; este vive en el propio proyecto y no
         // aparece en ese archivo.
         registerPlugin(SecureScreenPlugin.class);
+        registerPlugin(StellarKeyVaultPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

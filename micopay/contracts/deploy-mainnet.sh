@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Despliega una instancia del escrow en MAINNET. Cada instancia bloquea un solo
-# token (se fija en initialize), asi que hay una por activo:
+# token (se fija en el constructor), asi que hay una por activo:
 #
 #   PLATFORM_WALLET=G... TOKEN=USDC bash deploy-mainnet.sh   # USDC de Circle (default)
 #   PLATFORM_WALLET=G... TOKEN=XLM  bash deploy-mainnet.sh   # XLM nativo
@@ -22,11 +22,9 @@
 # Ensayo en testnet con SOURCE como wallet de plataforma (comportamiento
 # anterior): ALLOW_HOT_PLATFORM_WALLET=1, sin PLATFORM_WALLET.
 #
-# Pasos (cada uno se puede repetir sin romper nada, salvo initialize, que el
-# contrato rechaza una segunda vez):
+# Pasos:
 #   1. revisar PLATFORM_WALLET (formato, cuenta en Horizon, trustline de USDC)
-#   2. build + deploy del WASM
-#   3. initialize(admin = SOURCE, token, platform_wallet = PLATFORM_WALLET)
+#   2. build + deploy atomico del WASM con admin, token y platform_wallet
 set -euo pipefail
 
 TOKEN="${TOKEN:-USDC}"
@@ -69,7 +67,7 @@ fi
 
 echo "Admin: $ADMIN · wallet de plataforma: $PLATFORM_WALLET · token: $TOKEN ($TOKEN_SAC)"
 
-echo "1/3 Revisando la wallet de plataforma…"
+echo "1/2 Revisando la wallet de plataforma…"
 if ! [[ "$PLATFORM_WALLET" =~ ^G[A-Z2-7]{55}$ ]]; then
   echo "PLATFORM_WALLET no parece una llave publica de Stellar (56 caracteres, empieza con G): $PLATFORM_WALLET" >&2
   exit 1
@@ -98,19 +96,18 @@ EOF
   fi
 fi
 
-echo "2/3 Build y deploy…"
+echo "2/2 Build y deploy atomico…"
 (cd escrow && stellar contract build)
 CONTRACT_ID="$(stellar contract deploy \
   --wasm escrow/target/wasm32v1-none/release/micopay_escrow.wasm \
-  --source "$SOURCE" "${NET[@]}")"
+  --source "$SOURCE" "${NET[@]}" -- \
+  --admin "$ADMIN" --token_id "$TOKEN_SAC" --platform_wallet "$PLATFORM_WALLET")"
 echo "    contrato: $CONTRACT_ID"
-
-echo "3/3 initialize…"
-stellar contract invoke --id "$CONTRACT_ID" --source "$SOURCE" "${NET[@]}" -- \
-  initialize --admin "$ADMIN" --token_id "$TOKEN_SAC" --platform_wallet "$PLATFORM_WALLET"
 
 cat <<EOF
 
 Listo. Agrega la instancia a MAINNET.md y a ESCROW_CONTRACTS en la task definition:
   ESCROW_CONTRACTS=...,$TOKEN=$CONTRACT_ID
+Habilita decline solo para esta instancia nueva:
+  ESCROW_DECLINE_CONTRACT_IDS=...,$CONTRACT_ID
 EOF

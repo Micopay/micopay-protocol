@@ -47,6 +47,8 @@ Instancias con el fix de `lock` (#420), una por activo. Las despliega
 
 Both contracts verified live on testnet (`stellar contract fetch --network testnet --id <ID>`
 returns valid WASM with `initialize`, `lock`, `refund`, `release`, `get_trade` exports).
+Estas instancias antiguas **no** incluyen `decline`; no deben agregarse a
+`ESCROW_DECLINE_CONTRACT_IDS`.
 
 ## Platform account
 
@@ -71,6 +73,7 @@ Backend (`render.yaml` / `.env`):
 STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 STELLAR_NETWORK=TESTNET
 ESCROW_CONTRACT_ID=CB4M5777YFQWKGDUULCX5W6PXEDJSJARDTMH4VV6FXC4W4UPANALO3HZ
+ESCROW_DECLINE_CONTRACT_IDS=
 MXNE_CONTRACT_ID=CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
 MXNE_ISSUER_ADDRESS=GBZXN7PIRZGNMHGA7MUUUF4GWMTISGNQ5E72TFL6GDWPE6K4RCAVOALV
 ```
@@ -94,8 +97,13 @@ stellar contract deploy \
   --wasm target/wasm32v1-none/release/micopay_escrow.wasm \
   --source <platform_secret> \
   --network testnet \
-  --network-passphrase "Test SDF Network ; September 2015"
+  --network-passphrase "Test SDF Network ; September 2015" -- \
+  --admin <platform_address> \
+  --token_id <token_contract_id> \
+  --platform_wallet <fee_wallet_address>
 # → prints new contract ID; update ESCROW_CONTRACT_ID everywhere
 ```
 
-After redeploying, call `initialize` with the platform address before first use.
+El constructor inicializa el contrato dentro del despliegue. Agrega el nuevo ID
+a `ESCROW_CONTRACTS` y `ESCROW_DECLINE_CONTRACT_IDS`; conserva los IDs viejos
+para operaciones abiertas y reembolsos por timeout.

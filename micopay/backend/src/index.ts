@@ -22,7 +22,7 @@ import { clientErrorRoutes } from './routes/client-errors.js';
 import { jwksRoutes } from './routes/jwks.js';
 import { bankWithdrawRoutes } from './routes/bank-withdraw.js';
 import { bankWithdrawWebhookRoutes } from './routes/bank-withdraw-webhooks.js';
-import { AppError } from './utils/errors.js';
+import { AppError, KycTierInsufficientError } from './utils/errors.js';
 import { Keypair } from '@stellar/stellar-sdk';
 import fastifyStatic from '@fastify/static';
 import { dirname, join } from 'node:path';
@@ -160,11 +160,16 @@ app.setErrorHandler((error, request, reply) => {
       request.log.info({ err: error }, `[${error.code}] ${error.devMessage}`);
     }
 
+    const details = error instanceof KycTierInsufficientError
+      ? { required_level: error.requiredLevel, current_level: error.currentLevel }
+      : {};
+
     reply.status(error.httpStatus).send({
       code: error.code,
       message: error.userMessage,
       request_id: requestId,
       support_code: supportCode,
+      ...details,
     });
     return;
   }
@@ -193,8 +198,16 @@ app.setErrorHandler((error, request, reply) => {
 
 // --- Routes ---
 
-// Holds the singleton event listener (null when disabled or mock mode).
-let eventListener: EscrowEventListener | null = null;
+// One cursor/listener per configured escrow instance, including the legacy one.
+let eventListeners: EscrowEventListener[] = [];
+
+function eventListenerState(): 'disabled' | 'running' | 'reconnecting' | 'stopped' {
+  if (eventListeners.length === 0) return 'disabled';
+  const states = eventListeners.map((listener) => listener.currentState());
+  if (states.every((state) => state === 'running')) return 'running';
+  if (states.some((state) => state === 'reconnecting')) return 'reconnecting';
+  return 'stopped';
+}
 
 app.get('/health', async (_request, reply) => {
   // B-7: real readiness — actually round-trip to PostgreSQL, don't just
@@ -209,8 +222,9 @@ app.get('/health', async (_request, reply) => {
     timestamp: new Date().toISOString(),
     mockStellar: config.mockStellar,
     dbConnected,
-    eventListenerHealthy: eventListener?.isHealthy() ?? false,
-    eventListenerState: eventListener?.currentState() ?? 'disabled',
+    eventListenerHealthy: eventListeners.length > 0 && eventListeners.every((listener) => listener.isHealthy()),
+    eventListenerState: eventListenerState(),
+    eventListenerContracts: eventListeners.map((listener) => listener.contractId),
     configCheck: {
       hasPlatformKey: !!config.platformSecretKey,
       hasContractId: !!config.escrowContractId,
@@ -531,7 +545,12 @@ async function seedDemoMerchants(): Promise<void> {
 }
 
 async function startEventListener(): Promise<void> {
-  if (!config.eventListenerEnabled || config.mockStellar || !config.escrowContractId) {
+  const contractIds = [...new Set([
+    ...Object.values(config.escrowContracts),
+    config.escrowLegacyContractId,
+  ].filter(Boolean))];
+
+  if (!config.eventListenerEnabled || config.mockStellar || contractIds.length === 0) {
     app.log.info(
       { category: 'event-listener', enabled: config.eventListenerEnabled, mock: config.mockStellar },
       '[event-listener] Skipped (disabled, mock mode, or no contract ID configured)',
@@ -540,18 +559,18 @@ async function startEventListener(): Promise<void> {
   }
 
   try {
-    eventListener = createProductionListener(
-      config.escrowContractId,
+    eventListeners = contractIds.map((contractId) => createProductionListener(
+      contractId,
       config.stellarRpcUrl,
       {
         pollIntervalMs: config.eventListenerPollMs,
         healthStaleMs: config.eventListenerHealthStaleMs,
       },
-    );
-    await eventListener.start();
+    ));
+    await Promise.all(eventListeners.map((listener) => listener.start()));
     app.log.info(
-      { contract_id: config.escrowContractId, poll_ms: config.eventListenerPollMs, category: 'event-listener' },
-      '[event-listener] Soroban event listener active',
+      { contract_ids: contractIds, poll_ms: config.eventListenerPollMs, category: 'event-listener' },
+      '[event-listener] Soroban event listeners active',
     );
   } catch (err) {
     // Non-fatal: polling fallback remains active.
@@ -643,7 +662,7 @@ async function start() {
 // Graceful shutdown: stop the listener loop before the process exits.
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {
-    eventListener?.stop();
+    for (const listener of eventListeners) listener.stop();
     if (refundSweepInterval) clearInterval(refundSweepInterval);
     stopComplianceJob();
     process.exit(0);

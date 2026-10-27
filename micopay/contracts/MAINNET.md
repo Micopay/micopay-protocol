@@ -25,11 +25,11 @@ Dos cuentas, cada una con su llave en un lugar distinto:
 | Cuenta | Qué hace | Dónde vive la llave |
 |---|---|---|
 | Plataforma (`SOURCE`, `micopay-platform-mainnet`) | Despliega, es `admin` del contrato y firma lo que firma el backend | CLI `stellar` de Eric y `PLATFORM_SECRET_KEY` del backend |
-| Wallet de comisiones (`PLATFORM_WALLET`) | Recibe la comisión de cada `release` (`platform_wallet` en `initialize`) | Fuera de línea. Nunca en el backend, en AWS ni en este script |
+| Wallet de comisiones (`PLATFORM_WALLET`) | Recibe la comisión de cada `release` (`platform_wallet` en el constructor) | Fuera de línea. Nunca en el backend, en AWS ni en este script |
 
 Recibir no requiere firma, así que la wallet de comisiones no necesita estar
-en ningún servidor. `initialize` solo se puede llamar una vez: la wallet de
-comisiones tiene que existir antes de desplegar.
+en ningún servidor. El constructor fija admin, token y wallet de comisiones en
+la misma transacción de despliegue: la wallet tiene que existir antes.
 
 Orden:
 
@@ -41,7 +41,7 @@ Orden:
 
 ```bash
 cd micopay/contracts
-PLATFORM_WALLET=G... TOKEN=USDC bash deploy-mainnet.sh   # revisa la wallet, deploy, initialize
+PLATFORM_WALLET=G... TOKEN=USDC bash deploy-mainnet.sh   # revisa la wallet y despliega con constructor
 PLATFORM_WALLET=G... TOKEN=XLM  bash deploy-mainnet.sh   # segunda instancia, para XLM
 ```
 
@@ -59,6 +59,7 @@ para ensayos en testnet.
 | `STELLAR_RPC_URL` | `https://soroban-testnet.stellar.org` | RPC de arriba |
 | `ESCROW_CONTRACTS` | `USDC=CDUI…,XLM=CBFD…` (ver TESTNET.md) | `USDC=<paso 1>,XLM=<paso 1>` |
 | `ESCROW_LEGACY_CONTRACT_ID` | `CB4M…LO3HZ` | — |
+| `ESCROW_DECLINE_CONTRACT_IDS` | IDs nuevos con `decline`; vacío hasta redesplegar | IDs nuevos desplegados en el paso 1 |
 | `ESCROW_ASSET` (default) | `XLM` | `USDC` |
 | `SEED_DEMO_DATA` | `true` | `false` |
 | Secretos SSM | `/micopay/prod/*` | `/micopay/mainnet/*`: `DATABASE_URL`, `JWT_SECRET` y `SECRET_ENCRYPTION_KEY` nuevos, `PLATFORM_SECRET_KEY` de mainnet |

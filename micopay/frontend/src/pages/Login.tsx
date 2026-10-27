@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { UserData, getAuthToken, getCurrentUser } from '../services/api';
 import { writeJSON } from '../services/secureStorage';
-import { generateAndStoreKeypair, keypairExists, importKeypair } from '../lib/keystore';
+import { keypairExists, importKeypair } from '../lib/keystore';
 
 const USERS_STORAGE_KEY = 'micopay_user';
 
@@ -25,7 +25,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setLoading(true);
     try {
       if (!await keypairExists()) {
-        await generateAndStoreKeypair();
+        throw new Error('WALLET_NOT_FOUND');
       }
       const token = await getAuthToken();
       const profile = await getCurrentUser(token);
@@ -35,7 +35,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       navigate(from, { replace: true });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al iniciar sesión';
-      if (msg.includes('404') || msg.includes('USER_NOT_FOUND') || msg.includes('no encontrado')) {
+      if (msg.includes('WALLET_NOT_FOUND') || msg.includes('404') || msg.includes('USER_NOT_FOUND') || msg.includes('no encontrado')) {
         setError('No encontré tu cuenta en este dispositivo. Si cambiaste de teléfono o reinstalaste la app, usa "Restaurar con llave secreta".');
       } else if (msg.includes('Network') || msg.includes('fetch')) {
         setError('Sin conexión al servidor. Intenta en unos segundos.');

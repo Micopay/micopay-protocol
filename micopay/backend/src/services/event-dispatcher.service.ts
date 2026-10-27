@@ -17,7 +17,7 @@ export interface RawContractEvent {
 
 /** Parsed, XDR-free representation of a known escrow event. */
 export interface ParsedEscrowEvent {
-  type: 'locked' | 'released' | 'refunded';
+  type: 'locked' | 'released' | 'refunded' | 'declined';
   /** 64-char hex of the contract's trade_id (sha256 of secret_hash). */
   contractTradeIdHex: string;
   /** Stellar RPC event ID — used in audit metadata for traceability. */
@@ -35,6 +35,7 @@ export interface ParsedEscrowEvent {
  *   locked   → topic[0] = Symbol("locked"),   value = (trade_id, seller, buyer, amount, timeout_ledger)
  *   released → topic[0] = Symbol("released"), value = (trade_id, seller, buyer)
  *   refunded → topic[0] = Symbol("refunded"), value = (trade_id, seller)
+ *   declined → topic[0] = Symbol("declined"), value = (trade_id, seller)
  *
  * `scValToNative` is injected so this function is pure and unit-testable.
  *
@@ -52,7 +53,7 @@ export function parseEscrowEvent(
     return null;
   }
 
-  if (eventType !== 'locked' && eventType !== 'released' && eventType !== 'refunded') {
+  if (eventType !== 'locked' && eventType !== 'released' && eventType !== 'refunded' && eventType !== 'declined') {
     return null;
   }
 
@@ -108,7 +109,7 @@ const SETTLED_STATES = new Set(['completed', 'refunded']);
 export async function applyEscrowEvent(parsed: ParsedEscrowEvent): Promise<void> {
   if (parsed.type === 'released') {
     await handleReleased(parsed);
-  } else if (parsed.type === 'refunded') {
+  } else if (parsed.type === 'refunded' || parsed.type === 'declined') {
     await handleRefunded(parsed);
   }
   // 'locked': trade already updated by the HTTP route; nothing to do here.
@@ -227,6 +228,7 @@ async function handleRefunded(ev: ParsedEscrowEvent): Promise<void> {
     actor: ACTOR_SYSTEM,
     metadata: {
       source: 'soroban_event',
+      settlement: ev.type,
       event_id: ev.eventId,
       refund_tx_hash: ev.txHash,
       ledger: ev.ledger,
@@ -235,6 +237,6 @@ async function handleRefunded(ev: ParsedEscrowEvent): Promise<void> {
 
   logger.info(
     { trade_id: trade.id, ledger: ev.ledger, tx_hash: ev.txHash, category: 'event-dispatcher' },
-    '[dispatcher] Trade refunded via on-chain refunded event',
+    `[dispatcher] Trade refunded via on-chain ${ev.type} event`,
   );
 }

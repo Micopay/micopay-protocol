@@ -20,6 +20,13 @@ def computeVersionCode = { ->
     return new Date().format('yyMMddHH').toInteger()
 }
 
+def stellarNetwork = (System.getenv('MICOPAY_STELLAR_NETWORK')
+    ?: project.findProperty('micopayStellarNetwork')
+    ?: 'TESTNET').toUpperCase()
+if (!(stellarNetwork in ['TESTNET', 'PUBLIC'])) {
+    throw new GradleException('MICOPAY_STELLAR_NETWORK must be TESTNET or PUBLIC')
+}
+
 android {
     namespace = "com.micopay.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -31,9 +38,13 @@ android {
         versionName "1.0.0"
         resConfigs "es", "en"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "String", "STELLAR_NETWORK", "\"${stellarNetwork}\""
         aaptOptions {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
+    }
+    buildFeatures {
+        buildConfig true
     }
     signingConfigs {
         release {
@@ -79,6 +90,9 @@ dependencies {
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation "androidx.biometric:biometric:1.1.0"
+    implementation "network.lightsail:stellar-sdk:4.0.1"
+    implementation "network.lightsail:stellar-sdk-android-spi:4.0.1"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

@@ -6,6 +6,7 @@ import {
   fetchTradeDetail,
   completeTrade,
   cancelTradeRequest,
+  declineTradeRequest,
   refundTradeRequest,
   fetchRefundEligibility,
   type RefundEligibility,
@@ -625,13 +626,14 @@ function CancelledView() {
  * has real on-chain funds pending refund (lock_tx_hash set, release_tx_hash
  * unset). See docs/AUDIT_MOBILE_MAINNET.md finding B3.
  */
-function ExpiredView({ canRefund, onRefund, refunding, trade, title, description }: {
+function ExpiredView({ canRefund, onRefund, refunding, trade, title, description, error }: {
   canRefund: boolean;
   onRefund: () => void;
   refunding: boolean;
   trade: TradeDetailData;
   title: string;
   description: string;
+  error?: string | null;
 }) {
   return (
     <div className="flex flex-col items-center text-center">
@@ -640,6 +642,12 @@ function ExpiredView({ canRefund, onRefund, refunding, trade, title, description
           schedule
         </span>
       </div>
+
+      {error && (
+        <div className="mb-4 w-full rounded-sm border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+          {error}
+        </div>
+      )}
       <h2 className="text-2xl font-bold text-on-surface mb-2">{title}</h2>
       <p className="text-on-surface-variant mb-6">{description}</p>
 
@@ -920,6 +928,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
   // solo con estado `expired`, que nunca se persiste, asi que una operacion
   // `locked` o `revealing` vencida quedaba sin salida visible.
   const [refundEligibility, setRefundEligibility] = useState<RefundEligibility | null>(null);
+  const [declineAvailable, setDeclineAvailable] = useState(false);
 
   // Se consulta al cargar y tras cada cambio de estado, para que el CTA
   // aparezca en cuanto venza sin depender del reloj del dispositivo.
@@ -963,6 +972,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
     try {
       const data = await fetchTradeDetail(id, effectiveToken);
       setTrade(data.trade as TradeDetailData);
+      setDeclineAvailable(Boolean(data.decline_available));
       setError(null);
     } catch (e: any) {
       const status = e?.response?.status;
@@ -1080,6 +1090,26 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       fetchTrade();
     } catch (e: any) {
       setRefundError(e.message || 'Error al procesar el reembolso. Intenta de nuevo.');
+    } finally {
+      setIsRefunding(false);
+    }
+  };
+
+  const handleDeclineNow = async () => {
+    if (!trade || isRefunding) return;
+    const effectiveToken = token ?? (await getStoredToken());
+    if (!effectiveToken) {
+      setRefundError('Tu sesión expiró. Vuelve a entrar para devolver los fondos.');
+      return;
+    }
+
+    setIsRefunding(true);
+    setRefundError(null);
+    try {
+      await declineTradeRequest(trade.id, effectiveToken);
+      await fetchTrade();
+    } catch (e: any) {
+      setRefundError(e?.message || 'No se pudieron devolver los fondos. Intenta de nuevo.');
     } finally {
       setIsRefunding(false);
     }
@@ -1221,6 +1251,19 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
         // also surface a manual "Recuperar fondos" retry here so the user
         // isn't just waiting on a background job with no visible feedback.
         if (trade.lock_tx_hash && !trade.release_tx_hash) {
+          if (declineAvailable && isBuyer) {
+            return (
+              <ExpiredView
+                canRefund
+                onRefund={handleDeclineNow}
+                refunding={isRefunding}
+                trade={trade}
+                title="Devolución pendiente"
+                description="La operación fue cancelada. Autoriza ahora la devolución inmediata al dueño de los fondos, sin esperar el vencimiento."
+                error={refundError}
+              />
+            );
+          }
           return (
             <ExpiredView
               canRefund={isBuyer || isSeller}

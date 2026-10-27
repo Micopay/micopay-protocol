@@ -163,6 +163,10 @@ const ESCROW_CONTRACTS = parseEscrowContracts(
   process.env.ESCROW_CONTRACT_ID || '',
   ESCROW_ASSET_ENV,
 );
+const ESCROW_DECLINE_CONTRACT_IDS = (process.env.ESCROW_DECLINE_CONTRACT_IDS || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
@@ -181,6 +185,8 @@ export const config = {
    * refund iria al contrato nuevo, que no las conoce.
    */
   escrowLegacyContractId: process.env.ESCROW_LEGACY_CONTRACT_ID || '',
+  /** Contract IDs deployed with buyer-authorized decline(). */
+  escrowDeclineContractIds: ESCROW_DECLINE_CONTRACT_IDS as readonly string[],
   /** Activo por defecto de las operaciones nuevas (ver assetRate.service). */
   escrowAsset: ESCROW_ASSET_ENV,
   /**
@@ -329,6 +335,11 @@ export function validateConfig() {
     for (const [asset, contractId] of escrowEntries) {
       if (!/^C[A-Z2-7]{55}$/.test(contractId)) {
         errors.push(`Escrow contract for ${asset} is invalid. It must be a valid Stellar contract ID (56 characters starting with 'C').`);
+      }
+    }
+    for (const contractId of config.escrowDeclineContractIds) {
+      if (!/^C[A-Z2-7]{55}$/.test(contractId)) {
+        errors.push(`ESCROW_DECLINE_CONTRACT_IDS contains an invalid contract ID: ${contractId}`);
       }
     }
 

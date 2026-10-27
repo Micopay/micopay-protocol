@@ -1,6 +1,5 @@
-import { Keypair, TransactionBuilder, Operation, Memo, Networks, Asset, Horizon, Transaction } from '@stellar/stellar-sdk';
-import { requireUserPresence } from '../lib/userPresence';
-import { exportSecretKey } from '../lib/keystore';
+import { TransactionBuilder, Operation, Memo, Networks, Asset, Horizon, Transaction } from '@stellar/stellar-sdk';
+import { getPublicKey, signTransactionXdr } from '../lib/keystore';
 import { Buffer } from 'buffer';
 import { buildTxUrl } from '../utils/stellarExplorer';
 import { decodeTransactionXdr } from './transactionDecoder';
@@ -16,21 +15,16 @@ export async function sendCETESToEtherfuse(
   withdrawMemo: string,
   cetesIssuer: string
 ): Promise<{ hash: string; explorerUrl: string }> {
-  // Mueve dinero: se confirma antes de tocar la llave.
-  await requireUserPresence('payment');
-  const secret = await exportSecretKey();
-  if (!secret) throw new Error("No se encontró la llave privada del dispositivo.");
-
-  const keypair = Keypair.fromSecret(secret);
-  
-  const account = await server.loadAccount(keypair.publicKey());
+  const publicKey = await getPublicKey();
+  if (!publicKey) throw new Error("No se encontró la llave del dispositivo.");
+  const account = await server.loadAccount(publicKey);
 
   const memoBuffer = Buffer.from(withdrawMemo, 'base64');
   const memo = Memo.hash(memoBuffer);
 
   const asset = new Asset('CETES', cetesIssuer);
 
-  const tx = new TransactionBuilder(account, {
+  const unsignedTx = new TransactionBuilder(account, {
     fee: '10000',
     networkPassphrase: NETWORK_PASSPHRASE,
   })
@@ -44,11 +38,14 @@ export async function sendCETESToEtherfuse(
     .setTimeout(90)
     .addMemo(memo)
     .build();
-
-  tx.sign(keypair);
+  const signedTx = TransactionBuilder.fromXDR(
+    await signTransactionXdr(unsignedTx.toXDR(), NETWORK_PASSPHRASE, 'payment'),
+    NETWORK_PASSPHRASE,
+  );
+  if (!(signedTx instanceof Transaction)) throw new Error('La transacción firmada no es válida.');
 
   try {
-    const response = await server.submitTransaction(tx);
+    const response = await server.submitTransaction(signedTx);
     return {
       hash: response.hash,
       explorerUrl: buildTxUrl(response.hash)
@@ -156,7 +153,7 @@ export function validatePreparedWithdrawTx(
 
 /**
  * Firma y envia la preparedTransaction a Horizon despues de validarla.
- * Pide la huella (`requireUserPresence`). No reintenta: si `tx_bad_seq`,
+ * Firma mediante el firmador central, que aplica la confirmación local. No reintenta: si `tx_bad_seq`,
  * la pantalla pide nuevas instrucciones y vuelve a cotizar.
  */
 export async function signAndSubmitPreparedWithdrawTx(
@@ -165,19 +162,19 @@ export async function signAndSubmitPreparedWithdrawTx(
 ): Promise<{ hash: string; explorerUrl: string }> {
   validatePreparedWithdrawTx(xdr, expected);
 
-  await requireUserPresence('payment');
-  const secret = await exportSecretKey();
-  if (!secret) throw new Error('No se encontró la llave privada del dispositivo.');
-  const keypair = Keypair.fromSecret(secret);
-  if (keypair.publicKey() !== expected.fromAddress) {
+  const publicKey = await getPublicKey();
+  if (!publicKey) throw new Error('No se encontró la llave del dispositivo.');
+  if (publicKey !== expected.fromAddress) {
     throw new WithdrawTxMismatchError('la llave del dispositivo no coincide con la cuenta del retiro');
   }
 
-  const parsed = TransactionBuilder.fromXDR(xdr, NETWORK_PASSPHRASE);
+  const parsed = TransactionBuilder.fromXDR(
+    await signTransactionXdr(xdr, NETWORK_PASSPHRASE, 'payment'),
+    NETWORK_PASSPHRASE,
+  );
   if (!(parsed instanceof Transaction)) {
     throw new WithdrawTxMismatchError('la tx es un fee-bump; no se soporta');
   }
-  parsed.sign(keypair);
 
   try {
     const response = await server.submitTransaction(parsed);
