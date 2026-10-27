@@ -580,6 +580,7 @@ export async function getTradeHistory(
 ): Promise<TradeHistoryItem[]> {
   const res = await http.get("/trades/history", {
     ...authHeaders(token),
+    // The server filters; "all" (or no value) means no status filter.
     params: status && status !== "all" ? { status } : undefined,
   });
   return res.data.trades;

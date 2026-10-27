@@ -1,137 +1,84 @@
 # Contributing to MicoPay
 
-MicoPay is participating in **[Stellar Drips Wave 8](https://www.drips.network/wave/stellar)**. Contributions are scoped to the retail mobile app — not the whole monorepo.
+**Stellar Drips Wave 10 has been completed.** For the next contribution, check the
+[current issues](https://github.com/Micopay/micopay-protocol/issues) and the
+campaign attached to the issue. This guide does not announce a new Wave.
 
-> **Two campaigns run in parallel.** This guide covers Stellar Drips issues (`wave:*` + `Stellar Wave` labels). Issues labeled `grantfox:*` belong to the **GrantFox** campaign — same code standards, different assignment and reward flow: see [`docs/GRANTFOX_GUIDE.md`](./docs/GRANTFOX_GUIDE.md). Every issue belongs to exactly one campaign.
+## Start with the current app
 
-> Before opening a PR, skim this file end to end. It is the contract we review PRs against.
+Read the [README](./README.md) for the product, feature flags, and limitations.
+Contributions normally cover:
 
----
+- `micopay/frontend/`: React/Vite app and Capacitor Android integration.
+- `micopay/backend/`: Fastify API and application services.
+- `micopay/sql/`: schema changes when explicitly required by the issue.
+- `docs/`: documentation relevant to the app.
 
-## Wave focus
+Contract changes in `micopay/contracts/`, deployments, and infrastructure need
+explicit issue scope. ZK, AI-agent, and x402 projects moved to another repository;
+legacy protocol directories are not the default contribution surface.
 
-One flow over many demos. The Wave is organized around making **Core Retail Flow** — trade creation, state, cancel, timeout, refund, receipt — work reliably end to end.
+## Choose an issue before coding
 
-Every other milestone exists to make that flow trustworthy. If you are unsure where to start, pick an issue from [**Wave 8: Core Retail Flow (P0)**](https://github.com/Micopay/micopay-protocol/milestone/24) first.
+1. Read the issue's current description, acceptance criteria, assignee, and comments.
+2. Confirm that it is open for contributions and follow its assignment process.
+3. Wait for assignment before starting to avoid duplicate work.
+4. Ask on the issue when product behavior or scope is unclear.
+5. Do not start blocked work until the maintainer clears the dependency.
 
----
+Use the [milestone list](https://github.com/Micopay/micopay-protocol/milestones)
+for context, but do not assume an older open milestone is the current priority.
+The Wave 6 audit and Wave 8 plans are historical, not lists of unresolved tasks.
 
-## In-scope paths
+## Run the app locally
 
-- `micopay/frontend/` — retail mobile app (React/Vite, port 5181)
-- `micopay/backend/` — retail backend (Node/Fastify, port 3002)
-- `docs/` — shared product, UX, and team guides
+Use Node.js 22 and npm. Install dependencies with `npm ci` separately in
+`micopay/backend` and `micopay/frontend`.
 
-## Out-of-scope unless an issue explicitly opens it
+Follow the [README setup instructions](./README.md#local-development) to configure
+PostgreSQL, backend secrets, Stellar settings, and the frontend API URL.
+Example environment values are placeholders; do not use production credentials.
 
-- `apps/api/` (agent x402 protocol API)
-- `apps/web/` (protocol dashboard)
-- `contracts/` (Soroban contracts)
-- `stitch_remix_of_micopay/`, old prototypes, deployment configs, and operations internals
+In separate terminals, from each package directory:
 
-PRs that touch out-of-scope paths will be asked to split or rescope.
+```sh
+npm run dev
+```
 
----
+The backend example uses port **3000**; the frontend uses **5181**. Match
+`VITE_API_URL` to your backend. State whether your validation uses mocks or real
+Testnet transactions. Do not treat simulated DeFi screens as live products.
 
-## Getting started
+## Before opening a PR
 
-1. Fork the repo and clone your fork.
-2. Install dependencies from the repo root:
-   ```bash
-   npm install
-   ```
-3. Run the retail app locally (two terminals):
-   ```bash
-   cd micopay/backend && npm run dev   # http://localhost:3002
-   cd micopay/frontend && npm run dev  # http://localhost:5181
-   ```
-4. Read the four core docs before picking an issue:
-   - [`docs/PRODUCT_SCOPE.md`](./docs/PRODUCT_SCOPE.md) — what we are building and why
-   - [`docs/RETAIL_ROADMAP.md`](./docs/RETAIL_ROADMAP.md) — the phased execution plan
-   - [`docs/UX_MANIFESTO.md`](./docs/UX_MANIFESTO.md) — the trust and UX bar every PR is reviewed against
-   - [`docs/DRIPS_TEAM_GUIDE.md`](./docs/DRIPS_TEAM_GUIDE.md) — how issues, reviews, and merges work during the Wave
-5. Pick an issue from the [open milestones](https://github.com/Micopay/micopay-protocol/milestones).
+- Keep the change within the assigned issue and avoid unrelated refactors.
+- Follow the [UX manifesto](./docs/UX_MANIFESTO.md) for user-facing behavior.
+- Describe what changed, why, and which issue it addresses.
+- Record the checks you actually ran and any untested behavior.
+- For UI changes, include screenshots or a short recording and reproduction steps.
+- For trade or payment changes, cover affected states and failure paths.
+- Never include wallet secrets, signing keys, credentials, or identity documents.
+- Explain dependency, lockfile, build-script, or installation-hook changes explicitly.
 
----
+Use a focused title such as `fix: preserve amount after identity verification`.
+Reference the issue in the PR body (`Closes #123` when it fully resolves the issue).
+If you change the code after review, summarize the new changes and request review
+again. Avoid rewriting reviewed history without coordinating with the maintainer.
 
-## Picking an issue
+## Campaigns and rewards
 
-- Look for issues labeled [`wave:good-first`](https://github.com/Micopay/micopay-protocol/labels/wave%3Agood-first) if it is your first PR.
-- Comment on the issue asking to be assigned **before** you start work. We assign one contributor per issue to avoid duplicated effort.
-- If nobody responds within 48 hours, tag the maintainer on the issue.
-- Do not open PRs against issues labeled `wave:blocked` or `wave:needs-product` until the block is cleared.
+Check the issue's campaign and the current terms shown by Drips before applying.
+Eligibility, verification, points, deadlines, and payment rules are controlled by
+the campaign; this repository does not freeze those rules or promise a payout.
+Use the [Drips campaign page](https://www.drips.network/wave/stellar) for current information.
+If an issue belongs to another campaign, follow that issue's instructions.
 
-## Labels we use
+## Documentation and help
 
-- **Wave surface:** `wave:retail`, `wave:frontend`, `wave:backend`, `wave:merchant`, `wave:trust`, `wave:docs`
-- **Complexity:** `complexity: low`, `complexity: medium`, `complexity: high`
-- **Flow control:** `wave:good-first`, `wave:blocked`, `wave:needs-product`
-- **Rewards:** `Stellar Wave` marks work eligible for Drips
+- [Documentation index](./docs/README.md): entry points and historical references.
+- [Drips team guide](./docs/DRIPS_TEAM_GUIDE.md): maintainer planning context.
+- [Historical Wave 6 audit](./docs/AUDIT_APK_WAVE6.md): findings from June 2026,
+  which must be rechecked against current code before treating them as open work.
 
----
-
-## Milestones
-
-These are the milestones for the current Wave. Milestones from earlier Waves stay open for
-historical reference — pick from the Wave 8 ones.
-
-| Milestone | Focus |
-|---|---|
-| [Wave 8: Core Retail Flow (P0)](https://github.com/Micopay/micopay-protocol/milestone/24) | **Wave priority.** Trade creation, detail view, state machine UX, cancel / timeout / refund, receipts, history linked to real states |
-| [Wave 8: UI Truth (P1)](https://github.com/Micopay/micopay-protocol/milestone/25) | Places where the UI misrepresents real data or offers controls that do nothing |
-| [Wave 8: Backend Hardening](https://github.com/Micopay/micopay-protocol/milestone/26) | Auth persistence, audit log, error taxonomy, rate limiting, replay protection, structured logging |
-| [Wave 8: Product & Release](https://github.com/Micopay/micopay-protocol/milestone/27) | Build config, test suite, store readiness, privacy and support paths |
-| [Wave 8: Market & User Validation](https://github.com/Micopay/micopay-protocol/milestone/28) | Research issues. Delivered by PR adding your section to `docs/VALIDATION_DRIPS.md`, first person, one assignee per issue |
-
----
-
-## What a good PR looks like
-
-- Solves the issue as scoped (no side quests)
-- Does not touch out-of-scope paths
-- Matches the tone of [`docs/UX_MANIFESTO.md`](./docs/UX_MANIFESTO.md) for anything user-facing
-- Includes local test notes when behavior changes (what you ran, what you saw)
-- Stays under the complexity tier declared on the issue
-- References the issue number in the PR description (`Closes #123`)
-
-Review SLA during the Wave: **first review within 24 hours**.
-
-### Commit and PR style
-
-- Keep commits focused. One logical change per commit is ideal.
-- PR title: short, imperative mood (`fix: empty state on history`, not `Fixed the empty state`).
-- PR description should answer: what changed, why, how to test, and which issue it closes.
-
----
-
-## Rewards
-
-Rewards are distributed by [Drips](https://www.drips.network/wave/stellar) — not by the MicoPay maintainers — as a proportional share of the Wave 8 reward pool funded by the Stellar Development Foundation.
-
-Points per issue are fixed by Drips based on the `complexity` label set on the issue:
-
-| Complexity label | Points | Typical work |
-|---|---:|---|
-| `complexity: low` | 100 | Typos, empty states, small copy fixes, tiny tests |
-| `complexity: medium` | 150 | Self-contained screen, endpoint, state handling, validation |
-| `complexity: high` | 200 | Complex features, refactors, or new integrations |
-
-Your final payout = (your points ÷ total points earned across all contributors in the Wave) × Wave 8 reward pool. Only issues labeled `Stellar Wave` count. See [Drips' contributor guide](https://docs.drips.network/wave/contributors/solving-issues-and-earning-rewards/) for details on withdrawals and timing.
-
-### Before you apply
-
-Drips requires **identity verification (KYC) through Sumsub before you can apply to any issue** — government ID, a selfie, and proof of address. This is Drips' requirement, not MicoPay's, and we have no say in it. Do it before you pick an issue so you are not blocked once you are ready to work.
-
-Two other limits set by Drips: you can have at most **15 pending applications** at a time, and points land only when the maintainer marks the issue resolved after your PR is merged — not when the issue is assigned to you.
-
----
-
-## Code of Conduct
-
-Be direct, be kind, and assume good intent. Disrespectful behavior in issues, PRs, or reviews is grounds for removal from the Wave.
-
-## Getting help
-
-- **Unclear issue scope?** Comment on the issue.
-- **Blocked on a product decision?** Tag the maintainer and add the `wave:needs-product` label.
-- **General questions about the Wave?** Check [`docs/DRIPS_TEAM_GUIDE.md`](./docs/DRIPS_TEAM_GUIDE.md) first.
+Ask scope and implementation questions on the relevant issue. Be direct,
+respectful, and clear about blockers. Review timing depends on maintainer availability.

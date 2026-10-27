@@ -1,5 +1,12 @@
 ﻿# Auditoría APK MicoPay — Wave 6 (Drips)
 
+> **Documento histórico — Wave 6 (junio de 2026).** Wave 10 ya terminó.
+> Este reporte conserva los hallazgos y decisiones de aquella revisión; no describe
+> el estado actual de la APK ni una lista de tareas pendientes. No asumir que un
+> hallazgo sigue abierto sin revisar su issue y el código actual.
+> Para empezar a contribuir, consulta [CONTRIBUTING.md](../CONTRIBUTING.md)
+> y las [issues vigentes](https://github.com/Micopay/micopay-protocol/issues).
+
 > **Propósito:** reporte para revisión por Codex. Identifica la brecha entre la app móvil
 > actual (demo de un solo dispositivo) y "el producto principal" (app móvil usable por un
 > usuario real). Cada hallazgo incluye archivo:línea, severidad, causa y criterio de aceptación.
