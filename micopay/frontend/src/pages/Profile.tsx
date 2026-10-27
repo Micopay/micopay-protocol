@@ -28,6 +28,7 @@ interface ProfileProps {
   onLogout: () => void;
   onNavigatePrivacy?: () => void;
   onNavigateTerms?: () => void;
+  onNavigateKyc?: () => void;
   /** RED-2: entrada al alta como agente de Red MicoPay. */
   onNavigateJoinNetwork?: () => void;
   /** Pertenencia real, leida del servidor. No se infiere de tener sesion. */
@@ -39,7 +40,7 @@ interface ProfileProps {
   onToggleDebug?: () => void;
 }
 
-const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout, onNavigatePrivacy, onNavigateTerms, onNavigateJoinNetwork, providerStatus, availability, onToggleAvailability }: ProfileProps) => {
+const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout, onNavigatePrivacy, onNavigateTerms, onNavigateKyc, onNavigateJoinNetwork, providerStatus, availability, onToggleAvailability }: ProfileProps) => {
   const { t, i18n } = useTranslation();
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -315,6 +316,34 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                       </div>
                     </div>
                   </div>
+                </section>
+
+                <section className="bg-papel rounded-sm p-5 border-2 border-tinta/60 space-y-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-gris">
+                    Verificación de identidad
+                  </p>
+                  {profile.kyc_provider === 'didit' && (profile.kyc_level ?? 0) > 0 ? (
+                    <div className="flex items-center gap-3 rounded-sm bg-verde-suave p-4">
+                      <span className="material-symbols-outlined text-verde">verified_user</span>
+                      <div>
+                        <p className="font-bold text-tinta">Identidad verificada</p>
+                        <p className="text-sm text-gris">Nivel {profile.kyc_level} con Didit</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm text-gris">
+                        Verifica tu identidad para usar operaciones que requieren límites mayores y para retirar a banco.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={onNavigateKyc}
+                        className="w-full min-h-12 bg-verde text-papel font-bold rounded-sm"
+                      >
+                        Verificar mi identidad
+                      </button>
+                    </>
+                  )}
                 </section>
 
                 <section className="bg-papel rounded-sm p-5 border-2 border-tinta/60 space-y-3">

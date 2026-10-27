@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import type { ApiErrorAction } from '../utils/apiError';
 import {
   PLATFORM_FEE_PERCENT,
   platformFeeMxnFromAmount,
@@ -33,7 +34,8 @@ export interface TradeConfirmationPageProps {
   onConfirm: () => Promise<boolean>;
   loading?: boolean;
   errorMessage?: string | null;
-  errorAction?: string | null;
+  errorAction?: ApiErrorAction;
+  onVerifyIdentity?: () => void;
   onChooseAnotherAgent?: () => void;
   /** Effective-fee threshold (%) above which a warning is shown. Defaults to the shared guardrail. */
   maxEffectiveFeePercent?: number;
@@ -61,6 +63,7 @@ export default function TradeConfirmationPage({
   loading = false,
   errorMessage,
   errorAction,
+  onVerifyIdentity,
   onChooseAnotherAgent,
   maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
   assetKey,
@@ -115,7 +118,16 @@ export default function TradeConfirmationPage({
             className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
             role="alert"
           >
-            {errorMessage}
+            <p>{errorMessage}</p>
+            {errorAction === 'verify_identity' && onVerifyIdentity ? (
+              <button
+                type="button"
+                onClick={onVerifyIdentity}
+                className="mt-3 w-full min-h-12 rounded-sm bg-verde px-4 font-bold text-papel"
+              >
+                Verificar mi identidad
+              </button>
+            ) : null}
           </div>
         ) : null}
 

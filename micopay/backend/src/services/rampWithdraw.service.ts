@@ -23,7 +23,9 @@ import {
   createPersonalOrg,
   createQuote,
   getKycStatus,
+  getOrganization,
   mapEtherfuseKyc,
+  mapEtherfuseKycDetailed,
   getOrder,
   getPaymentAccount,
   registerPaymentAccount,
@@ -55,6 +57,7 @@ export type BankWithdrawStage =
   | 'needs_didit'      // falta Didit (como en P2P)
   | 'needs_kyc'        // Didit ok, falta mandar datos a Etherfuse / abrir /idv
   | 'kyc_review'       // enviado, Etherfuse esta revisando
+  | 'kyc_action'       // Etherfuse espera algo del usuario en /idv (terminar o corregir)
   | 'needs_bank'       // KYC aprobado, falta registrar CLABE
   | 'ready';           // listo para cotizar y retirar
 
@@ -78,11 +81,12 @@ interface UserRow {
   etherfuse_kyc_status: EtherfuseKycStatus;
   etherfuse_kyc_message: string | null;
   etherfuse_kyc_updated_at: string | null;
+  email: string | null;
 }
 
 async function loadUser(userId: string): Promise<UserRow> {
   const user = await db.getOne<UserRow>(
-    `SELECT id, stellar_address, username,
+    `SELECT id, stellar_address, username, email,
             etherfuse_customer_id, etherfuse_bank_account_id,
             etherfuse_wallet_account_id, etherfuse_kyc_status,
             etherfuse_kyc_message, etherfuse_kyc_updated_at
@@ -98,11 +102,23 @@ async function loadUser(userId: string): Promise<UserRow> {
  * pantalla mientras el usuario esta en revision, por si un webhook se perdio.
  * `userMessage` solo se sobrescribe cuando trae algo: GET /kyc no repite el
  * mensaje que llego por webhook.
+ *
+ * `detail` pide los requisitos (Etherfuse consulta a su proveedor: no en el
+ * polling corto). Sin ellos no se distingue "en revision" de "le toca al
+ * usuario", asi que un `action_required` guardado se conserva mientras el
+ * estado siga en `inProgress`.
  */
-async function refreshEtherfuseKyc(userId: string, customerOrgId: string, message?: string | null): Promise<{ mapped: EtherfuseKycStatus; kyc: KycStatus }> {
-  const kyc = await getKycStatus(customerOrgId);
-  const mapped = mapEtherfuseKyc(kyc.status, kyc.needsWork);
-  const newMessage = message ?? kyc.userMessage;
+async function refreshEtherfuseKyc(
+  userId: string,
+  customerOrgId: string,
+  opts: { message?: string | null; detail?: boolean; previous?: EtherfuseKycStatus } = {},
+): Promise<{ mapped: EtherfuseKycStatus; kyc: KycStatus }> {
+  const kyc = await getKycStatus(customerOrgId, { requirements: opts.detail });
+  let mapped = opts.detail ? mapEtherfuseKycDetailed(kyc) : mapEtherfuseKyc(kyc.status, kyc.needsWork);
+  if (!opts.detail && mapped === 'review' && kyc.status === 'inProgress' && opts.previous === 'action_required') {
+    mapped = 'action_required';
+  }
+  const newMessage = opts.message ?? kyc.userMessage;
   await db.execute(
     `UPDATE users
         SET etherfuse_kyc_status = $1,
@@ -114,7 +130,14 @@ async function refreshEtherfuseKyc(userId: string, customerOrgId: string, messag
   return { mapped, kyc };
 }
 
-export async function getBankWithdrawStatus(userId: string): Promise<BankWithdrawStatus> {
+/** Columna guardada a etapa de la pantalla, mientras el KYC no este aprobado. */
+function kycStage(mapped: EtherfuseKycStatus): BankWithdrawStage {
+  // Un `denied` tambien se resuelve volviendo a /idv (docs de Etherfuse: "a
+  // denied customer resubmits by being launched into /idv").
+  return mapped === 'action_required' || mapped === 'rejected' ? 'kyc_action' : 'kyc_review';
+}
+
+export async function getBankWithdrawStatus(userId: string, opts: { detail?: boolean } = {}): Promise<BankWithdrawStatus> {
   const u = await loadUser(userId);
   // Didit es la verificacion basica que ya existe en P2P. El webhook de Didit
   // escribe kyc_level (no kyc_status), con vencimiento.
@@ -122,16 +145,19 @@ export async function getBankWithdrawStatus(userId: string): Promise<BankWithdra
   if (!u.etherfuse_customer_id) return { stage: 'needs_kyc' };
   if (u.etherfuse_kyc_status !== 'approved') {
     try {
-      const { mapped, kyc } = await refreshEtherfuseKyc(userId, u.etherfuse_customer_id);
+      const { mapped, kyc } = await refreshEtherfuseKyc(userId, u.etherfuse_customer_id, {
+        detail: opts.detail,
+        previous: u.etherfuse_kyc_status,
+      });
       // La org existe pero los datos no llegaron (p.ej. Etherfuse rechazo el
       // POST): se vuelve a mostrar el formulario en vez de "en revision".
       if (mapped === 'not_started') return { stage: 'needs_kyc' };
       if (mapped !== 'approved') {
-        return { stage: 'kyc_review', kycMessage: kyc.userMessage ?? u.etherfuse_kyc_message };
+        return { stage: kycStage(mapped), kycMessage: kyc.userMessage ?? u.etherfuse_kyc_message };
       }
     } catch {
       // Etherfuse no responde: se muestra lo ultimo que sabemos.
-      return { stage: 'kyc_review', kycMessage: u.etherfuse_kyc_message };
+      return { stage: kycStage(u.etherfuse_kyc_status), kycMessage: u.etherfuse_kyc_message };
     }
   }
   if (!u.etherfuse_bank_account_id) return { stage: 'needs_bank' };
@@ -208,6 +234,10 @@ export async function startKyc(userId: string, req: StartKycRequest): Promise<St
   if (org.id !== u.etherfuse_customer_id) {
     await db.execute(`UPDATE users SET etherfuse_customer_id = $1 WHERE id = $2`, [org.id, userId]);
   }
+  // users.email existe solo para Etherfuse; relaunchKyc lo necesita para el JWT.
+  if (req.email !== u.email) {
+    await db.execute(`UPDATE users SET email = $1 WHERE id = $2`, [req.email, userId]);
+  }
 
   // 2. Enviar datos de verificacion.
   const verification = await submitVerification(org.id, {
@@ -231,10 +261,30 @@ export async function startKyc(userId: string, req: StartKycRequest): Promise<St
   return { customerOrgId: org.id, verification, launch };
 }
 
+export class RelaunchKycError extends Error {
+  constructor(public readonly code: 'kyc_not_started' | 'missing_email') {
+    super(code === 'kyc_not_started' ? 'Primero envia tus datos' : 'Falta tu correo; vuelve a enviar tus datos');
+  }
+}
+
+/**
+ * Nuevo launch form de /idv para un usuario que ya tiene org en Etherfuse:
+ * terminar la selfie si cerro la pestana, o corregir lo que Etherfuse marco.
+ * El JWT dura 5 minutos, por eso se firma uno por cada toque del boton.
+ */
+export async function relaunchKyc(userId: string): Promise<LaunchForm> {
+  const u = await loadUser(userId);
+  if (!u.etherfuse_customer_id) throw new RelaunchKycError('kyc_not_started');
+  if (!u.email) throw new RelaunchKycError('missing_email');
+  const org = await getOrganization(u.etherfuse_customer_id);
+  return buildLaunchForm(org.id, { email: u.email, name: org.displayName });
+}
+
 /**
  * Llamado por el webhook kycUpdated. Re-lee el estado desde Etherfuse (no
  * confiamos en el body del aviso) y actualiza la base. El `userMessage` si se
- * toma del aviso: es el unico lugar donde Etherfuse dice que corregir.
+ * toma del aviso: es el unico lugar donde Etherfuse dice que corregir. Con
+ * requisitos: llega una vez por cambio, no es polling.
  */
 export async function applyKycUpdate(customerOrgId: string, userMessage: string | null): Promise<EtherfuseKycStatus | null> {
   const user = await db.getOne<{ id: string }>(
@@ -243,7 +293,7 @@ export async function applyKycUpdate(customerOrgId: string, userMessage: string 
   );
   if (!user) return null;
 
-  const { mapped } = await refreshEtherfuseKyc(user.id, customerOrgId, userMessage);
+  const { mapped } = await refreshEtherfuseKyc(user.id, customerOrgId, { message: userMessage, detail: true });
   return mapped;
 }
 

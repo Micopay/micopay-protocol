@@ -237,11 +237,15 @@ La numeración llega a SEC-31; 32 y 33 están libres.
 
 ## Fase 4 — Preparación para Play Store 🆕
 
+> **2026-10-16:** el orden para abrir hoy la cuenta y pedir testers está en `DISTRIBUCION_BETA_TESTNET_2026-08.md` §0. T-20 hay que repetirlo: el AAB del 2026-08-24 está viejo.
+
 **Prerrequisito:** fases 2 y 3 terminadas. No conviene meter testers en una app con la cola offline rota y el KYC sin salida.
 
 > ⚠️ **Las políticas de Play cambian con frecuencia.** Todo lo de esta fase debe verificarse en la Play Console antes de darlo por hecho. Lo que sigue es lo que hay que revisar, no una garantía de que siga vigente.
 
-### T-19 · Quitar los dos permisos innecesarios
+### T-19 · Quitar los dos permisos innecesarios ✅
+
+> Comprobado el 2026-10-16: el manifiesto ya no declara `ACCESS_FINE_LOCATION` ni `POST_NOTIFICATIONS`.
 
 **Archivos:** `android/app/src/main/AndroidManifest.xml`
 
@@ -398,7 +402,7 @@ Para cada issue, comprueba en el código **actual de la rama** que el problema s
 | 1 · Build de release | T-03 … T-05 (T-06 cancelada) | ✅ completada | no |
 | 2 · Cola offline | T-07 … T-11 | pendiente | no |
 | 3 · Llave secreta | T-12 … T-14 | pendiente | 🔒 T-13 |
-| 4 · Play Store | T-19 … T-24 | pendiente | 🔒 T-21, T-22, T-23, T-24 |
+| 4 · Play Store | T-19 ✅, T-20 … T-24 | en curso (2026-10-16, ver §0 de DISTRIBUCION) | 🔒 T-21, T-22, T-23, T-24 |
 | 5 · Deep links | T-15, T-16 | bloqueada | 🔒 T-15, depende de T-21 |
 | 6 · Drips | T-17 ✅, T-18 | cuerpos listos | 🔒 T-18 |
 

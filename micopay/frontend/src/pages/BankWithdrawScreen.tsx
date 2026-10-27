@@ -5,6 +5,7 @@ import {
   fetchBankWithdrawOrders,
   fetchBankWithdrawStatus,
   registerBankAccount,
+  relaunchBankKyc,
   startBankKyc,
   type BankKycLaunchForm,
   type BankWithdrawOrder,
@@ -23,6 +24,7 @@ import {
 
 interface BankWithdrawScreenProps {
   onBack: () => void;
+  onVerifyIdentity: () => void;
   userToken: string;
 }
 
@@ -66,15 +68,15 @@ function bankFromClabe(clabe: string): string | null {
 
 // ---- Pantalla ------------------------------------------------------------
 
-export default function BankWithdrawScreen({ onBack, userToken }: BankWithdrawScreenProps) {
+export default function BankWithdrawScreen({ onBack, onVerifyIdentity, userToken }: BankWithdrawScreenProps) {
   const [status, setStatus] = useState<BankWithdrawStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (detail = false) => {
     try {
       setError(null);
-      const s = await fetchBankWithdrawStatus(userToken);
+      const s = await fetchBankWithdrawStatus(userToken, { detail });
       setStatus(s);
     } catch (e) {
       setError(extractApiErrorPayload(e).message ?? 'No pudimos cargar tu estado');
@@ -83,14 +85,20 @@ export default function BankWithdrawScreen({ onBack, userToken }: BankWithdrawSc
     }
   }, [userToken]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { refresh(true); }, [refresh]);
+
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(true); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refresh]);
 
   // Si estamos esperando revision de Etherfuse, consultamos cada 10 s por si
   // ya aprobaron (el webhook escribe en la base, pero esto evita que el
   // usuario tenga que cerrar y abrir).
   useEffect(() => {
     if (status?.stage !== 'kyc_review') return;
-    const t = setInterval(refresh, 10_000);
+    const t = setInterval(() => refresh(), 10_000);
     return () => clearInterval(t);
   }, [status?.stage, refresh]);
 
@@ -106,11 +114,16 @@ export default function BankWithdrawScreen({ onBack, userToken }: BankWithdrawSc
         {!loading && error && (
           <div className="p-4 border-2 border-tinta bg-amarillo">
             <p className="font-bold">{error}</p>
-            <button onClick={refresh} className="mt-2 underline">Reintentar</button>
+            <button onClick={() => refresh(true)} className="mt-2 underline">Reintentar</button>
           </div>
         )}
         {!loading && !error && status && (
-          <StageView status={status} userToken={userToken} onChanged={refresh} />
+          <StageView
+            status={status}
+            userToken={userToken}
+            onChanged={() => refresh(true)}
+            onVerifyIdentity={onVerifyIdentity}
+          />
         )}
       </main>
     </div>
@@ -118,20 +131,34 @@ export default function BankWithdrawScreen({ onBack, userToken }: BankWithdrawSc
 }
 
 function StageView({
-  status, userToken, onChanged,
-}: { status: BankWithdrawStatusResponse; userToken: string; onChanged: () => void }) {
+  status, userToken, onChanged, onVerifyIdentity,
+}: {
+  status: BankWithdrawStatusResponse;
+  userToken: string;
+  onChanged: () => void;
+  onVerifyIdentity: () => void;
+}) {
   switch (status.stage) {
     case 'needs_didit':
       return (
-        <section className="p-4 border-2 border-tinta bg-crema">
+        <section className="p-4 border-2 border-tinta bg-crema flex flex-col gap-3">
           <h2 className="font-bold mb-2">Verifica tu identidad</h2>
-          <p className="mb-4">
+          <p>
             Antes de retirar a tu banco necesitas verificar tu identidad. Es el
             mismo proceso de Didit que usamos para pagar entre personas.
           </p>
-          <p className="text-sm opacity-70">Vuelve aqui cuando este listo.</p>
+          <button
+            type="button"
+            onClick={onVerifyIdentity}
+            className="min-h-12 bg-verde text-papel font-bold rounded-sm"
+          >
+            Verificar mi identidad
+          </button>
+          <p className="text-sm opacity-70">Al terminar regresarás aquí.</p>
         </section>
       );
+    case 'kyc_action':
+      return <KycActionView userToken={userToken} message={status.kycMessage ?? null} />;
     case 'needs_kyc':
       return <KycForm userToken={userToken} onDone={onChanged} />;
     case 'kyc_review':
@@ -266,6 +293,47 @@ function submitLaunchForm(launch: BankKycLaunchForm) {
   }
   document.body.appendChild(form);
   try { form.submit(); } finally { form.remove(); }
+}
+
+function KycActionView({ userToken, message }: { userToken: string; message: string | null }) {
+  const [opening, setOpening] = useState(false);
+  const [opened, setOpened] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const open = async () => {
+    try {
+      setOpening(true);
+      setError(null);
+      submitLaunchForm(await relaunchBankKyc(userToken));
+      setOpened(true);
+    } catch (e) {
+      setError(extractApiErrorPayload(e).message ?? 'No pudimos abrir Etherfuse');
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  return (
+    <section className="p-4 border-2 border-tinta bg-amarillo flex flex-col gap-3">
+      <h2 className="font-bold">Te falta un paso en Etherfuse</h2>
+      <p>
+        {message
+          ?? 'Etherfuse necesita que termines o corrijas tu verificacion. Abre su pagina y revisa lo que te marca.'}
+      </p>
+      {opened && (
+        <p className="text-sm">Cuando termines, regresa aqui: la pantalla se actualiza sola.</p>
+      )}
+      {error && <p className="text-red-600 font-bold">{error}</p>}
+      <button
+        type="button"
+        onClick={open}
+        disabled={opening}
+        className="min-h-12 bg-tinta text-crema font-bold disabled:opacity-50"
+      >
+        {opening ? 'Abriendo…' : opened ? 'Abrir de nuevo' : 'Continuar en Etherfuse'}
+      </button>
+    </section>
+  );
 }
 
 const RFC_RE = /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/;

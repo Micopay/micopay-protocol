@@ -333,6 +333,7 @@ function MapDepositRoute() {
             const ok = await retryTradeFlow();
             if (ok) navigate('/chat-deposit');
           }}
+          onVerifyIdentity={() => navigate(`/kyc/didit?return=depositMap&level=${tradeError?.requiredLevel === 2 ? 2 : 1}`)}
       />
   );
 }
@@ -372,6 +373,7 @@ function MapRoute() {
             const ok = await retryTradeFlow();
             if (ok) navigate('/chat');
           }}
+          onVerifyIdentity={() => navigate(`/kyc/didit?return=cashoutMap&level=${tradeError?.requiredLevel === 2 ? 2 : 1}`)}
       />
   );
 }
@@ -421,7 +423,8 @@ function ConfirmRoute() {
       assetKey={activeAssetKey}
       loading={tradeLoading}
       errorMessage={tradeError?.message ?? null}
-      errorAction={tradeError?.action ?? null}
+      errorAction={tradeError?.action}
+      onVerifyIdentity={() => navigate(`/kyc/didit?return=${isDeposit ? 'depositMap' : 'cashoutMap'}&level=${tradeError?.requiredLevel === 2 ? 2 : 1}`)}
       onChooseAnotherAgent={() => {
         clearTradeError();
         navigate('/map');
@@ -650,7 +653,13 @@ function BankWithdrawRoute() {
   if (!BANK_WITHDRAW_ENABLED || !sessionUser?.token) {
     return <ComingSoon title="Retirar a banco" icon="account_balance" onBack={() => navigate('/')} />;
   }
-  return <BankWithdrawScreen onBack={() => navigate('/')} userToken={sessionUser.token} />;
+  return (
+    <BankWithdrawScreen
+      onBack={() => navigate('/')}
+      onVerifyIdentity={() => navigate('/kyc/didit?return=bankWithdraw')}
+      userToken={sessionUser.token}
+    />
+  );
 }
 
 /**
@@ -667,6 +676,9 @@ const KYC_RETURN_DESTINATIONS = {
   inbox: '/inbox',
   profile: '/profile',
   joinNetwork: '/join-network',
+  bankWithdraw: '/retirar-banco',
+  cashoutMap: '/map',
+  depositMap: '/map-deposit',
 } as const;
 
 type KycReturnKey = keyof typeof KYC_RETURN_DESTINATIONS;
@@ -690,10 +702,12 @@ export function DiditKYCRoute() {
   const { sessionUser } = useAppCtx();
   const [params] = useSearchParams();
   const destination = resolveKycReturn(params.get('return'), 'home');
+  const level = params.get('level') === '2' ? 2 : 1;
   return (
       <KYCScreen
           token={sessionUser?.token ?? null}
           provider="didit"
+          level={level}
           onApproved={() => {
             navigate(destination);
           }}
@@ -804,6 +818,7 @@ function ProfileRoute() {
           }}
           onNavigatePrivacy={() => navigate('/privacy')}
           onNavigateTerms={() => navigate('/terms')}
+          onNavigateKyc={() => navigate('/kyc/didit?return=profile')}
           onNavigateJoinNetwork={() => navigate('/join-network')}
           providerStatus={providerStatus}
           availability={availability}
@@ -1152,7 +1167,13 @@ function App() {
         // Always load the keypair first — registerUser reads it to get the
         // Stellar address, so this must happen before any registerUser call.
         if (!await keypairExists()) {
-          await generateAndStoreKeypair();
+          if (import.meta.env.VITE_DEMO_MODE === 'true') {
+            await generateAndStoreKeypair();
+          } else {
+            setDevicePublicKey(null);
+            await removeKey(USERS_STORAGE_KEY);
+            return;
+          }
         }
         const pubKey = await getPublicKey();
         setDevicePublicKey(pubKey);

@@ -50,12 +50,20 @@ function getHorizonUrl(): string {
  */
 async function assertInvocationMatches(
   tx: import('@stellar/stellar-sdk').Transaction | import('@stellar/stellar-sdk').FeeBumpTransaction,
-  expected: { contractId: string; functionName: string; args: unknown[] },
+  expected: { sourceAccount: string; contractId: string; functionName: string; args: unknown[] },
 ) {
   const { Address, scValToNative, FeeBumpTransaction } = await import('@stellar/stellar-sdk');
 
   if (tx instanceof FeeBumpTransaction) {
-    throw new BadRequestError('INVALID_TX_SHAPE', 'La transacción firmada no es válida.', 'Fee-bump transactions are not accepted for lock/release');
+    throw new BadRequestError('INVALID_TX_SHAPE', 'La transacción firmada no es válida.', 'Fee-bump transactions are not accepted for escrow actions');
+  }
+
+  if (tx.source !== expected.sourceAccount) {
+    throw new BadRequestError(
+      'TX_SOURCE_MISMATCH',
+      'La cuenta que firma no corresponde a este intercambio.',
+      `Expected source ${expected.sourceAccount}, got ${tx.source}`,
+    );
   }
 
   if (tx.operations.length !== 1 || tx.operations[0].type !== 'invokeHostFunction') {
@@ -79,12 +87,11 @@ async function assertInvocationMatches(
     throw new BadRequestError('TX_FUNCTION_MISMATCH', 'La transacción firmada no corresponde a esta operación.', `Expected function ${expected.functionName}, got ${functionName}`);
   }
 
-  // Only the leading args we pass in `expected` are checked. Callers must list
-  // every argument that decides who ends up with the funds — for lock() that
-  // includes timeout_minutes, which sets when refund() opens.
+  // Callers list every contract argument. Exact length prevents an altered XDR
+  // from being accepted just because its leading fields match the trade.
   const actualArgs = invocation.args().map((a) => scValToNative(a));
-  if (actualArgs.length < expected.args.length) {
-    throw new BadRequestError('TX_ARGS_MISMATCH', 'La transacción firmada no corresponde a este intercambio.', `Arg count mismatch: expected at least ${expected.args.length}, got ${actualArgs.length}`);
+  if (actualArgs.length !== expected.args.length) {
+    throw new BadRequestError('TX_ARGS_MISMATCH', 'La transacción firmada no corresponde a este intercambio.', `Arg count mismatch: expected ${expected.args.length}, got ${actualArgs.length}`);
   }
   for (let i = 0; i < expected.args.length; i++) {
     const a = actualArgs[i];
@@ -226,6 +233,7 @@ export async function submitLockTx(params: {
   const tx = TransactionBuilder.fromXDR(params.signedXdr, networkPassphrase);
 
   await assertInvocationMatches(tx, {
+    sourceAccount: params.sellerAddress,
     contractId: params.contractId,
     functionName: 'lock',
     args: [
@@ -312,6 +320,7 @@ export async function submitReleaseTx(params: {
   /** Contrato del escrow de la operacion (`escrowContractForTrade`). */
   contractId: string;
   signedXdr: string;
+  buyerAddress: string;
   tradeIdBytes: Buffer;
   secretBytes: Buffer;
 }): Promise<{ txHash: string }> {
@@ -321,6 +330,7 @@ export async function submitReleaseTx(params: {
   const tx = TransactionBuilder.fromXDR(params.signedXdr, networkPassphrase);
 
   await assertInvocationMatches(tx, {
+    sourceAccount: params.buyerAddress,
     contractId: params.contractId,
     functionName: 'release',
     args: [params.tradeIdBytes, params.secretBytes],
@@ -340,6 +350,74 @@ export async function submitReleaseTx(params: {
     'STELLAR_RELEASE_TIMEOUT',
     'La transacción de liberación falló en la blockchain.',
     'La transacción de liberación está tardando más de lo esperado.',
+  );
+}
+
+/**
+ * Build and simulate the buyer-authorized decline() invocation.
+ * The buyer signs locally; the backend never receives their secret key.
+ */
+export async function prepareDeclineTx(params: {
+  request: FastifyRequest;
+  contractId: string;
+  buyerAddress: string;
+  tradeIdBytes: Buffer;
+}): Promise<{ xdr: string; networkPassphrase: string }> {
+  const { Contract, TransactionBuilder, Networks, nativeToScVal } = await import('@stellar/stellar-sdk');
+  const networkPassphrase = getNetworkPassphrase(Networks);
+  const account = await rpcRead(config.stellarRpcUrl, (s) => s.getAccount(params.buyerAddress));
+  const contract = new Contract(params.contractId);
+
+  const tx = new TransactionBuilder(account, { fee: '1000000', networkPassphrase })
+    .addOperation(
+      contract.call('decline', nativeToScVal(params.tradeIdBytes, { type: 'bytes' })),
+    )
+    .setTimeout(180)
+    .build();
+
+  try {
+    const prepared = await rpcRead(config.stellarRpcUrl, (s) => s.prepareTransaction(tx));
+    return { xdr: prepared.toXDR(), networkPassphrase };
+  } catch (err: any) {
+    if (err instanceof AppError) throw err;
+    params.request.log.error({ err: err.message, category: 'stellar.tx' }, '[Stellar] Decline simulation failed');
+    throw new Error(`Decline simulation failed: ${err.message}. Check if trade exists and is still locked.`);
+  }
+}
+
+/** Submit a buyer-signed decline() after checking the exact contract call. */
+export async function submitDeclineTx(params: {
+  request: FastifyRequest;
+  contractId: string;
+  signedXdr: string;
+  buyerAddress: string;
+  tradeIdBytes: Buffer;
+}): Promise<{ txHash: string }> {
+  const { TransactionBuilder, Networks } = await import('@stellar/stellar-sdk');
+  const networkPassphrase = getNetworkPassphrase(Networks);
+  const tx = TransactionBuilder.fromXDR(params.signedXdr, networkPassphrase);
+
+  await assertInvocationMatches(tx, {
+    sourceAccount: params.buyerAddress,
+    contractId: params.contractId,
+    functionName: 'decline',
+    args: [params.tradeIdBytes],
+  });
+
+  const sendResult = await submitSignedTx(config.stellarRpcUrl, tx);
+  if (sendResult.status === 'ERROR') {
+    params.request.log.error({ detail: sendResult.errorResult, category: 'stellar.tx' }, '[Stellar] Decline send failed');
+    throw new BadRequestError('STELLAR_DECLINE_SEND_FAILED', 'La devolución fue rechazada por la red.', `Decline send failed: ${JSON.stringify(sendResult.errorResult)}`);
+  }
+
+  return pollForConfirmation(
+    params.request,
+    sendResult.hash,
+    'Decline',
+    'STELLAR_DECLINE_FAILED',
+    'STELLAR_DECLINE_TIMEOUT',
+    'La devolución falló en la blockchain.',
+    'La devolución está tardando más de lo esperado.',
   );
 }
 

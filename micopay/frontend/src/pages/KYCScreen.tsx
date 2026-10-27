@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { App as CapApp } from '@capacitor/app';
 
-import { startKYC, getKYCStatus, type KYCProvider, type KYCStatus, type KYCStatusResponse } from '../services/api';
+import { startKYC, getKYCStatus, type KYCLevel, type KYCProvider, type KYCStatus, type KYCStatusResponse } from '../services/api';
 import { readJSON, writeJSON } from '../services/secureStorage';
 import { extractApiErrorPayload } from '../utils/apiError';
 
@@ -16,8 +16,8 @@ const PROVIDER_NAMES: Record<KYCProvider, string> = {
 // Cache key is per-provider so a Didit verification (#314/#315's tiered gate)
 // and an Etherfuse verification (CETES-only) never clobber each other's
 // cached status for the same user.
-function secureStorageKey(provider: KYCProvider): string {
-  return `kyc_status_${provider}`;
+function secureStorageKey(provider: KYCProvider, level: KYCLevel): string {
+  return `kyc_status_${provider}_${level}`;
 }
 
 function StatusLine({ status }: { status: KYCStatus }) {
@@ -64,9 +64,11 @@ type KYCScreenProps = {
   token: string | null;
   /** Defaults to 'etherfuse' so the existing CETES onboarding call site is unaffected. */
   provider?: KYCProvider;
+  /** Didit verification tier; level 2 includes proof of address. */
+  level?: KYCLevel;
 };
 
-export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }: KYCScreenProps) {
+export default function KYCScreen({ onApproved, token, provider = 'etherfuse', level = 1 }: KYCScreenProps) {
   const { t } = useTranslation();
   const providerName = PROVIDER_NAMES[provider];
   const [status, setStatus] = useState<KYCStatus>('pending');
@@ -101,7 +103,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
    * estado provisional; quien desbloquea es la respuesta del backend.
    */
   const loadCachedStatus = async () => {
-    const cached = await readJSON<{ status: KYCStatus; reason?: string | null }>(secureStorageKey(provider));
+    const cached = await readJSON<{ status: KYCStatus; reason?: string | null }>(secureStorageKey(provider, level));
     if (cached?.status === 'approved') {
       setStatus('approved');
       setReason(null);
@@ -114,12 +116,12 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
       await loadCachedStatus();
       if (!token) return;
       try {
-        const res = await getKYCStatus(token, provider);
+        const res = await getKYCStatus(token, provider, level);
         if (cancelled) return;
         // El servidor manda, tambien para desmentir a la cache.
         await applyStatus(res);
         if (res.status !== 'approved') {
-          await writeJSON(secureStorageKey(provider), { status: res.status });
+          await writeJSON(secureStorageKey(provider, level), { status: res.status });
         }
       } catch {
         // Sin respuesta del servidor no se desbloquea nada: la cache se queda
@@ -131,7 +133,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, provider]);
+  }, [token, provider, level]);
 
   const handleOpenHostedFlow = async (emailOverride?: string) => {
     if (blockedByConsent) return;
@@ -144,7 +146,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
     setLoading(true);
 
     try {
-      const { onboardingUrl } = await startKYC(token, provider, emailOverride);
+      const { onboardingUrl } = await startKYC(token, provider, emailOverride, level);
       setNeedsEmail(false);
 
       startedAtRef.current = Date.now();
@@ -195,7 +197,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
     setStatusPollingError(null);
 
     if (res.status === 'approved') {
-      await writeJSON(secureStorageKey(provider), { status: 'approved' });
+      await writeJSON(secureStorageKey(provider, level), { status: 'approved' });
       onApproved();
     }
   };
@@ -204,7 +206,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
     if (!token) return null;
     setStatusPollingError(null);
     try {
-      const res = await getKYCStatus(token, provider);
+      const res = await getKYCStatus(token, provider, level);
       await applyStatus(res);
       return res;
     } catch (e: any) {

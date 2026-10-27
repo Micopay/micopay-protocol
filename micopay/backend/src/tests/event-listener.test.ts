@@ -310,6 +310,23 @@ async function testParseRefundedEvent() {
   console.log('  ✓ parseEscrowEvent handles refunded event');
 }
 
+async function testParseDeclinedEvent() {
+  const tradeId = Buffer.from('d'.repeat(64), 'hex');
+  const mockParser = (v: unknown) => v;
+  const parsed = parseEscrowEvent({
+    id: 'evt-parse-declined',
+    topic: ['declined'],
+    value: [tradeId, 'GSELLER...'],
+    txHash: 'tx_declined',
+    ledger: 502,
+  }, mockParser);
+
+  ok(parsed !== null);
+  strictEqual(parsed!.type, 'declined');
+  strictEqual(parsed!.contractTradeIdHex, 'd'.repeat(64));
+  console.log('  ✓ parseEscrowEvent handles declined event');
+}
+
 async function testParseLockedEvent() {
   const tradeId = Buffer.from('c'.repeat(64), 'hex');
   const mockParser = (v: unknown) => v;
@@ -557,6 +574,29 @@ async function testApplyRefundedUpdatesActiveTradeToRefunded() {
   console.log('  ✓ applyEscrowEvent(refunded) refunds an active trade and records the hash');
 }
 
+async function testApplyDeclinedUpdatesCancelledTradeToRefunded() {
+  const contractTradeId = '5e'.repeat(32);
+  const tradeId = randomUUID();
+  await insertTestTrade({ id: tradeId, status: 'cancelled', contractTradeId });
+  const before = await db.getOne<{ id: string; status: string }>(
+    'SELECT id, status FROM trades WHERE contract_trade_id = $1', [contractTradeId]);
+  strictEqual(before?.id, tradeId, 'declined fixture must be addressable by contract trade id');
+
+  await applyEscrowEvent({
+    type: 'declined',
+    contractTradeIdHex: contractTradeId,
+    eventId: 'evt-declined-1',
+    txHash: 'tx_declined_1',
+    ledger: 401,
+  });
+
+  const after = await db.getOne<{ status: string; release_tx_hash: string | null }>(
+    'SELECT status, release_tx_hash FROM trades WHERE id = $1', [tradeId]);
+  strictEqual(after?.status, 'refunded');
+  strictEqual(after?.release_tx_hash, 'tx_declined_1');
+  console.log('  ✓ applyEscrowEvent(declined) confirms the early return');
+}
+
 // ── Runner ────────────────────────────────────────────────────────────────
 
 const SUITES = [
@@ -565,8 +605,8 @@ const SUITES = [
   { name: 'EscrowEventListener — health', tests: [testHealthWhenStopped, testHealthAfterSuccessfulPoll, testHealthAfterStale] },
   { name: 'EscrowEventListener — reconnect', tests: [testReconnectAfterError, testCursorResetOnOldestLedgerError] },
   { name: 'EscrowEventListener — deduplication', tests: [testDuplicateEventSkipped, testDuplicateAcrossPolls] },
-  { name: 'parseEscrowEvent', tests: [testParseReleasedEvent, testParseRefundedEvent, testParseLockedEvent, testParseUnknownEventReturnsNull, testParseMalformedValueReturnsNull, testParseWrongTradeIdLength] },
-  { name: 'applyEscrowEvent — idempotency', tests: [testApplyReleasedIdempotentOnCompleted, testApplyRefundedSettlesCancelledTrade, testLateRefundedEventKeepsRefundedTrade, testRefundedEventIsIdempotent, testApplyReleasedUpdatesActiveTradeToCompleted, testApplyRefundedUpdatesActiveTradeToRefunded] },
+  { name: 'parseEscrowEvent', tests: [testParseReleasedEvent, testParseRefundedEvent, testParseDeclinedEvent, testParseLockedEvent, testParseUnknownEventReturnsNull, testParseMalformedValueReturnsNull, testParseWrongTradeIdLength] },
+  { name: 'applyEscrowEvent — idempotency', tests: [testApplyReleasedIdempotentOnCompleted, testApplyRefundedSettlesCancelledTrade, testLateRefundedEventKeepsRefundedTrade, testRefundedEventIsIdempotent, testApplyReleasedUpdatesActiveTradeToCompleted, testApplyRefundedUpdatesActiveTradeToRefunded, testApplyDeclinedUpdatesCancelledTradeToRefunded] },
 ];
 
 async function runAll() {

@@ -90,6 +90,7 @@ interface ExploreMapProps {
   creationErrorAction?: ApiErrorAction;
   onDismissCreationError?: () => void;
   onRetryCreationError?: () => void;
+  onVerifyIdentity?: () => void;
   /** Effective-fee threshold (%) above which a warning is shown. Defaults to the shared guardrail. */
   maxEffectiveFeePercent?: number;
 }
@@ -148,6 +149,7 @@ const ExploreMap = ({
   creationErrorAction = 'retry',
   onDismissCreationError,
   onRetryCreationError,
+  onVerifyIdentity,
   maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
 }: ExploreMapProps) => {
   const { t } = useTranslation();
@@ -200,6 +202,7 @@ const ExploreMap = ({
             message={creationError}
             action={creationErrorAction}
             onRetry={onRetryCreationError}
+            onVerifyIdentity={onVerifyIdentity}
             onDismiss={onDismissCreationError}
             supportState="TRADE_CREATE"
             className="mb-6"

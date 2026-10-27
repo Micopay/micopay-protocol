@@ -5,6 +5,75 @@
 
 **Documentos relacionados:** `CAMINO_A_MAINNET_CUMPLIMIENTO_2026-07.md` (marco PLD), `AUDITORIA_APK_PILOTO_2026-08.md` (estado del APK).
 
+> **Actualización 2026-10-16:** Eric decidió abrir hoy la cuenta de Play Console y empezar a pedir testers. El plan vigente es el **§0**. Lo que sigue a partir de "Resumen" es el análisis de agosto; donde contradiga al §0, manda el §0.
+
+---
+
+## 0. Plan vigente (2026-10-16): cuenta hoy y testers
+
+**Objetivo:** hoy queda creada la cuenta de Play Console y la app MicoPay; en cuanto Google verifique la identidad, la beta en testnet se reparte por **prueba interna**, y en paralelo arranca la **prueba cerrada** que exige Google (12 testers durante 14 días) y que el borrador del Instaward de octubre promete con 15 testers.
+
+### 0.1 Requisitos vigentes (Ayuda de Play Console, consultada el 2026-10-16)
+
+| Requisito | Qué dice Google |
+|---|---|
+| Datos de una cuenta **personal** | Nombre de desarrollador, nombre legal, dirección legal, correo y teléfono de contacto, correo de desarrollador. Nombre y dirección salen del perfil de Google Payments y se verifican **antes de publicar** |
+| Correo y teléfono | Se verifican con un código de un solo uso |
+| Cuenta de **organización** | Exige número **D-U-N-S**; sin él no se puede crear. Exenta de la prueba cerrada obligatoria |
+| Lo que se ve en Play (personal) | Nombre legal, país y correo de desarrollador. La dirección completa solo si se monetiza |
+| Dispositivo | Cuentas personales nuevas: verificar acceso a un Android físico, sin root, Android 10 o superior, con la app Play Console. Tarda menos de un minuto |
+| Prueba interna | Hasta 100 testers, sin requisitos ni espera de revisión |
+| Prueba cerrada | Exige completar la configuración de la app. Mínimo **12 testers inscritos de forma continua durante 14 días** antes de pedir producción. Quien sale antes de 14 días no cuenta y su conteo se reinicia |
+| Revisión del acceso a producción | "Normalmente siete días o menos" |
+
+Fuentes: [información de la cuenta](https://support.google.com/googleplay/android-developer/answer/13628312), [requisitos de prueba de cuentas personales](https://support.google.com/googleplay/android-developer/answer/14151465), [verificación de dispositivo](https://support.google.com/googleplay/android-developer/answer/14316361).
+
+**No confirmado en fuentes oficiales:** cuánto tarda la verificación de identidad y la revisión de la primera versión en prueba cerrada (guías externas hablan de hasta 7 días). Por eso "testers hoy" depende de que Google verifique la identidad el mismo día.
+
+### 0.2 Decisiones
+
+| # | Decisión | Recomendación | Estado |
+|---|---|---|---|
+| D1 | Cuenta personal u organización | **Personal a nombre de Eric**: la de organización exige D-U-N-S y no sale hoy. Nombre de desarrollador: "MicoPay". La app se puede transferir después a una cuenta de organización | 🔒 Eric |
+| D2 | Correo de desarrollador (público en Play) | Uno que sí reciba correo, p. ej. `micopaycontacto@gmail.com`. No `hola@micopay.com.mx`: no tiene MX y no recibe | 🔒 Eric |
+| D3 | Responsable en `/privacy-app` | Eric como persona física hasta que exista la sociedad (ya lo proponía T-22) | 🔒 Eric da nombre y domicilio |
+| D4 | Pistas | Prueba interna para empezar ya; prueba cerrada en paralelo para el reloj de 12 × 14 | Recomendado |
+| D5 | Cómo se presenta la app | "MicoPay (beta en testnet)": billetera de autocustodia y escrow en Soroban; **sin dinero real** | Recomendado |
+
+### 0.3 Pasos de hoy
+
+**Bloque A · Eric, en la consola (≈1 h)**
+
+1. Entrar a [play.google.com/console/signup](https://play.google.com/console/signup) con la cuenta de Google elegida, tipo **personal**.
+2. Pagar la cuota de registro (US$25 según el §6.1; el monto exacto lo muestra la consola).
+3. Llenar nombre de desarrollador, nombre legal y dirección (perfil de pagos), correo y teléfono de contacto y correo de desarrollador; confirmar los códigos.
+4. Iniciar la verificación de identidad que pida la consola.
+5. Verificar el dispositivo: instalar la app Play Console en el Redmi o el Samsung S25 y tocar **Verify**.
+
+**Bloque B · en paralelo, en el repo (no espera a la cuenta)**
+
+6. Rellenar `[RAZÓN SOCIAL]` y `[DOMICILIO FISCAL COMPLETO]` de `micopay.com.mx/privacy-app` (repo `Micopay/micopay-landig`) con los datos de D3 y publicar. Revisar que siga cuadrando con los permisos del AAB: internet, cámara y ubicación aproximada.
+7. Compilar un **AAB nuevo de testnet** (el único que hay es del 2026-08-24): `npm run build:testnet`, `npx cap sync android`, `./gradlew bundleRelease`; registrar `versionCode` y `sha256sum`.
+8. Preparar la ficha: título "MicoPay (beta en testnet)", descripción corta y larga que digan que es una red de prueba, ícono de 512 × 512, gráfico de 1024 × 500 y al menos 2 capturas (salen de las grabaciones del reto 3).
+9. Borrador de las respuestas de **seguridad de datos**, según `/privacy-app`: teléfono (hash SHA-256), ubicación aproximada, nombre de usuario, dirección Stellar pública, historial de operaciones y verificación de identidad con terceros (Didit), y Etherfuse.
+10. Lista de testers: correos de cuentas de Google. Fuentes: el equipo (Eric, Raúl, José Alfredo, Anna), el programa BAF, el chapter de México y las personas de los reportes de validación que quieran probar. Meta: **15 o más**, para que la prueba cerrada no caiga de 12 si alguien sale.
+
+**Bloque C · Eric, cuando la consola lo permita**
+
+11. Crear la app: nombre, idioma es-419/es-MX, tipo app, gratuita. Aceptar **Play App Signing** (T-21).
+12. **Prueba interna:** crear la lista de testers, subir el AAB, publicar y mandar el enlace de inscripción. Cada tester acepta el enlace e instala desde Play.
+13. Completar **Contenido de la app**: URL de la política (`/privacy-app`), acceso a la app (instrucciones para el revisor: la app crea su billetera en el teléfono y no usa usuario y contraseña), anuncios (no), clasificación de contenido, público objetivo (18+), seguridad de datos (paso 9) y **funciones financieras**: declarar billetera de autocustodia con escrow P2P en red de prueba. Revisar en la consola qué pide para México la política de criptomonedas y billeteras antes de enviar.
+14. **Prueba cerrada:** el mismo AAB, la lista del paso 10, enviar a revisión. El reloj de 14 días corre con 12 o más testers inscritos sin interrupción.
+15. Con la huella de Play App Signing ya disponible, actualizar `assetlinks.json` (Fase 5 del plan de remediación). No bloquea a los testers.
+
+### 0.4 Qué queda hecho hoy y qué no
+
+| Hoy | Depende de Google |
+|---|---|
+| Cuenta creada y pagada, dispositivo verificado, AAB nuevo, `/privacy-app` completo, ficha y lista de testers listas | Verificación de identidad (habilita publicar), revisión de la primera versión en prueba cerrada y, al final, el acceso a producción |
+
+Producción sigue fuera de este plan. El acceso se pide cuando se cumplan los 14 días, y para entonces hay que responder la declaración de funciones financieras con la app ya en mainnet o seguir como beta.
+
 ---
 
 ## Resumen

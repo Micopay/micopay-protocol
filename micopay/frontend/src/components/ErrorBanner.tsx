@@ -6,6 +6,7 @@ interface ErrorBannerProps {
   message: string;
   action?: ApiErrorAction;
   onRetry?: () => void;
+  onVerifyIdentity?: () => void;
   onDismiss?: () => void;
   retryLabel?: string;
   supportTradeId?: string;
@@ -19,6 +20,7 @@ export default function ErrorBanner({
   message,
   action = 'retry',
   onRetry,
+  onVerifyIdentity,
   onDismiss,
   retryLabel = 'Reintentar',
   supportTradeId,
@@ -29,7 +31,8 @@ export default function ErrorBanner({
   const { t } = useTranslation();
   const isChooseAgent = action === 'choose_agent';
   const showRetry = action === 'retry' && onRetry;
-  const showSupport = !isChooseAgent && (action === 'support' || !showRetry);
+  const showVerifyIdentity = action === 'verify_identity' && onVerifyIdentity;
+  const showSupport = !isChooseAgent && (action === 'support' || (!showRetry && !showVerifyIdentity));
 
   const actions = (
     <div className="flex flex-wrap items-center gap-3 justify-end">
@@ -49,6 +52,15 @@ export default function ErrorBanner({
           className="text-xs font-semibold text-primary underline hover:no-underline"
         >
           {retryLabel}
+        </button>
+      ) : null}
+      {showVerifyIdentity ? (
+        <button
+          type="button"
+          onClick={onVerifyIdentity}
+          className="rounded-sm bg-verde px-4 py-2 text-xs font-bold text-papel"
+        >
+          Verificar mi identidad
         </button>
       ) : null}
       {showSupport ? (

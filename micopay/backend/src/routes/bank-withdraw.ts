@@ -9,6 +9,8 @@ import {
   listUserWithdrawOrders,
   registerBankAccount,
   registerWalletAccount,
+  relaunchKyc,
+  RelaunchKycError,
   startKyc,
   validateClabe,
 } from '../services/rampWithdraw.service.js';
@@ -36,16 +38,39 @@ function sendEtherfuseError(reply: FastifyReply, err: unknown): FastifyReply {
 
 export async function bankWithdrawRoutes(app: FastifyInstance) {
   /**
-   * GET /defi/bank-withdraw/status
+   * GET /defi/bank-withdraw/status[?detail=1]
    * Devuelve en que paso del flujo esta el usuario para pintar el stepper.
+   * `detail=1` pide los requisitos a Etherfuse: la app lo usa al abrir la
+   * pantalla y al volver de /idv, no en el polling.
    */
   app.get(
     '/defi/bank-withdraw/status',
     { preHandler: [authMiddleware, bankWithdrawRateLimit] },
     async (request, reply) => {
+      const detail = (request.query as { detail?: string } | undefined)?.detail === '1';
       try {
-        return await getBankWithdrawStatus(requireUserId(request));
+        return await getBankWithdrawStatus(requireUserId(request), { detail });
       } catch (err) { return sendEtherfuseError(reply, err); }
+    },
+  );
+
+  /**
+   * POST /defi/bank-withdraw/kyc/launch
+   * Firma un launch form nuevo para volver a /idv (terminar o corregir) sin
+   * reenviar los datos.
+   */
+  app.post(
+    '/defi/bank-withdraw/kyc/launch',
+    { preHandler: [authMiddleware, bankWithdrawRateLimit] },
+    async (request, reply) => {
+      try {
+        return { launch: await relaunchKyc(requireUserId(request)) };
+      } catch (err) {
+        if (err instanceof RelaunchKycError) {
+          return reply.status(409).send({ code: err.code, message: err.message });
+        }
+        return sendEtherfuseError(reply, err);
+      }
     },
   );
 
