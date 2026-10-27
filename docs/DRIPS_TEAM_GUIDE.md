@@ -2,7 +2,9 @@
 
 ## Purpose
 
-This guide explains how MicoPay should approach Drips Wave as a team.
+This is a maintainer planning guide. Stellar Drips Wave 10 has been completed.
+New contributors should start with [CONTRIBUTING.md](../CONTRIBUTING.md).
+Examples and planning recommendations below are not a live backlog or current campaign rules.
 
 The goal is not just to participate. The goal is to turn Drips into a force multiplier for the retail app roadmap.
 
@@ -43,9 +45,9 @@ Use Drips to accelerate `MiCoPay app mobil`, not to split the team's focus acros
 
 ## Repo strategy
 
-Do not split the repo yet.
-
-Keep the monorepo as the source of truth, but define a Wave contribution surface.
+The ZK, AI-agent, and x402 projects have moved to a separate repository.
+This repository focuses on the mobile app and its backend. Historical protocol
+paths below are not part of the default contribution scope.
 
 ### In-scope paths for current Waves
 
@@ -332,7 +334,7 @@ Recommended labels:
 - `wave:good-first`
 - `wave:blocked`
 - `wave:needs-product`
-- `research` — market/user validation issues with no code and no PR; they close on a structured, privacy-first answer (see Wave 6 §7 in `AUDIT_APK_WAVE6.md`). Create this label deliberately before opening those issues.
+- `research` — market/user validation issues. Specify the deliverable and submission format in each current issue; do not infer them from the historical Wave 6 audit.
 
 ## MicoPay-specific policy for Drips
 
