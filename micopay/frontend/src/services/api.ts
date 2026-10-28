@@ -1218,6 +1218,7 @@ export interface StartBankKycRequest {
   lastName: string;
   dateOfBirth: string;    // YYYY-MM-DD
   taxId: string;          // RFC
+  curp: string;
   country: string;        // ISO alpha-3 ("MEX")
   address: {
     street: string;
@@ -1280,10 +1281,14 @@ export interface BankWithdrawQuote {
   quoteId: string;
   sourceAmount: string;
   sourceAsset: string;        // "USDC:ISSUER"
+  fundingAmount: string;      // CETES exactos que recibira Etherfuse
+  fundingAsset: string;       // "CETES:ISSUER"
+  dexPath: Array<{ code: string; issuer?: string }>;
   destinationAmount: string;  // MXN
   destinationAsset: 'MXN';
   feeBps: number;
   feeAmount: string;
+  feeAsset: string;
   expiresAt: string;
   clabeMasked: string;
 }
@@ -1321,6 +1326,13 @@ export interface BankWithdrawOrder {
   };
   /** XDR sin firmar; la app lo valida con validatePreparedWithdrawTx. */
   preparedTransaction?: string;
+  swap: {
+    sendAsset: { code: string; issuer?: string };
+    sendMax: string;
+    destinationAsset: { code: string; issuer?: string };
+    destinationAmount: string;
+    path: Array<{ code: string; issuer?: string }>;
+  };
 }
 
 export async function confirmBankWithdrawOrder(

@@ -1,4 +1,4 @@
-import { TransactionBuilder, Operation, Memo, Networks, Asset, Horizon, Transaction } from '@stellar/stellar-sdk';
+import { TransactionBuilder, Operation, Memo, Networks, Asset, Horizon, Transaction, Account } from '@stellar/stellar-sdk';
 import { getPublicKey, signTransactionXdr } from '../lib/keystore';
 import { Buffer } from 'buffer';
 import { buildTxUrl } from '../utils/stellarExplorer';
@@ -8,6 +8,20 @@ const HORIZON_URL = import.meta.env.VITE_HORIZON_URL || 'https://horizon-testnet
 const NETWORK_PASSPHRASE = import.meta.env.VITE_NETWORK_PASSPHRASE || Networks.TESTNET;
 
 const server = new Horizon.Server(HORIZON_URL);
+
+export async function getStellarAssetBalance(
+  address: string,
+  assetRef: { code: string; issuer?: string },
+): Promise<string> {
+  const account = await server.loadAccount(address);
+  const balance = account.balances.find((item) => {
+    if (assetRef.code === 'XLM') return item.asset_type === 'native';
+    return (item.asset_type === 'credit_alphanum4' || item.asset_type === 'credit_alphanum12')
+      && item.asset_code === assetRef.code
+      && item.asset_issuer === assetRef.issuer;
+  });
+  return balance?.balance ?? '0';
+}
 
 export async function sendCETESToEtherfuse(
   cetesAmount: string,
@@ -72,12 +86,20 @@ export interface ExpectedBankWithdraw {
   toAddress: string;
   /** Memo que Etherfuse pide (opcional segun orden). */
   memo?: string | null;
-  /** Codigo del activo que paga el usuario. Siempre 'USDC' en este flujo. */
-  assetCode: 'USDC';
-  /** Emisor que Etherfuse acepta (ETHERFUSE_USDC_ASSET en el backend). */
+  /** Codigo del activo que Etherfuse espera recibir. */
+  assetCode: string;
+  /** Emisor del activo que Etherfuse espera recibir. */
   assetIssuer: string;
-  /** Monto exacto que debe salir, decimal string con hasta 7 decimales. */
+  /** Monto exacto que Etherfuse debe recibir, con hasta 7 decimales. */
   amount: string;
+}
+
+export interface BankWithdrawSwapPlan {
+  sendAsset: { code: string; issuer?: string };
+  sendMax: string;
+  destinationAsset: { code: string; issuer?: string };
+  destinationAmount: string;
+  path: Array<{ code: string; issuer?: string }>;
 }
 
 export class WithdrawTxMismatchError extends Error {
@@ -185,4 +207,98 @@ export async function signAndSubmitPreparedWithdrawTx(
     if (code === 'tx_too_late') throw new Error('tx_too_late');
     throw error;
   }
+}
+
+function stellarAsset(ref: { code: string; issuer?: string }): Asset {
+  if (ref.code === 'XLM') return Asset.native();
+  if (!ref.issuer) throw new WithdrawTxMismatchError(`falta el emisor de ${ref.code}`);
+  return new Asset(ref.code, ref.issuer);
+}
+
+function assertSwapPlan(expected: ExpectedBankWithdraw, swap: BankWithdrawSwapPlan): void {
+  if (swap.sendAsset.code !== 'USDC' || !swap.sendAsset.issuer) {
+    throw new WithdrawTxMismatchError('el activo de entrada del swap no es USDC');
+  }
+  if (swap.destinationAsset.code !== expected.assetCode || swap.destinationAsset.issuer !== expected.assetIssuer) {
+    throw new WithdrawTxMismatchError('el activo destino del swap no coincide con la orden');
+  }
+  if (normalizeAmount(swap.destinationAmount) !== normalizeAmount(expected.amount)) {
+    throw new WithdrawTxMismatchError('el monto destino del swap no coincide con la orden');
+  }
+  if (normalizeAmount(swap.sendMax) === 'invalid') {
+    throw new WithdrawTxMismatchError('el maximo de USDC del swap no es valido');
+  }
+  if (swap.path.length > 5) {
+    throw new WithdrawTxMismatchError('la ruta del swap tiene demasiados saltos');
+  }
+}
+
+/**
+ * Verifica primero el pago CETES preparado por Etherfuse y luego lo sustituye
+ * por un pathPaymentStrictReceive equivalente. Es atomico: Etherfuse recibe la
+ * cantidad exacta o no sale ningun activo de la wallet. `sendMax` limita los
+ * USDC que el DEX puede gastar.
+ */
+export async function signAndSubmitBankWithdrawPathPayment(
+  preparedXdr: string,
+  expectedFunding: ExpectedBankWithdraw,
+  swap: BankWithdrawSwapPlan,
+): Promise<{ hash: string; explorerUrl: string }> {
+  const publicKey = await getPublicKey();
+  if (!publicKey) throw new Error('No se encontró la llave del dispositivo.');
+  if (publicKey !== expectedFunding.fromAddress) {
+    throw new WithdrawTxMismatchError('la llave del dispositivo no coincide con la cuenta del retiro');
+  }
+
+  const account = await server.loadAccount(publicKey);
+  const unsignedXdr = buildBankWithdrawPathPaymentXdr(account, preparedXdr, expectedFunding, swap);
+  const signed = TransactionBuilder.fromXDR(
+    await signTransactionXdr(unsignedXdr, NETWORK_PASSPHRASE, 'payment'),
+    NETWORK_PASSPHRASE,
+  );
+  if (!(signed instanceof Transaction)) throw new WithdrawTxMismatchError('la firma devolvio una tx no soportada');
+
+  try {
+    const response = await server.submitTransaction(signed);
+    return { hash: response.hash, explorerUrl: buildTxUrl(response.hash) };
+  } catch (error: any) {
+    const txCode = error?.response?.data?.extras?.result_codes?.transaction;
+    const opCode = error?.response?.data?.extras?.result_codes?.operations?.[0];
+    if (txCode === 'tx_bad_seq') throw new Error('tx_bad_seq');
+    if (txCode === 'tx_too_late') throw new Error('tx_too_late');
+    if (['op_over_sendmax', 'op_too_few_offers', 'op_src_no_trust', 'op_src_not_authorized', 'op_underfunded'].includes(opCode)) {
+      throw new Error('No se pudo completar el swap USDC→CETES; solicita una cotización nueva y revisa tu saldo.');
+    }
+    throw error;
+  }
+}
+
+/** Construye la tx que se mostrará al firmador; exportada para probar el XDR exacto. */
+export function buildBankWithdrawPathPaymentXdr(
+  account: Account,
+  preparedXdr: string,
+  expectedFunding: ExpectedBankWithdraw,
+  swap: BankWithdrawSwapPlan,
+  networkPassphrase: string = NETWORK_PASSPHRASE,
+): string {
+  validatePreparedWithdrawTx(preparedXdr, expectedFunding, networkPassphrase);
+  assertSwapPlan(expectedFunding, swap);
+  if (account.accountId() !== expectedFunding.fromAddress) {
+    throw new WithdrawTxMismatchError('la cuenta cargada no coincide con el retiro');
+  }
+  const prepared = TransactionBuilder.fromXDR(preparedXdr, networkPassphrase);
+  if (!(prepared instanceof Transaction)) throw new WithdrawTxMismatchError('la tx es un fee-bump; no se soporta');
+  const builder = new TransactionBuilder(account, {
+    fee: '10000',
+    networkPassphrase,
+  }).addOperation(Operation.pathPaymentStrictReceive({
+    sendAsset: stellarAsset(swap.sendAsset),
+    sendMax: swap.sendMax,
+    destination: expectedFunding.toAddress,
+    destAsset: stellarAsset(swap.destinationAsset),
+    destAmount: swap.destinationAmount,
+    path: swap.path.map(stellarAsset),
+  }));
+  if (prepared.memo.type !== 'none') builder.addMemo(prepared.memo);
+  return builder.setTimeout(90).build().toXDR();
 }

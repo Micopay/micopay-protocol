@@ -5,6 +5,7 @@ abc
 account_balance
 account_balance_wallet
 add_circle
+android
 arrow_back
 arrow_forward
 arrow_upward
@@ -41,6 +42,7 @@ home
 hourglass_top
 inbox
 info
+input
 key
 location_off
 location_on
@@ -52,6 +54,7 @@ mail
 military_tech
 near_me
 north_east
+not_started
 notifications
 notifications_off
 open_in_new

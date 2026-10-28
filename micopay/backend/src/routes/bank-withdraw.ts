@@ -86,12 +86,13 @@ export async function bankWithdrawRoutes(app: FastifyInstance) {
       schema: {
         body: {
           type: 'object',
-          required: ['firstName', 'lastName', 'dateOfBirth', 'taxId', 'country', 'address', 'email', 'displayName'],
+          required: ['firstName', 'lastName', 'dateOfBirth', 'taxId', 'curp', 'country', 'address', 'email', 'displayName'],
           properties: {
             firstName: { type: 'string', minLength: 1, maxLength: 80 },
             lastName: { type: 'string', minLength: 1, maxLength: 80 },
             dateOfBirth: { type: 'string', pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' },
             taxId: { type: 'string', minLength: 1, maxLength: 32 },
+            curp: { type: 'string', pattern: '^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[A-Z0-9][0-9]$' },
             country: { type: 'string', pattern: '^[A-Z]{3}$' },
             email: { type: 'string', format: 'email', maxLength: 254 },
             displayName: { type: 'string', minLength: 1, maxLength: 120 },

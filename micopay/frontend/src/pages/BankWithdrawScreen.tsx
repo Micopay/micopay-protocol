@@ -17,7 +17,8 @@ import {
 import { extractApiErrorPayload } from '../utils/apiError';
 import { getPublicKey } from '../lib/keystore';
 import {
-  signAndSubmitPreparedWithdrawTx,
+  getStellarAssetBalance,
+  signAndSubmitBankWithdrawPathPayment,
   WithdrawTxMismatchError,
   type ExpectedBankWithdraw,
 } from '../services/stellarRamp';
@@ -337,11 +338,13 @@ function KycActionView({ userToken, message }: { userToken: string; message: str
 }
 
 const RFC_RE = /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/;
+const CURP_RE = /^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[A-Z0-9][0-9]$/;
 
 function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void }) {
   const [fullName, setFullName] = useState('');
   const [dob, setDob] = useState('');
   const [rfc, setRfc] = useState('');
+  const [curp, setCurp] = useState('');
   const [street, setStreet] = useState('');
   const [city, setCity] = useState('');
   const [postalCode, setPostal] = useState('');
@@ -358,6 +361,7 @@ function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void 
     lastName.trim().length > 0 &&
     /^\d{4}-\d{2}-\d{2}$/.test(dob) &&
     RFC_RE.test(rfc.trim().toUpperCase()) &&
+    CURP_RE.test(curp.trim().toUpperCase()) &&
     street.trim().length > 0 &&
     city.trim().length > 0 &&
     email.includes('@');
@@ -370,6 +374,7 @@ function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void 
       lastName,
       dateOfBirth: dob,
       taxId: rfc.trim().toUpperCase(),
+      curp: curp.trim().toUpperCase(),
       country: 'MEX',
       address: {
         street: street.trim(),
@@ -469,6 +474,21 @@ function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void 
       </label>
 
       <label className="flex flex-col gap-1">
+        <span className="font-bold">CURP</span>
+        <input
+          type="text"
+          value={curp}
+          onChange={(e) => setCurp(e.target.value.toUpperCase())}
+          className="border-2 border-tinta p-2 bg-white uppercase"
+          maxLength={18}
+          placeholder="HEGL900101MDFRNT00"
+        />
+        {curp.length > 0 && !CURP_RE.test(curp.trim().toUpperCase()) && (
+          <span className="text-sm">La CURP debe tener 18 caracteres.</span>
+        )}
+      </label>
+
+      <label className="flex flex-col gap-1">
         <span className="font-bold">Calle y numero</span>
         <input
           type="text"
@@ -517,8 +537,8 @@ function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void 
       </button>
 
       <p className="text-xs opacity-70">
-        Los datos van directo a Etherfuse. La constancia de situacion fiscal
-        se pedira dentro de su pagina si la necesitan.
+        Los datos van directo a Etherfuse. La CURP sustituye la constancia
+        fiscal; su pagina pedira solo los pasos visuales pendientes.
       </p>
     </form>
   );
@@ -571,6 +591,14 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
     const q = stage.quote;
     try {
       setBusy(true); setError(null);
+      const pub = await getPublicKey();
+      if (!pub) throw new Error('No encontramos tu llave en el telefono');
+      const [sourceCode, sourceIssuer] = q.sourceAsset.split(':');
+      const sourceBalance = await getStellarAssetBalance(pub, { code: sourceCode, issuer: sourceIssuer });
+      if (Number(sourceBalance) < Number(q.sourceAmount)) {
+        throw new Error(`Saldo insuficiente del USDC compatible con Etherfuse. Tienes ${Number(sourceBalance).toFixed(2)} y necesitas hasta ${q.sourceAmount}.`);
+      }
+
       const order = await confirmBankWithdrawOrder(userToken, q.quoteId);
       setStage({ kind: 'signing', order, quote: q });
 
@@ -578,20 +606,16 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
       if (!order.preparedTransaction || !dest?.address) {
         throw new Error('Etherfuse no devolvio una transaccion para firmar');
       }
-      const pub = await getPublicKey();
-      if (!pub) throw new Error('No encontramos tu llave en el telefono');
 
-      // sourceAsset del quote viene como "USDC:ISSUER".
-      const [, issuer = ''] = q.sourceAsset.split(':');
       const expected: ExpectedBankWithdraw = {
         fromAddress: pub,
         toAddress: dest.address,
         memo: dest.memo ?? null,
-        assetCode: 'USDC',
-        assetIssuer: issuer,
-        amount: q.sourceAmount,
+        assetCode: order.swap.destinationAsset.code,
+        assetIssuer: order.swap.destinationAsset.issuer ?? '',
+        amount: order.swap.destinationAmount,
       };
-      await signAndSubmitPreparedWithdrawTx(order.preparedTransaction, expected);
+      await signAndSubmitBankWithdrawPathPayment(order.preparedTransaction, expected, order.swap);
 
       setStage({
         kind: 'tracking',
@@ -675,7 +699,8 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
       {stage.kind === 'quoted' && (
         <div className="flex flex-col gap-3 border-2 border-tinta p-3 bg-amarillo">
           <p>Te llegan <strong>${stage.quote.destinationAmount} MXN</strong></p>
-          <p className="text-sm">Comisión {stage.quote.feeAmount} USDC ({stage.quote.feeBps / 100}%)</p>
+          <p className="text-sm">Conversión: hasta {stage.quote.sourceAmount} USDC → {stage.quote.fundingAmount} CETES</p>
+          <p className="text-sm">Comisión de Etherfuse: {stage.quote.feeAmount} {stage.quote.feeAsset.split(':')[0]} ({stage.quote.feeBps / 100}%)</p>
           <p className="text-sm">
             {expired
               ? 'La cotización vencio; pide una nueva.'

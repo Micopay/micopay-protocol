@@ -16,7 +16,8 @@ vi.mock('../services/api', () => ({
 }));
 vi.mock('../lib/keystore', () => ({ getPublicKey: vi.fn() }));
 vi.mock('../services/stellarRamp', () => ({
-  signAndSubmitPreparedWithdrawTx: vi.fn(),
+  getStellarAssetBalance: vi.fn(),
+  signAndSubmitBankWithdrawPathPayment: vi.fn(),
   WithdrawTxMismatchError: class extends Error {},
 }));
 
