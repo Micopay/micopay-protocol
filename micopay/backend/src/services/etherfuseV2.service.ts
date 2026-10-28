@@ -118,6 +118,8 @@ export interface SubmitVerificationRequest {
   /** ISO 3166-1 alpha-3. */
   country: string;
   address: VerificationAddress;
+  /** CURP para clientes mexicanos. Etherfuse ya no pide constancia fiscal. */
+  additionalInfo?: { curp?: string };
 }
 
 /** Estado global del KYC (schema `VerificationStatus` de openapi-v2.json). */

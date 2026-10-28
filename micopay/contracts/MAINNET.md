@@ -57,9 +57,9 @@ para ensayos en testnet.
 | Base | `micopay` (la actual) | `micopay_mainnet` (mismo RDS) |
 | `STELLAR_NETWORK` | `TESTNET` | `PUBLIC` |
 | `STELLAR_RPC_URL` | `https://soroban-testnet.stellar.org` | RPC de arriba |
-| `ESCROW_CONTRACTS` | `USDC=CDUI…,XLM=CBFD…` (ver TESTNET.md) | `USDC=<paso 1>,XLM=<paso 1>` |
+| `ESCROW_CONTRACTS` | `USDC=CALS…,XLM=CCX5…` (ver TESTNET.md) | `USDC=<paso 1>,XLM=<paso 1>` |
 | `ESCROW_LEGACY_CONTRACT_ID` | `CB4M…LO3HZ` | — |
-| `ESCROW_DECLINE_CONTRACT_IDS` | IDs nuevos con `decline`; vacío hasta redesplegar | IDs nuevos desplegados en el paso 1 |
+| `ESCROW_DECLINE_CONTRACT_IDS` | `CALS…,CCX5…` | IDs nuevos desplegados en el paso 1 |
 | `ESCROW_ASSET` (default) | `XLM` | `USDC` |
 | `SEED_DEMO_DATA` | `true` | `false` |
 | Secretos SSM | `/micopay/prod/*` | `/micopay/mainnet/*`: `DATABASE_URL`, `JWT_SECRET` y `SECRET_ENCRYPTION_KEY` nuevos, `PLATFORM_SECRET_KEY` de mainnet |

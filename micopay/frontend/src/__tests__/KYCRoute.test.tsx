@@ -156,7 +156,7 @@ describe('KYCRoute — Route navigation on KYC approval', () => {
       expect(screen.getByTestId('location-path')).toHaveTextContent('/cetes');
     });
 
-    expect(mockWriteJSON).toHaveBeenCalledWith('kyc_status_etherfuse', { status: 'approved' });
+    expect(mockWriteJSON).toHaveBeenCalledWith('kyc_status_etherfuse_1', { status: 'approved' });
     expect(screen.queryByTestId('home-screen')).not.toBeInTheDocument();
   });
 
@@ -261,7 +261,7 @@ describe('ProviderOnboardingRoute — KYC del agente', () => {
     mockGetKYCStatus.mockResolvedValue({ status: 'approved' });
     fireEvent.click(screen.getByRole('button', { name: 'open-kyc' }));
 
-    await waitFor(() => expect(mockGetKYCStatus).toHaveBeenCalledWith('mock-session-token', 'didit'));
+    await waitFor(() => expect(mockGetKYCStatus).toHaveBeenCalledWith('mock-session-token', 'didit', 1));
     await waitFor(() => {
       expect(screen.getByTestId('location-path')).toHaveTextContent('/join-network');
     });

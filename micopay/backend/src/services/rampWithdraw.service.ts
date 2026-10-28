@@ -31,6 +31,11 @@ import {
   registerPaymentAccount,
   submitVerification,
 } from './etherfuseV2.service.js';
+import {
+  applySlippageBps,
+  quoteStrictSendPath,
+  type StellarAssetRef,
+} from './stellarDex.service.js';
 
 // ---- CLABE --------------------------------------------------------------
 
@@ -187,6 +192,8 @@ export interface StartKycRequest {
   dateOfBirth: string;
   /** RFC. */
   taxId: string;
+  /** CURP. */
+  curp: string;
   /** ISO alpha-3, p.ej. "MEX". */
   country: string;
   address: {
@@ -214,9 +221,8 @@ export interface StartKycResponse {
  * de verificacion y devuelve lo necesario para abrir /idv. Guarda el customer
  * id del usuario.
  *
- * No sube documentos: en el modelo de hoy el INE sale de Didit (futuro slice
- * mapea los binarios) y la constancia y la ocupacion las sube el usuario en
- * su propia pantalla, igual que la selfie.
+   * No sube documentos: manda RFC + CURP y el usuario completa en /idv los
+   * pasos visuales que Etherfuse solicite, como selfie o comprobante.
  */
 export async function startKyc(userId: string, req: StartKycRequest): Promise<StartKycResponse> {
   const u = await loadUser(userId);
@@ -247,6 +253,7 @@ export async function startKyc(userId: string, req: StartKycRequest): Promise<St
     taxId: req.taxId,
     country: req.country,
     address: req.address,
+    additionalInfo: { curp: req.curp },
   });
 
   // 3. El POST responde 202 (aceptado, no aplicado): el usuario queda en
@@ -380,9 +387,8 @@ export async function applyPaymentAccountUpdate(customerOrgId: string, paymentAc
 // ---- Quotes y orders ----------------------------------------------------
 
 export type WithdrawAsset = 'USDC';
-// XLM va a entrar cuando este resuelta la ruta DEX en una sola transaccion
-// (plan WP2). De momento, lo que Etherfuse ve siempre es USDC; si el usuario
-// paga desde XLM, la conversion la hace la app en la misma tx que paga.
+// La app convierte este USDC a CETES con un path payment atomico; Etherfuse
+// recibe CETES y liquida MXN por SPEI. XLM puede añadirse después con la misma ruta.
 
 export interface CreateWithdrawQuoteRequest {
   asset: WithdrawAsset;
@@ -394,20 +400,51 @@ export interface WithdrawQuote {
   quoteId: string;
   sourceAmount: string;
   sourceAsset: string;
+  /** Activo exacto que Etherfuse recibira despues del path payment. */
+  fundingAmount: string;
+  fundingAsset: string;
+  /** Activos intermedios elegidos por Horizon. */
+  dexPath: StellarAssetRef[];
   destinationAmount: string;
   destinationAsset: 'MXN';
   feeBps: number;
   feeAmount: string;
+  feeAsset: string;
   expiresAt: string;
   /** CLABE enmascarada que va a recibir. */
   clabeMasked: string;
 }
 
+function isEtherfuseSandbox(): boolean {
+  const url = process.env.ETHERFUSE_V2_API_URL ?? process.env.ETHERFUSE_API_URL ?? 'https://api.sand.etherfuse.com';
+  return url.includes('.sand.') || url.includes('sandbox');
+}
+
 function etherfuseUsdcAsset(): string {
-  // "USDC:ISSUER" tal como Etherfuse lo acepta en Stellar. Env var distinta de
-  // la que ya existe (USDC_ISSUER puede ser el de la app, no el de Etherfuse).
-  return process.env.ETHERFUSE_USDC_ASSET
-    ?? 'USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
+  if (process.env.ETHERFUSE_USDC_ASSET) return process.env.ETHERFUSE_USDC_ASSET;
+  if (isEtherfuseSandbox()) return 'USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+  return 'USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
+}
+
+function etherfuseFundingAsset(): string {
+  if (process.env.ETHERFUSE_WITHDRAW_FUNDING_ASSET) return process.env.ETHERFUSE_WITHDRAW_FUNDING_ASSET;
+  if (isEtherfuseSandbox()) return 'CETES:GC3CW7EDYRTWQ635VDIGY6S4ZUF5L6TQ7AA4MWS7LEQDBLUSZXV7UPS4';
+  throw new Error('ETHERFUSE_WITHDRAW_FUNDING_ASSET debe configurarse en produccion');
+}
+
+function parseAsset(value: string): StellarAssetRef {
+  if (value === 'XLM') return { code: 'XLM' };
+  const [code, issuer] = value.split(':');
+  if (!code || !issuer) throw new Error(`rampWithdraw: activo invalido ${value}`);
+  return { code, issuer };
+}
+
+function dexSlippageBps(): number {
+  const value = Number(process.env.BANK_WITHDRAW_DEX_SLIPPAGE_BPS ?? '100');
+  if (!Number.isInteger(value) || value < 0 || value > 500) {
+    throw new Error('BANK_WITHDRAW_DEX_SLIPPAGE_BPS debe estar entre 0 y 500');
+  }
+  return value;
 }
 
 /**
@@ -428,19 +465,27 @@ export async function createWithdrawQuote(userId: string, req: CreateWithdrawQuo
   }
 
   const sourceAsset = etherfuseUsdcAsset();
+  const fundingAsset = etherfuseFundingAsset();
+  let dex;
+  try {
+    dex = await quoteStrictSendPath(parseAsset(sourceAsset), req.amount, parseAsset(fundingAsset));
+  } catch (err) {
+    throw new EtherfuseV2Error(503, 'dex-route-unavailable', (err as Error).message);
+  }
+  const fundingAmount = applySlippageBps(dex.destinationAmount, dexSlippageBps());
   const q: Quote = await createQuote(u.etherfuse_customer_id, {
     source: { type: 'stored', id: u.etherfuse_wallet_account_id },
     destination: { type: 'stored', id: u.etherfuse_bank_account_id },
-    sourceAmount: req.amount,
-    sourceAsset,
+    sourceAmount: fundingAmount,
+    sourceAsset: fundingAsset,
     destinationAsset: 'MXN',
   });
 
   await db.execute(
     `INSERT INTO ramp_quotes
-       (quote_id, user_id, asset, send_code, send_issuer, send_max,
+       (quote_id, user_id, asset, send_code, send_issuer, send_max, dex_path,
         pay_code, pay_issuer, pay_amount, destination_mxn, fee_amount, expires_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+     VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13)
      ON CONFLICT (quote_id) DO NOTHING`,
     [
       q.quoteId,
@@ -448,10 +493,11 @@ export async function createWithdrawQuote(userId: string, req: CreateWithdrawQuo
       'USDC',
       'USDC',
       sourceAsset.split(':')[1] ?? '',
+      req.amount,
+      JSON.stringify(dex.path),
+      parseAsset(fundingAsset).code,
+      parseAsset(fundingAsset).issuer ?? '',
       q.sourceAmount,
-      'MXN',
-      '',
-      q.destinationAmount,  // pay_amount: para USDC directo es igual al source menos fee
       q.destinationAmount,
       q.feeAmount,
       q.expiresAt,
@@ -460,12 +506,16 @@ export async function createWithdrawQuote(userId: string, req: CreateWithdrawQuo
 
   return {
     quoteId: q.quoteId,
-    sourceAmount: q.sourceAmount,
-    sourceAsset: q.sourceAsset,
+    sourceAmount: req.amount,
+    sourceAsset,
+    fundingAmount: q.sourceAmount,
+    fundingAsset: q.sourceAsset,
+    dexPath: dex.path,
     destinationAmount: q.destinationAmount,
     destinationAsset: 'MXN',
     feeBps: q.feeBps,
     feeAmount: q.feeAmount,
+    feeAsset: q.fees[0]?.asset ?? q.sourceAsset,
     expiresAt: q.expiresAt,
     clabeMasked: (await loadClabeMask(userId)) ?? '',
   };
@@ -477,6 +527,13 @@ export interface WithdrawOrderResult {
   fundingInstructions?: FundingInstructions;
   /** XDR sin firmar que arma Etherfuse; la app la revisa (decisión 7) antes de firmarla. */
   preparedTransaction?: string;
+  swap: {
+    sendAsset: StellarAssetRef;
+    sendMax: string;
+    destinationAsset: StellarAssetRef;
+    destinationAmount: string;
+    path: StellarAssetRef[];
+  };
 }
 
 /**
@@ -487,8 +544,20 @@ export async function confirmWithdrawOrder(userId: string, quoteId: string): Pro
   const u = await loadUser(userId);
   if (!u.etherfuse_customer_id) throw new EtherfuseV2Error(409, 'not-ready', 'falta etherfuse_customer_id');
 
-  const q = await db.getOne<{ user_id: string; expires_at: string | null }>(
-    `SELECT user_id, expires_at FROM ramp_quotes WHERE quote_id = $1`,
+  const q = await db.getOne<{
+    user_id: string;
+    expires_at: string | null;
+    send_code: string;
+    send_issuer: string | null;
+    send_max: string;
+    dex_path: StellarAssetRef[] | string;
+    pay_code: string;
+    pay_issuer: string;
+    pay_amount: string;
+  }>(
+    `SELECT user_id, expires_at, send_code, send_issuer, send_max, dex_path,
+            pay_code, pay_issuer, pay_amount
+       FROM ramp_quotes WHERE quote_id = $1`,
     [quoteId],
   );
   if (!q || q.user_id !== userId) {
@@ -499,6 +568,12 @@ export async function confirmWithdrawOrder(userId: string, quoteId: string): Pro
   }
 
   const order: Order = await createOrder(u.etherfuse_customer_id, { quoteId });
+  if (
+    order.source.asset !== `${q.pay_code}:${q.pay_issuer}`
+    || Number(order.source.amount).toFixed(7) !== Number(q.pay_amount).toFixed(7)
+  ) {
+    throw new EtherfuseV2Error(502, 'order-funding-mismatch', 'Etherfuse devolvio una orden distinta de la cotizacion');
+  }
 
   await db.execute(
     `INSERT INTO ramp_orders (order_id, user_id, quote_id, status, status_updated_at)
@@ -517,6 +592,13 @@ export async function confirmWithdrawOrder(userId: string, quoteId: string): Pro
     // fundingInstructions.destination.preparedTransaction (XDR en Stellar).
     // La app la valida (decision 7) antes de firmarla.
     preparedTransaction: order.fundingInstructions?.destination?.preparedTransaction?.transaction,
+    swap: {
+      sendAsset: { code: q.send_code, issuer: q.send_issuer ?? undefined },
+      sendMax: q.send_max,
+      destinationAsset: { code: q.pay_code, issuer: q.pay_issuer },
+      destinationAmount: q.pay_amount,
+      path: typeof q.dex_path === 'string' ? JSON.parse(q.dex_path) as StellarAssetRef[] : q.dex_path,
+    },
   };
 }
 
