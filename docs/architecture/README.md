@@ -5,5 +5,5 @@ the mobile application:
 
 - [Offline merchant mutation queue](./OFFLINE_QUEUE_IMPLEMENTATION.md)
 
-Documents for the former protocol API, x402, and ZK stack live under
-[`archive/external-projects/`](../archive/external-projects/).
+The protocol API, x402, ZK, Bazaar, and AI-agent architecture is documented in
+[MicoPay Bridge](https://github.com/Micopay/micopaybridge).

@@ -13,7 +13,7 @@ npm install
 npm run dev            # http://localhost:5181
 ```
 
-> Requires Node >=20 (root `package.json` engines field). Run `node --version` to check.
+> Use Node 22, matching CI. Run `node --version` to check.
 
 | Script | Command | Output |
 |--------|---------|--------|
@@ -27,18 +27,18 @@ Deploy target: Vercel. `vercel.json` rewrites all paths to `index.html`.
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` before starting. Both variables default to `localhost:3000` when unset.
+Copy `.env.example` to `.env` before starting. The API URL defaults to
+`localhost:3000` when unset.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `VITE_API_URL` | `http://localhost:3000` | Base URL for the backend REST API — trades, users, DeFi. `CONTRIBUTING.md` documents the backend on port **3002**; update this when running the full stack. |
-| `VITE_PROTOCOL_API_URL` | `http://localhost:3000` | Base URL used by `ClaimQR.tsx` to poll merchant cash requests. Separated to allow independent deployment of the protocol service. |
 
 ---
 
 ## Pages Map
 
-The app uses a manual state machine in `App.tsx` (`useState`), not React Router. There are no URL-based routes except `ClaimQR`.
+The app uses a manual state machine in `App.tsx` (`useState`), not React Router.
 
 | State key | Component | Purpose |
 |-----------|-----------|---------|
@@ -55,7 +55,6 @@ The app uses a manual state machine in `App.tsx` (`useState`), not React Router.
 | `explore` | `Explore.tsx` | DeFi product discovery |
 | `cetes` | `CETESScreen.tsx` | Tokenized CETES bonds — buy/sell |
 | `blend` | `BlendScreen.tsx` | Blend Capital — supply/borrow |
-| _(standalone)_ | `ClaimQR.tsx` | Merchant-facing QR claim page. Not in the SPA router. Requires a direct URL with a `requestId` prop. |
 
 ---
 
@@ -70,7 +69,6 @@ These paths hit the backend and produce on-chain state on Stellar Testnet:
 - **`lock_tx_hash`** — stored in component state, surfaced in trade history with Stellar Explorer links. Filtered: hashes prefixed with `mock` are not linked.
 - **Wallet balance** — `Home.tsx` fetches live XLM balance from `GET /account/balance` on mount.
 - **Trade history** — fetched from `GET /trades/history` when a user token is present.
-- **`ClaimQR.tsx`** — polls `GET /api/v1/cash/request/:id` on a 4-second interval with a live countdown timer.
 
 ### Demo-only — confirmed mocks
 
@@ -103,7 +101,6 @@ Start from the [Core Retail Flow milestone](https://github.com/ericmt-98/micopay
 1. **No browser history.** `App.tsx` does not push to `window.history`. Back/forward navigation and deep links do not work.
 2. **No wallet integration.** Stellar addresses are generated client-side. Freighter and other wallets are not connected.
 3. **No MXNe.** The wallet holds XLM, USDC and CETES; the MXNe placeholder row was removed.
-4. **`ClaimQR` is not routable from the SPA.** No internal navigation path leads to it; it requires a direct URL.
-5. **CETES and Blend are fully simulated.** All DeFi transactions return mock hashes. No on-chain activity is triggered.
-6. **XLM rate is a static mock.** `20 MXN / 1 XLM` is a hardcoded demo constant — not a live feed.
-7. **Port mismatch.** `CONTRIBUTING.md` documents the backend on port `3002`. Both env vars default to `3000`. Override in `.env` when running the full stack.
+4. **CETES and Blend are fully simulated.** All DeFi transactions return mock hashes. No on-chain activity is triggered.
+5. **XLM rate is a static mock.** `20 MXN / 1 XLM` is a hardcoded demo constant — not a live feed.
+6. **Port mismatch.** `CONTRIBUTING.md` documents the backend on port `3002`. `VITE_API_URL` defaults to `3000`; override it in `.env` when running the full stack.

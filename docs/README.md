@@ -25,7 +25,7 @@ known at that moment; it is not automatically the current backlog.
 | [`audits/`](./audits/) | Point-in-time technical reviews | Findings must be rechecked against current code |
 | [`security-reports/`](./security-reports/) | Security findings and incident evidence | Historical evidence; status may have changed |
 | [`presentations/`](./presentations/) | Shareable explanatory material | Communication artifacts |
-| [`archive/`](./archive/) | Completed campaigns, superseded plans, old issues, and external projects | Historical only |
+| [`archive/`](./archive/) | Completed campaigns, superseded plans, and old issues | Historical only |
 
 ## Source-of-truth order
 
@@ -37,6 +37,7 @@ When documents disagree, use this order:
 4. A dated audit or active plan.
 5. Anything under `archive/`.
 
-Stellar Drips Wave 10 is complete. ZK, AI-agent, XRPL, and x402 material is
-archived here for traceability; those projects are not the default contribution
-surface of the MicoPay mobile app.
+Stellar Drips Wave 10 is complete. ZK, AI-agent, XRPL, x402, and Bazaar material
+is maintained in [MicoPay Bridge](https://github.com/Micopay/micopaybridge), not
+in this mobile-app repository. Git history preserves the former copies if an old
+decision needs to be traced.

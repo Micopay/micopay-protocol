@@ -15,7 +15,7 @@
 | Pregunta | Respuesta |
 |----------|-----------|
 | ¿Se valida el formato de `secret`/`htlc`? | **Sí (post-fix).** `secret` debe ser hex de 64 caracteres (preimage HTLC de 32 bytes). `htlc` debe ser hash hex de 64 caracteres (tx Stellar) o prefijo `demo_htlc_` solo en demo mode. `trade_id` debe ser UUID; `request_id` alfanumérico con guiones. |
-| ¿El preimage HTLC se filtra a logs/clipboard/historial? | **No a logcat/console en código de producción.** No hay `console.log` del secret en el frontend. El QR vive en estado React (`QRReveal`, `ClaimQR`) mientras se muestra — comportamiento inherente al flujo QR. No hay copia automática al portapapeles del secret HTLC. El historial del WebView no persiste el payload del QR en rutas revisadas. |
+| ¿El preimage HTLC se filtra a logs/clipboard/historial? | **No a logcat/console en código de producción.** No hay `console.log` del secret en el frontend. El QR vive en estado React (`QRReveal`) mientras se muestra — comportamiento inherente al flujo QR. No hay copia automática al portapapeles del secret HTLC. El historial del WebView no persiste el payload del QR en rutas revisadas. |
 | ¿El formato legacy en claro sigue aceptándose en release? | **No (post-fix).** `MICOPAY:…` se rechaza cuando `VITE_DEMO_MODE !== 'true'`. |
 | ¿Demo secret aislado a `IS_DEMO_MODE`? | **Sí.** `DEMO_QR_PAYLOAD` solo se expone vía `getDemoQrPayload()` (lanza fuera de demo). Usado en `QRReveal.tsx` únicamente cuando `getSecret` falla **y** `IS_DEMO_MODE`. `App.tsx` stub de trade demo también gated por `IS_DEMO_MODE`. |
 

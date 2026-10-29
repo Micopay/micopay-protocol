@@ -15,8 +15,8 @@ Contributions normally cover:
 - `docs/`: documentation relevant to the app.
 
 Contract changes in `micopay/contracts/`, deployments, and infrastructure need
-explicit issue scope. ZK, AI-agent, and x402 projects moved to another repository;
-legacy protocol directories are not the default contribution surface.
+explicit issue scope. ZK, AI-agent, x402, and Bazaar development belongs in
+[MicoPay Bridge](https://github.com/Micopay/micopaybridge), not in this repository.
 
 ## Choose an issue before coding
 
