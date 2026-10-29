@@ -21,8 +21,22 @@
  * anunciado.
  */
 
+import { config } from '../config.js';
+
 /** Comision de MicoPay. El backend es la fuente de verdad; el frontend la espeja. */
 export const PLATFORM_FEE_PERCENT = 0.8;
+
+/**
+ * Tope configurable de las dos comisiones juntas. El contrato no necesita
+ * conocerlo: es una politica comercial que se aplica antes de construir el XDR.
+ */
+export const MAX_EFFECTIVE_FEE_PERCENT = config.maxEffectiveFeePercent;
+
+/** Maximo nominal del agente con la comision actual de MicoPay. */
+export const MAX_PROVIDER_FEE_PERCENT = Math.max(
+  0,
+  Math.round((MAX_EFFECTIVE_FEE_PERCENT - PLATFORM_FEE_PERCENT) * 10_000) / 10_000,
+);
 
 /**
  * Flujo de la operacion. Decide hacia donde van las comisiones (H5, decision
@@ -75,6 +89,24 @@ export function normalizeFeeFlow(flow: unknown): FeeFlow {
   // Sin flujo se asume deposito: es el comportamiento que tenian los APK que no
   // lo mandan (decision abierta 2 de PLAN_COMISIONES_EFECTIVO).
   return flow === 'cashout' ? 'cashout' : 'deposit';
+}
+
+export function isProviderRateAllowed(providerRatePercent: number): boolean {
+  return Number.isFinite(providerRatePercent)
+    && providerRatePercent >= 0
+    && providerRatePercent <= MAX_PROVIDER_FEE_PERCENT;
+}
+
+/**
+ * Comprueba el coste real despues del redondeo a pesos. En montos pequenos,
+ * dos `ceil` pueden hacer que 5.2% + 0.8% nominal supere 6% efectivo.
+ */
+export function isEffectiveFeeAllowed(
+  fees: Pick<TradeFeeBreakdown, 'amountMxn' | 'providerFeeMxn' | 'platformFeeMxn'>,
+): boolean {
+  if (!Number.isFinite(fees.amountMxn) || fees.amountMxn <= 0) return false;
+  const totalFeeMxn = fees.providerFeeMxn + fees.platformFeeMxn;
+  return totalFeeMxn * 100 <= fees.amountMxn * MAX_EFFECTIVE_FEE_PERCENT;
 }
 
 /**

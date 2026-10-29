@@ -24,7 +24,14 @@
 
 import { strictEqual, ok } from "assert";
 import db, { pool } from "../db/schema.js";
-import { computeTradeFees, PLATFORM_FEE_PERCENT } from "../services/tradeFees.js";
+import {
+  computeTradeFees,
+  isEffectiveFeeAllowed,
+  isProviderRateAllowed,
+  MAX_EFFECTIVE_FEE_PERCENT,
+  MAX_PROVIDER_FEE_PERCENT,
+  PLATFORM_FEE_PERCENT,
+} from "../services/tradeFees.js";
 import { getAvailableMerchants } from "../services/merchant.service.js";
 
 const RUN = Math.random().toString(36).slice(2, 8);
@@ -120,6 +127,22 @@ function testEffectivePercentIsTheRealCost() {
   console.log("  ✓ el coste efectivo es el total, no una de las dos partes");
 }
 
+function testSixPercentServerSideCap() {
+  strictEqual(MAX_EFFECTIVE_FEE_PERCENT, Number(process.env.MAX_EFFECTIVE_FEE_PERCENT || 6));
+  strictEqual(MAX_PROVIDER_FEE_PERCENT, MAX_EFFECTIVE_FEE_PERCENT - PLATFORM_FEE_PERCENT);
+  ok(isProviderRateAllowed(MAX_PROVIDER_FEE_PERCENT), "el maximo calculado del agente se acepta");
+  ok(!isProviderRateAllowed(MAX_PROVIDER_FEE_PERCENT + 0.0001), "una tarifa superior se rechaza");
+
+  const normalAmount = computeTradeFees(500, MAX_PROVIDER_FEE_PERCENT, "cashout");
+  ok(isEffectiveFeeAllowed(normalAmount), "500 MXN al maximo nominal queda dentro de 6%");
+
+  // Dos redondeos `ceil` pueden rebasar el nominal en montos pequenos. El
+  // control se aplica al resultado real, no solo a 5.2 + 0.8.
+  const roundedOver = computeTradeFees(100, MAX_PROVIDER_FEE_PERCENT, "cashout");
+  ok(!isEffectiveFeeAllowed(roundedOver), "el redondeo que produce 7% efectivo se bloquea");
+  console.log("  ✓ el backend bloquea el coste total por encima del tope configurable");
+}
+
 // ── 2. Lo que anuncia el mapa ──────────────────────────────────────────────
 
 async function testDiscoveryAnnouncesWhatTheTradeCharges() {
@@ -180,6 +203,7 @@ async function main() {
   testRoundingNeverFavoursNobody();
   testTinyAmountsDoNotGoNegative();
   testEffectivePercentIsTheRealCost();
+  testSixPercentServerSideCap();
 
   if (!pool) {
     console.error(

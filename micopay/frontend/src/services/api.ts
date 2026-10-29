@@ -811,6 +811,9 @@ export interface MerchantConfig {
   min_trade_mxn: number;
   max_trade_mxn: number;
   daily_cap_mxn: number;
+  /** Politica vigente del servidor. No se reenvian al guardar. */
+  max_effective_fee_percent?: number;
+  max_provider_fee_percent?: number;
   latitude?: number | null;
   longitude?: number | null;
   address_text?: string | null;
@@ -903,6 +906,8 @@ export interface AvailableMerchant {
   provider_fee_mxn?: number;
   platform_fee_mxn?: number;
   effective_fee_percent?: number;
+  /** Tope vigente enviado por el backend; permite cambiarlo sin recompilar el APK. */
+  max_effective_fee_percent?: number;
   seller_id: string;
   username: string;
   rate_percent: number;
@@ -936,10 +941,10 @@ export interface AvailableMerchant {
 
 /**
  * Effective-fee guardrail. Validations V-1/V-3/V-7/V-8 found a universal ceiling:
- * users abandon MicoPay when the *total* cost exceeds ~5%. The UI warns above this
- * threshold. Kept here (not hardcoded in components) so it can be tuned centrally.
+ * Fallback para APKs o respuestas antiguas. El backend envia el tope vigente
+ * en discovery para que pueda cambiarse sin recompilar la app.
  */
-export const MAX_EFFECTIVE_FEE_PERCENT = 5;
+export const MAX_EFFECTIVE_FEE_PERCENT = 6;
 
 /**
  * Total effective cost the user pays = provider commission + platform fee.

@@ -14,6 +14,12 @@ that its findings remain open or that its campaign is accepting contributions.
 
 ## Supporting references
 
+- [Escrow contract code guide](./GUIA_CODIGO_CONTRATO_ESCROW.md): section-by-section
+  explanation of the Soroban contract, its authorization rules, state changes,
+  events, and tests.
+- [Fee-system audit (2026-10-28)](./AUDITORIA_COMISIONES_BACKEND_2026-10-28.md):
+  backend fee calculation, quote integrity, merchant limits, XDR validation,
+  and findings that must close before Mainnet.
 - [Drips team guide](./DRIPS_TEAM_GUIDE.md): maintainer planning and review practices.
 - [APK release checklist](./RELEASE_APK_CHECKLIST.md): release preparation.
 - [Product scope](./PRODUCT_SCOPE.md) and [retail roadmap](./RETAIL_ROADMAP.md):

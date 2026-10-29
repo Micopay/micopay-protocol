@@ -316,6 +316,7 @@ function MapDepositRoute() {
                 amountMxn: activeAmount,
                 platformFeeMxn: offer.platformFeeMxn,
                 providerFeeMxn: offer.providerFeeMxn,
+                maxEffectiveFeePercent: offer.maxEffectiveFeePercent,
                 flow: 'deposit',
                 nearbyCount: offer.nearbyCount,
               },
@@ -357,6 +358,7 @@ function MapRoute() {
                 amountMxn: activeAmount,
                 platformFeeMxn: offer.platformFeeMxn,
                 providerFeeMxn: offer.providerFeeMxn,
+                maxEffectiveFeePercent: offer.maxEffectiveFeePercent,
                 flow: 'cashout',
                 nearbyCount: offer.nearbyCount,
               },
@@ -395,6 +397,7 @@ function ConfirmRoute() {
     // hasta aqui para que la pantalla no vuelva a deducirlo restando.
     platformFeeMxn?: number;
     providerFeeMxn?: number;
+    maxEffectiveFeePercent?: number;
     flow: 'cashout' | 'deposit';
     nearbyCount: number;
   } | null;
@@ -418,6 +421,7 @@ function ConfirmRoute() {
       amountMxn={state.amountMxn}
       platformFeeMxn={state.platformFeeMxn}
       providerFeeMxn={state.providerFeeMxn}
+      maxEffectiveFeePercent={state.maxEffectiveFeePercent}
       flow={state.flow ?? 'cashout'}
       nearbyCount={state.nearbyCount}
       assetKey={activeAssetKey}

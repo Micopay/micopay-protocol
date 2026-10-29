@@ -49,3 +49,10 @@ __pycache__/
 # Keep them on the workstation; do not publish them with source changes.
 artifacts/
 tmp/
+
+# Generated presentation workbench and inspection metadata.
+.deck-build/
+*.pptx.inspect.ndjson
+
+# Release APKs are distributed separately from the source repository.
+*.apk

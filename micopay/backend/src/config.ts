@@ -248,6 +248,11 @@ export const config = {
   authRateLimitMax: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '30', 10),
   tradeRateLimitWindowMs: parseInt(process.env.TRADE_RATE_LIMIT_WINDOW_MS || '3600000', 10), // 1 hour
   tradeRateLimitMax: parseInt(process.env.TRADE_RATE_LIMIT_MAX || '10', 10),
+  /**
+   * Tope comercial de las dos comisiones juntas (agente + MicoPay).
+   * Se configura fuera del contrato: cambiarlo no requiere redesplegar Soroban.
+   */
+  maxEffectiveFeePercent: parseFloat(process.env.MAX_EFFECTIVE_FEE_PERCENT || '6'),
   messageRateLimitWindowMs: parseInt(process.env.MESSAGE_RATE_LIMIT_WINDOW_MS || '60000', 10),
   messageRateLimitMax: parseInt(process.env.MESSAGE_RATE_LIMIT_MAX || '30', 10),
   disputeRateLimitWindowMs: parseInt(process.env.DISPUTE_RATE_LIMIT_WINDOW_MS || '3600000', 10),
@@ -306,6 +311,14 @@ export function validateConfig() {
     // AES-256-GCM needs a 32-byte key — 64 hex chars. An invalid key here would
     // otherwise crash at first encrypt/decrypt call instead of at boot.
     errors.push("SECRET_ENCRYPTION_KEY must be 64 hex characters (32 bytes) for AES-256-GCM.");
+  }
+
+  if (
+    !Number.isFinite(config.maxEffectiveFeePercent) ||
+    config.maxEffectiveFeePercent < 0.8 ||
+    config.maxEffectiveFeePercent > 100
+  ) {
+    errors.push("MAX_EFFECTIVE_FEE_PERCENT must be a number between the 0.8% platform fee and 100%.");
   }
 
   if (config.isProduction) {
