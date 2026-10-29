@@ -85,11 +85,19 @@ Feature visibility is defined in
 | [`micopay/contracts/`](./micopay/contracts) | App escrow contract and network deployment notes. |
 | [`micopay/sql/`](./micopay/sql) | PostgreSQL schema and migrations. |
 | [`micopay/scripts/`](./micopay/scripts) | App development and operational utilities. |
-| [`docs/`](./docs) | Product decisions, contributor guides, release notes, and historical plans. |
+| [`docs/`](./docs) | Indexed product, architecture, operations, audit, and historical documentation. |
 
 The backend runs on **AWS ECS**, with images in **ECR**, PostgreSQL in **RDS**,
 and runtime secrets in **SSM Parameter Store**. Older Render deployment references
 and dated planning documents are historical.
+
+### Legacy directories
+
+`apps/api/`, `packages/`, `circuits/`, `contracts/zk-verifier/`, and the root
+Turbo workspace belong to an older protocol/x402/ZK line. They are retained
+only because the payment-link and reputation dependencies have not been fully
+retired. Do not use them as the production mobile backend or add new app
+features there. See [legacy code still present](./docs/archive/LEGACY_CODE.md).
 
 ## Local development
 
@@ -143,7 +151,7 @@ It does not share the release app's stored session. Updating a release installat
 while preserving its data requires the same application ID, compatible version
 code, and signing identity.
 
-See the [APK release checklist](./docs/RELEASE_APK_CHECKLIST.md).
+See the [APK release checklist](./docs/guides/RELEASE_APK_CHECKLIST.md).
 Never commit signing keys, wallet secrets, or environment credentials.
 
 ## Contributing
@@ -161,9 +169,9 @@ verification, and bank withdrawals.
 Useful references:
 
 - [Contributing guide](./CONTRIBUTING.md)
-- [Product scope](./docs/PRODUCT_SCOPE.md)
-- [UX manifesto](./docs/UX_MANIFESTO.md)
-- [Drips team guide](./docs/DRIPS_TEAM_GUIDE.md)
+- [Product scope](./docs/product/PRODUCT_SCOPE.md)
+- [UX manifesto](./docs/product/UX_MANIFESTO.md)
+- [Drips team guide](./docs/guides/DRIPS_TEAM_GUIDE.md)
 - [Issues](https://github.com/Micopay/micopay-protocol/issues)
 
 ## Background

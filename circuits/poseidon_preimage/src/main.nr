@@ -1,6 +1,6 @@
 // Proves knowledge of a secret whose pedersen_hash equals the public hash.
 // Hash function: std::hash::pedersen_hash (BN254 Pedersen, native to Noir stdlib 1.0.x)
-// See TOOLCHAIN.md: poseidon::bn254 not exported in nargo 1.0.0-beta.9; pedersen used instead.
+// See docs/archive/external-projects/TOOLCHAIN.md: poseidon::bn254 is not exported in nargo 1.0.0-beta.9.
 fn main(secret: Field, hash: pub Field) {
     let h = std::hash::pedersen_hash([secret]);
     assert(h == hash);
