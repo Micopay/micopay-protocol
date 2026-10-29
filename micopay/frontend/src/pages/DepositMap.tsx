@@ -354,13 +354,14 @@ const DepositMap = ({
                       commissionPct: m.rate_percent,
                       platformFeeMxn: m.platform_fee_mxn,
                       providerFeeMxn: m.provider_fee_mxn,
+                      maxEffectiveFeePercent: m.max_effective_fee_percent ?? maxEffectiveFeePercent,
                       nearbyCount: merchants.length,
                     });
                   } else {
                     onSelectOffer(m.seller_id);
                   }
                 }}
-                maxEffectiveFeePercent={maxEffectiveFeePercent}
+                maxEffectiveFeePercent={merchant.max_effective_fee_percent ?? maxEffectiveFeePercent}
                 flow="deposit"
               />
             ))}

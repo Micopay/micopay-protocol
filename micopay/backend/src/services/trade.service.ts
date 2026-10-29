@@ -1,5 +1,12 @@
 import db, { pool as dbPool } from '../db/schema.js';
-import { computeTradeFees, PLATFORM_FEE_PERCENT } from './tradeFees.js';
+import {
+  computeTradeFees,
+  isEffectiveFeeAllowed,
+  isProviderRateAllowed,
+  MAX_EFFECTIVE_FEE_PERCENT,
+  MAX_PROVIDER_FEE_PERCENT,
+  PLATFORM_FEE_PERCENT,
+} from './tradeFees.js';
 import {
   AssetNotEnabledError,
   assertEnabledEscrowAsset,
@@ -426,10 +433,25 @@ export async function createTrade(input: CreateTradeInput) {
     'SELECT rate_percent FROM merchant_configs WHERE user_id = $1',
     [providerId],
   );
+  const providerRatePercent = Number(providerConfig?.rate_percent ?? 0);
+  if (!isProviderRateAllowed(providerRatePercent)) {
+    throw new ValidationError(
+      'FEE_LIMIT_EXCEEDED',
+      'La comisión de este agente supera el límite permitido. Elige otro agente.',
+      `provider rate ${providerRatePercent}% exceeds ${MAX_PROVIDER_FEE_PERCENT}% (effective cap ${MAX_EFFECTIVE_FEE_PERCENT}%)`,
+    );
+  }
   // H5: el monto escrito es el efectivo que cambia de mano, y lo que va al
   // contrato es lo que recibe el comprador del escrow (`escrowAmountMxn`), que
   // ya lleva la comision del agente segun el flujo. Ver `tradeFees.ts`.
-  const fees = computeTradeFees(amountMxn, Number(providerConfig?.rate_percent ?? 0), flow);
+  const fees = computeTradeFees(amountMxn, providerRatePercent, flow);
+  if (!isEffectiveFeeAllowed(fees)) {
+    throw new ValidationError(
+      'FEE_LIMIT_EXCEEDED',
+      'La comisión total supera el límite permitido. Elige otro agente o cambia el monto.',
+      `effective fee ${fees.effectivePercent}% exceeds configured cap ${MAX_EFFECTIVE_FEE_PERCENT}%`,
+    );
+  }
   const { providerFeeMxn, platformFeeMxn, payoutMxn, escrowAmountMxn } = fees;
   if (escrowAmountMxn < 1) {
     throw new ValidationError(

@@ -19,6 +19,15 @@ interface LocationState {
   publish_storefront: boolean;
 }
 
+function editableConfig(config: MerchantConfig) {
+  return {
+    rate_percent: config.rate_percent,
+    min_trade_mxn: config.min_trade_mxn,
+    max_trade_mxn: config.max_trade_mxn,
+    daily_cap_mxn: config.daily_cap_mxn,
+  };
+}
+
 export default function MerchantSettings({
   token,
   onBack,
@@ -33,6 +42,7 @@ export default function MerchantSettings({
   const [availability, setAvailabilityState] = useState<
     "online" | "offline" | "paused"
   >("online");
+  const [maxProviderFeePercent, setMaxProviderFeePercent] = useState(5.2);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -63,7 +73,8 @@ export default function MerchantSettings({
           getMerchantConfig(token),
           getCurrentUser(token),
         ]);
-        setForm(config);
+        setForm(editableConfig(config));
+        setMaxProviderFeePercent(config.max_provider_fee_percent ?? 5.2);
         setLocation({
           latitude: config.latitude ?? null,
           longitude: config.longitude ?? null,
@@ -172,7 +183,10 @@ export default function MerchantSettings({
         offlineQueue.queueMutationAsync,
       );
       
-      setForm(result.config);
+      setForm(editableConfig(result.config));
+      setMaxProviderFeePercent(
+        result.config.max_provider_fee_percent ?? maxProviderFeePercent,
+      );
       
       if (result.queued) {
         setMessage('⏳ Cambios guardados localmente. Se sincronizarán cuando la conexión se restaure.');
@@ -225,9 +239,11 @@ export default function MerchantSettings({
           </section>
 
           <Field
-            label="Tasa (%)"
+            label={`Tasa del agente (%) · máximo ${maxProviderFeePercent}`}
             value={form.rate_percent}
             step="0.1"
+            min={0}
+            max={maxProviderFeePercent}
             onChange={(v) =>
               setForm((f) => ({ ...f, rate_percent: Number(v) }))
             }
@@ -394,19 +410,25 @@ function Field({
   value,
   onChange,
   step = "1",
+  min,
+  max,
 }: {
   label: string;
   value: number;
   onChange: (v: string) => void;
   step?: string;
+  min?: number;
+  max?: number;
 }) {
   return (
     <label className="block">
       <span className="block text-sm font-medium mb-2">{label}</span>
       <input
-        type="text"
-                  inputMode="decimal"
+        type="number"
+        inputMode="decimal"
         step={step}
+        min={min}
+        max={max}
         value={Number.isFinite(value) ? value : 0}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-sm border border-slate-200 px-4 py-3"

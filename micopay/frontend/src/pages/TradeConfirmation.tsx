@@ -4,7 +4,7 @@ import {
   PLATFORM_FEE_PERCENT,
   platformFeeMxnFromAmount,
 } from '../constants/trade';
-import { effectiveFeePercent, MAX_EFFECTIVE_FEE_PERCENT } from '../services/api';
+import { MAX_EFFECTIVE_FEE_PERCENT } from '../services/api';
 import { getEscrowAssetOption } from '../constants/escrowAssets';
 import { formatEstimateUnits, useEscrowAssetEstimate } from '../hooks/useEscrowAssetEstimate';
 
@@ -91,8 +91,10 @@ export default function TradeConfirmationPage({
   const platformFee = platformFeeMxn ?? platformFeeMxnFromAmount(amountMxn);
   const providerFee = providerFeeMxn ?? Math.ceil((amountMxn * commissionPct) / 100);
   const totalFee = providerFee + platformFee;
-  // Combined effective cost the user actually pays: provider commission + platform fee.
-  const effectivePct = effectiveFeePercent(commissionPct);
+  // Costo real tras redondear ambas comisiones a pesos, igual que el backend.
+  // No basta sumar los porcentajes nominales: en montos pequeños, dos `ceil`
+  // pueden convertir 5.2% + 0.8% en un costo efectivo mayor a 6%.
+  const effectivePct = amountMxn > 0 ? (totalFee / amountMxn) * 100 : 0;
   const exceedsThreshold = effectivePct > maxEffectiveFeePercent;
 
   const title = flow === 'cashout' ? t('confirm.cashoutTitle') : t('confirm.depositTitle');
@@ -240,7 +242,7 @@ export default function TradeConfirmationPage({
 
         <button
           type="button"
-          disabled={loading || isChooseAgentAction}
+          disabled={loading || isChooseAgentAction || exceedsThreshold}
           onClick={async () => { await onConfirm(); }}
           className="w-full rounded-sm bg-verde py-3.5 text-sm font-semibold text-on-primary hover:opacity-95 disabled:opacity-50 transition-opacity"
         >
