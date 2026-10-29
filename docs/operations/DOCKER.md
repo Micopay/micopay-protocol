@@ -1,65 +1,40 @@
-# Docker Deployment
+# Local PostgreSQL and backup stack
 
-## Quick Start
-
-```bash
-# 1. Copy environment file
-cp .env.docker.example .env
-
-# 2. Configure your wallet (required for payments)
-# Generate a keypair: stellar keys generate
-# Set PLATFORM_SECRET_KEY=your_secret_key in .env
-
-# 3. Start services
-docker-compose up -d
-
-# 4. Check health
-curl http://localhost:3000/health
-
-# 5. View logs
-docker-compose logs -f api
-```
+The root `docker-compose.yml` is an optional local operations stack. It does
+not run the MicoPay API or frontend. Application processes run separately from
+`micopay/backend` and `micopay/frontend`.
 
 ## Services
 
-| Service | Port | Description |
-|---------|------|-------------|
-| API | 3000 | MicoPay Protocol API (x402) |
-| Web | 5186 | Protocol Dashboard |
-| PostgreSQL | 5432 | Database (user: micopay) |
+| Service | Port | Purpose |
+| --- | --- | --- |
+| PostgreSQL | 5432 | Local MicoPay database |
+| MinIO | 9000 / 9001 | S3-compatible local backup storage and console |
+| pgBackRest | internal | Encrypted PostgreSQL backups |
+| backup-scheduler | internal | Periodic backup checks |
 
-## Environment Variables
+## Start
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `PLATFORM_SECRET_KEY` | Yes | - | Stellar secret key for receiving payments |
-| `STELLAR_RPC_URL` | No | testnet URL | Stellar RPC endpoint |
-| `ESCROW_CONTRACT_ID` | No | testnet ID | Deployed escrow contract |
-| `MOCK_STELLAR` | No | false | Skip on-chain verification (demo only) |
-
-## Production Notes
-
-1. **Generate a new wallet**: `stellar keys generate`
-2. **Fund with testnet XLM**: Use Stellar laboratory or friendbot
-3. **Configure firewall**: Only expose ports 3000 (API) and 5186 (Web)
-4. **Use secrets manager**: Store `PLATFORM_SECRET_KEY` in env, not in docker-compose.yml
-
-## Troubleshooting
-
-```bash
-# View API logs
-docker-compose logs api
-
-# Restart services
-docker-compose restart
-
-# Rebuild after code changes
-docker-compose up -d --build
-
-# Stop all services
-docker-compose down
-
-# Reset database
-docker-compose down -v
-docker-compose up -d
+```sh
+cp .env.example .env
+docker compose up -d
+docker compose ps
 ```
+
+Replace every example password before using the stack outside an isolated
+developer machine. The application backend still needs its own environment
+configuration in `micopay/backend`.
+
+## Common operations
+
+```sh
+docker compose logs -f postgres pgbackrest backup-scheduler
+docker compose restart postgres
+docker compose down
+```
+
+`docker compose down -v` deletes the local database and backup volumes. Use it
+only when loss of all local data is intentional.
+
+Production runs on AWS; this compose file is not a production deployment
+manifest. See the current AWS operations documents in this directory.

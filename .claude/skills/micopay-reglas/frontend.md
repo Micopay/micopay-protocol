@@ -35,8 +35,8 @@ npm run build:play     # build de Play Store (.env.play)
 
 - Texto visible nuevo -> `useTranslation()` y la clave en **ambos**
   `src/i18n/es.json` y `src/i18n/en.json`. El idioma por defecto es `es`.
-- Hay pantallas que todavia tienen texto fijo (`Login`, `Welcome`, `Terms`,
-  `Privacy`, `ClaimQR`). No las migres si la issue no lo pide: es otra issue.
+- Hay pantallas que todavia tienen texto fijo (`Login`, `Welcome`, `Terms` y
+  `Privacy`). No las migres si la issue no lo pide: es otra issue.
 
 ## Iconos (Material Symbols)
 

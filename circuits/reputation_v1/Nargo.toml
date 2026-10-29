@@ -1,7 +1,0 @@
-[package]
-name = "reputation_v1"
-type = "bin"
-authors = ["MicoPay ZKaaS"]
-compiler_version = ">=0.1.0"
-
-[dependencies]

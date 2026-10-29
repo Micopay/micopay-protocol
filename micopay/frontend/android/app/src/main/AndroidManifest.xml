@@ -23,24 +23,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!--
-                Android App Links — intercepts https://app.micopay.xyz/claim/* at the OS level.
-                android:autoVerify="true" triggers Digital Asset Links verification against
-                https://app.micopay.xyz/.well-known/assetlinks.json at install time.
-                Once verified, tapping a claim URL opens MicoPay directly without a browser
-                disambiguation dialog. launchMode="singleTask" (already set above) ensures
-                a backgrounded instance receives the URL via onNewIntent instead of spawning
-                a second activity.
-            -->
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="https"
-                    android:host="app.micopay.xyz"
-                    android:pathPrefix="/claim/" />
-            </intent-filter>
         </activity>
 
         <provider

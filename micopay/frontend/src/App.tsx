@@ -46,7 +46,6 @@ import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Profile from "./pages/Profile";
 import { SignatureApproval } from "./pages/SignatureApproval";
-import ClaimQR from "./pages/ClaimQR";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import MerchantSettings from "./pages/MerchantSettings";
@@ -923,8 +922,8 @@ const HIDE_BOTTOMNAV_ROUTES = new Set([
   "/sign-request",
 ]);
 
-// Claim and sign-request screens also hide the bottom nav (standalone deep-link UI).
-const HIDE_BOTTOMNAV_PREFIX = ['/claim/', '/sign-request/'];
+// The signing screen is a standalone deep-link UI.
+const HIDE_BOTTOMNAV_PREFIX = ['/sign-request/'];
 
 function BottomNavAdapter() {
   const navigate = useNavigate();

@@ -1,7 +1,9 @@
 # MicoPay — Stellar Testnet Reference
 
 Canonical IDs for the **mobile stack** (micopay-backend + micopay/frontend).
-The `micopay-api` x402 service uses a separate escrow contract; do not mix them.
+The AI-agent/x402 product is maintained separately in
+[`Micopay/micopaybridge`](https://github.com/Micopay/micopaybridge); do not mix
+its deployments with the mobile app escrow described here.
 
 ## Escrow multiactivo activo (desde 2026-10-28)
 

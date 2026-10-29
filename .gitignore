@@ -55,6 +55,14 @@ __pycache__/
 artifacts/
 tmp/
 
+# MicoPay Bridge has its own repository. Preserve any local leftovers without
+# allowing its protocol API, SDK, circuits, or contracts back into this repo.
+/apps/
+/packages/
+/circuits/
+/contracts/
+/skill/
+
 # Generated presentation workbench and inspection metadata.
 .deck-build/
 *.pptx.inspect.ndjson

@@ -6,15 +6,16 @@ MicoPay helps people send and receive digital assets, find nearby cash providers
 and coordinate cash deposits and withdrawals in Mexican pesos. The app combines
 a Stellar wallet, a provider map, chat, and Soroban escrow.
 
-This repository focuses on the **MicoPay mobile app and its supporting backend**.
-The ZK, AI-agent, and x402 projects have moved to a separate repository. Historical
-code and documents may remain here, but those projects are outside the current app scope.
+This repository contains the **MicoPay mobile app and its supporting backend**.
+ZK, AI-agent, x402, Bazaar, atomic-swap, and cross-chain work lives in
+**[MicoPay Bridge](https://github.com/Micopay/micopaybridge)**. Its code and
+product documentation are intentionally not duplicated here.
 
 ### Future integration possibilities
 
 Connecting the app's cash network to AI assistants, bots, or paid APIs is a possible
 future development direction. The related x402, ZK, atomic-swap, and cross-chain
-work lives in the separate project. **The combined agent-to-cash experience is not
+work lives in MicoPay Bridge. **The combined agent-to-cash experience is not
 fully implemented or available end to end in these early stages of the app.**
 Individual prototypes or components do not establish that the complete integration
 works with the mobile wallet and real cash providers.
@@ -91,13 +92,12 @@ The backend runs on **AWS ECS**, with images in **ECR**, PostgreSQL in **RDS**,
 and runtime secrets in **SSM Parameter Store**. Older Render deployment references
 and dated planning documents are historical.
 
-### Legacy directories
+### Repository boundary
 
-`apps/api/`, `packages/`, `circuits/`, `contracts/zk-verifier/`, and the root
-Turbo workspace belong to an older protocol/x402/ZK line. They are retained
-only because the payment-link and reputation dependencies have not been fully
-retired. Do not use them as the production mobile backend or add new app
-features there. See [legacy code still present](./docs/archive/LEGACY_CODE.md).
+This repository has no protocol/x402 workspace. The removed `apps/api`, SDK,
+ZK circuits, verifier, Bazaar, and agent-facing skill are maintained in
+[MicoPay Bridge](https://github.com/Micopay/micopaybridge). “Agent” inside this
+repository means a **human cash provider**, not an autonomous AI agent.
 
 ## Local development
 

@@ -45,22 +45,20 @@ Use Drips to accelerate `MiCoPay app mobil`, not to split the team's focus acros
 
 ## Repo strategy
 
-The ZK, AI-agent, and x402 projects have moved to a separate repository.
-This repository focuses on the mobile app and its backend. Historical protocol
-paths below are not part of the default contribution scope.
+The ZK, AI-agent, x402, and Bazaar projects live in
+[MicoPay Bridge](https://github.com/Micopay/micopaybridge). This repository
+focuses on the mobile app and its backend.
 
 ### In-scope paths for current Waves
 
 - `micopay/frontend`
 - `micopay/backend`
+- `micopay/contracts` when an issue explicitly changes escrow behavior
 - selected shared docs
 
 ### Out-of-scope unless explicitly opened
 
-- `apps/agent`
-- `apps/api`
-- `apps/web`
-- `contracts`
+- MicoPay Bridge code or documentation
 - old prototypes and remix directories
 - deployment secrets and operations internals
 

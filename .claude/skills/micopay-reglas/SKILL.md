@@ -17,8 +17,10 @@ cambiar algo cercano.
 | `micopay/frontend` | App Android (Capacitor 8) + PWA. React, Vite, Vitest, i18next |
 | `micopay/backend` | API Fastify + PostgreSQL. Tests como scripts `node --import tsx` |
 | `micopay/sql` | `init.sql` + `migrations/<timestamp>_<nombre>.{up,down}.sql` |
-| `contracts/`, `micopay/contracts` | Contratos Soroban (escrow, HTLC). Ver skill `stellar-dev` |
-| `apps/`, `packages/` | Agente, bot de Telegram, API x402, SDK. Fuera del flujo diario |
+| `micopay/contracts` | Contrato Soroban de escrow de la app. Ver skill `stellar-dev` |
+
+El protocolo x402, ZK, Bazaar y los agentes autonomos viven en
+`Micopay/micopaybridge`; no recrearlos en este repositorio.
 
 Detalle por area: [frontend.md](frontend.md) y [backend.md](backend.md).
 

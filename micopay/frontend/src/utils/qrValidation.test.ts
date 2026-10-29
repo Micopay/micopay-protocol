@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   isHex64,
-  isHtlcReference,
-  isRequestId,
   isUuid,
 } from './qrValidation';
 
@@ -24,15 +22,4 @@ describe('qrValidation', () => {
     expect(isUuid('abc-123')).toBe(false);
   });
 
-  it('validates request IDs', () => {
-    expect(isRequestId('mcr-4b6c0e5c')).toBe(true);
-    expect(isRequestId('')).toBe(false);
-  });
-
-  it('validates HTLC references', () => {
-    const txHash = 'b'.repeat(64);
-    expect(isHtlcReference(txHash, false)).toBe(true);
-    expect(isHtlcReference('demo_htlc_123_mcr-abc', false)).toBe(false);
-    expect(isHtlcReference('demo_htlc_123_mcr-abc', true)).toBe(true);
-  });
 });
