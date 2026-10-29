@@ -1,33 +1,42 @@
 # MicoPay documentation
 
-**Stellar Drips Wave 10 has been completed.** This folder includes both working
-references and historical plans. A document mentioning a Wave is not evidence
-that its findings remain open or that its campaign is accepting contributions.
+This directory separates current product documentation from point-in-time
+audits and historical material. A dated plan or audit is evidence of what was
+known at that moment; it is not automatically the current backlog.
 
 ## Start here
 
-1. [Project README](../README.md): current app scope and feature limitations.
-2. [Contributing](../CONTRIBUTING.md): setup, issue selection, and PR expectations.
-3. [Current issues](https://github.com/Micopay/micopay-protocol/issues): scope,
-   assignment, acceptance criteria, and campaign eligibility for each contribution.
-4. [UX manifesto](./UX_MANIFESTO.md): product and interface principles.
+1. [Project README](../README.md) — current scope, limitations, and local setup.
+2. [Contributing](../CONTRIBUTING.md) — contribution and verification rules.
+3. [Product scope](./product/PRODUCT_SCOPE.md) — boundaries of the mobile app.
+4. [Current plans](./plans/README.md) — plans still treated as active.
+5. [Current GitHub issues](https://github.com/Micopay/micopay-protocol/issues) —
+   assignment, acceptance criteria, and implementation status.
 
-## Supporting references
+## Directory map
 
-- [Escrow contract code guide](./GUIA_CODIGO_CONTRATO_ESCROW.md): section-by-section
-  explanation of the Soroban contract, its authorization rules, state changes,
-  events, and tests.
-- [Fee-system audit (2026-10-28)](./AUDITORIA_COMISIONES_BACKEND_2026-10-28.md):
-  backend fee calculation, quote integrity, merchant limits, XDR validation,
-  and findings that must close before Mainnet.
-- [Drips team guide](./DRIPS_TEAM_GUIDE.md): maintainer planning and review practices.
-- [APK release checklist](./RELEASE_APK_CHECKLIST.md): release preparation.
-- [Product scope](./PRODUCT_SCOPE.md) and [retail roadmap](./RETAIL_ROADMAP.md):
-  planning context; confirm status against current issues and implementation.
+| Directory | Purpose | Authority |
+| --- | --- | --- |
+| [`product/`](./product/) | Product scope, roadmap, and UX principles | Current reference; verify feature status in code |
+| [`architecture/`](./architecture/) | Implemented mobile-app architecture | Current reference for the named subsystem |
+| [`guides/`](./guides/) | Maintainer, release, and contract guides | Operational guidance |
+| [`operations/`](./operations/) | AWS, Docker, recovery, and runtime notes | Verify dates and deployed configuration before acting |
+| [`plans/current/`](./plans/current/) | Plans explicitly still active | Planning reference, not proof of completion |
+| [`audits/`](./audits/) | Point-in-time technical reviews | Findings must be rechecked against current code |
+| [`security-reports/`](./security-reports/) | Security findings and incident evidence | Historical evidence; status may have changed |
+| [`presentations/`](./presentations/) | Shareable explanatory material | Communication artifacts |
+| [`archive/`](./archive/) | Completed campaigns, superseded plans, old issues, and external projects | Historical only |
 
-## Historical material
+## Source-of-truth order
 
-[Wave 6 APK audit](./AUDIT_APK_WAVE6.md) records the June 2026 review.
-It is preserved for traceability, not as the onboarding guide or current backlog.
-Other dated audits and plans should be read with the same distinction.
-ZK, AI-agent, and x402 documents describe projects moved to another repository.
+When documents disagree, use this order:
+
+1. Deployed configuration and current code.
+2. Current GitHub issue or pull request.
+3. The current product, architecture, guide, or operations document.
+4. A dated audit or active plan.
+5. Anything under `archive/`.
+
+Stellar Drips Wave 10 is complete. ZK, AI-agent, XRPL, and x402 material is
+archived here for traceability; those projects are not the default contribution
+surface of the MicoPay mobile app.

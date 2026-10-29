@@ -15,7 +15,7 @@
 // leaf (the purchase) without knowing `secret`. `secret` is user-generated and never shared.
 //
 // Hash: std::hash::pedersen_hash (BN254 Pedersen; poseidon::bn254 is not exported in
-// nargo 1.0.0-beta.9 -- see TOOLCHAIN.md). On-chain UltraHonk/BN254 verification is hash-agnostic.
+// nargo 1.0.0-beta.9 -- see docs/archive/external-projects/TOOLCHAIN.md). On-chain verification is hash-agnostic.
 //
 // PUBLIC INPUT ORDER: [merkle_root, nullifier]. The nullifier MUST stay LAST -- the contract's
 // `verify_unique` reads the nullifier as the final 32-byte field of public_inputs.

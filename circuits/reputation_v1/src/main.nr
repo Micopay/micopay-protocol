@@ -6,7 +6,7 @@
 //   3. nullifier = pedersen_hash([secret, context]) -- binds proof to verifier/session
 //
 // Hash function: std::hash::pedersen_hash (BN254 Pedersen, available in nargo 1.0.0-beta.9)
-// See TOOLCHAIN.md: poseidon::bn254 not exported in this nargo version.
+// See docs/archive/external-projects/TOOLCHAIN.md: poseidon::bn254 is not exported in this nargo version.
 
 global TREE_DEPTH: u32 = 20;
 

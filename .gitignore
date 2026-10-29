@@ -26,6 +26,11 @@ Thumbs.db
 
 # Claude Code session state
 .claude/scheduled_tasks.lock
+.claude/settings.local.json
+
+# Local tool and editor preferences
+.turbo/
+.vscode/
 
 # Gemini/Antigravity (Internal files)
 .gemini/

@@ -1,14 +1,32 @@
-# Archive
+# Documentation archive
 
-Historical documents from earlier phases of MicoPay. Kept for reference, not maintained.
+This directory preserves historical evidence without presenting it as current
+product documentation.
 
-If you are a new contributor, start with the active docs one level up in [`docs/`](../).
+It contains:
 
-| File | What it is | Why it's here |
-|---|---|---|
-| `COMMIT_PLAN.md` | Day-by-day commit plan for the DoraHacks 2026 hackathon sprint | Hackathon-specific, no longer followed |
-| `EQUIPO.md` | Early team vision document (discussion draft) | Superseded by `docs/PRODUCT_SCOPE.md` |
-| `VISION.md` | Protocol positioning doc written for the agent-focused hackathon narrative | Still a useful read for strategic context, but out of scope for current Drips work |
-| `micopay_backend_v1.3.md` | 108KB backend spec from the hackathon | Reference for historical decisions; `micopay/backend/` is the source of truth |
-| `verify_accept.js` | One-off localhost test script for the Bazaar accept endpoint | Dev-time script, replaced by the demo runner |
-| `stitch/` | Google Stitch HTML/PNG prototypes used for early design iteration | The final UI lives in `micopay/frontend/`; kept for visual reference |
+- superseded implementation and deployment plans;
+- completed Drips research and validation work;
+- old issue drafts and session reports;
+- regulatory research snapshots;
+- former XRPL, ZK, x402, and agent-project documentation;
+- generated design snapshots and older backend references.
+
+Files are retained for traceability. Do not execute their deployment commands
+or assume their findings remain open without checking current code and runtime
+configuration first.
+
+## Archive map
+
+| Path | Contents |
+| --- | --- |
+| `compliance/` | Regulatory and KYC research snapshots |
+| `external-projects/` | Former protocol API, ZK, x402, XRPL, and agent material |
+| `issues/` | Local issue drafts from completed contribution waves |
+| `operations/` | Superseded Render and AWS migration plans |
+| `research/` | Drips interviews, validation, reports, and weekly submissions |
+| `stitch/` | Early visual prototypes |
+| Root files | Hackathon plans, early vision documents, and backend snapshots |
+
+See [Legacy code still present](./LEGACY_CODE.md) for directories that remain in
+the repository because their removal still has unresolved dependencies.

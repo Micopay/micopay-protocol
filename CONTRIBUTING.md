@@ -52,7 +52,7 @@ Testnet transactions. Do not treat simulated DeFi screens as live products.
 ## Before opening a PR
 
 - Keep the change within the assigned issue and avoid unrelated refactors.
-- Follow the [UX manifesto](./docs/UX_MANIFESTO.md) for user-facing behavior.
+- Follow the [UX manifesto](./docs/product/UX_MANIFESTO.md) for user-facing behavior.
 - Describe what changed, why, and which issue it addresses.
 - Record the checks you actually ran and any untested behavior.
 - For UI changes, include screenshots or a short recording and reproduction steps.
@@ -76,8 +76,8 @@ If an issue belongs to another campaign, follow that issue's instructions.
 ## Documentation and help
 
 - [Documentation index](./docs/README.md): entry points and historical references.
-- [Drips team guide](./docs/DRIPS_TEAM_GUIDE.md): maintainer planning context.
-- [Historical Wave 6 audit](./docs/AUDIT_APK_WAVE6.md): findings from June 2026,
+- [Drips team guide](./docs/guides/DRIPS_TEAM_GUIDE.md): maintainer planning context.
+- [Historical Wave 6 audit](./docs/audits/AUDIT_APK_WAVE6.md): findings from June 2026,
   which must be rechecked against current code before treating them as open work.
 
 Ask scope and implementation questions on the relevant issue. Be direct,
