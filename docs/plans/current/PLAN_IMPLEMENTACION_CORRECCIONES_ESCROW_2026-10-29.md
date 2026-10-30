@@ -1,0 +1,260 @@
+# Plan de implementación: correcciones del escrow (auditoría 2026-10-29)
+
+Fecha: 2026-10-29 (México). Base: `55da2f313d023bdc14679b494dc3e6047d7e7be8`.
+Origen: [auditoría consolidada del escrow](../../audits/AUDITORIA_ESCROW_REFERENCIA_XRPL_2026-10-29.md) (H1-H4, N1-N4, D1-D3).
+Relacionado: [plan APK y escrow seguro 2026-10-26](./PLAN_IMPLEMENTACION_APK_ESCROW_SEGURO_2026-10-26.md). Su fase 6 ya pedía calcular el hash antes de enviar y tratar el timeout como estado incierto; eso no se implementó y aquí queda como WP2. Sus listeners por contrato son la condición que habilita H1.
+
+## Principios
+
+- **El contrato no se toca** en WP0 a WP7. Todo se corrige en backend, base de datos y app. El contrato solo cambia en WP8, y solo si producto decide D1/D2.
+- **La cadena es la fuente de verdad** de los fondos; la base de datos es la libreta. Ningún estado terminal (`completed`, `refunded`) se escribe sin evidencia del contrato correcto.
+- **Identidad de una operación en cadena:** red + contrato + `trade_id`. Nunca solo `trade_id`.
+- Cada WP se publica por PR a `main`, con pruebas, y se despliega primero en testnet.
+- No borrar evidencia: secretos, constancias de efectivo y auditoría se conservan mientras haya una discrepancia abierta.
+
+## Resumen
+
+| WP | Hallazgos | Qué resuelve | Tamaño | Depende de |
+|---|---|---|---|---|
+| WP0 | — | Verificar producción y tomar decisiones | S | — |
+| WP1 | H1, N2 | Que un evento ajeno no cierre una operación; que el agente no entregue efectivo sin poder cobrar | M | WP0 |
+| WP2 | N1, N4 (parcial) | Que un lock lento no quede huérfano | M | WP1 |
+| WP3 | H2 | Que el plazo de la app sea el de la cadena | M | WP1, WP2 |
+| WP4 | H3, H4 | Que no se pierdan eventos | M | WP1 |
+| WP5 | Adenda | Conciliación periódica contra la cadena | M | WP1, WP4 |
+| WP6 | N3 | Comprobar al receptor antes del escaneo | S | WP1 |
+| WP7 | N4, menores | Diagnóstico de errores y limpieza | S | — |
+| WP8 | D1, D2, D3 | Contrato nuevo (opcional) | L | Decisión de producto |
+| WP9 | — | Verificación de punta a punta y despliegue | M | WP1-WP6 |
+
+Orden de despliegue: **WP0 → WP1 → WP2 → WP3 → WP4 → WP5 → WP6**. WP7 puede ir en cualquier momento. WP8 queda fuera del camino crítico.
+
+---
+
+## WP0: línea base y decisiones
+
+**Verificaciones en producción** (solo lectura):
+- [ ] Contratos que escucha el backend en AWS: valores reales de `ESCROW_CONTRACTS` y `ESCROW_LEGACY_CONTRACT_ID` en SSM, y log `[event-listener] Soroban event listeners active`. Si escucha más de uno, H1 es explotable hoy y WP1 pasa a hotfix.
+- [ ] **Regla:** no agregar un segundo contrato en mainnet (por ejemplo USDC) antes de que WP1 esté en producción.
+- [ ] Hash del WASM desplegado en cada contrato, comparado contra el build reproducible del commit base.
+- [ ] Inventario de operaciones abiertas (`pending` con intento de lock, `locked`, `revealing`, `cancelled` con `lock_tx_hash`) por contrato.
+
+**Decisiones de producto** (Eric, 2026-10-29):
+- [x] **Margen mínimo en cadena para iniciar la entrega de efectivo: 20 minutos.** Configurable con `CASH_HANDOFF_MIN_MARGIN_MINUTES`.
+- [ ] **Margen mínimo para aceptar un lock:** cuánto debe faltar para `expires_at` de la solicitud. Se decide en WP3.
+- [x] **D1: se mantiene el contrato tal como está.** `release` sigue permitido después del plazo y compite con `refund`; no se adopta el corte de XRPL. Razón: en ambos flujos, quien libera (buyer) es quien ya entregó el efectivo, y el backend solo le entrega el secreto después de la constancia (cashout) o del reveal (depósito). Cortar la liberación tardía no protege al seller de nada (el buyer ya podía liberar desde el primer minuto) y deja sin salida al que pagó en efectivo. El riesgo residual se reduce con el margen de 20 min, la liberación inmediata tras el escaneo y D2.
+- [x] **D2: el backend nunca reembolsa por su cuenta una operación con constancia de efectivo.** Ni el botón de reembolso de la app (`refundTrade` y `getRefundEligibility`) ni el sweep. La operación pasa a soporte. No impide una llamada directa al contrato; eso se atiende con soporte y reputación. Se implementa en WP1 (1d).
+
+**Verificado el 2026-10-29:**
+- [x] `https://api.micopay.app/health` indica `eventListenerState: "disabled"` y `eventListenerContracts: []`. El listener está apagado, así que **H1 no es explotable hoy en producción**. También significa que hoy no hay ninguna recuperación por eventos (N1 y WP5 suben de prioridad). **Regla:** no encender `EVENT_LISTENER_ENABLED` antes de WP1.
+- [x] Producción (`api.micopay.app`) corre en testnet. El APK usa los contratos USDC `CALS46…` y XLM `CCX5E4…`.
+- [x] El WASM desplegado en `CALS46…` y `CCX5E4…` es idéntico al build local de `55da2f3` (sha256 `6ec8aba7d201c6fec89e40a1437910fdc393d5b606370142ae115372afcf2693`, `stellar contract build` con stellar-cli 25.2.0). El legacy `CB4M…` (`062eb1bb…`) es la versión anterior, sin `decline`.
+- [ ] Valores de `ESCROW_CONTRACTS` y `ESCROW_LEGACY_CONTRACT_ID` en la task definition de ECS, e inventario de operaciones abiertas: pendientes de una sesión de AWS.
+
+Criterio de salida: configuración de producción documentada y decisiones registradas.
+
+---
+
+## WP1: identidad completa de eventos y escaneo seguro (H1 + N2)
+
+### 1a. Evento ligado a su contrato
+
+- `event-listener.service.ts`: pasar al dispatcher el `contractId` del listener y el `contractId` que trae el evento del RPC; descartar y registrar el evento si no coinciden.
+- `event-dispatcher.service.ts`: agregar `contractId` a `RawContractEvent` y a `ParsedEscrowEvent`.
+- `handleReleased` y `handleRefunded`: buscar con `WHERE contract_trade_id = $1 AND escrow_contract_id = $2`. Sin coincidencia exacta, no tocar nada y registrar `untracked_or_foreign_event` con el contrato.
+- Filas legacy con `escrow_contract_id` nulo: resolver su contrato con la misma regla de `escrowContractForTrade` (`services/escrowContract.ts`) en la migración, no en caliente.
+- Clave de deduplicación: `evt:{red}:{contrato}:{eventId}`. Hoy es `evt:{eventId}`.
+- Al arrancar, validar que cada contrato configurado pertenece a `STELLAR_NETWORK`; si no, fallar el arranque.
+
+**Migración** `sql/migrations/2026110xxxxxxx_escrow_event_identity.up.sql` (con su `.down.sql`):
+- Rellenar `escrow_contract_id` en filas con `lock_tx_hash` y contrato nulo.
+- Índice único parcial `(escrow_contract_id, contract_trade_id) WHERE contract_trade_id IS NOT NULL`. Antes de crearlo, una consulta debe confirmar que no hay duplicados; si los hay, se detiene la migración y se revisan a mano.
+
+### 1b. Escaneo solo sobre operaciones cobrables
+
+- `merchantConfirmScan` (`trade.service.ts:1971`): antes de consumir el claim token, exigir:
+  1. `status === 'revealing'`; cualquier otro estado se rechaza con un código específico;
+  2. `get_trade` en `escrow_contract_id`, con estado `Locked` y mismos seller, buyer y monto que la fila;
+  3. margen: `(timeout_ledger - ledger actual) × segundos por ledger ≥ CASH_HANDOFF_MIN_MARGIN_MINUTES`.
+
+  Si la consulta RPC falla, no se registra la entrega: "no se pudo confirmar, intenta de nuevo".
+- La relectura de una entrega ya confirmada (`existingHandoff`) se mantiene, pero en una fila terminal debe mostrar el estado real, no la tarjeta de liberar.
+- `frontend/src/pages/MerchantInbox.tsx` (`TradeConfirmationCard`): si `status` no es `revealing` ni `completed`, mostrar un estado de alto ("No entregues efectivo") en lugar de la confirmación normal. El backend ya rechaza; esto es defensa en la interfaz.
+
+### 1d. Sin reembolso automático con constancia de efectivo (D2)
+
+- `getRefundEligibility`: si existe `trade_cash_handoffs`, devolver `eligible: false` con la razón `cash_handoff_confirmed`.
+- `refundTrade`: rechazar con `CASH_HANDOFF_CONFIRMED` y un mensaje que dirija a soporte.
+- `sweepPendingRefunds`: excluir las filas con constancia (hoy no deberían llegar, porque `cancelTrade` ya las bloquea, pero se cubre por si acaso).
+- Prueba: una operación vencida con constancia no es elegible, `refundTrade` falla y el sweep no la toca.
+
+### 1c. Revisión de daños existentes (script de solo lectura)
+
+- [ ] Buscar filas `refunded` o `completed` cuyo evento de auditoría tenga `source: 'soroban_event'`. Para cada una, consultar `get_trade` en su propio contrato. Si allí sigue `Locked`, o el estado no coincide, es una posible víctima de H1: reportarla, no corregirla automáticamente.
+- [ ] Revisar `trade_cash_handoffs` sobre filas `refunded`.
+
+**Pruebas:**
+- Dispatcher con dos contratos y el mismo `trade_id`: un refund de B no modifica A; un evento con `contractId` distinto del listener se descarta.
+- Escaneo sobre `refunded`, `cancelled`, `locked`, `pending` o `completed` sin entrega: falla, no consume el token y no crea la constancia.
+- Escaneo con el escrow `Released` o `Refunded` en cadena aunque la base diga `revealing`: falla.
+- Escaneo con margen insuficiente: falla.
+- Testnet: reproducir el ataque de H1 con el contrato XLM y el legacy y comprobar que A no cambia.
+
+Criterio de salida: todas las pruebas en verde, desplegado en testnet, script 1c ejecutado contra producción y su resultado documentado.
+
+---
+
+## WP2: lock enviado nunca huérfano (N1)
+
+- `submitLockTx` (`stellar.service.ts:219`): calcular `tx.hash()` del XDR firmado **antes** de enviarlo y devolverlo a `lockTrade`.
+- `lockTrade`: persistir `lock_submitted_tx_hash` y `lock_submitted_at` antes de `sendTransaction`. La fila sigue `pending`; la app muestra "confirmando bloqueo".
+- Distinguir los resultados de `sendTransaction`:
+  - `PENDING` o `DUPLICATE`: seguir esperando;
+  - `TRY_AGAIN_LATER`: no enviado; se permite reintentar con el mismo XDR;
+  - `ERROR`: rechazo definitivo; se limpia el intento.
+- Confirmar con `getTransaction` del RPC en lugar de, o además de, Horizon. Si se agota la espera, responder "pendiente de confirmación", no error definitivo.
+- Evento `locked` en el dispatcher: si la fila está `pending`, coinciden contrato y `trade_id`, y seller, buyer y monto del evento son iguales a los de la fila, pasarla a `locked` con `lock_tx_hash = txHash` del evento. Cualquier diferencia se registra como discrepancia y no se aplica.
+- `prepareLockTrade`: si hay un `lock_submitted_tx_hash` sin resolver, no construir un XDR nuevo; resolver antes el intento anterior (RPC y `get_trade`).
+- `cancelTrade` sobre `pending` con un intento de lock sin resolver: cancelar el flujo, pero mantener la fila elegible para conciliación y sweep.
+- Ligado a N4: si la simulación devuelve `Error(Contract, #10)`, consultar `get_trade` antes de decir que la operación ya existe.
+
+**Migración:** columnas `lock_submitted_tx_hash`, `lock_submitted_at`.
+
+**Pruebas:**
+- RPC simulado que confirma después de que se agota la espera: la fila termina `locked` por el evento o por la conciliación, y se puede reembolsar desde la app.
+- Un `TRY_AGAIN_LATER` no deja la fila marcada como enviada.
+- Un evento `locked` con monto distinto no se aplica.
+
+---
+
+## WP3: un solo plazo, el de la cadena (H2)
+
+- Persistir el vencimiento real de los fondos al confirmar el lock: columna `funds_timeout_ledger`, tomada del evento `locked` o de `get_trade`. Guardar también `funds_expires_at_estimate` solo para mostrar en la app, con la etiqueta "aprox.".
+- `expires_at` queda como **caducidad de la solicitud** (hasta cuándo se puede bloquear). Deja de usarse para decidir reembolsos.
+- `prepareLockTrade` y `lockTrade`: rechazar si a `expires_at` le falta menos que el margen de WP0.
+- `getRefundEligibility`, `refundTrade` y `sweepPendingRefunds`: elegible si `ledger actual >= funds_timeout_ledger` (RPC). El reloj del servidor solo se usa para la cuenta regresiva aproximada.
+- `getTradeSecret` y `merchantConfirmScan`: usar el margen en cadena (WP1b) en lugar de `expires_at`.
+- La app muestra la cuenta regresiva estimada a partir de `funds_expires_at_estimate`, actualizada con la respuesta del servidor.
+- Fuera de alcance: cambiar el contrato a timestamp absoluto (WP8).
+
+**Migración:** `funds_timeout_ledger`, `funds_expires_at_estimate`, y relleno de las operaciones abiertas con `get_trade` mediante un script, no SQL puro.
+
+**Pruebas:**
+- Operación creada a las 12:00 y bloqueada a las 12:30: el reembolso no es elegible hasta el ledger del contrato.
+- Lock a 1 minuto de `expires_at`: rechazado.
+- La elegibilidad que ofrece la app coincide con lo que acepta el contrato en testnet, en el borde exacto del ledger.
+
+---
+
+## WP4: eventos durables y completos (H3 + H4)
+
+- `db/schema.ts`: agregar `withTransaction(fn)` sobre `pool` (cliente dedicado, `BEGIN`/`COMMIT`/`ROLLBACK`). Revisar el store en memoria: si no soporta transacciones, documentar que el modo mock no las garantiza.
+- La deduplicación y los efectos del evento (UPDATE y auditoría) van en **la misma transacción**. Si algo falla, no queda marca y el siguiente ciclo reintenta.
+- `fetchEvents`: paginar con el `cursor` del RPC hasta agotar la página. Avanzar el cursor persistido **solo** hasta el último evento procesado con éxito; si un evento falla, detener el lote ahí.
+- `event_cursor`: guardar también el cursor de paginación del RPC, además de `last_ledger`.
+- Cursor fuera de la ventana del RPC: no reiniciar en silencio. Registrar una alerta, saltar al ledger actual **y** disparar la conciliación completa (WP5) de ese contrato.
+- Métrica o log de lag por contrato (ledger actual menos cursor).
+
+**Migración:** columna de cursor de paginación en `event_cursor`.
+
+**Pruebas:**
+- Fallo inyectado en el primer `dispatch`: el segundo intento aplica el evento una sola vez.
+- 250 eventos, varios en el mismo ledger: se procesan todos y en orden.
+- Cursor fuera de la ventana: se dispara la conciliación y queda la alerta.
+
+---
+
+## WP5: conciliación contra la cadena
+
+Nuevo servicio `services/escrowReconciliation.service.ts`, en un intervalo como el del sweep (`index.ts`), configurable y desactivable.
+
+- **Candidatas:**
+  - filas `pending` con `lock_submitted_tx_hash`;
+  - filas `locked`, `revealing` y `cancelled` con lock;
+  - filas terminales marcadas por evento en los últimos N días;
+  - todas las filas de un contrato cuyo cursor salió de la ventana.
+- **Por cada fila:** `get_trade` (simulación, sin escritura) en `escrow_contract_id`.
+
+  | En cadena | En la base | Acción |
+  |---|---|---|
+  | `Locked` | abierta | Nada (actualizar `funds_timeout_ledger` si falta) |
+  | `Locked` | `refunded`/`completed` | **Discrepancia crítica:** alerta y marca `needs_review`; no reescribir sola |
+  | `Released` | abierta | Pasar a `completed` con evidencia `reconciled` (contrato, ledger); hash si se encuentra |
+  | `Refunded` | abierta o `cancelled` | Pasar a `refunded` con evidencia |
+  | `TradeNotFound` o archivado | con lock | No cambiar estado; alerta "no verificable" |
+  | Error RPC | cualquiera | No cambiar nada; reintentar en el siguiente ciclo |
+
+- Toda corrección va con UPDATE condicionado al estado leído (idempotente) y con un evento de auditoría `reconciliation`. Nunca envía transacciones de pago.
+- Columna o tabla de discrepancias abiertas para soporte, separada de la constancia de efectivo.
+- La app muestra "confirmación pendiente" para filas en `needs_review`, nunca un estado terminal inventado.
+
+**Pruebas:**
+- Un evento `released` perdido se recupera por conciliación; ejecutar la conciliación dos veces no duplica nada.
+- Una fila falsa `refunded` con la cadena en `Locked` genera una alerta y no se reescribe sola.
+- Un RPC caído o un registro archivado no producen `refunded`.
+
+---
+
+## WP6: receptor listo justo antes del efectivo (N3)
+
+- `receiverReadiness.service.ts`: identificar el activo exacto (código y emisor). Opciones: leer `name()` del SAC del contrato, que devuelve `CODE:ISSUER`, o configurarlo en el backend. Hoy el emisor solo vive en la configuración del APK.
+- Comprobar: cuenta existente, trustline del emisor exacto, `is_authorized` (Horizon) y XLM gastable para la comisión de `release`.
+- Llamarla **también** en `merchantConfirmScan` (cashout: el buyer es el agente), antes de registrar la entrega. Si el resultado no es concluyente, no hay entrega.
+- Depósito: el receptor es el cliente; aplicar la misma comprobación antes de que el cliente entregue efectivo, en el punto del flujo que corresponda. Revisar ese flujo dentro de este WP.
+
+**Pruebas:** buyer desautorizado, trustline de otro emisor y XLM insuficiente bloquean el escaneo; un buyer correcto pasa.
+
+---
+
+## WP7: diagnóstico y limpieza (N4 y menores)
+
+- Al registrar un fallo de simulación o envío, guardar el contrato de origen del error a partir de los eventos de diagnóstico. No traducir `Error(Contract, #n)` a un nombre de `EscrowError` sin confirmar que salió del escrow.
+- `executeRefundOnChain` (`trade.service.ts:1603`): limpiar `secret_enc`/`secret_nonce` y condicionar el UPDATE a `status NOT IN ('completed','refunded')`, igual que el dispatcher.
+- Documentar en `contracts/` que `DataKey::Admin` no tiene funciones y que el contrato es inmutable.
+
+---
+
+## WP8: contrato siguiente (opcional, requiere decisión D1/D2)
+
+Solo si WP0 lo decide. Nuevo despliegue; el contrato actual sigue escuchándose mientras tenga operaciones abiertas, como en el plan 2026-10-26.
+
+Candidatos:
+- `EscrowError` desde un rango propio (por ejemplo 100+) para eliminar N4.
+- `timeout_minutes` con mínimo y máximo; rechazar 0.
+- Plazo por timestamp del ledger en lugar de número de ledger.
+- Si D1 adopta el corte de XRPL: `release` hasta el borde inclusive y `refund` solo después (`>`), más una vía de recuperación del agente que ya entregó efectivo, diseñada antes de programarla.
+- Pruebas Rust sin `mock_all_auths` para cada función, más build reproducible con hash publicado.
+
+---
+
+## WP9: verificación y despliegue
+
+**Testnet de punta a punta**, con APK release:
+1. Cashout normal y depósito normal.
+2. Ataque H1 (contrato XLM + legacy) contra una operación en `revealing`: el escaneo se rechaza y A no cambia.
+3. Lock con confirmación tardía (forzando la espera corta): termina `locked` y se puede reembolsar.
+4. Entrega de efectivo a 25 y a 15 minutos del vencimiento en cadena (con margen de 20): la primera pasa y la segunda no.
+5. Release y refund en el borde, en ambos órdenes de inclusión; documentar el resultado.
+6. Agente con USDC desautorizado: el escaneo se rechaza.
+7. Listener detenido más tiempo que la ventana del RPC: la conciliación repara todo.
+
+**Producción:**
+- Orden: migraciones → backend → APK (la UI de WP1b puede ir después; el backend ya protege).
+- Tras cada despliegue: listeners activos por contrato, lag del cursor, discrepancias abiertas y el resultado del script 1c.
+- Actualizar la auditoría con el estado de cada hallazgo (corregido, desplegado, verificado) y mover este plan a `archive/` al terminar.
+
+## Trazabilidad
+
+| Hallazgo | WP |
+|---|---|
+| H1 | WP1 (1a, 1c), WP5 |
+| H2 | WP3 |
+| H3 | WP4 |
+| H4 | WP4, WP5 |
+| N1 | WP2, WP5 |
+| N2 | WP1 (1b) |
+| N3 | WP6 |
+| N4 | WP2, WP7, WP8 |
+| D1 | WP0, WP8 |
+| D2 | WP0, WP1b (margen), WP3 |
+| D3 | WP8 |
