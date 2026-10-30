@@ -67,7 +67,7 @@ Estado (2026-10-29): implementado en la rama `fix/escrow-wp1-identidad-eventos` 
 - [x] `handleReleased` y `handleRefunded`: buscan por `contract_trade_id` y se quedan solo con la fila cuyo contrato coincide. Sin coincidencia, no tocan nada y registran el contrato; con más de una, registran el error y no aplican nada.
 - [x] Filas legacy con `escrow_contract_id` nulo: se resuelven **en código** con `escrowContractForTrade` (`services/escrowContract.ts`), la misma regla que usa el resto del backend. Se descartó la migración de relleno y el índice único: el filtro por contrato ya evita el cruce, y un índice sobre filas rellenadas a mano añade riesgo sin cerrar nada más. Se reconsidera si 1c encuentra duplicados.
 - [x] Clave de deduplicación: `evt:` + sha256(`{red}:{contrato}:{eventId}`) en base64url. Antes era `evt:{eventId}`.
-- [ ] Al arrancar, validar que cada contrato configurado pertenece a `STELLAR_NETWORK`; si no, fallar el arranque. Pendiente.
+- [x] Al arrancar (`services/escrowNetworkCheck.service.ts`, 38681e4), el RPC debe servir la red de `STELLAR_NETWORK` y cada contrato (por activo, legacy y decline) debe tener instancia en ella; si no, el arranque se detiene. Si el RPC no responde, se registra y se sigue, para no entrar en un ciclo de reinicios. Probado contra testnet y mainnet reales.
 
 ### 1b. Escaneo solo sobre operaciones cobrables
 
@@ -110,9 +110,10 @@ Avance (2026-10-29):
   - pruebas del backend en verde: event-listener 30/30 (5 de las nuevas fallan contra el código anterior), cashHandoff, refund, refundEligibility, escrowCollectable (8) y el resto de suites;
   - `npm run build` limpio;
   - frontend 464/464, con `merchantInboxNotCollectable.test.tsx`, cuyo caso `refunded` falla contra la tarjeta anterior.
+- H1 reproducido en testnet con eventos reales (`docs/audits/evidence/h1-testnet-2026-10-29.ts`). Se bloqueó el mismo `secret_hash` en el contrato XLM (A) y en el legacy (B) y se reembolsó B:
+  - con `main` (55da2f3), A queda `refunded` y su propio release ya no la corrige;
+  - con WP1, A sigue `revealing` y pasa a `completed` con su release; en cadena, A `Released` y B `Refunded`.
 - Pendiente:
-  - validación de red al arrancar;
-  - la prueba de H1 en testnet;
   - el despliegue;
   - el script 1c, que necesita acceso a AWS y a la base.
 
