@@ -226,6 +226,11 @@ export async function submitLockTx(params: {
   amountStroops: bigint;
   platformFeeStroops: bigint;
   secretHash: string;
+  /**
+   * WP2 (N1): se llama con el hash del XDR ya validado, ANTES de enviarlo.
+   * Quien llama lo persiste; si lanza, no se envia nada.
+   */
+  onSubmitting?: (txHash: string) => Promise<void>;
 }): Promise<{ txHash: string }> {
   const { TransactionBuilder, Networks } = await import('@stellar/stellar-sdk');
   const networkPassphrase = getNetworkPassphrase(Networks);
@@ -246,20 +251,62 @@ export async function submitLockTx(params: {
     ],
   });
 
+  await params.onSubmitting?.(tx.hash().toString('hex'));
+
   const sendResult = await submitSignedTx(config.stellarRpcUrl, tx);
   if (sendResult.status === 'ERROR') {
     params.request.log.error({ detail: sendResult.errorResult, category: 'stellar.tx' }, '[Stellar] Lock send failed');
     throw new BadRequestError('STELLAR_LOCK_SEND_FAILED', 'La transacción de bloqueo fue rechazada por la red.', `Send failed: ${JSON.stringify(sendResult.errorResult)}`);
   }
+  if (sendResult.status === 'TRY_AGAIN_LATER') {
+    // La red no la acepto en la cola: no se envio. Antes se seguia esperando
+    // la confirmacion de algo que nunca iba a llegar.
+    throw new UpstreamError(
+      'STELLAR_LOCK_NOT_ACCEPTED',
+      'La red está saturada y no recibió el bloqueo. Intenta de nuevo en un momento.',
+      `Lock ${sendResult.hash} returned TRY_AGAIN_LATER`,
+      503,
+    );
+  }
 
-  return pollForConfirmation(
-    params.request,
-    sendResult.hash,
-    'Lock',
-    'STELLAR_TRANSACTION_FAILED',
-    'STELLAR_TIMEOUT',
-    'La transacción de bloqueo falló en la blockchain.',
-    'La transacción de bloqueo está tardando más de lo esperado.',
+  return confirmLockByRpc(params.request, sendResult.hash);
+}
+
+/** Espera de la confirmacion del lock. Mutable solo para las pruebas. */
+export const lockConfirmation = { polls: 15, intervalMs: 2000 };
+
+/**
+ * Confirma el lock con `getTransaction` del RPC, el mismo nodo que lo recibio,
+ * en lugar de Horizon. Agotar la espera NO es un fallo: la transaccion puede
+ * entrar despues, y el intento queda guardado para resolverse (WP2).
+ */
+async function confirmLockByRpc(
+  request: { log: { info: (...args: any[]) => void; [key: string]: any } },
+  txHash: string,
+): Promise<{ txHash: string }> {
+  for (let i = 0; i < lockConfirmation.polls; i++) {
+    await new Promise((r) => setTimeout(r, lockConfirmation.intervalMs));
+    let status: string;
+    try {
+      status = (await rpcRead(config.stellarRpcUrl, (s) => s.getTransaction(txHash), { retry: false })).status;
+    } catch {
+      continue; // RPC caido o lento: seguir esperando
+    }
+    if (status === 'SUCCESS') {
+      request.log.info({ tx_hash: txHash, category: 'stellar.tx' }, '[Stellar] Lock confirmed');
+      return { txHash };
+    }
+    if (status === 'FAILED') {
+      throw new UpstreamError('STELLAR_TRANSACTION_FAILED', 'La transacción de bloqueo falló en la blockchain.', `Lock transaction failed on-chain: ${txHash}`);
+    }
+    // NOT_FOUND: aun no entra en un ledger
+  }
+
+  throw new UpstreamError(
+    'STELLAR_LOCK_PENDING',
+    'Tu bloqueo se envió y la red aún no lo confirma. No lo vuelvas a firmar: revisa en un momento.',
+    `Lock tx ${txHash} not confirmed within ${(lockConfirmation.polls * lockConfirmation.intervalMs) / 1000}s`,
+    504,
   );
 }
 

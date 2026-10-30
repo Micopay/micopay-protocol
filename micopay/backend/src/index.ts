@@ -31,6 +31,7 @@ import { registerRequestId, toSupportCode } from './middleware/requestId.middlew
 import { createProductionListener } from './services/event-listener.service.js';
 import type { EscrowEventListener } from './services/event-listener.service.js';
 import { sweepPendingRefunds } from './services/trade.service.js';
+import { resolveSubmittedLocks } from './services/lockAttempt.service.js';
 import { startComplianceJob, stopComplianceJob } from './services/compliance.service.js';
 import { assertEscrowContractsOnNetwork } from './services/escrowNetworkCheck.service.js';
 
@@ -597,6 +598,16 @@ function startRefundSweep(): void {
   }
 
   refundSweepInterval = setInterval(async () => {
+    // WP2: primero los locks enviados sin confirmar. Uno que entro despues de
+    // cancelarse queda con `lock_tx_hash` y el sweep de abajo lo reembolsa.
+    try {
+      const { locked, cleared, pending } = await resolveSubmittedLocks();
+      if (locked > 0 || cleared > 0 || pending > 0) {
+        app.log.info({ locked, cleared, pending, category: 'lock-attempt' }, '[lock-attempt] Cycle complete');
+      }
+    } catch (err) {
+      app.log.error({ err, category: 'lock-attempt' }, '[lock-attempt] Cycle failed');
+    }
     try {
       const { swept, failed } = await sweepPendingRefunds({ log: app.log });
       if (swept > 0 || failed > 0) {

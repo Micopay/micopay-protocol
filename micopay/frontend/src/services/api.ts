@@ -436,7 +436,14 @@ export async function lockTrade(
       {},
       authHeaders(sellerToken),
   );
-  const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
+  const prepared = prepareRes.data as
+    | { mock: true }
+    | { xdr: string; network_passphrase: string }
+    | { status: TradeState; lock_tx_hash: string };
+  // Un lock anterior que tardo en confirmarse ya entro: no se firma otro.
+  if ('lock_tx_hash' in prepared) {
+    return { status: prepared.status, lock_tx_hash: prepared.lock_tx_hash };
+  }
   let signedXdr: string | undefined;
   if (!('mock' in prepared)) {
     await validatePreparedEscrowTx(prepared.xdr, prepared.network_passphrase, trade, 'lock');
