@@ -217,8 +217,20 @@ Nuevo servicio `services/escrowReconciliation.service.ts`, en un intervalo como 
 - Depósito: el receptor es el cliente; aplicar la misma comprobación antes de que el cliente entregue efectivo, en el punto del flujo que corresponda. Revisar ese flujo dentro de este WP.
 
 **Hueco de confianza en el depósito (encontrado al implementar WP1, 2026-10-29).** En el depósito el cliente entrega el efectivo mientras la fila está `locked`, y no queda constancia durable: `trade_cash_handoffs` solo existe en cashout. El agente revela con "confirmar efectivo" (`revealTrade`) y el cliente libera, pero si el agente no revela, al vencer puede reembolsarse. D2 no protege aquí, porque no hay constancia que bloquee el reembolso.
-- Propuesta: que el cliente registre "entregué efectivo" antes o al entregar. Ese registro bloquea el reembolso y el sweep igual que en D2 y manda el caso a soporte si el agente no revela.
-- Requiere una decisión de producto: quién declara la entrega y qué pasa con una declaración falsa.
+- **Decisión (2026-10-29, D4):** el depósito conserva su orden: el cliente paga primero y el agente confirma, como en cualquier compra. No se invierte el QR. Invertirlo haría que el agente confiara en un cliente anónimo, y en la práctica el agente pediría el efectivo antes de mostrarlo, con lo que el hueco volvería.
+- **Lo que se agrega, solo para el caso de problema:** en la pantalla del QR del cliente (`DepositQR.tsx`), mientras la fila está `locked`, un botón "Pagué y no me confirmaron". El flujo normal no gana ningún paso.
+- **Backend:** un reclamo durable `trade_cash_claims` (`trade_id`, `claimant_id`, `created_at`), que solo puede crear el buyer de un depósito `locked`. Mientras exista:
+  - `getRefundEligibility` responde `cash_claim_open`;
+  - `refundTrade` rechaza con `CASH_CLAIM_OPEN`;
+  - `sweepPendingRefunds` no toca la fila;
+  - se avisa al agente para que confirme, y el caso queda para soporte;
+  - si el agente revela después, el flujo sigue normal.
+- **Límite:** no impide que el agente llame `refund` directo al contrato con su llave. El reclamo deja a soporte la evidencia para suspenderlo. Cerrarlo en cadena es WP8.
+- **Reclamos falsos:** el agente honesto solo pierde tiempo (sus fondos quedan detenidos hasta que soporte decida). Soporte resuelve; reincidir suspende al cliente.
+- **Pruebas:**
+  - el reclamo bloquea `refundTrade` y el sweep;
+  - solo el buyer de un depósito `locked` puede crearlo;
+  - un reveal posterior no queda bloqueado por el reclamo.
 - Se trata junto con N3 porque es el mismo momento del flujo.
 
 **Pruebas:** buyer desautorizado, trustline de otro emisor y XLM insuficiente bloquean el escaneo; un buyer correcto pasa.
