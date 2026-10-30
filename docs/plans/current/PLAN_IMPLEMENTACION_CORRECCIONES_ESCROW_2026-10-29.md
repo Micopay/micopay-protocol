@@ -93,8 +93,24 @@ Estado (2026-10-29): implementado en 92651ac.
 
 ### 1c. Revisión de daños existentes (script de solo lectura)
 
-- [ ] Buscar filas `refunded` o `completed` cuyo evento de auditoría tenga `source: 'soroban_event'`. Para cada una, consultar `get_trade` en su propio contrato. Si allí sigue `Locked`, o el estado no coincide, es una posible víctima de H1: reportarla, no corregirla automáticamente.
-- [ ] Revisar `trade_cash_handoffs` sobre filas `refunded`.
+- [x] Buscar filas `refunded` o `completed` cuyo evento de auditoría tenga `source: 'soroban_event'`. Para cada una, consultar `get_trade` en su propio contrato. Si allí sigue `Locked`, o el estado no coincide, es una posible víctima de H1: reportarla, no corregirla automáticamente.
+- [x] Revisar `trade_cash_handoffs` sobre filas `refunded`.
+
+**Resultado (2026-10-29).** Consultas en una transacción `READ ONLY`, desde una tarea suelta de ECS (task definition 33), y `get_trade` en testnet:
+- **Sin daños de H1:**
+  - ninguna fila de `audit_log` tiene `source: 'soroban_event'`, ni hay filas en `event_cursor`; el listener nunca aplicó un evento;
+  - no hay filas `refunded`, ni constancias sobre filas `refunded` o `cancelled`, ni `contract_trade_id` duplicados.
+- **Configuración de producción** (sin secretos), igual a la probada en la validación de red:
+  - `ESCROW_CONTRACTS` USDC `CALS46…` y XLM `CCX5E4…`;
+  - legacy `CB4M…`;
+  - `EVENT_LISTENER_ENABLED=false`, TESTNET;
+  - `CASH_HANDOFF_MIN_MARGIN_MINUTES` sin definir (20 por defecto).
+- **Inventario de abiertas con lock:** 8 cashouts XLM (2 `locked` y 6 `revealing`), todos del contrato legacy (`escrow_contract_id` nulo) y vencidos entre el 5 y el 15 de septiembre.
+  - En cadena siguen `Locked` en `CB4M…`, con plazos de los ledgers 4524852 a 4685159 (el actual es 5461428). Base y cadena coinciden.
+  - Suman 29,267,855,289 stroops (2,926.7855289 XLM de testnet).
+  - Ninguno tiene constancia de efectivo, así que el vendedor puede reembolsarlos; el sweep no los toca porque no están `cancelled`.
+- **Otras 12 filas abiertas sin `lock_tx_hash`:** una por cada estado y flujo, creadas el 3 y el 4 de septiembre, sin contrato, sin `contract_trade_id` y sin `locked_at`. Son datos de prueba que nunca llegaron a la cadena.
+- 26 filas `pending` sin lock.
 
 **Pruebas:**
 - Dispatcher con dos contratos y el mismo `trade_id`: un refund de B no modifica A; un evento con `contractId` distinto del listener se descarta.
@@ -114,8 +130,8 @@ Avance (2026-10-29):
   - con `main` (55da2f3), A queda `refunded` y su propio release ya no la corrige;
   - con WP1, A sigue `revealing` y pasa a `completed` con su release; en cadena, A `Released` y B `Refunded`.
 - Pendiente:
-  - el despliegue;
-  - el script 1c, que necesita acceso a AWS y a la base.
+  - el despliegue.
+- Script 1c ejecutado contra producción (resultado arriba).
 
 ---
 
