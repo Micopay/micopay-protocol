@@ -41,7 +41,7 @@ Orden de despliegue: **WP0 → WP1 → WP2 → WP3 → WP4 → WP5 → WP6**. WP
 
 **Decisiones de producto** (Eric, 2026-10-29):
 - [x] **Margen mínimo en cadena para iniciar la entrega de efectivo: 20 minutos.** Configurable con `CASH_HANDOFF_MIN_MARGIN_MINUTES`.
-- [ ] **Margen mínimo para aceptar un lock:** cuánto debe faltar para `expires_at` de la solicitud. Se decide en WP3.
+- [x] **Margen mínimo para aceptar un lock: 30 minutos** antes de `expires_at` de la solicitud (Eric, 2026-10-30). Configurable con `LOCK_MIN_REQUEST_MARGIN_MINUTES`.
 - [x] **D1: se mantiene el contrato tal como está.** `release` sigue permitido después del plazo y compite con `refund`; no se adopta el corte de XRPL. Razón: en ambos flujos, quien libera (buyer) es quien ya entregó el efectivo, y el backend solo le entrega el secreto después de la constancia (cashout) o del reveal (depósito). Cortar la liberación tardía no protege al seller de nada (el buyer ya podía liberar desde el primer minuto) y deja sin salida al que pagó en efectivo. El riesgo residual se reduce con el margen de 20 min, la liberación inmediata tras el escaneo y D2.
 - [x] **D2: el backend nunca reembolsa por su cuenta una operación con constancia de efectivo.** Ni el botón de reembolso de la app (`refundTrade` y `getRefundEligibility`) ni el sweep. La operación pasa a soporte. No impide una llamada directa al contrato; eso se atiende con soporte y reputación. Se implementa en WP1 (1d).
 
@@ -168,6 +168,8 @@ Avance (2026-10-29):
 ---
 
 ## WP3: un solo plazo, el de la cadena (H2)
+
+**Estado (2026-10-30):** implementado en #473 (commit 97070ff), sin integrar ni desplegar. Diferencias con lo de abajo: no hay script de relleno; una fila sin `funds_timeout_ledger` lo lee de `get_trade` la primera vez que se pregunta por el reembolso, y lo guarda. Falta la etiqueta "aprox." en la app. Pruebas: `test:funds-deadline` (7 casos).
 
 - Persistir el vencimiento real de los fondos al confirmar el lock: columna `funds_timeout_ledger`, tomada del evento `locked` o de `get_trade`. Guardar también `funds_expires_at_estimate` solo para mostrar en la app, con la etiqueta "aprox.".
 - `expires_at` queda como **caducidad de la solicitud** (hasta cuándo se puede bloquear). Deja de usarse para decidir reembolsos.
