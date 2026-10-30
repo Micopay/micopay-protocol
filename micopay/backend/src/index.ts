@@ -32,6 +32,7 @@ import { createProductionListener } from './services/event-listener.service.js';
 import type { EscrowEventListener } from './services/event-listener.service.js';
 import { sweepPendingRefunds } from './services/trade.service.js';
 import { startComplianceJob, stopComplianceJob } from './services/compliance.service.js';
+import { assertEscrowContractsOnNetwork } from './services/escrowNetworkCheck.service.js';
 
 // Resolve the absolute path to the public/ directory next to src/
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -616,6 +617,8 @@ async function start() {
   try {
     // Validate config at startup. Will throw and crash if critical config is missing.
     validateConfig();
+    // WP1a: un contrato de otra red detiene el arranque antes de servir.
+    await assertEscrowContractsOnNetwork(app.log);
 
     // Ensure the schema exists before seeding/serving. Idempotent; only runs
     // against a real PostgreSQL connection (the in-memory store needs no migrations).

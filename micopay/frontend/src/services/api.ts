@@ -1159,7 +1159,9 @@ export interface RefundEligibility {
     | 'not_participant'
     | 'no_funds_locked'
     | 'not_expired_yet'
-    | 'already_settled';
+    | 'already_settled'
+    /** Ya hubo entrega de efectivo: el reembolso lo revisa soporte (D2). */
+    | 'cash_handoff_confirmed';
   expires_at: string;
   /** Hora del servidor: la cuenta atrás no depende del reloj del teléfono. */
   server_time: string;

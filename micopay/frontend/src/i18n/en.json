@@ -274,6 +274,8 @@
     "expired": "Expired",
     "releaseNoReceipt": "The release did not return a receipt. Try again.",
     "releaseFailed": "Could not release. Try again.",
+    "notCollectableTitle": "Do not hand over cash",
+    "notCollectableBody": "This trade can no longer be collected. If you already handed over cash, contact support.",
     "qrVerified": "QR verified",
     "tradeConfirmed": "Trade confirmed by the server",
     "platformFee": "Platform fee: ${{amount}} MXN",

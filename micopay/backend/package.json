@@ -38,6 +38,7 @@
     "test:kyc-ledger": "cross-env MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/kycVolumeLedger.test.ts",
     "test:initiator": "cross-env ALLOW_IN_MEMORY_DB=true MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/initiatorAttribution.test.ts",
     "test:trade-updates": "cross-env ALLOW_IN_MEMORY_DB=true MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/tradeUpdateNotification.test.ts",
+    "test:escrow-collectable": "node --import tsx src/tests/escrowCollectable.test.ts",
     "test:cash-handoff": "cross-env ALLOW_IN_MEMORY_DB=true MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/cashHandoff.test.ts",
     "test:demo-seed": "node --import tsx src/tests/demoSeedTrades.test.ts",
     "test:trade-asset": "cross-env ALLOW_IN_MEMORY_DB=true MOCK_STELLAR=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/tradeAsset.test.ts",
@@ -52,7 +53,8 @@
     "test:etherfuse-jwks": "node --import tsx src/tests/etherfuseJwks.test.ts",
     "test:etherfuse-v2-webhook": "node --import tsx src/tests/etherfuseV2WebhookSig.test.ts",
     "test:clabe": "cross-env ALLOW_IN_MEMORY_DB=true SECRET_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 node --import tsx src/tests/clabe.test.ts",
-    "test:stellar-dex": "node --import tsx src/tests/stellarDex.test.ts"
+    "test:stellar-dex": "node --import tsx src/tests/stellarDex.test.ts",
+    "test:escrow-network-check": "node --import tsx src/tests/escrowNetworkCheck.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^8.5.0",

@@ -1,6 +1,8 @@
 import pino from 'pino';
+import { createHash } from 'crypto';
 import type { RawContractEvent } from './event-dispatcher.service.js';
 import { rpcRead } from '../lib/stellarRpc.js';
+import { config } from '../config.js';
 
 const logger = pino({ name: 'event-listener' });
 
@@ -54,10 +56,12 @@ export interface EventListenerDeps {
   saveCursor: (ledger: number) => Promise<void>;
   /**
    * Atomically mark an event as processed.
+   * `eventKey` is `{contractId}:{eventId}`: the RPC event id alone does not say
+   * which contract it came from.
    * Returns true  → event was already processed (skip dispatch).
    * Returns false → event is new (dispatch and record).
    */
-  isDuplicate: (eventId: string) => Promise<boolean>;
+  isDuplicate: (eventKey: string) => Promise<boolean>;
   /** Apply a new deduplicated event to the database. */
   dispatch: (event: RawContractEvent) => Promise<void>;
 }
@@ -188,9 +192,20 @@ export class EscrowEventListener {
 
     // Process events in ledger order. O(n) where n = new events in this batch.
     for (const event of batch.events) {
-      const duplicate = await this.deps.isDuplicate(event.id);
+      // La consulta ya filtra por este contrato; aun asi, un evento que diga
+      // venir de otro no se aplica. Y si el RPC no lo trae, es el de este
+      // listener: el dispatcher necesita saberlo para no cruzar contratos.
+      if (event.contractId && event.contractId !== this.contractId) {
+        logger.warn(
+          { listener_contract: this.contractId, event_contract: event.contractId, event_id: event.id, category: 'event-listener' },
+          '[event-listener] Event from another contract — skipped',
+        );
+        continue;
+      }
+      const scoped: RawContractEvent = { ...event, contractId: this.contractId };
+      const duplicate = await this.deps.isDuplicate(`${this.contractId}:${event.id}`);
       if (duplicate) continue;
-      await this.deps.dispatch(event);
+      await this.deps.dispatch(scoped);
     }
 
     // Advance cursor regardless of whether events were found.
@@ -222,7 +237,16 @@ export function createProductionListener(
       limit: EVENTS_PAGE_LIMIT,
     }), { retry: false });
     return {
-      events: res.events as unknown as RawContractEvent[],
+      events: res.events.map((e: import('@stellar/stellar-sdk').rpc.Api.EventResponse) => ({
+        id: e.id,
+        // El SDK lo entrega como `Contract`; el dispatcher compara cadenas.
+        contractId: e.contractId?.contractId(),
+        inSuccessfulContractCall: e.inSuccessfulContractCall,
+        topic: e.topic,
+        value: e.value,
+        txHash: e.txHash,
+        ledger: e.ledger,
+      })),
       latestLedger: res.latestLedger,
     };
   };
@@ -232,11 +256,12 @@ export function createProductionListener(
     return info.sequence;
   };
 
-  const isDuplicate = async (eventId: string): Promise<boolean> => {
+  const isDuplicate = async (eventKey: string): Promise<boolean> => {
     const db = (await import('../db/schema.js')).default;
-    // Reuse processed_tx for event deduplication.
-    // Key format: "evt:{eventId}" — max ~36 chars, within VARCHAR(64).
-    const key = `evt:${eventId}`;
+    // Reuse processed_tx for event deduplication. La clave lleva red, contrato
+    // y evento; resumida con sha256 para caber en VARCHAR(64) ("evt:" + 43).
+    const digest = createHash('sha256').update(`${config.stellarNetwork}:${eventKey}`).digest('base64url');
+    const key = `evt:${digest}`;
     const inserted = await db.insertUnique(
       `INSERT INTO processed_tx (tx_hash, source_route, user_id, processed_at)
        VALUES ($1, 'event-listener', $2, NOW())

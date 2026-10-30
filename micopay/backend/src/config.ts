@@ -233,6 +233,12 @@ export const config = {
   eventListenerPollMs: parseInt(process.env.EVENT_LISTENER_POLL_MS || '5000', 10),
   eventListenerHealthStaleMs: parseInt(process.env.EVENT_LISTENER_HEALTH_STALE_MS || '30000', 10),
 
+  // Tiempo minimo que debe quedarle al escrow EN CADENA para registrar una
+  // entrega de efectivo. Decision de producto del 2026-10-29 (WP0 del plan de
+  // correcciones del escrow): sin ese margen, la liberacion puede no alcanzar
+  // a entrar antes de que `refund` sea elegible.
+  cashHandoffMinMarginMinutes: parseInt(process.env.CASH_HANDOFF_MIN_MARGIN_MINUTES || '20', 10),
+
   // Rate Limiting
   clientErrorRateLimitWindowMs: parseInt(process.env.CLIENT_ERROR_RATE_LIMIT_WINDOW_MS || '60000', 10),
   clientErrorRateLimitMax: parseInt(process.env.CLIENT_ERROR_RATE_LIMIT_MAX || '20', 10),
