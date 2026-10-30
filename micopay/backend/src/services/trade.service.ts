@@ -15,7 +15,7 @@ import {
   stroopsAtFrozenRate,
   type SupportedAsset,
 } from './assetRate.service.js';
-import { StrKey } from '@stellar/stellar-sdk';
+import { StrKey, TransactionBuilder, Networks } from '@stellar/stellar-sdk';
 import { config } from '../config.js';
 import pino from 'pino';
 import { generateTradeSecret, encryptSecret, decryptSecret } from './secret.service.js';
@@ -29,6 +29,7 @@ import {
 import { escrowContractForTrade, escrowContractSupportsDecline } from './escrowContract.js';
 import { assertReceiverCanReceive } from './receiverReadiness.service.js';
 import { assertEscrowCollectable } from './escrowCollectable.service.js';
+import { fundsRefundTiming, tradeDeadline } from './fundsDeadline.service.js';
 import { AppError, NotFoundError, ForbiddenError, ConflictError, BadRequestError, AuthError, ValidationError, TradeStateError, MerchantLimitError, KycMonthlyCapExceededError } from '../utils/errors.js';
 import {
   getTradeAuditTrail as getTradeAuditTrailRows,
@@ -759,6 +760,31 @@ function assertUsableStellarAddress(address: string | null | undefined, whose: s
   );
 }
 
+/** Hash del lock firmado, o null si el XDR no se puede leer (lo rechaza `submitLockTx`). */
+function hashOfSignedLock(signedXdr: string): string | null {
+  try {
+    const passphrase = config.stellarNetwork === 'TESTNET' ? Networks.TESTNET : Networks.PUBLIC;
+    return TransactionBuilder.fromXDR(signedXdr, passphrase).hash().toString('hex');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * WP3: `expires_at` es la caducidad de la SOLICITUD. Bloquear a minutos de que
+ * venza no deja tiempo para encontrarse y entregar el efectivo, asi que se
+ * exige un margen (decision de producto del 2026-10-30: 30 minutos).
+ */
+function assertLockRequestMargin(trade: { id: string; expires_at: string }): void {
+  const marginMs = config.lockMinRequestMarginMinutes * 60 * 1000;
+  if (new Date(trade.expires_at).getTime() - Date.now() >= marginMs) return;
+  throw new TradeStateError(
+    'TRADE_EXPIRING',
+    `A esta solicitud le quedan menos de ${config.lockMinRequestMarginMinutes} minutos. Crea una nueva.`,
+    `Trade ${trade.id} expires at ${trade.expires_at}; lock needs ${config.lockMinRequestMarginMinutes} min of margin`,
+  );
+}
+
 export async function prepareLockTrade(
   request: FastifyRequest,
   tradeId: string,
@@ -774,6 +800,7 @@ export async function prepareLockTrade(
   assertLockableEscrowAsset(trade);
 
   if (config.mockStellar) {
+    assertLockRequestMargin(trade);
     return { mock: true as const };
   }
 
@@ -799,6 +826,8 @@ export async function prepareLockTrade(
     }
     if (resolution === 'pending') throw new LockConfirmingError(trade.lock_submitted_tx_hash);
   }
+
+  assertLockRequestMargin(trade);
 
   const contractId = escrowContractForTrade(trade);
   let prepared: { xdr: string; networkPassphrase: string };
@@ -914,6 +943,10 @@ export async function lockTrade(
         }
       }
 
+      // Un reenvio del mismo XDR ya guardado se deja pasar: su primer envio
+      // paso el margen y puede haber entrado.
+      if (priorHash !== hashOfSignedLock(signedXdr)) assertLockRequestMargin(trade);
+
       let recordedHash: string | null = null;
       try {
         const result = await submitLockTx({
@@ -945,6 +978,7 @@ export async function lockTrade(
         throw err;
       }
     } else {
+      assertLockRequestMargin(trade);
       // Mock mode — generate placeholder hashes
       const verified = await verifyLockOnChain(
         request,
@@ -1036,8 +1070,10 @@ export async function getTradeSecret(request: FastifyRequest, tradeId: string, u
     throw new TradeStateError('INVALID_STATE', `El intercambio no está en estado de revelación (actual: ${trade.status})`, `Trade is ${trade.status}, must be revealing`);
   }
 
-  // Check not expired
-  if (new Date(trade.expires_at) < new Date()) {
+  // Check not expired. WP3: con fondos bloqueados, el plazo es el de la
+  // cadena (estimado); `expires_at` solo limita hasta cuando se puede bloquear.
+  const deadline = tradeDeadline(trade);
+  if (deadline < new Date()) {
     throw new TradeStateError('TRADE_EXPIRED', 'El intercambio ha expirado', 'Trade has expired');
   }
 
@@ -1047,7 +1083,7 @@ export async function getTradeSecret(request: FastifyRequest, tradeId: string, u
   const claimToken = randomBytes(32).toString('hex');
   const tokenExpiresAt = new Date(Math.min(
     Date.now() + CLAIM_TOKEN_TTL_MINUTES * 60 * 1000,
-    new Date(trade.expires_at).getTime(),
+    deadline.getTime(),
   ));
 
   await db.execute(
@@ -1577,7 +1613,7 @@ export async function cancelTrade(
       // WP2: un lock enviado y sin confirmar tambien puede tener fondos; si
       // entra, `markLockConfirmed` lo registra y el sweep lo reembolsa.
       refund_expected: Boolean(lockTx || trade.lock_submitted_tx_hash),
-      refund_available_at: lockTx ? trade.expires_at : null,
+      refund_available_at: lockTx ? tradeDeadline(trade).toISOString() : null,
       lock_tx_hash: lockTx,
       decline_available: Boolean(lockTx)
         && trade.buyer_id === userId
@@ -1749,11 +1785,20 @@ export interface RefundEligibility {
     | 'no_funds_locked'
     | 'not_expired_yet'
     | 'already_settled'
-    | 'cash_handoff_confirmed';
+    | 'cash_handoff_confirmed'
+    /** WP3: no se pudo leer el plazo en cadena; nunca se toma por vencido. */
+    | 'unverifiable';
+  /** Caducidad de la solicitud. */
   expires_at: string;
+  /**
+   * WP3: desde cuando se estima que el contrato acepta el reembolso. Con lock,
+   * sale del ledger del contrato; sin lock, es `expires_at`. Aproximado: el
+   * que decide es el ledger.
+   */
+  refund_available_at: string;
   /** Hora del servidor, para que el cliente pinte la cuenta atras sin usar la suya. */
   server_time: string;
-  /** Segundos que faltan; 0 si ya vencio. */
+  /** Segundos que faltan para `refund_available_at`; 0 si ya vencio. */
   seconds_remaining: number;
 }
 
@@ -1765,14 +1810,15 @@ export async function getRefundEligibility(
   if (!trade) throw new NotFoundError('TRADE_NOT_FOUND', 'El intercambio no existe', 'Trade not found');
 
   const now = new Date();
-  const expiresAt = new Date(trade.expires_at);
-  const secondsRemaining = Math.max(0, Math.ceil((expiresAt.getTime() - now.getTime()) / 1000));
+  const secondsUntil = (at: Date) => Math.max(0, Math.ceil((at.getTime() - now.getTime()) / 1000));
+  const fallback = tradeDeadline(trade);
 
   const base = {
     trade_id: trade.id,
     expires_at: trade.expires_at,
+    refund_available_at: fallback.toISOString(),
     server_time: now.toISOString(),
-    seconds_remaining: secondsRemaining,
+    seconds_remaining: secondsUntil(fallback),
   };
 
   // Mismo orden de comprobaciones que `refundTrade`, para que esta respuesta
@@ -1789,11 +1835,27 @@ export async function getRefundEligibility(
   if (await getCashHandoff(tradeId)) {
     return { ...base, eligible: false, reason: 'cash_handoff_confirmed' };
   }
-  if (secondsRemaining > 0) {
-    return { ...base, eligible: false, reason: 'not_expired_yet' };
+
+  // WP3: decide el ledger del contrato, no `expires_at`.
+  let timing;
+  try {
+    timing = await fundsRefundTiming(trade, now);
+  } catch (err) {
+    if (err instanceof AppError && err.code === 'ESCROW_UNVERIFIABLE') {
+      return { ...base, eligible: false, reason: 'unverifiable' };
+    }
+    throw err;
+  }
+  const withTiming = {
+    ...base,
+    refund_available_at: timing.availableAt.toISOString(),
+    seconds_remaining: timing.reached ? 0 : Math.max(1, secondsUntil(timing.availableAt)),
+  };
+  if (!timing.reached) {
+    return { ...withTiming, eligible: false, reason: 'not_expired_yet' };
   }
 
-  return { ...base, eligible: true, reason: 'eligible' };
+  return { ...withTiming, eligible: true, reason: 'eligible' };
 }
 
 export async function refundTrade(
@@ -1822,14 +1884,6 @@ export async function refundTrade(
       throw new ConflictError('No hay fondos en cadena para reembolsar en este intercambio');
     }
 
-    if (new Date(trade.expires_at) > new Date()) {
-      throw new TradeStateError(
-        'TRADE_NOT_EXPIRED',
-        'El intercambio aún no ha expirado. Espera a que venza el tiempo.',
-        `Trade ${tradeId} has not expired yet (expires at ${trade.expires_at})`
-      );
-    }
-
     // 'cancelled' is deliberately allowed through here: cancelling a
     // locked/revealing trade (see cancelTrade below) no longer implies the
     // on-chain funds have been settled — it only stops the app-level flow.
@@ -1849,6 +1903,18 @@ export async function refundTrade(
         'CASH_HANDOFF_CONFIRMED',
         'La entrega de efectivo ya fue confirmada. Este intercambio lo revisa soporte.',
         `Trade ${tradeId} has a confirmed cash handoff; refund goes to support`,
+      );
+    }
+
+    // WP3: el contrato solo acepta `refund` cuando su ledger llega a
+    // `timeout_ledger`, que corre desde el lock. Antes se miraba `expires_at`
+    // (desde la creacion) y el reembolso fallaba en cadena.
+    const timing = await fundsRefundTiming(trade);
+    if (!timing.reached) {
+      throw new TradeStateError(
+        'TRADE_NOT_EXPIRED',
+        'El intercambio aún no ha expirado. Espera a que venza el tiempo.',
+        `Trade ${tradeId}: on-chain timeout not reached (est. ${timing.availableAt.toISOString()})`,
       );
     }
 
@@ -1886,7 +1952,11 @@ export async function sweepPendingRefunds(
   const candidates = await db.getMany<{
     id: string; status: string; secret_hash: string; seller_id: string; expires_at: string;
   }>(
-    `SELECT id, status, secret_hash, seller_id, expires_at, asset_code, escrow_contract_id FROM trades
+    // `expires_at < NOW()` sigue siendo un filtro previo valido: el lock ocurre
+    // despues de crear la solicitud y dura lo mismo que ella, asi que el plazo
+    // en cadena nunca vence antes. Lo decide `fundsRefundTiming` abajo.
+    `SELECT id, status, secret_hash, seller_id, expires_at, asset_code, escrow_contract_id,
+            lock_tx_hash, funds_timeout_ledger, funds_expires_at_estimate FROM trades
      WHERE status = 'cancelled'
        AND lock_tx_hash IS NOT NULL
        AND release_tx_hash IS NULL
@@ -1912,6 +1982,10 @@ export async function sweepPendingRefunds(
       continue;
     }
     try {
+      // WP3: el ledger del contrato decide. Un RPC caido deja la fila para el
+      // siguiente ciclo; nunca se toma como "ya vencio".
+      const timing = await fundsRefundTiming(trade);
+      if (!timing.reached) continue;
       // Attribute the audit trail to the seller (the actual funds recipient)
       // since there's no HTTP-authenticated actor for a background sweep.
       await executeRefundOnChain(request, trade.id, trade, trade.seller_id, {
@@ -2129,11 +2203,13 @@ export async function merchantConfirmScan(
   // 5. Expirada. Se comprueba DESPUES de la reanudacion para no dejar
   //    atrapado a un proveedor que ya entrego efectivo y cuya operacion
   //    expiro mientras reintentaba la firma.
-  if (!existingHandoff && new Date(trade.expires_at) < new Date()) {
+  //    WP3: el plazo efectivo es el de los fondos; el margen exacto en cadena
+  //    lo comprueba `assertEscrowCollectable` en el paso 6b.
+  if (!existingHandoff && tradeDeadline(trade) < new Date()) {
     throw new TradeStateError(
       'TRADE_EXPIRED',
       'Este intercambio ha expirado',
-      `Trade ${tradeId} expired at ${trade.expires_at}`,
+      `Trade ${tradeId} expired at ${tradeDeadline(trade).toISOString()}`,
     );
   }
 
@@ -2235,8 +2311,9 @@ async function buildConfirmResult(
     platform_fee_mxn: Number(trade.platform_fee_mxn ?? 0),
     client_handle: client?.username ?? 'Usuario MicoPay',
     provider_fee_mxn: Number(trade.provider_fee_mxn ?? 0),
-    expires_at: trade.expires_at,
-    expired: new Date(trade.expires_at) < new Date(),
+    // WP3: lo que ve el agente es el plazo de los fondos, no el de la solicitud.
+    expires_at: tradeDeadline(trade).toISOString(),
+    expired: tradeDeadline(trade) < new Date(),
     created_at: trade.created_at,
     lock_tx_hash: trade.lock_tx_hash ?? null,
     release_tx_hash: trade.release_tx_hash ?? null,

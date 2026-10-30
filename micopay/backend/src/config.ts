@@ -238,6 +238,10 @@ export const config = {
   // correcciones del escrow): sin ese margen, la liberacion puede no alcanzar
   // a entrar antes de que `refund` sea elegible.
   cashHandoffMinMarginMinutes: parseInt(process.env.CASH_HANDOFF_MIN_MARGIN_MINUTES || '20', 10),
+  // Tiempo minimo que debe quedarle a la SOLICITUD (`expires_at`) para aceptar
+  // un lock. Decision de producto del 2026-10-30 (WP3): bloquear a minutos de
+  // que venza la solicitud no deja tiempo para encontrarse y entregar.
+  lockMinRequestMarginMinutes: parseInt(process.env.LOCK_MIN_REQUEST_MARGIN_MINUTES || '30', 10),
 
   // Rate Limiting
   clientErrorRateLimitWindowMs: parseInt(process.env.CLIENT_ERROR_RATE_LIMIT_WINDOW_MS || '60000', 10),
