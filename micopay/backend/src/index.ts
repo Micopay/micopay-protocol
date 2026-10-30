@@ -227,6 +227,7 @@ app.get('/health', async (_request, reply) => {
     eventListenerHealthy: eventListeners.length > 0 && eventListeners.every((listener) => listener.isHealthy()),
     eventListenerState: eventListenerState(),
     eventListenerContracts: eventListeners.map((listener) => listener.contractId),
+    eventListenerLagLedgers: eventListeners.length > 0 ? Math.max(...eventListeners.map((listener) => listener.lagLedgers())) : null,
     configCheck: {
       hasPlatformKey: !!config.platformSecretKey,
       hasContractId: !!config.escrowContractId,
