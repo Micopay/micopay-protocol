@@ -129,8 +129,15 @@ Avance (2026-10-29):
 - H1 reproducido en testnet con eventos reales (`docs/audits/evidence/h1-testnet-2026-10-29.ts`). Se bloqueó el mismo `secret_hash` en el contrato XLM (A) y en el legacy (B) y se reembolsó B:
   - con `main` (55da2f3), A queda `refunded` y su propio release ya no la corrige;
   - con WP1, A sigue `revealing` y pasa a `completed` con su release; en cadena, A `Released` y B `Refunded`.
-- Pendiente:
-  - el despliegue.
+- **Desplegado el 2026-10-29:**
+  - #471 se integró a `main` como 8fbfc17;
+  - imagen `micopay-backend:escrow-wp1-20261029-215721`, construida desde un worktree limpio de 8fbfc17;
+  - task definition 34 (igual a la 33, salvo la imagen).
+- **El servicio quedó estable:**
+  - el log muestra `Escrow contracts verified on network` con los 3 contratos;
+  - `/health` está `ok` con la base conectada y el listener sigue `disabled`.
+- **La imagen anterior** (`dex-20261027-213504`, rev 33) se construyó desde `e0c5bb7` con cambios sin commitear en `bank-withdraw`, `rampWithdraw.service` y `stellarDex.service`. Se comprobó que esos tres compilados son idénticos en `main` antes de reemplazarla.
+- **Sin tareas en ejecución por unos 7 minutos** (22:03 a 22:10 hora de CDMX), por la configuración 100/0 del servicio.
 - Script 1c ejecutado contra producción (resultado arriba).
 
 ---
