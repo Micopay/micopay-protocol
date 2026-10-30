@@ -52,6 +52,40 @@ Decidido por Eric el 2026-10-29.
   - Si se aprueba, reemplaza la detección no documentada de `window.stellar`.
 - **Stellar Wallets Kit** (`@creit.tech/stellar-wallets-kit`): una sola interfaz para Varial, Lobstr, WalletConnect, xBull y otras.
 
+### WalletConnect amplía su soporte a Stellar (2026-10-29)
+
+- **Qué se anunció:**
+  - Stellar entra a la red de WalletConnect (más de 700 billeteras, según WalletConnect).
+  - Socios de lanzamiento: Fireblocks y Utila (custodios para empresas), Arculus (billetera física) y LOBSTR.
+  - WalletConnect Pay funciona en Stellar: pagos de la billetera del cliente directo al comercio, sin custodia. LOBSTR es la primera billetera; el primer comercio es PTIX (Bermudas), en el segundo trimestre de 2027.
+- **WalletConnect y Reown:** WalletConnect es el protocolo y la red de servidores que solo pasan mensajes cifrados (no ven llaves ni fondos). Reown es el nombre que la empresa adoptó en 2024 para sus librerías:
+  - AppKit, para apps;
+  - WalletKit, para billeteras.
+
+  Requiere registrar el proyecto y obtener un ID de proyecto (hay plan gratuito; los límites no se revisaron).
+- **Por qué importa:**
+  - una sola integración llega a todas las billeteras de Stellar que lo implementen;
+  - un agente grande puede poner fondos en el escrow desde su custodio (Fireblocks, Utila), con sus propios controles;
+  - el super nodo puede operar en la PC y firmar en el celular.
+- **Multifirma:** cada sesión de WalletConnect firma con una sola llave. Las firmas las junta la app (una sesión por firmante) o la billetera:
+  - LOBSTR Vault: la transacción se manda a su API para las firmas adicionales;
+  - Fireblocks y Utila: las aprobaciones son internas; **no se confirmó** cómo las exponen por WalletConnect.
+
+  El lock de MicoPay vence 180 s después de prepararse (`setTimeout(180)`). Para un agente con multifirma hacen falta más validez y un estado de "firma pendiente". WP2 ya evita que un envío lento se pierda.
+- **Soroban:**
+  - `stellar_signXDR` firma la transacción completa. Funciona hoy y es lo que usa MicoPay: el vendedor firma el lock como cuenta de origen.
+  - `stellar_signAuthEntry` firma solo una autorización. Sirve cuando otra cuenta paga la comisión. **Inestable:** la especificación sigue en revisión, y reown-com/appkit #5829 reporta que el formato no coincide con SEP-43. MicoPay no debe depender de él todavía, así que no puede pagar la comisión por el usuario vía WalletConnect.
+- **Billeteras de Stellar con WalletConnect confirmadas:** LOBSTR, Varial (celular), Fireblocks, Utila y Arculus. No confirmado: xBull, Albedo y otras (Stellar Wallets Kit las conecta directo).
+
+### Arquitectura decidida (2026-10-30)
+
+- **MicoPay web** siempre es la app que pide la firma ("¿con qué billetera firmas?"), con Stellar Wallets Kit (WalletConnect más las conexiones directas). La APK de MicoPay aparece como una billetera más en esa lista.
+- **La APK:**
+  - sus propios flujos los sigue firmando directo con su llave (Keystore con huella), sin WalletConnect;
+  - para el super nodo (web en la PC, firma en el celular), primero usa las solicitudes de firma delegada que ya existen (`/sign-requests`, aviso push y pantalla `SignatureApproval`);
+  - más adelante, WalletKit, para que la APK firme también en otras apps de Stellar (Blend, Soroswap).
+- **Dentro de la APK** también se puede firmar con una billetera externa del mismo teléfono: se abre LOBSTR, se firma y se vuelve a MicoPay.
+
 ## Cómo encaja MicoPay hoy
 
 Todas las firmas del frontend pasan por tres funciones de `micopay/frontend/src/lib/keystore.ts`:
@@ -99,3 +133,7 @@ Requisitos previos: WP2-WP8 del plan de correcciones del escrow y salida a mainn
 - Extensión firmadora de Lobstr: https://lobstr.co/signer-extension/
 - Lobstr en Google Play: https://play.google.com/store/apps/details?id=com.lobstr.client
 - Stellar Wallets Kit: https://stellarwalletskit.dev/
+- Stellar, anuncio de WalletConnect: https://stellar.org/press/walletconnect-expands-stellar-network-support-and-partnership-with-penrose-partners-to-bring-walletconnect-pay-to-bermuda-in-support-of-the-government-s-onchain-economy-vision
+- WalletConnect, Stellar: https://docs.walletconnect.network/wallet-sdk/chain-support/stellar.md
+- reown-com/appkit #5829: https://github.com/reown-com/appkit/issues/5829
+- LOBSTR Vault: https://github.com/Lobstrco/Vault-Android
