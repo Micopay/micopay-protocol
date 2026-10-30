@@ -2,6 +2,8 @@
 
 **A mobile wallet connecting Stellar payments with cash in Mexico.**
 
+> **Status:** Active development. Stellar Testnet; mainnet deployment pending.
+
 MicoPay helps people send and receive digital assets, find nearby cash providers,
 and coordinate cash deposits and withdrawals in Mexican pesos. The app combines
 a Stellar wallet, a provider map, chat, and Soroban escrow.
@@ -76,6 +78,14 @@ Feature visibility is defined in
 | `VITE_ENABLE_DEFI_TRADING` | Internal CETES and Blend screens. |
 | `VITE_ENABLE_SPEI_RAMP` | Etherfuse SPEI ramp screens. |
 | `VITE_ENABLE_BANK_WITHDRAW` | Bank withdrawal flow. |
+
+## Custody model
+
+MicoPay does not take custody of user funds in the wallet or the cash network.
+
+- **Keys:** each user's key is generated and stored on their device, and users sign their own transactions.
+- **Funds:** during a cash exchange, the asset sits in the Soroban escrow. The contract can only pay the buyer and the platform fee on release, or return the funds to the seller. Its admin has no function to withdraw them.
+- **Backend:** it stores the secret of each escrow encrypted, to coordinate the QR step. The contract still decides where funds can go, but the exchange flow depends on the backend being available.
 
 ## Repository structure
 
