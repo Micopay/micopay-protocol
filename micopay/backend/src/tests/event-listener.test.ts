@@ -60,7 +60,8 @@ function makeDeps(overrides: Partial<EventListenerDeps> = {}): EventListenerDeps
     currentLedger: async () => 1000,
     loadCursor: async () => 100,
     saveCursor: async () => {},
-    isDuplicate: async () => false,
+    isProcessed: async () => false,
+    markProcessed: async () => {},
     dispatch: async () => {},
     ...overrides,
   };
@@ -175,34 +176,202 @@ async function testReconnectAfterError() {
   console.log('  ✓ Listener retries after fetch error with backoff');
 }
 
-async function testCursorResetOnOldestLedgerError() {
+async function testGapOnOldestLedgerError() {
   let savedCursor = 12345; // simulate a very old cursor
-  let resetCalled = false;
+  const gaps: Array<[number, number]> = [];
+  let fetches = 0;
 
   const deps = makeDeps({
     loadCursor: async () => savedCursor,
-    saveCursor: async (ledger) => {
-      savedCursor = ledger;
-      if (ledger === 0) resetCalled = true;
-    },
+    saveCursor: async (ledger) => { savedCursor = ledger; },
     fetchEvents: async () => {
-      throw new Error('start is before oldest ledger');
+      fetches++;
+      if (fetches === 1) throw new Error('start is before oldest ledger');
+      return { events: [], latestLedger: savedCursor };
     },
     currentLedger: async () => 99999,
+    onGap: async (from, to) => { gaps.push([from, to]); },
   });
 
   const listener = new EscrowEventListener('C_TEST', deps, {
-    pollIntervalMs: 50,
+    pollIntervalMs: 20,
     backoffBaseMs: 10,
     backoffMaxMs: 20,
   });
 
   await listener.start();
-  await delay(150);
+  await delay(100);
   listener.stop();
 
-  ok(resetCalled, 'Cursor should be reset to 0 when RPC window exceeded');
-  console.log('  ✓ Cursor resets to 0 on oldest-ledger error');
+  strictEqual(savedCursor, 99999, 'Cursor jumps to the current ledger, never to 0');
+  strictEqual(gaps.length, 1, 'The gap is reported exactly once');
+  strictEqual(gaps[0][0], 12346, 'Gap starts right after the old cursor');
+  strictEqual(gaps[0][1], 99999, 'Gap ends at the current ledger');
+  console.log('  ✓ Cursor outside the RPC window: reports the exact gap and jumps to current');
+}
+
+// ── WP4: eventos durables y completos ─────────────────────────────────────
+
+function ledgerEvent(id: string, ledger: number): RawContractEvent {
+  return { ...makeEvent(id, 'released', Buffer.alloc(32)), ledger };
+}
+
+async function testFailedDispatchIsRetriedOnce() {
+  const processed = new Set<string>();
+  const applied: string[] = [];
+  let cursor = 100;
+  let failNext = true;
+  const events = [ledgerEvent('a', 105), ledgerEvent('b', 107), ledgerEvent('c', 110)];
+
+  const deps = makeDeps({
+    loadCursor: async () => cursor,
+    saveCursor: async (ledger) => { cursor = ledger; },
+    fetchEvents: async (start) => ({
+      events: events.filter((e) => e.ledger >= start),
+      latestLedger: 120,
+    }),
+    isProcessed: async (key) => processed.has(key),
+    markProcessed: async (key) => { processed.add(key); },
+    dispatch: async (event) => {
+      if (event.id === 'b' && failNext) {
+        failNext = false;
+        throw new Error('db down');
+      }
+      applied.push(event.id);
+    },
+  });
+
+  const listener = new EscrowEventListener(TEST_CONTRACT, deps, {
+    pollIntervalMs: 10,
+    backoffBaseMs: 1,
+    backoffMaxMs: 2,
+  });
+  await listener.start();
+  await delay(120);
+  listener.stop();
+
+  strictEqual(applied.join(','), 'a,b,c', 'Each event is applied exactly once, in order');
+  strictEqual(cursor, 120, 'Cursor reaches the latest ledger after the retry');
+  console.log('  ✓ A failed dispatch stops the batch and is retried, without duplicates');
+}
+
+async function testFailedDispatchHoldsTheCursor() {
+  let cursor = 100;
+  const saved: number[] = [];
+  const deps = makeDeps({
+    loadCursor: async () => cursor,
+    saveCursor: async (ledger) => { saved.push(ledger); cursor = ledger; },
+    fetchEvents: async () => ({ events: [ledgerEvent('x', 105)], latestLedger: 120 }),
+    dispatch: async () => { throw new Error('db down'); },
+  });
+
+  const listener = new EscrowEventListener(TEST_CONTRACT, deps, {
+    pollIntervalMs: 1_000,
+    backoffBaseMs: 1_000,
+    backoffMaxMs: 1_000,
+  });
+  await listener.start();
+  await delay(50);
+  listener.stop();
+
+  strictEqual(saved.join(','), '104', 'Cursor stops right before the failed event');
+  ok(listener.lagLedgers() > 0, 'The lag is visible');
+  ok(!saved.includes(120), 'Cursor never skips past a failed event');
+  console.log('  ✓ The cursor never advances past an event that failed');
+}
+
+async function testAllPagesAreProcessed() {
+  const total = 250;
+  const all = Array.from({ length: total }, (_, i) => ledgerEvent(`p${i}`, 101 + Math.floor(i / 10)));
+  const applied: string[] = [];
+  const cursors: Array<string | undefined> = [];
+  let cursor = 100;
+
+  const deps = makeDeps({
+    loadCursor: async () => cursor,
+    saveCursor: async (ledger) => { cursor = ledger; },
+    fetchEvents: async (_start, page) => {
+      cursors.push(page);
+      const offset = page ? Number(page) : 0;
+      const slice = all.slice(offset, offset + 200);
+      const next = offset + 200;
+      return { events: slice, latestLedger: 500, ...(next < total ? { nextCursor: String(next) } : {}) };
+    },
+    dispatch: async (event) => { applied.push(event.id); },
+  });
+
+  const listener = new EscrowEventListener(TEST_CONTRACT, deps, { pollIntervalMs: 10_000 });
+  await listener.start();
+  await delay(60);
+  listener.stop();
+
+  strictEqual(applied.length, total, 'All 250 events are applied, not just the first 200');
+  strictEqual(applied[0], 'p0');
+  strictEqual(applied[total - 1], `p${total - 1}`, 'In order');
+  strictEqual(cursors[1], '200', 'The second page asks for the RPC cursor');
+  strictEqual(cursor, 500, 'Cursor advances only after the last page');
+  console.log('  ✓ 250 events over two pages: all applied, in order');
+}
+
+async function testPageCapResumesOnNextPoll() {
+  let cursor = 100;
+  let polls = 0;
+  const applied = new Set<string>();
+  const processed = new Set<string>();
+
+  const deps = makeDeps({
+    loadCursor: async () => cursor,
+    saveCursor: async (ledger) => { cursor = ledger; },
+    fetchEvents: async (start, page) => {
+      if (!page) polls++;
+      const offset = page ? Number(page) : 0;
+      const event = ledgerEvent(`e${offset}`, Math.max(start, 101 + offset));
+      if (offset >= 30) return { events: [event], latestLedger: 500 };
+      return { events: [event], latestLedger: 500, nextCursor: String(offset + 1) };
+    },
+    isProcessed: async (key) => processed.has(key),
+    markProcessed: async (key) => { processed.add(key); },
+    dispatch: async (event) => { applied.add(event.id); },
+  });
+
+  const listener = new EscrowEventListener(TEST_CONTRACT, deps, {
+    pollIntervalMs: 20,
+    backoffBaseMs: 5,
+    backoffMaxMs: 10,
+  });
+  await listener.start();
+  await delay(30);
+  listener.stop();
+
+  ok(cursor < 500, `Cursor stays behind the unread pages after the cap (got ${cursor})`);
+  ok(polls >= 1, 'The poll ran');
+  console.log('  ✓ At the page cap the cursor stays behind what was not read');
+}
+
+async function testFailureOnSecondPageKeepsItsLedger() {
+  let cursor = 100;
+  const firstPage = [ledgerEvent('p1', 105)];
+  const secondPage = [ledgerEvent('p2', 130)];
+  const deps = makeDeps({
+    loadCursor: async () => cursor,
+    saveCursor: async (ledger) => { cursor = ledger; },
+    fetchEvents: async (_start, page) => (page
+      ? { events: secondPage, latestLedger: 500 }
+      : { events: firstPage, latestLedger: 500, nextCursor: 'next' }),
+    dispatch: async (event) => { if (event.id === 'p2') throw new Error('db down'); },
+  });
+
+  const listener = new EscrowEventListener(TEST_CONTRACT, deps, {
+    pollIntervalMs: 1_000,
+    backoffBaseMs: 1_000,
+    backoffMaxMs: 1_000,
+  });
+  await listener.start();
+  await delay(50);
+  listener.stop();
+
+  strictEqual(cursor, 129, 'Cursor stops right before the failed event of page 2');
+  console.log('  ✓ A failure on a later page keeps the cursor just before it');
 }
 
 // ── EscrowEventListener — deduplication ──────────────────────────────────
@@ -218,11 +387,8 @@ async function testDuplicateEventSkipped() {
       events: [sameEvent, sameEvent], // same event delivered twice in one batch
       latestLedger: 102,
     }),
-    isDuplicate: async (id) => {
-      if (processedIds.has(id)) return true;
-      processedIds.add(id);
-      return false;
-    },
+    isProcessed: async (id) => processedIds.has(id),
+    markProcessed: async (id) => { processedIds.add(id); },
     dispatch: async () => { dispatchCount++; },
   });
 
@@ -249,11 +415,8 @@ async function testDuplicateAcrossPolls() {
         latestLedger: 100 + pollCount,
       };
     },
-    isDuplicate: async (id) => {
-      if (processedIds.has(id)) return true;
-      processedIds.add(id);
-      return false;
-    },
+    isProcessed: async (id) => processedIds.has(id),
+    markProcessed: async (id) => { processedIds.add(id); },
     dispatch: async () => { dispatchCount++; },
   });
 
@@ -733,7 +896,7 @@ async function testListenerSkipsEventFromAnotherContract() {
       served = true;
       return { events: [foreign, missing, own], latestLedger: 102 };
     },
-    isDuplicate: async (key) => { keys.push(key); return false; },
+    isProcessed: async (key) => { keys.push(key); return false; },
     dispatch: async (event) => { dispatched.push(event); },
   });
   const listener = new EscrowEventListener(TEST_CONTRACT, deps, { pollIntervalMs: 10_000 });
@@ -754,7 +917,8 @@ const SUITES = [
   { name: 'jitteredBackoff', tests: [testBackoffRange, testBackoffGrowth] },
   { name: 'isBeforeOldestLedgerError', tests: [testBeforeOldestLedgerError] },
   { name: 'EscrowEventListener — health', tests: [testHealthWhenStopped, testHealthAfterSuccessfulPoll, testHealthAfterStale] },
-  { name: 'EscrowEventListener — reconnect', tests: [testReconnectAfterError, testCursorResetOnOldestLedgerError] },
+  { name: 'EscrowEventListener — reconnect', tests: [testReconnectAfterError, testGapOnOldestLedgerError] },
+  { name: 'WP4 — durable and complete events', tests: [testFailedDispatchIsRetriedOnce, testFailedDispatchHoldsTheCursor, testAllPagesAreProcessed, testPageCapResumesOnNextPoll, testFailureOnSecondPageKeepsItsLedger] },
   { name: 'EscrowEventListener — deduplication', tests: [testDuplicateEventSkipped, testDuplicateAcrossPolls] },
   { name: 'parseEscrowEvent', tests: [testParseReleasedEvent, testParseRefundedEvent, testParseDeclinedEvent, testParseLockedEvent, testParseUnknownEventReturnsNull, testParseMalformedValueReturnsNull, testParseWrongTradeIdLength] },
   { name: 'H1 — contract + trade_id identity', tests: [testRefundFromOtherContractDoesNotTouchTrade, testRefundFromOwnContractStillSettles, testSameTradeIdInTwoContractsOnlyMatchingRowChanges, testParseRejectsEventWithoutContract, testParseRejectsFailedCallEvent, testListenerSkipsEventFromAnotherContract] },
