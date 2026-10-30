@@ -144,6 +144,8 @@ Avance (2026-10-29):
 
 ## WP2: lock enviado nunca huérfano (N1)
 
+**Estado (2026-10-30):** implementado en #472 (rama `fix/escrow-wp2-lock-huerfano`, commit 180e26d), sin integrar ni desplegar. Además de lo listado abajo: el ciclo `resolveSubmittedLocks` corre junto al sweep (cada 5 min) y, pasada la ventana de validez del XDR (180 s + 60 s), decide con `get_trade`. Pruebas: `test:lock-attempt` (8 casos).
+
 - `submitLockTx` (`stellar.service.ts:219`): calcular `tx.hash()` del XDR firmado **antes** de enviarlo y devolverlo a `lockTrade`.
 - `lockTrade`: persistir `lock_submitted_tx_hash` y `lock_submitted_at` antes de `sendTransaction`. La fila sigue `pending`; la app muestra "confirmando bloqueo".
 - Distinguir los resultados de `sendTransaction`:
