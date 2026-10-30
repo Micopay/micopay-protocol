@@ -59,16 +59,15 @@ Criterio de salida: configuración de producción documentada y decisiones regis
 
 ### 1a. Evento ligado a su contrato
 
-- `event-listener.service.ts`: pasar al dispatcher el `contractId` del listener y el `contractId` que trae el evento del RPC; descartar y registrar el evento si no coinciden.
-- `event-dispatcher.service.ts`: agregar `contractId` a `RawContractEvent` y a `ParsedEscrowEvent`.
-- `handleReleased` y `handleRefunded`: buscar con `WHERE contract_trade_id = $1 AND escrow_contract_id = $2`. Sin coincidencia exacta, no tocar nada y registrar `untracked_or_foreign_event` con el contrato.
-- Filas legacy con `escrow_contract_id` nulo: resolver su contrato con la misma regla de `escrowContractForTrade` (`services/escrowContract.ts`) en la migración, no en caliente.
-- Clave de deduplicación: `evt:{red}:{contrato}:{eventId}`. Hoy es `evt:{eventId}`.
-- Al arrancar, validar que cada contrato configurado pertenece a `STELLAR_NETWORK`; si no, fallar el arranque.
+Estado (2026-10-29): implementado en la rama `fix/escrow-wp1-identidad-eventos` (92651ac), sin desplegar.
 
-**Migración** `sql/migrations/2026110xxxxxxx_escrow_event_identity.up.sql` (con su `.down.sql`):
-- Rellenar `escrow_contract_id` en filas con `lock_tx_hash` y contrato nulo.
-- Índice único parcial `(escrow_contract_id, contract_trade_id) WHERE contract_trade_id IS NOT NULL`. Antes de crearlo, una consulta debe confirmar que no hay duplicados; si los hay, se detiene la migración y se revisan a mano.
+- [x] `event-listener.service.ts`: descarta y registra los eventos cuyo `contractId` (del RPC) no es el del listener, y pasa al dispatcher el contrato del listener.
+- [x] Se descartan los eventos con `inSuccessfulContractCall === false` (el RPC los devuelve también para llamadas fallidas).
+- [x] `event-dispatcher.service.ts`: `contractId` en `RawContractEvent` y `ParsedEscrowEvent`; sin contrato, el evento no se procesa.
+- [x] `handleReleased` y `handleRefunded`: buscan por `contract_trade_id` y se quedan solo con la fila cuyo contrato coincide. Sin coincidencia, no tocan nada y registran el contrato; con más de una, registran el error y no aplican nada.
+- [x] Filas legacy con `escrow_contract_id` nulo: se resuelven **en código** con `escrowContractForTrade` (`services/escrowContract.ts`), la misma regla que usa el resto del backend. Se descartó la migración de relleno y el índice único: el filtro por contrato ya evita el cruce, y un índice sobre filas rellenadas a mano añade riesgo sin cerrar nada más. Se reconsidera si 1c encuentra duplicados.
+- [x] Clave de deduplicación: `evt:` + sha256(`{red}:{contrato}:{eventId}`) en base64url. Antes era `evt:{eventId}`.
+- [ ] Al arrancar, validar que cada contrato configurado pertenece a `STELLAR_NETWORK`; si no, fallar el arranque. Pendiente.
 
 ### 1b. Escaneo solo sobre operaciones cobrables
 
@@ -81,12 +80,16 @@ Criterio de salida: configuración de producción documentada y decisiones regis
 - La relectura de una entrega ya confirmada (`existingHandoff`) se mantiene, pero en una fila terminal debe mostrar el estado real, no la tarjeta de liberar.
 - `frontend/src/pages/MerchantInbox.tsx` (`TradeConfirmationCard`): si `status` no es `revealing` ni `completed`, mostrar un estado de alto ("No entregues efectivo") en lugar de la confirmación normal. El backend ya rechaza; esto es defensa en la interfaz.
 
+Estado (2026-10-29): implementado en 92651ac. La lectura en cadena está en `services/escrowCollectable.service.ts` y `readEscrowTrade` (`stellar.service.ts`). Solo `TradeNotFound` (#3) cuenta como "no existe"; cualquier otro error, un registro archivado o el RPC caído dan `ESCROW_UNVERIFIABLE` (503) y no se registra la entrega. El margen usa 5 s por ledger.
+
 ### 1d. Sin reembolso automático con constancia de efectivo (D2)
 
 - `getRefundEligibility`: si existe `trade_cash_handoffs`, devolver `eligible: false` con la razón `cash_handoff_confirmed`.
 - `refundTrade`: rechazar con `CASH_HANDOFF_CONFIRMED` y un mensaje que dirija a soporte.
 - `sweepPendingRefunds`: excluir las filas con constancia (hoy no deberían llegar, porque `cancelTrade` ya las bloquea, pero se cubre por si acaso).
 - Prueba: una operación vencida con constancia no es elegible, `refundTrade` falla y el sweep no la toca.
+
+Estado (2026-10-29): implementado en 92651ac.
 
 ### 1c. Revisión de daños existentes (script de solo lectura)
 
@@ -101,6 +104,17 @@ Criterio de salida: configuración de producción documentada y decisiones regis
 - Testnet: reproducir el ataque de H1 con el contrato XLM y el legacy y comprobar que A no cambia.
 
 Criterio de salida: todas las pruebas en verde, desplegado en testnet, script 1c ejecutado contra producción y su resultado documentado.
+
+Avance (2026-10-29):
+- Hecho:
+  - pruebas del backend en verde: event-listener 30/30 (5 de las nuevas fallan contra el código anterior), cashHandoff, refund, refundEligibility, escrowCollectable (8) y el resto de suites;
+  - `npm run build` limpio;
+  - frontend 464/464, con `merchantInboxNotCollectable.test.tsx`, cuyo caso `refunded` falla contra la tarjeta anterior.
+- Pendiente:
+  - validación de red al arrancar;
+  - la prueba de H1 en testnet;
+  - el despliegue;
+  - el script 1c, que necesita acceso a AWS y a la base.
 
 ---
 
@@ -201,6 +215,11 @@ Nuevo servicio `services/escrowReconciliation.service.ts`, en un intervalo como 
 - Comprobar: cuenta existente, trustline del emisor exacto, `is_authorized` (Horizon) y XLM gastable para la comisión de `release`.
 - Llamarla **también** en `merchantConfirmScan` (cashout: el buyer es el agente), antes de registrar la entrega. Si el resultado no es concluyente, no hay entrega.
 - Depósito: el receptor es el cliente; aplicar la misma comprobación antes de que el cliente entregue efectivo, en el punto del flujo que corresponda. Revisar ese flujo dentro de este WP.
+
+**Hueco de confianza en el depósito (encontrado al implementar WP1, 2026-10-29).** En el depósito el cliente entrega el efectivo mientras la fila está `locked`, y no queda constancia durable: `trade_cash_handoffs` solo existe en cashout. El agente revela con "confirmar efectivo" (`revealTrade`) y el cliente libera, pero si el agente no revela, al vencer puede reembolsarse. D2 no protege aquí, porque no hay constancia que bloquee el reembolso.
+- Propuesta: que el cliente registre "entregué efectivo" antes o al entregar. Ese registro bloquea el reembolso y el sweep igual que en D2 y manda el caso a soporte si el agente no revela.
+- Requiere una decisión de producto: quién declara la entrega y qué pasa con una declaración falsa.
+- Se trata junto con N3 porque es el mismo momento del flujo.
 
 **Pruebas:** buyer desautorizado, trustline de otro emisor y XLM insuficiente bloquean el escaneo; un buyer correcto pasa.
 
