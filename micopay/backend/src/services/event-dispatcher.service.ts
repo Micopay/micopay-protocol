@@ -38,7 +38,7 @@ export interface ParsedEscrowEvent {
   txHash: string;
   ledger: number;
   /** Solo en `locked`: lo que el contrato bloqueo, para compararlo con la fila. */
-  lock?: { seller: string; buyer: string; amount: bigint };
+  lock?: { seller: string; buyer: string; amount: bigint; timeoutLedger?: number };
 }
 
 // ── Parsing ───────────────────────────────────────────────────────────────
@@ -87,6 +87,7 @@ export function parseEscrowEvent(
     if (eventType === 'locked') {
       if (values.length < 4) return null;
       lock = { seller: String(values[1]), buyer: String(values[2]), amount: BigInt(values[3] as bigint) };
+      if (values.length >= 5) lock.timeoutLedger = Number(values[4]);
     }
   } catch {
     return null;
@@ -242,7 +243,15 @@ async function handleLocked(ev: ParsedEscrowEvent): Promise<void> {
     return;
   }
 
-  const result = await markLockConfirmed({ tradeId: trade.id, lockTxHash: ev.txHash, actor: ACTOR_SYSTEM, source: 'event' });
+  const result = await markLockConfirmed({
+    tradeId: trade.id,
+    lockTxHash: ev.txHash,
+    actor: ACTOR_SYSTEM,
+    source: 'event',
+    // El ledger del evento como referencia: si el listener va atrasado, la
+    // estimacion sale tarde, nunca temprano.
+    fundsTimeout: ev.lock.timeoutLedger != null ? { timeoutLedger: ev.lock.timeoutLedger, latestLedger: ev.ledger } : undefined,
+  });
   logger.info(
     { trade_id: trade.id, result, ledger: ev.ledger, tx_hash: ev.txHash, category: 'event-dispatcher' },
     '[dispatcher] Lock confirmed via on-chain locked event',

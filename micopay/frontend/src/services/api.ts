@@ -1168,8 +1168,13 @@ export interface RefundEligibility {
     | 'not_expired_yet'
     | 'already_settled'
     /** Ya hubo entrega de efectivo: el reembolso lo revisa soporte (D2). */
-    | 'cash_handoff_confirmed';
+    | 'cash_handoff_confirmed'
+    /** No se pudo leer el plazo en cadena; se reintenta, nunca se da por vencido. */
+    | 'unverifiable';
+  /** Caducidad de la solicitud. */
   expires_at: string;
+  /** Desde cuándo se estima que se puede reembolsar (plazo del contrato, aprox.). */
+  refund_available_at?: string;
   /** Hora del servidor: la cuenta atrás no depende del reloj del teléfono. */
   server_time: string;
   seconds_remaining: number;

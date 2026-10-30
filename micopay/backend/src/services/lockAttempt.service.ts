@@ -24,6 +24,7 @@ import { rpcRead } from '../lib/stellarRpc.js';
 import { CircuitOpenError } from '../lib/circuitBreaker.js';
 import { readEscrowTrade } from './stellar.service.js';
 import { escrowContractForTrade } from './escrowContract.js';
+import { captureFundsTimeout } from './fundsDeadline.service.js';
 import { sendTradeUpdateNotification } from './push.service.js';
 import { AppError, ConflictError } from '../utils/errors.js';
 
@@ -134,6 +135,8 @@ export async function markLockConfirmed(params: {
   /** De donde salio la confirmacion: 'http', 'rpc', 'get_trade' o 'event'. */
   source: string;
   requestId?: string | null;
+  /** WP3: plazo en cadena ya conocido (evento o `get_trade`); si falta, se lee. */
+  fundsTimeout?: { timeoutLedger: number; latestLedger: number };
 }): Promise<'locked' | 'cancelled' | 'noop'> {
   const { tradeId, lockTxHash, actor, source } = params;
   const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
@@ -212,6 +215,9 @@ export async function markLockConfirmed(params: {
       confirmed_by: source,
     },
   });
+
+  // WP3: el plazo de los fondos corre desde ESTE lock, no desde la creacion.
+  await captureFundsTimeout(trade, params.fundsTimeout);
 
   if (toState === 'locked') {
     // Bloquea el vendedor; el aviso es para el comprador.
@@ -292,7 +298,13 @@ export async function resolveSubmittedLock(trade: TradeRow, actor = 'system:lock
 
   // El escrow coincide y solo pudo crearlo un lock firmado por este vendedor
   // con estos argumentos; el hash guardado es el de ese envio.
-  await markLockConfirmed({ tradeId: trade.id, lockTxHash: txHash, actor, source: 'get_trade' });
+  await markLockConfirmed({
+    tradeId: trade.id,
+    lockTxHash: txHash,
+    actor,
+    source: 'get_trade',
+    fundsTimeout: { timeoutLedger: onChain.trade.timeoutLedger, latestLedger: onChain.latestLedger },
+  });
   return 'locked';
 }
 
