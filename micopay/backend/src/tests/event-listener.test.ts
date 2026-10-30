@@ -33,6 +33,11 @@ import db from '../db/schema.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
+/** Contrato de las filas de prueba: el dispatcher solo aplica eventos suyos. */
+const TEST_CONTRACT = 'C_TEST';
+/** Otra instancia del escrow, con el mismo trade_id posible (H1). */
+const OTHER_CONTRACT = 'C_OTHER';
+
 function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -40,6 +45,7 @@ function delay(ms: number): Promise<void> {
 function makeEvent(id: string, topic0: string, valueBytes: Buffer): RawContractEvent {
   return {
     id,
+    contractId: TEST_CONTRACT,
     topic: [topic0],       // tests provide pre-stringified topics
     value: [valueBytes],   // tests provide pre-parsed values
     txHash: `txhash_${id}`,
@@ -274,6 +280,7 @@ async function testParseReleasedEvent() {
 
   const event: RawContractEvent = {
     id: 'evt-parse-1',
+    contractId: TEST_CONTRACT,
     topic: ['released'],
     value: [tradeId, 'GSELLER...', 'GBUYER...'],
     txHash: 'tx_abc',
@@ -296,6 +303,7 @@ async function testParseRefundedEvent() {
 
   const event: RawContractEvent = {
     id: 'evt-parse-2',
+    contractId: TEST_CONTRACT,
     topic: ['refunded'],
     value: [tradeId, 'GSELLER...'], // refunded only has trade_id + seller
     txHash: 'tx_def',
@@ -315,6 +323,7 @@ async function testParseDeclinedEvent() {
   const mockParser = (v: unknown) => v;
   const parsed = parseEscrowEvent({
     id: 'evt-parse-declined',
+    contractId: TEST_CONTRACT,
     topic: ['declined'],
     value: [tradeId, 'GSELLER...'],
     txHash: 'tx_declined',
@@ -333,6 +342,7 @@ async function testParseLockedEvent() {
 
   const event: RawContractEvent = {
     id: 'evt-parse-3',
+    contractId: TEST_CONTRACT,
     topic: ['locked'],
     value: [tradeId, 'GSELLER...', 'GBUYER...', BigInt(1000), 9999],
     txHash: 'tx_ghi',
@@ -396,6 +406,7 @@ async function insertTestTrade(overrides: {
   id: string;
   status: string;
   contractTradeId: string;
+  escrowContractId?: string;
 }): Promise<void> {
   // CASH-1: fixtures model a deposit, so the escrow seller is also the
   // provider. Hoisted because provider_id must equal seller_id — two separate
@@ -419,8 +430,8 @@ async function insertTestTrade(overrides: {
   await db.execute(
     `INSERT INTO trades
        (id, status, contract_trade_id, seller_id, buyer_id, flow, provider_id,
-        amount_mxn, amount_stroops, platform_fee_mxn, secret_hash)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        amount_mxn, amount_stroops, platform_fee_mxn, secret_hash, escrow_contract_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
     [
       overrides.id,
       overrides.status,
@@ -433,6 +444,7 @@ async function insertTestTrade(overrides: {
       '1000000000',   // amount_stroops
       1,              // platform_fee_mxn
       'testhash',     // secret_hash
+      overrides.escrowContractId ?? TEST_CONTRACT,
     ],
   );
 }
@@ -445,6 +457,7 @@ async function testApplyReleasedIdempotentOnCompleted() {
 
   const parsed: ParsedEscrowEvent = {
     type: 'released',
+    contractId: TEST_CONTRACT,
     contractTradeIdHex: contractTradeId,
     eventId: 'evt-idem-1',
     txHash: 'tx_idem_1',
@@ -471,6 +484,7 @@ async function testApplyRefundedSettlesCancelledTrade() {
 
   const parsed: ParsedEscrowEvent = {
     type: 'refunded',
+    contractId: TEST_CONTRACT,
     contractTradeIdHex: contractTradeId,
     eventId: 'evt-idem-2',
     txHash: 'tx_idem_2',
@@ -518,7 +532,7 @@ async function testRefundedEventIsIdempotent() {
 
   await insertTestTrade({ id: tradeId, status: 'locked', contractTradeId });
   const ev: ParsedEscrowEvent = {
-    type: 'refunded', contractTradeIdHex: contractTradeId, eventId: 'evt-rep', txHash: 'tx_rep_1', ledger: 600,
+    type: 'refunded', contractId: TEST_CONTRACT, contractTradeIdHex: contractTradeId, eventId: 'evt-rep', txHash: 'tx_rep_1', ledger: 600,
   };
   await applyEscrowEvent(ev);
   await applyEscrowEvent({ ...ev, txHash: 'tx_rep_2' });
@@ -538,6 +552,7 @@ async function testApplyReleasedUpdatesActiveTradeToCompleted() {
 
   const parsed: ParsedEscrowEvent = {
     type: 'released',
+    contractId: TEST_CONTRACT,
     contractTradeIdHex: contractTradeId,
     eventId: 'evt-idem-3',
     txHash: 'tx_idem_3',
@@ -559,6 +574,7 @@ async function testApplyRefundedUpdatesActiveTradeToRefunded() {
 
   const parsed: ParsedEscrowEvent = {
     type: 'refunded',
+    contractId: TEST_CONTRACT,
     contractTradeIdHex: contractTradeId,
     eventId: 'evt-idem-4',
     txHash: 'tx_idem_4',
@@ -584,6 +600,7 @@ async function testApplyDeclinedUpdatesCancelledTradeToRefunded() {
 
   await applyEscrowEvent({
     type: 'declined',
+    contractId: TEST_CONTRACT,
     contractTradeIdHex: contractTradeId,
     eventId: 'evt-declined-1',
     txHash: 'tx_declined_1',
@@ -597,6 +614,140 @@ async function testApplyDeclinedUpdatesCancelledTradeToRefunded() {
   console.log('  ✓ applyEscrowEvent(declined) confirms the early return');
 }
 
+// ── H1 · identidad contrato + trade_id ────────────────────────────────────
+//
+// El trade_id es sha256(secret_hash) y el hash es publico. Un atacante puede
+// repetirlo en OTRA instancia del escrow, reembolsarla al instante y emitir un
+// `refunded` autentico con el mismo trade_id. Ese evento no debe tocar la
+// operacion del primer contrato.
+
+async function testRefundFromOtherContractDoesNotTouchTrade() {
+  const contractTradeId = '1'.repeat(64);
+  const tradeId = randomUUID();
+  await insertTestTrade({ id: tradeId, status: 'revealing', contractTradeId });
+  await db.execute(
+    `UPDATE trades SET secret_enc = $2, secret_nonce = $3 WHERE id = $1`,
+    [tradeId, 'enc_keep', 'nonce_keep'],
+  );
+
+  for (const type of ['refunded', 'declined', 'released'] as const) {
+    await applyEscrowEvent({
+      type,
+      contractId: OTHER_CONTRACT,
+      contractTradeIdHex: contractTradeId,
+      eventId: `evt-foreign-${type}`,
+      txHash: `tx_foreign_${type}`,
+      ledger: 900,
+    });
+  }
+
+  const after = await db.getOne<{ status: string; secret_enc: string | null; release_tx_hash: string | null }>(
+    'SELECT status, secret_enc, release_tx_hash FROM trades WHERE id = $1',
+    [tradeId],
+  );
+  strictEqual(after?.status, 'revealing', 'A foreign contract event must not settle the trade');
+  strictEqual(after?.secret_enc, 'enc_keep', 'A foreign contract event must not wipe the secret');
+  strictEqual(after?.release_tx_hash ?? null, null, 'A foreign contract event must not record a settlement');
+  console.log('  ✓ refunded/declined/released from another contract leave the trade untouched');
+}
+
+async function testRefundFromOwnContractStillSettles() {
+  const contractTradeId = '2'.repeat(64);
+  const tradeId = randomUUID();
+  await insertTestTrade({ id: tradeId, status: 'locked', contractTradeId });
+
+  await applyEscrowEvent({
+    type: 'refunded',
+    contractId: TEST_CONTRACT,
+    contractTradeIdHex: contractTradeId,
+    eventId: 'evt-own-refund',
+    txHash: 'tx_own_refund',
+    ledger: 901,
+  });
+
+  const after = await db.getOne<{ status: string }>('SELECT status FROM trades WHERE id = $1', [tradeId]);
+  strictEqual(after?.status, 'refunded', 'The contract that holds the trade still settles it');
+  console.log('  ✓ refunded from the trade contract still settles it');
+}
+
+async function testSameTradeIdInTwoContractsOnlyMatchingRowChanges() {
+  const contractTradeId = '3'.repeat(64);
+  const tradeA = randomUUID();
+  const tradeB = randomUUID();
+  await insertTestTrade({ id: tradeA, status: 'revealing', contractTradeId, escrowContractId: TEST_CONTRACT });
+  await insertTestTrade({ id: tradeB, status: 'locked', contractTradeId, escrowContractId: OTHER_CONTRACT });
+
+  await applyEscrowEvent({
+    type: 'refunded',
+    contractId: OTHER_CONTRACT,
+    contractTradeIdHex: contractTradeId,
+    eventId: 'evt-b-refund',
+    txHash: 'tx_b_refund',
+    ledger: 902,
+  });
+
+  const a = await db.getOne<{ status: string }>('SELECT status FROM trades WHERE id = $1', [tradeA]);
+  const b = await db.getOne<{ status: string }>('SELECT status FROM trades WHERE id = $1', [tradeB]);
+  strictEqual(a?.status, 'revealing', 'Trade in contract A is untouched');
+  strictEqual(b?.status, 'refunded', 'Trade in contract B is settled');
+  console.log('  ✓ with the same trade_id in two contracts, only the emitting contract row changes');
+}
+
+async function testParseRejectsEventWithoutContract() {
+  const parsed = parseEscrowEvent({
+    id: 'evt-no-contract',
+    topic: ['refunded'],
+    value: [Buffer.from('4'.repeat(64), 'hex'), 'GSELLER...'],
+    txHash: 'tx_no_contract',
+    ledger: 903,
+  }, (v: unknown) => v);
+  strictEqual(parsed, null, 'An event without its contract cannot be applied');
+  console.log('  ✓ parseEscrowEvent rejects an event without its contract');
+}
+
+async function testParseRejectsFailedCallEvent() {
+  const parsed = parseEscrowEvent({
+    id: 'evt-failed-call',
+    contractId: TEST_CONTRACT,
+    inSuccessfulContractCall: false,
+    topic: ['released'],
+    value: [Buffer.from('5'.repeat(64), 'hex'), 'GSELLER...', 'GBUYER...'],
+    txHash: 'tx_failed_call',
+    ledger: 904,
+  }, (v: unknown) => v);
+  strictEqual(parsed, null, 'An event from a failed contract call is not a settlement');
+  console.log('  ✓ parseEscrowEvent rejects an event from a failed contract call');
+}
+
+async function testListenerSkipsEventFromAnotherContract() {
+  const dispatched: RawContractEvent[] = [];
+  const keys: string[] = [];
+  const foreign = { ...makeEvent('evt-l-foreign', 'refunded', Buffer.alloc(32)), contractId: OTHER_CONTRACT };
+  const missing = { ...makeEvent('evt-l-missing', 'refunded', Buffer.alloc(32)), contractId: undefined };
+  const own = makeEvent('evt-l-own', 'refunded', Buffer.alloc(32));
+  let served = false;
+
+  const deps = makeDeps({
+    fetchEvents: async (): Promise<EventBatch> => {
+      if (served) return { events: [], latestLedger: 102 };
+      served = true;
+      return { events: [foreign, missing, own], latestLedger: 102 };
+    },
+    isDuplicate: async (key) => { keys.push(key); return false; },
+    dispatch: async (event) => { dispatched.push(event); },
+  });
+  const listener = new EscrowEventListener(TEST_CONTRACT, deps, { pollIntervalMs: 10_000 });
+  await listener.start();
+  await delay(50);
+  listener.stop();
+
+  strictEqual(dispatched.length, 2, 'Only events of this listener contract are dispatched');
+  ok(dispatched.every((e) => e.contractId === TEST_CONTRACT), 'Dispatched events carry the listener contract');
+  ok(!dispatched.some((e) => e.id === 'evt-l-foreign'), 'The foreign event is not dispatched');
+  ok(keys.every((k) => k.startsWith(`${TEST_CONTRACT}:`)), 'Dedup key includes the contract');
+  console.log('  ✓ listener skips events from another contract and scopes the rest to its own');
+}
+
 // ── Runner ────────────────────────────────────────────────────────────────
 
 const SUITES = [
@@ -606,6 +757,7 @@ const SUITES = [
   { name: 'EscrowEventListener — reconnect', tests: [testReconnectAfterError, testCursorResetOnOldestLedgerError] },
   { name: 'EscrowEventListener — deduplication', tests: [testDuplicateEventSkipped, testDuplicateAcrossPolls] },
   { name: 'parseEscrowEvent', tests: [testParseReleasedEvent, testParseRefundedEvent, testParseDeclinedEvent, testParseLockedEvent, testParseUnknownEventReturnsNull, testParseMalformedValueReturnsNull, testParseWrongTradeIdLength] },
+  { name: 'H1 — contract + trade_id identity', tests: [testRefundFromOtherContractDoesNotTouchTrade, testRefundFromOwnContractStillSettles, testSameTradeIdInTwoContractsOnlyMatchingRowChanges, testParseRejectsEventWithoutContract, testParseRejectsFailedCallEvent, testListenerSkipsEventFromAnotherContract] },
   { name: 'applyEscrowEvent — idempotency', tests: [testApplyReleasedIdempotentOnCompleted, testApplyRefundedSettlesCancelledTrade, testLateRefundedEventKeepsRefundedTrade, testRefundedEventIsIdempotent, testApplyReleasedUpdatesActiveTradeToCompleted, testApplyRefundedUpdatesActiveTradeToRefunded, testApplyDeclinedUpdatesCancelledTradeToRefunded] },
 ];
 

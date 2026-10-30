@@ -24,6 +24,7 @@ import type { FastifyRequest } from 'fastify';
 import { prepareLockTx, submitLockTx, prepareReleaseTx, submitReleaseTx, prepareDeclineTx, submitDeclineTx, callRefundOnChain, verifyLockOnChain, assertNotReplayed } from './stellar.service.js';
 import { escrowContractForTrade, escrowContractSupportsDecline } from './escrowContract.js';
 import { assertReceiverCanReceive } from './receiverReadiness.service.js';
+import { assertEscrowCollectable } from './escrowCollectable.service.js';
 import { AppError, NotFoundError, ForbiddenError, ConflictError, BadRequestError, AuthError, ValidationError, TradeStateError, MerchantLimitError, KycMonthlyCapExceededError } from '../utils/errors.js';
 import {
   getTradeAuditTrail as getTradeAuditTrailRows,
@@ -1672,7 +1673,8 @@ export interface RefundEligibility {
     | 'not_participant'
     | 'no_funds_locked'
     | 'not_expired_yet'
-    | 'already_settled';
+    | 'already_settled'
+    | 'cash_handoff_confirmed';
   expires_at: string;
   /** Hora del servidor, para que el cliente pinte la cuenta atras sin usar la suya. */
   server_time: string;
@@ -1708,6 +1710,9 @@ export async function getRefundEligibility(
   }
   if (['completed', 'refunded'].includes(trade.status)) {
     return { ...base, eligible: false, reason: 'already_settled' };
+  }
+  if (await getCashHandoff(tradeId)) {
+    return { ...base, eligible: false, reason: 'cash_handoff_confirmed' };
   }
   if (secondsRemaining > 0) {
     return { ...base, eligible: false, reason: 'not_expired_yet' };
@@ -1757,6 +1762,19 @@ export async function refundTrade(
     // settled) are terminal on-chain states that make a refund() call moot.
     if (['completed', 'refunded'].includes(trade.status)) {
       throw new ConflictError(`No se puede reembolsar un intercambio en estado ${trade.status}`);
+    }
+
+    // D2 (decision de producto 2026-10-29): con la entrega de efectivo
+    // confirmada, quien bloqueo la cripto ya recibio el efectivo. MicoPay no le
+    // devuelve tambien la cripto por su cuenta; el caso va a soporte. El
+    // contrato sigue aceptando un refund directo: esto no lo impide, solo
+    // evita que la app lo ofrezca.
+    if (await getCashHandoff(tradeId)) {
+      throw new ConflictError(
+        'CASH_HANDOFF_CONFIRMED',
+        'La entrega de efectivo ya fue confirmada. Este intercambio lo revisa soporte.',
+        `Trade ${tradeId} has a confirmed cash handoff; refund goes to support`,
+      );
     }
 
     return await executeRefundOnChain(request, tradeId, trade, userId);
@@ -1809,6 +1827,15 @@ export async function sweepPendingRefunds(
     // The contract itself would reject an early call (TimeoutNotReached),
     // but failing fast here avoids a wasted RPC round-trip either way.
     if (new Date(trade.expires_at) > new Date()) continue;
+    // D2: `cancelTrade` ya impide cancelar con entrega confirmada, asi que no
+    // deberia llegar ninguna; si llega, no se reembolsa sola.
+    if (await getCashHandoff(trade.id)) {
+      logger.warn(
+        { trade_id: trade.id, category: 'trade.lifecycle' },
+        '[refund-sweep] Cancelled trade has a confirmed cash handoff — left for support',
+      );
+      continue;
+    }
     try {
       // Attribute the audit trail to the seller (the actual funds recipient)
       // since there's no HTTP-authenticated actor for a background sweep.
@@ -2051,6 +2078,21 @@ export async function merchantConfirmScan(
     );
     return buildConfirmResult(trade, existingHandoff, true);
   }
+
+  // 6b. Solo una operacion cobrable registra una entrega (N2/H1 de la
+  //     auditoria del escrow 2026-10-29). Antes solo se rechazaba
+  //     `cancelled`: una fila `refunded` con un QR vigente registraba la
+  //     entrega y el agente daba efectivo que ya no iba a poder cobrar. Antes
+  //     de gastar el QR se confirma EN CADENA que el escrow sigue bloqueado,
+  //     es de esta operacion y le queda margen.
+  if (trade.status !== 'revealing') {
+    throw new ConflictError(
+      'TRADE_NOT_COLLECTABLE',
+      'Este intercambio ya no se puede cobrar. No entregues efectivo.',
+      `Trade ${tradeId} is ${trade.status}, expected revealing`,
+    );
+  }
+  await assertEscrowCollectable(trade);
 
   // 7. Primera vez: el QR debe traer un token vivo y sin usar (SEC-02). Se
   //    quema aqui, ya validada la operacion, para que un QR contra un trade

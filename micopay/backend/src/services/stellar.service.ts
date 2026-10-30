@@ -486,6 +486,87 @@ export async function callRefundOnChain(params: {
   );
 }
 
+/** Estado de un escrow tal como lo guarda el contrato (`get_trade`). */
+export interface OnChainEscrowTrade {
+  seller: string;
+  buyer: string;
+  amount: bigint;
+  platformFee: bigint;
+  timeoutLedger: number;
+  status: 'Locked' | 'Released' | 'Refunded';
+}
+
+/** `EscrowError::TradeNotFound` del contrato. */
+const ESCROW_TRADE_NOT_FOUND = 3;
+
+/**
+ * Lee `get_trade` por simulacion: no firma, no envia y no gasta. Devuelve el
+ * escrow (o null si el contrato no lo tiene) y el ultimo ledger cerrado, que es
+ * contra lo que se mide el plazo.
+ *
+ * Cualquier otra falla (RPC caido, registro archivado, error del host) se
+ * lanza: quien llama no debe tratar "no pude leer" como "no existe".
+ */
+export async function readEscrowTrade(params: {
+  contractId: string;
+  tradeIdBytes: Buffer;
+}): Promise<{ trade: OnChainEscrowTrade | null; latestLedger: number }> {
+  const {
+    Contract, TransactionBuilder, Networks, Keypair, nativeToScVal, scValToNative, rpc,
+  } = await import('@stellar/stellar-sdk');
+
+  const networkPassphrase = getNetworkPassphrase(Networks);
+  const source = Keypair.fromSecret(config.platformSecretKey).publicKey();
+  const account = await rpcRead(config.stellarRpcUrl, (s) => s.getAccount(source));
+
+  const tx = new TransactionBuilder(account, { fee: '100', networkPassphrase })
+    .addOperation(
+      new Contract(params.contractId).call('get_trade', nativeToScVal(params.tradeIdBytes, { type: 'bytes' })),
+    )
+    .setTimeout(30)
+    .build();
+
+  const sim: import('@stellar/stellar-sdk').rpc.Api.SimulateTransactionResponse =
+    await rpcRead(config.stellarRpcUrl, (s) => s.simulateTransaction(tx));
+  const unverifiable = (dev: string) => new UpstreamError(
+    'ESCROW_UNVERIFIABLE',
+    'No pudimos confirmar el estado del escrow. Intenta de nuevo en un momento.',
+    dev,
+    503,
+  );
+
+  if (rpc.Api.isSimulationError(sim)) {
+    // El contrato no conoce ese trade_id. El numero solo es fiable aqui porque
+    // `get_trade` no llama a ningun otro contrato (N4 de la auditoria: los
+    // errores del token comparten numeracion con EscrowError).
+    if (sim.error.includes(`Error(Contract, #${ESCROW_TRADE_NOT_FOUND})`)) {
+      return { trade: null, latestLedger: sim.latestLedger };
+    }
+    throw unverifiable(`get_trade simulation failed: ${sim.error}`);
+  }
+  // Un registro archivado necesita restaurarse antes de leerse: no se sabe su
+  // estado. Se mira `restorePreamble` directo, sin depender de que la respuesta
+  // traiga todos los campos que espera el guard del SDK.
+  if (rpc.Api.isSimulationRestore(sim) || ('restorePreamble' in sim && sim.restorePreamble) || !sim.result) {
+    throw unverifiable('get_trade needs a restore or returned no result');
+  }
+
+  const raw = scValToNative(sim.result.retval) as Record<string, unknown>;
+  // Un enum de variantes unitarias llega como ["Locked"].
+  const status = Array.isArray(raw.status) ? String(raw.status[0]) : String(raw.status);
+  return {
+    trade: {
+      seller: String(raw.seller),
+      buyer: String(raw.buyer),
+      amount: BigInt(raw.amount as bigint),
+      platformFee: BigInt(raw.platform_fee as bigint),
+      timeoutLedger: Number(raw.timeout_ledger),
+      status: status as OnChainEscrowTrade['status'],
+    },
+    latestLedger: sim.latestLedger,
+  };
+}
+
 /**
  * Legacy mock used when MOCK_STELLAR=true.
  */

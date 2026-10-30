@@ -160,6 +160,28 @@ async function testAlreadySettled() {
   console.log("  ✓ completada o ya reembolsada no vuelve a ofrecer reembolso");
 }
 
+/** D2: con efectivo entregado, la app no ofrece el reembolso; va a soporte. */
+async function testCashHandoffIsNotEligible() {
+  const client = await createUser("cli");
+  const provider = await createUser("prov");
+  const tradeId = await insertTrade({
+    sellerId: client,
+    buyerId: provider,
+    status: "revealing",
+    expiresInSeconds: -60,
+  });
+  await db.execute(
+    `INSERT INTO trade_cash_handoffs (trade_id, provider_id, claim_token_hash)
+     VALUES ($1, $2, $3)`,
+    [tradeId, provider, `handoff_elig_${seq}`],
+  );
+
+  const e = await getRefundEligibility(tradeId, client);
+  strictEqual(e.eligible, false, "con entrega confirmada no se ofrece reembolso");
+  strictEqual(e.reason, "cash_handoff_confirmed");
+  console.log("  ✓ con entrega de efectivo confirmada no se ofrece reembolso (D2)");
+}
+
 async function testOnlyParticipants() {
   const client = await createUser("cli");
   const provider = await createUser("prov");
@@ -225,6 +247,7 @@ async function main() {
   await testBoundaryIsInclusive();
   await testNoFundsLocked();
   await testAlreadySettled();
+  await testCashHandoffIsNotEligible();
   await testOnlyParticipants();
   await testEligibilityMatchesTheAction();
   await testServerTimeIsReported();

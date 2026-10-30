@@ -274,6 +274,8 @@
     "expired": "Expirado",
     "releaseNoReceipt": "La liberación no devolvió un comprobante. Vuelve a intentarlo.",
     "releaseFailed": "No se pudo liberar. Reintenta.",
+    "notCollectableTitle": "No entregues efectivo",
+    "notCollectableBody": "Este intercambio ya no se puede cobrar. Si ya entregaste efectivo, contacta a soporte.",
     "qrVerified": "QR verificado",
     "tradeConfirmed": "Trade confirmado por el servidor",
     "platformFee": "Comisión plataforma: ${{amount}} MXN",

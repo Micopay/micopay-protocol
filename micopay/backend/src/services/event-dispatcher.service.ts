@@ -1,6 +1,7 @@
 import pino from 'pino';
 import db from '../db/schema.js';
 import { insertTradeAuditEvent } from '../db/audit-log.model.js';
+import { escrowContractForTrade } from './escrowContract.js';
 
 const logger = pino({ name: 'event-dispatcher' });
 
@@ -9,6 +10,15 @@ const logger = pino({ name: 'event-dispatcher' });
 /** Raw event shape from Stellar RPC getEvents. */
 export interface RawContractEvent {
   id: string;
+  /**
+   * Contrato que emitio el evento. El `trade_id` es sha256(secret_hash) y el
+   * hash es publico: cualquiera puede repetirlo en OTRA instancia del escrow.
+   * Sin el contrato, un refund en B cerraba la fila de A (H1 de
+   * docs/audits/AUDITORIA_ESCROW_REFERENCIA_XRPL_2026-10-29.md).
+   */
+  contractId?: string;
+  /** False si la llamada que emitio el evento fallo: no es una liquidacion. */
+  inSuccessfulContractCall?: boolean;
   topic: unknown[];
   value: unknown;
   txHash: string;
@@ -18,6 +28,8 @@ export interface RawContractEvent {
 /** Parsed, XDR-free representation of a known escrow event. */
 export interface ParsedEscrowEvent {
   type: 'locked' | 'released' | 'refunded' | 'declined';
+  /** Contrato que emitio el evento: la identidad es contrato + trade_id. */
+  contractId: string;
   /** 64-char hex of the contract's trade_id (sha256 of secret_hash). */
   contractTradeIdHex: string;
   /** Stellar RPC event ID — used in audit metadata for traceability. */
@@ -39,13 +51,17 @@ export interface ParsedEscrowEvent {
  *
  * `scValToNative` is injected so this function is pure and unit-testable.
  *
- * Returns null for unknown or malformed events (caller should skip them).
+ * Returns null for unknown or malformed events (caller should skip them), for
+ * events without their contract, and for events of a failed contract call.
  */
 export function parseEscrowEvent(
   event: RawContractEvent,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   scValToNative: (v: any) => any,
 ): ParsedEscrowEvent | null {
+  if (!event.contractId) return null;
+  if (event.inSuccessfulContractCall === false) return null;
+
   let eventType: string;
   try {
     eventType = String(scValToNative(event.topic[0]));
@@ -70,6 +86,7 @@ export function parseEscrowEvent(
 
   return {
     type: eventType,
+    contractId: event.contractId,
     contractTradeIdHex: tradeIdBytes.toString('hex'),
     eventId: event.id,
     txHash: event.txHash,
@@ -135,11 +152,50 @@ export async function dispatchEscrowEvent(event: RawContractEvent): Promise<void
 
 // ── Handlers ──────────────────────────────────────────────────────────────
 
-async function handleReleased(ev: ParsedEscrowEvent): Promise<void> {
-  const trade = await db.getOne<{ id: string; status: string }>(
-    'SELECT id, status FROM trades WHERE contract_trade_id = $1',
+/**
+ * La fila de ESTE contrato con ese trade_id, o null.
+ *
+ * El `trade_id` solo es unico dentro de una instancia del escrow, asi que se
+ * filtra por el contrato de cada fila con la misma regla que usan lock,
+ * release y refund (`escrowContractForTrade`, que tambien resuelve las filas
+ * legacy sin `escrow_contract_id`). Si dos filas del mismo contrato tienen el
+ * mismo trade_id no se adivina: se registra y no se toca ninguna.
+ */
+async function findTradeForEvent(ev: ParsedEscrowEvent): Promise<{ id: string; status: string } | null> {
+  const candidates = await db.getMany<{
+    id: string; status: string; escrow_contract_id: string | null; asset_code: string | null;
+  }>(
+    'SELECT id, status, escrow_contract_id, asset_code FROM trades WHERE contract_trade_id = $1',
     [ev.contractTradeIdHex],
   );
+
+  const matches = candidates.filter((row) => {
+    try {
+      return escrowContractForTrade(row) === ev.contractId;
+    } catch {
+      return false;
+    }
+  });
+
+  if (matches.length === 1) return matches[0];
+
+  if (matches.length > 1) {
+    logger.error(
+      { contract_id: ev.contractId, contract_trade_id: ev.contractTradeIdHex, rows: matches.map((m) => m.id), category: 'event-dispatcher' },
+      '[dispatcher] Several trades share contract + trade_id — event not applied',
+    );
+  } else if (candidates.length > 0) {
+    // El trade_id existe, pero en OTRO contrato: justo el caso de H1.
+    logger.warn(
+      { contract_id: ev.contractId, contract_trade_id: ev.contractTradeIdHex, event_id: ev.eventId, ledger: ev.ledger, category: 'event-dispatcher' },
+      '[dispatcher] Event from a contract that does not hold this trade — ignored',
+    );
+  }
+  return null;
+}
+
+async function handleReleased(ev: ParsedEscrowEvent): Promise<void> {
+  const trade = await findTradeForEvent(ev);
 
   if (!trade) {
     // Expected when the on-chain release was performed by a different environment or
@@ -175,6 +231,7 @@ async function handleReleased(ev: ParsedEscrowEvent): Promise<void> {
     actor: ACTOR_SYSTEM,
     metadata: {
       source: 'soroban_event',
+      contract_id: ev.contractId,
       event_id: ev.eventId,
       release_tx_hash: ev.txHash,
       ledger: ev.ledger,
@@ -188,10 +245,7 @@ async function handleReleased(ev: ParsedEscrowEvent): Promise<void> {
 }
 
 async function handleRefunded(ev: ParsedEscrowEvent): Promise<void> {
-  const trade = await db.getOne<{ id: string; status: string }>(
-    'SELECT id, status FROM trades WHERE contract_trade_id = $1',
-    [ev.contractTradeIdHex],
-  );
+  const trade = await findTradeForEvent(ev);
 
   if (!trade) {
     logger.info(
@@ -228,6 +282,7 @@ async function handleRefunded(ev: ParsedEscrowEvent): Promise<void> {
     actor: ACTOR_SYSTEM,
     metadata: {
       source: 'soroban_event',
+      contract_id: ev.contractId,
       settlement: ev.type,
       event_id: ev.eventId,
       refund_tx_hash: ev.txHash,
