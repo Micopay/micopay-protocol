@@ -169,7 +169,7 @@ Avance (2026-10-29):
 
 ## WP3: un solo plazo, el de la cadena (H2)
 
-**Estado (2026-10-30):** implementado en #473 (commit 97070ff), sin integrar ni desplegar. Diferencias con lo de abajo: no hay script de relleno; una fila sin `funds_timeout_ledger` lo lee de `get_trade` la primera vez que se pregunta por el reembolso, y lo guarda. Falta la etiqueta "aprox." en la app. Pruebas: `test:funds-deadline` (7 casos).
+**Estado (2026-10-30):** implementado en #473 (commit 97070ff), integrado como 81d7090 y **desplegado** el 2026-10-30 a las 03:19 (imagen `micopay-backend:escrow-wp3-20261030-031749`, desde una copia limpia; task def 36, solo cambia la imagen). Migración `20261030120000_trade_funds_timeout` aplicada al arrancar; health ok, JWKS 200, sin errores. Corte: menos de 2 minutos (último 200 a las 03:19:56, siguiente a las 03:21:39). Diferencias con lo de abajo: no hay script de relleno; una fila sin `funds_timeout_ledger` lo lee de `get_trade` la primera vez que se pregunta por el reembolso, y lo guarda. Falta la etiqueta "aprox." en la app. Pruebas: `test:funds-deadline` (7 casos).
 
 - Persistir el vencimiento real de los fondos al confirmar el lock: columna `funds_timeout_ledger`, tomada del evento `locked` o de `get_trade`. Guardar también `funds_expires_at_estimate` solo para mostrar en la app, con la etiqueta "aprox.".
 - `expires_at` queda como **caducidad de la solicitud** (hasta cuándo se puede bloquear). Deja de usarse para decidir reembolsos.
