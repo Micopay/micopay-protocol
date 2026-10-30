@@ -19,6 +19,8 @@ export interface RpcServerLike {
   getTransaction(hash: string): Promise<{ status: string }>;
   getEvents(request: any): Promise<any>;
   getLatestLedger(): Promise<{ sequence: number }>;
+  getNetwork(): Promise<{ passphrase: string }>;
+  getLedgerEntries(...keys: any[]): Promise<{ entries: Array<{ key: any }>; latestLedger: number }>;
 }
 
 type ServerFactory = (url: string) => Promise<RpcServerLike>;
