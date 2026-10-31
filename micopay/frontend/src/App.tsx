@@ -4,7 +4,7 @@ import { generateAndStoreKeypair, keypairExists, getPublicKey, revealSecretKey }
 import { IS_EXTERNAL_SIGNER } from './lib/signer/mode';
 import WalletLogin from './pages/WalletLogin';
 import WebSessionGuard from './components/WebSessionGuard';
-import NetworkBanner from './components/NetworkBanner';
+import WebShell, { type WebNavItem } from './components/WebShell';
 import {
   HashRouter,
   Routes,
@@ -962,6 +962,61 @@ function BottomNavAdapter() {
   );
 }
 
+// ── Armazon de la web en PC ──────────────────────────────────────────────────
+
+const NAV_ROUTES: Record<string, string> = {
+  home: "/",
+  pay: "/pay",
+  inbox: "/inbox",
+  explore: "/explore",
+  cetes: "/cetes",
+  profile: "/profile",
+};
+
+const HIDE_WEB_SIDEBAR_ROUTES = new Set(["/login", "/register", "/welcome"]);
+
+function AppFrame({ children }: { children: React.ReactNode }) {
+  if (!IS_EXTERNAL_SIGNER) {
+    return <div className="flex flex-col min-h-screen bg-fondo">{children}</div>;
+  }
+  return <WebFrame>{children}</WebFrame>;
+}
+
+function WebFrame({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { t } = useTranslation();
+  const { sessionUser, providerStatus } = useAppCtx();
+  const [address, setAddress] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionUser) { setAddress(null); return; }
+    getPublicKey().then(setAddress).catch(() => setAddress(null));
+  }, [sessionUser]);
+
+  const operation: WebNavItem[] = [
+    { page: 'home', icon: 'home', label: t('nav.home') },
+    { page: 'pay', icon: 'swap_horiz', label: t('nav.pay') },
+    ...(providerStatus === 'active' ? [{ page: 'inbox', icon: 'inbox', label: t('nav.inbox') }] : []),
+    { page: 'cetes', icon: 'savings', label: t('nav.invest') },
+    { page: 'explore', icon: 'explore', label: t('nav.explore') },
+  ];
+
+  return (
+    <WebShell
+      showSidebar={!!sessionUser && !HIDE_WEB_SIDEBAR_ROUTES.has(location.pathname)}
+      operation={operation}
+      account={[{ page: 'profile', icon: 'person', label: t('nav.profile') }]}
+      currentPage={ROUTE_TO_PAGE[location.pathname] ?? ''}
+      onNavigate={(page) => navigate(NAV_ROUTES[page] ?? '/')}
+      username={sessionUser?.username}
+      address={address}
+    >
+      {children}
+    </WebShell>
+  );
+}
+
 // ── Push notifications ───────────────────────────────────────────────────────
 // Con sesion, registra el telefono para recibir avisos y abre la pantalla del
 // aviso que se toco. El permiso se pide aqui, una vez, al entrar; si se niega,
@@ -1509,8 +1564,7 @@ function App() {
       <ErrorBoundary>
         <AppContext.Provider value={ctx}>
           <HashRouter>
-            <div className="flex flex-col min-h-screen bg-fondo">
-              {IS_EXTERNAL_SIGNER && <NetworkBanner />}
+            <AppFrame>
               {IS_EXTERNAL_SIGNER && sessionUser && <WebSessionGuard onExpired={handleAccountDeleted} />}
               <ConnectionBannerHost />
               {/* Se oculta solo cuando hay conexión y no hay nada pendiente. */}
@@ -1570,7 +1624,7 @@ function App() {
                   onClose={handleCloseBackup}
                 />
               )}
-            </div>
+            </AppFrame>
           </HashRouter>
         </AppContext.Provider>
       </ErrorBoundary>

@@ -1,3 +1,4 @@
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, Link } from 'react-router-dom';
@@ -161,7 +162,7 @@ function PendingView({
       </h2>
       <p className="text-on-surface-variant mb-6">
         {isSeller
-          ? 'Firma con tu llave para bloquear los fondos en el contrato de garantía.'
+          ? `Firma con tu ${IS_EXTERNAL_SIGNER ? 'billetera' : 'llave'} para bloquear los fondos en el contrato de garantía.`
           : 'El vendedor aún no ha bloqueado los fondos. Tu operación está segura en garantía.'}
       </p>
 

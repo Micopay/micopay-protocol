@@ -97,6 +97,7 @@
     "stellarAddress": "Stellar address",
     "wallet": "Wallet",
     "deviceKey": "Device key",
+    "walletAccount": "Your wallet account",
     "copyAddress": "Copy address",
     "importKey": "Import key",
     "exportKey": "Export secret key ⚠️",
@@ -168,6 +169,7 @@
     "currency": "MXN",
     "locatingAgents": "Finding agents near you...",
     "locationNeeded": "We need your location",
+    "locationDescriptionWeb": "To show nearby agents, allow location in your browser, from the icon next to the page address.",
     "locationDescription": "To show nearby agents, enable location permission in your device Settings.",
     "back": "Back",
     "loadError": "We couldn't load the offers",
@@ -767,6 +769,7 @@
     }
   },
   "a11y": {
+    "mainNav": "Main navigation",
     "back": "Go back",
     "close": "Close",
     "copyPublicKey": "Copy public key",

@@ -1,3 +1,4 @@
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
 import { useState, useEffect, useCallback } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useQRScanner } from '../hooks/useQRScanner';
@@ -474,7 +475,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
 
       <main className="pt-[calc(6rem+env(safe-area-inset-top))] px-6 pb-32">
         {/* Sin permiso de avisos: el agente no se entera con la app cerrada */}
-        {(pushPermission === 'prompt' || pushPermission === 'denied') && token && (
+        {!IS_EXTERNAL_SIGNER && (pushPermission === 'prompt' || pushPermission === 'denied') && token && (
           <div className="mb-4 rounded-sm p-4 bg-amber-50 border border-amber-200">
             <div className="flex items-start gap-3">
               <span className="material-symbols-outlined text-amber-600">notifications_off</span>

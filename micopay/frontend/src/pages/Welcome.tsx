@@ -10,6 +10,7 @@
  *
  *   1. Su dinero vive en este telefono. Nadie mas lo tiene.
  *   2. Hay una llave. Si la pierde sin respaldo, pierde los fondos.
+ *      En la web, la cuenta y la llave son las de su billetera.
  *   3. Que es un cash-out y por que el dinero queda retenido.
  *   4. Que va a quedar con una persona real, y que el codigo QR es lo que
  *      cierra la operacion.
@@ -20,6 +21,7 @@
  */
 
 import { useState } from 'react';
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
 import OnboardingFlow, {
   StepText,
   StepPoint,
@@ -38,8 +40,29 @@ interface Props {
 export default function Welcome({ username, onDone, onBackupKey }: Props) {
   const [index, setIndex] = useState(0);
 
-  const steps: OnboardingStep[] = [
-    {
+  const allSteps: OnboardingStep[] = [
+    IS_EXTERNAL_SIGNER ? {
+      id: 'wallet',
+      title: username ? `Hola, ${username}` : 'Tu dinero, en tu billetera',
+      lead: 'Antes de empezar, tres minutos que te pueden ahorrar un disgusto.',
+      body: (
+        <>
+          <StepText>
+            Tu cuenta de MicoPay es la de <strong>tu billetera</strong>. No es como la app de un
+            banco: aquí nosotros no guardamos tu dinero ni podemos moverlo. Solo tú.
+          </StepText>
+          <StepPoint icon="lock">
+            Tu <strong>llave secreta</strong> vive en tu billetera. MicoPay nunca la ve: cada
+            movimiento lo revisas y lo apruebas tú ahí.
+          </StepPoint>
+          <StepPoint icon="warning">
+            Eso también significa que <strong>si pierdes el acceso a tu billetera y no guardaste su
+            frase de recuperación, nadie puede devolverte tus fondos</strong>. Ni nosotros. Y nunca
+            te la vamos a pedir: quien te la pida quiere quitarte tu dinero.
+          </StepPoint>
+        </>
+      ),
+    } : {
       id: 'wallet',
       title: username ? `Hola, ${username}` : 'Tu dinero, en tu teléfono',
       lead: 'Antes de empezar, tres minutos que te pueden ahorrar un disgusto.',
@@ -158,6 +181,8 @@ export default function Welcome({ username, onDone, onBackupKey }: Props) {
       nextLabel: 'Entendido, empezar',
     },
   ];
+  // El respaldo es de la llave del telefono; en la web lo resuelve la billetera.
+  const steps = IS_EXTERNAL_SIGNER ? allSteps.filter((s) => s.id !== 'backup') : allSteps;
 
   return (
     <OnboardingFlow

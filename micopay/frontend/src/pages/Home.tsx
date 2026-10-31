@@ -209,7 +209,9 @@ const Home = ({
     <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col">
       {/* TopAppBar */}
       <header className="border-b-2 border-tinta fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel">
-        <Logo />
+        {/* En PC la marca ya esta en la barra lateral. */}
+        {IS_EXTERNAL_SIGNER && <span className="hidden font-headline text-xl font-bold text-tinta md:block">{t('nav.home')}</span>}
+        <div className={IS_EXTERNAL_SIGNER ? 'md:hidden' : undefined}><Logo /></div>
         <div className="flex items-center gap-4">
           <button
             onClick={onNavigateInbox}
@@ -300,6 +302,9 @@ const Home = ({
           </p>
         </section>
 
+        {/* En PC, dos columnas: lo que tengo y hago, y a un lado el detalle. */}
+        <div className={IS_EXTERNAL_SIGNER ? 'lg:grid lg:grid-cols-2 lg:items-start lg:gap-10' : undefined}>
+        <div>
         {showBalanceError && walletBalanceError ? (
           <ErrorBanner
             message={walletBalanceError.message || "Error al cargar el balance"}
@@ -386,6 +391,8 @@ const Home = ({
             {t('home.findNearby')}
           </p>
         </div>
+        </div>
+        <div>
         <section className="mb-8">
           <h2 className="mb-4"><Label>
             {t('home.assets')}
@@ -576,6 +583,8 @@ const Home = ({
             </button>
           )}
         </section>
+        </div>
+        </div>
 
       </main>
     </div>

@@ -1,3 +1,4 @@
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
 import MapReal from '../components/MapReal';
 import { useTranslation } from 'react-i18next';
 import { useMerchantsAvailable } from '../hooks/useMerchantsAvailable';
@@ -157,7 +158,7 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
         <span className="material-symbols-outlined text-5xl text-gris">location_off</span>
         <h2 className="font-headline font-bold text-xl text-on-surface">{t('depositMap.locationNeeded')}</h2>
         <p className="text-sm text-gris font-medium max-w-xs leading-snug">
-          {t('depositMap.locationDescription')}
+          {t(IS_EXTERNAL_SIGNER ? 'depositMap.locationDescriptionWeb' : 'depositMap.locationDescription')}
         </p>
         <button
           onClick={onBack}

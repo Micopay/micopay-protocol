@@ -354,7 +354,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
 
                 <section className="bg-papel rounded-sm p-5 border-2 border-tinta/60 space-y-3">
                   <p className="text-xs font-bold uppercase tracking-[0.15em] text-gris">
-                    {t('profile.deviceKey')}
+                    {t(IS_EXTERNAL_SIGNER ? 'profile.walletAccount' : 'profile.deviceKey')}
                   </p>
                   <p className="font-mono text-xs text-tinta break-all select-all bg-fondo rounded-sm p-3">
                     {devicePublicKey ?? t('profile.noKeyGenerated')}

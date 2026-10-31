@@ -1,3 +1,4 @@
+import { NO_KEY_MESSAGE } from '../lib/signer/mode';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   confirmBankWithdrawOrder,
@@ -592,7 +593,7 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
     try {
       setBusy(true); setError(null);
       const pub = await getPublicKey();
-      if (!pub) throw new Error('No encontramos tu llave en el telefono');
+      if (!pub) throw new Error(NO_KEY_MESSAGE);
       const [sourceCode, sourceIssuer] = q.sourceAsset.split(':');
       const sourceBalance = await getStellarAssetBalance(pub, { code: sourceCode, issuer: sourceIssuer });
       if (Number(sourceBalance) < Number(q.sourceAmount)) {

@@ -97,6 +97,7 @@
     "stellarAddress": "Dirección Stellar",
     "wallet": "Wallet",
     "deviceKey": "Clave del dispositivo",
+    "walletAccount": "Cuenta de tu billetera",
     "copyAddress": "Copiar dirección",
     "importKey": "Importar clave",
     "exportKey": "Exportar clave secreta ⚠️",
@@ -168,6 +169,7 @@
     "currency": "MXN",
     "locatingAgents": "Localizando agentes cerca de ti...",
     "locationNeeded": "Necesitamos tu ubicación",
+    "locationDescriptionWeb": "Para mostrarte agentes cerca, permite la ubicación en tu navegador, desde el ícono junto a la dirección de la página.",
     "locationDescription": "Para mostrarte agentes cercanos, activa el permiso de ubicación en Ajustes de tu dispositivo.",
     "back": "Volver",
     "loadError": "No pudimos cargar las ofertas",
@@ -767,6 +769,7 @@
     }
   },
   "a11y": {
+    "mainNav": "Navegación principal",
     "back": "Volver",
     "close": "Cerrar",
     "copyPublicKey": "Copiar clave pública",

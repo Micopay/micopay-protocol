@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as keystore from '../lib/keystore';
 import WalletLogin from '../pages/WalletLogin';
+import Welcome from '../pages/Welcome';
 import { ApiError } from '../utils/apiError';
 // @ts-expect-error El Worker es JavaScript plano.
 import worker from '../../web/worker.js';
@@ -82,6 +83,17 @@ describe('Conectar billetera', () => {
     open();
     fireEvent.click(screen.getByRole('button', { name: 'Conectar billetera' }));
     expect(await screen.findByText(/todavía no existe en la red/)).toBeTruthy();
+  });
+});
+
+describe('Bienvenida en la web', () => {
+  it('habla de la billetera y no pide respaldar una llave del telefono', () => {
+    render(<Welcome username="ana" onDone={() => {}} />);
+    expect(screen.getByText(/Paso 1 de 4/)).toBeTruthy();
+    expect(document.body.textContent).toMatch(/tu billetera/);
+    expect(document.body.textContent).not.toMatch(/teléfono|dispositivo/);
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+    expect(screen.queryByText('Respalda tu llave')).toBeNull();
   });
 });
 
