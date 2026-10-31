@@ -193,6 +193,8 @@ export interface TradeDetailResponse {
   trade: TradeData & {
     lock_tx_hash?: string | null;
     release_tx_hash?: string | null;
+    /** WP5: la base y el contrato no coinciden; soporte lo revisa. */
+    chain_review_reason?: string | null;
     platform_fee_mxn?: number;
     /** Congeladas al crear la operacion (tradeFees.ts del backend). */
     provider_fee_mxn?: number;

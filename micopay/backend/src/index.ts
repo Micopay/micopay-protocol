@@ -32,6 +32,7 @@ import { createProductionListener } from './services/event-listener.service.js';
 import type { EscrowEventListener } from './services/event-listener.service.js';
 import { sweepPendingRefunds } from './services/trade.service.js';
 import { resolveSubmittedLocks } from './services/lockAttempt.service.js';
+import { reconcileEscrowTrades } from './services/escrowReconciliation.service.js';
 import { startComplianceJob, stopComplianceJob } from './services/compliance.service.js';
 import { assertEscrowContractsOnNetwork } from './services/escrowNetworkCheck.service.js';
 
@@ -581,6 +582,27 @@ async function startEventListener(): Promise<void> {
   }
 }
 
+let reconciliationInterval: NodeJS.Timeout | null = null;
+
+/** WP5: compara las filas con el contrato. Solo lee la cadena. */
+function startReconciliation(): void {
+  if (config.mockStellar || !config.reconciliationEnabled) {
+    app.log.info({ category: 'escrow-reconciliation' }, '[reconciliation] Disabled');
+    return;
+  }
+  reconciliationInterval = setInterval(async () => {
+    try {
+      const counts = await reconcileEscrowTrades();
+      if (counts.corrected > 0 || counts.review > 0 || counts.unreadable > 0) {
+        app.log.info({ ...counts, category: 'escrow-reconciliation' }, '[reconciliation] Cycle complete');
+      }
+    } catch (err) {
+      app.log.error({ err, category: 'escrow-reconciliation' }, '[reconciliation] Cycle failed');
+    }
+  }, config.reconciliationIntervalMs);
+  reconciliationInterval.unref?.();
+}
+
 // Holds the refund-sweep interval handle (null when disabled, e.g. mock mode).
 let refundSweepInterval: NodeJS.Timeout | null = null;
 const REFUND_SWEEP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -667,6 +689,7 @@ async function start() {
     
     await startEventListener();
     startRefundSweep();
+    startReconciliation();
     startComplianceJob();
   } catch (err) {
     app.log.error(err);
@@ -679,6 +702,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {
     for (const listener of eventListeners) listener.stop();
     if (refundSweepInterval) clearInterval(refundSweepInterval);
+    if (reconciliationInterval) clearInterval(reconciliationInterval);
     stopComplianceJob();
     process.exit(0);
   });
