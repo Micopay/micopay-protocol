@@ -1331,6 +1331,11 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
         {/* WP-D: la cifra del escrow que le toca a quien mira, con datos del
             servidor. Sin metadatos de activo no se pinta. */}
         <TradeEscrowSummary trade={trade} viewerId={userId} className="mb-4" />
+        {trade.chain_review_reason && (
+          <p role="status" className="mb-4 border-2 border-tinta bg-naranja-suave p-3 text-sm font-bold">
+            Confirmación pendiente: estamos verificando esta operación en la red.
+          </p>
+        )}
         {renderStateView()}
 
         {/* Support link visible in all states */}

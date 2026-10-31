@@ -232,6 +232,11 @@ export const config = {
   eventListenerEnabled: process.env.EVENT_LISTENER_ENABLED === 'true',
   eventListenerPollMs: parseInt(process.env.EVENT_LISTENER_POLL_MS || '5000', 10),
   eventListenerHealthStaleMs: parseInt(process.env.EVENT_LISTENER_HEALTH_STALE_MS || '30000', 10),
+  // WP5: conciliacion contra la cadena. Solo lee; 'false' la apaga.
+  reconciliationEnabled: process.env.ESCROW_RECONCILIATION_ENABLED !== 'false',
+  reconciliationIntervalMs: parseInt(process.env.ESCROW_RECONCILIATION_INTERVAL_MS || '600000', 10),
+  reconciliationLookbackDays: parseInt(process.env.ESCROW_RECONCILIATION_LOOKBACK_DAYS || '7', 10),
+  reconciliationBatchSize: parseInt(process.env.ESCROW_RECONCILIATION_BATCH_SIZE || '200', 10),
 
   // Tiempo minimo que debe quedarle al escrow EN CADENA para registrar una
   // entrega de efectivo. Decision de producto del 2026-10-29 (WP0 del plan de

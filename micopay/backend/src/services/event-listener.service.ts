@@ -1,3 +1,4 @@
+import { reconcileEscrowTrades } from './escrowReconciliation.service.js';
 import pino from 'pino';
 import { createHash } from 'crypto';
 import type { RawContractEvent } from './event-dispatcher.service.js';
@@ -211,8 +212,9 @@ export class EscrowEventListener {
           { cursor, current, contract_id: this.contractId, category: 'event-listener' },
           '[event-listener] Cursor outside RPC window — events lost, reconciliation required',
         );
-        await this.deps.saveCursor(current);
+        // Primero la conciliacion: si falla, el cursor sigue viejo y se reintenta.
         await this.deps.onGap?.(cursor + 1, current);
+        await this.deps.saveCursor(current);
         return; // Not a failure: the next poll continues from `current`.
       }
       throw err;
@@ -346,12 +348,12 @@ export function createProductionListener(
   };
 
   const onGap = async (fromLedger: number, toLedger: number): Promise<void> => {
-    // WP5 conectara aqui la conciliacion del contrato. Mientras tanto queda el
-    // error en el log, con el rango exacto que hay que revisar.
     logger.error(
       { contract_id: contractId, from_ledger: fromLedger, to_ledger: toLedger, category: 'event-listener-gap' },
-      '[event-listener] Gap in event history — reconcile this contract against the chain',
+      '[event-listener] Gap in event history — reconciling this contract against the chain',
     );
+    const counts = await reconcileEscrowTrades({ contractId });
+    logger.warn({ ...counts, contract_id: contractId, category: 'event-listener-gap' }, '[event-listener] Gap reconciliation finished');
   };
 
   const loadCursor = async (): Promise<number> => {
