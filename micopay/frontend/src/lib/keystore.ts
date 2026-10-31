@@ -3,12 +3,18 @@ import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
 import { readJSON, writeJSON, removeKey } from '../services/secureStorage';
 import { requireUserPresence, type PresenceReason } from './userPresence';
 import { StellarKeyVault, type NativeVaultStatus } from './nativeKeyVault';
+import { IS_EXTERNAL_SIGNER } from './signer/mode';
 
 const KEYPAIR_KEY = 'stellar_keypair';
 
 interface StoredKeypair {
     publicKey: string;
     secretKey: string; // never leaves this module via HTTP
+}
+
+/** Las rutas de llave no existen en la web: ahi la llave es de la billetera. */
+function assertLocalKeysAllowed(): void {
+    if (IS_EXTERNAL_SIGNER) throw new Error('La web no crea ni lee llaves: firma tu billetera.');
 }
 
 function usesNativeVault(): boolean {
@@ -58,6 +64,7 @@ async function ensureNativeMigration(): Promise<NativeVaultStatus> {
 }
 
 export async function generateAndStoreKeypair(): Promise<string> {
+    assertLocalKeysAllowed();
     if (usesNativeVault()) {
         const result = await StellarKeyVault.generate({ reason: 'migration' });
         return result.publicKey;
@@ -71,6 +78,7 @@ export async function generateAndStoreKeypair(): Promise<string> {
 }
 
 export async function getPublicKey(): Promise<string | null> {
+    if (IS_EXTERNAL_SIGNER) return (await import('./signer/externalSigner')).getConnectedAddress();
     if (usesNativeVault()) {
         const status = await ensureNativeMigration();
         return status.exists ? status.publicKey ?? null : null;
@@ -80,6 +88,7 @@ export async function getPublicKey(): Promise<string | null> {
 }
 
 export async function keypairExists(): Promise<boolean> {
+    if (IS_EXTERNAL_SIGNER) return Boolean(await getPublicKey());
     if (usesNativeVault()) {
         const status = await nativeStatus();
         if (status.exists) return true;
@@ -91,6 +100,7 @@ export async function keypairExists(): Promise<boolean> {
 }
 
 export async function signChallenge(challenge: string): Promise<string> {
+    assertLocalKeysAllowed();
     if (usesNativeVault()) {
         await ensureNativeMigration();
         return (await StellarKeyVault.signChallenge({ challenge, reason: 'sign_request' })).signature;
@@ -113,6 +123,9 @@ export async function signTransactionXdr(
     networkPassphrase: string,
     reason: PresenceReason = 'sign_request',
 ): Promise<string> {
+    if (IS_EXTERNAL_SIGNER) {
+        return (await import('./signer/externalSigner')).signWithWallet(xdr, networkPassphrase);
+    }
     if (usesNativeVault()) {
         await ensureNativeMigration();
         return (await StellarKeyVault.signTransaction({ xdr, networkPassphrase, reason })).signedXdr;
@@ -130,6 +143,7 @@ export async function signTransactionXdr(
 }
 
 export async function importKeypair(secretKey: string): Promise<string> {
+    assertLocalKeysAllowed();
     if (usesNativeVault()) {
         const kp = Keypair.fromSecret(secretKey);
         const result = await StellarKeyVault.importSeed({
@@ -159,6 +173,7 @@ export async function importKeypair(secretKey: string): Promise<string> {
  * Para enseñarsela a la persona, usar `revealSecretKey()`.
  */
 export async function exportSecretKey(): Promise<string> {
+    assertLocalKeysAllowed();
     if (usesNativeVault()) {
         throw new Error('La llave protegida no se puede exportar por una ruta de firma. Usa revealSecretKey().');
     }
@@ -173,6 +188,7 @@ export async function exportSecretKey(): Promise<string> {
  * puede vaciar la cuenta desde cualquier otro dispositivo.
  */
 export async function revealSecretKey(): Promise<string> {
+    assertLocalKeysAllowed();
     if (usesNativeVault()) {
         await ensureNativeMigration();
         return (await StellarKeyVault.revealSeed({ reason: 'reveal_key' })).secretKey;
@@ -182,6 +198,7 @@ export async function revealSecretKey(): Promise<string> {
 }
 
 export async function deleteKeypair(): Promise<void> {
+    assertLocalKeysAllowed();
     if (usesNativeVault()) {
         const status = await nativeStatus();
         if (status.exists) await StellarKeyVault.deleteKey({ reason: 'migration' });

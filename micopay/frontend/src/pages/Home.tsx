@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
 import { useTranslation } from 'react-i18next';
 import { Label, MoneyBlock } from '../components/ui';
 import { Logo } from '../components/Logo';
@@ -108,7 +109,7 @@ const Home = ({
   const [pendingSignRequests, setPendingSignRequests] = useState<SignatureRequest[]>([]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || IS_EXTERNAL_SIGNER) return;
     getPendingSignatureRequests(token)
       .then((requests) => setPendingSignRequests(requests))
       .catch(() => setPendingSignRequests([]));

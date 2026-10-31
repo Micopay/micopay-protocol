@@ -1,0 +1,18 @@
+{
+  "name": "micopay-web",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "../dist-web",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  "routes": [{ "pattern": "app.micopay.com.mx", "custom_domain": true }],
+  "vars": {
+    "NETWORK_PASSPHRASE": "Test SDF Network ; September 2015",
+    "WEB_AUTH_ENDPOINT": "https://api.micopay.app/auth/sep10",
+    // Llave publica; vacia, stellar.toml responde 404.
+    "SEP10_SIGNING_KEY": "GDI4RVFVG3O2UVGJDVXIZG3Q2KW5E64LILFMMYENWA25BXLVBK5634RN"
+  }
+}

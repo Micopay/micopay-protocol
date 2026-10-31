@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { generateAndStoreKeypair, keypairExists, getPublicKey, revealSecretKey } from './lib/keystore';
+import { IS_EXTERNAL_SIGNER } from './lib/signer/mode';
+import WalletLogin from './pages/WalletLogin';
+import WebSessionGuard from './components/WebSessionGuard';
+import NetworkBanner from './components/NetworkBanner';
 import {
   HashRouter,
   Routes,
@@ -45,6 +49,9 @@ import ReceivePayment from "./pages/ReceivePayment";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Profile from "./pages/Profile";
+import WalletConnections from "./pages/WalletConnections";
+import WalletRequestSheet from "./components/WalletRequestSheet";
+import { startWalletConnect, stopWalletRequests } from "./services/walletConnect";
 import { SignatureApproval } from "./pages/SignatureApproval";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -780,7 +787,7 @@ function WelcomeRoute() {
       <Welcome
           username={sessionUser?.username ?? null}
           onDone={done}
-          onBackupKey={() => navigate('/profile')}
+          onBackupKey={IS_EXTERNAL_SIGNER ? undefined : () => navigate('/profile')}
       />
   );
 }
@@ -1029,6 +1036,15 @@ function ConnectionBannerHost() {
 function App() {
   const [flow, setFlow] = useState<Flow>(null);
   const [sessionUser, setSessionUser] = useState<UserData | null>(null);
+
+  // La APK atiende firmas de la web solo con sesion abierta.
+  useEffect(() => {
+    if (!sessionUser?.token) {
+      stopWalletRequests();
+      return;
+    }
+    startWalletConnect(sessionUser.token).catch((err) => console.error("[WalletConnect]", err));
+  }, [sessionUser?.token]);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
   const [availability, setAvailabilityState] = useState<string | null>(null);
   // null = todavia no se sabe. Mientras no se sepa NO se redirige a nada: hacerlo
@@ -1195,6 +1211,11 @@ function App() {
             return;
           } catch (err: any) {
             const status = err?.response?.status;
+            if (IS_EXTERNAL_SIGNER && (status === 401 || status === 403)) {
+              // En la web recuperar pediria una firma al abrir la pagina.
+              await removeKey(USERS_STORAGE_KEY);
+              return;
+            }
             if (status !== 401 && status !== 403) {
               // Transient/network error — keep the cached session optimistically.
               setSessionUser(stored);
@@ -1237,6 +1258,7 @@ function App() {
   };
 
   const handleAccountDeleted = () => {
+    if (IS_EXTERNAL_SIGNER) void import('./lib/signer/externalSigner').then((signer) => signer.disconnectWallet());
     setSessionUser(null);
     setActiveTrade(null);
     setLockTxHash(null);
@@ -1320,6 +1342,16 @@ function App() {
   };
 
   const checkBackupGate = async (execute: () => Promise<boolean>): Promise<boolean> => {
+    // En la web no hay llave que respaldar: solo importa que la billetera siga igual.
+    if (IS_EXTERNAL_SIGNER) {
+      try {
+        await (await import('./lib/signer/externalSigner')).assertWalletReady();
+      } catch (e) {
+        setTradeError({ ...mapApiError(e), message: e instanceof Error ? e.message : mapApiError(e).message });
+        return false;
+      }
+      return execute();
+    }
     const confirmed = await isBackupConfirmed();
     if (confirmed) {
       return execute();
@@ -1478,13 +1510,15 @@ function App() {
         <AppContext.Provider value={ctx}>
           <HashRouter>
             <div className="flex flex-col min-h-screen bg-fondo">
+              {IS_EXTERNAL_SIGNER && <NetworkBanner />}
+              {IS_EXTERNAL_SIGNER && sessionUser && <WebSessionGuard onExpired={handleAccountDeleted} />}
               <ConnectionBannerHost />
               {/* Se oculta solo cuando hay conexión y no hay nada pendiente. */}
               <OfflineQueueStatus token={sessionUser?.token ?? null} />
               <PushNotificationsBridge />
               <Routes>
-                <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
-                <Route path="/register" element={<Register onLoginSuccess={handleLoginSuccess} />} />
+                <Route path="/login" element={IS_EXTERNAL_SIGNER ? <WalletLogin onLoginSuccess={handleLoginSuccess} /> : <Login onLoginSuccess={handleLoginSuccess} />} />
+                <Route path="/register" element={IS_EXTERNAL_SIGNER ? <Navigate to="/login" replace /> : <Register onLoginSuccess={handleLoginSuccess} />} />
                 <Route path="/" element={<ProtectedRoute><HomeRoute /></ProtectedRoute>} />
                 <Route path="/history" element={<ProtectedRoute><HistoryRoute /></ProtectedRoute>} />
                 <Route path="/trade/:id" element={<ProtectedRoute><TradeDetailRoute /></ProtectedRoute>} />
@@ -1517,13 +1551,15 @@ function App() {
                 <Route path="/welcome" element={<ProtectedRoute><WelcomeRoute /></ProtectedRoute>} />
                 <Route path="/join-network" element={<ProtectedRoute><ProviderOnboardingRoute /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><ProfileRoute /></ProtectedRoute>} />
+                {!IS_EXTERNAL_SIGNER && <Route path="/conexiones-web" element={<ProtectedRoute><WalletConnections /></ProtectedRoute>} />}
                 <Route path="/privacy" element={<ProtectedRoute><PrivacyRoute /></ProtectedRoute>} />
                 <Route path="/terms" element={<ProtectedRoute><TermsRoute /></ProtectedRoute>} />
-                <Route path="/sign-request" element={<ProtectedRoute><SignatureApprovalRoute /></ProtectedRoute>} />
-                <Route path="/sign-request/:id" element={<ProtectedRoute><SignatureApprovalRoute /></ProtectedRoute>} />
+                {!IS_EXTERNAL_SIGNER && <Route path="/sign-request" element={<ProtectedRoute><SignatureApprovalRoute /></ProtectedRoute>} />}
+                {!IS_EXTERNAL_SIGNER && <Route path="/sign-request/:id" element={<ProtectedRoute><SignatureApprovalRoute /></ProtectedRoute>} />}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
               <BottomNavAdapter />
+              <WalletRequestSheet />
 
               {showBackupPrompt && backupSecret && (
                 <SecretKeyBackupModal

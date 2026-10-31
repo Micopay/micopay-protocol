@@ -20,6 +20,7 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import org.stellar.sdk.Address;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import org.stellar.sdk.KeyPair;
@@ -182,6 +183,21 @@ public class StellarKeyVaultPlugin extends Plugin {
             return;
         }
         authenticate(call, () -> withKeyPair(call, keyPair -> {
+            if ("web_auth".equals(reason)) {
+                Transaction challenge = Sep10SigningPolicy.readChallenge(
+                    xdr,
+                    keyPair.getAccountId(),
+                    new Network(networkPassphrase),
+                    BuildConfig.SEP10_SIGNING_KEY,
+                    BuildConfig.SEP10_HOME_DOMAIN,
+                    BuildConfig.SEP10_WEB_AUTH_DOMAIN
+                );
+                challenge.sign(keyPair);
+                JSObject signed = new JSObject();
+                signed.put("signedXdr", challenge.toEnvelopeXdr().toXdrBase64());
+                call.resolve(signed);
+                return;
+            }
             TransactionEnvelope envelope = TransactionEnvelope.fromXdrBase64(xdr);
             if (envelope.getDiscriminant() != EnvelopeType.ENVELOPE_TYPE_TX) {
                 throw new IllegalArgumentException("Solo se admiten transacciones V1, no fee-bump");
@@ -413,6 +429,7 @@ public class StellarKeyVaultPlugin extends Plugin {
     }
 
     private String promptText(String reason) {
+        if ("web_auth".equals(reason)) return "Confirma para iniciar sesión en la web";
         if ("lock".equals(reason)) return "Confirma para bloquear tu dinero en garantía";
         if ("release".equals(reason)) return "Confirma para liberar el dinero";
         if ("decline".equals(reason)) return "Confirma para devolver los fondos";
@@ -455,6 +472,14 @@ public class StellarKeyVaultPlugin extends Plugin {
             if (!reason.equals(functionName)) {
                 throw new IllegalArgumentException("El método del contrato no coincide con la intención aprobada");
             }
+            EscrowSigningPolicy.requireAllowedContract(
+                Address.fromSCAddress(invocation.getHostFunction().getInvokeContract().getContractAddress()).toString(),
+                BuildConfig.ESCROW_CONTRACTS
+            );
+            EscrowSigningPolicy.requireArgumentCount(
+                functionName,
+                invocation.getHostFunction().getInvokeContract().getArgs().length
+            );
             return;
         }
         throw new IllegalArgumentException("Esta intención todavía no está habilitada en el firmador nativo");

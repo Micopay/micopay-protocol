@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
 
 // We keep the original key name (`micopay_users`) so legacy sync readers in
 // the codebase (e.g. TradeDetail.getToken on web) continue to work unchanged.
@@ -32,7 +33,7 @@ function openDb(): Promise<IDBDatabase> {
  * Get or create the non-extractable AES-GCM key stored in IndexedDB.
  * The key is created with `extractable: false`, so the key material can
  * never be exported — it can only be used via `crypto.subtle.encrypt()` /
- * `crypto.subtle.decrypt()`. This prevents XSS from reading the key.
+ * `crypto.subtle.decrypt()`. A script on this origin cannot read the key, but it can still use it to decrypt.
  */
 async function getCryptoKey(): Promise<CryptoKey> {
   const db = await openDb();
@@ -166,7 +167,25 @@ const webCryptoStore: KvStore = {
 
 let nativeStorePromise: Promise<KvStore> | null = null;
 
-async function getStore(): Promise<KvStore> {
+// ── Sesion del navegador ──
+
+const SESSION_KEY = 'micopay_user';
+
+/** En la web la sesion muere con la pestana: el cifrado no protege de un script del mismo origen. */
+const webSessionStore: KvStore = {
+  async get(key) {
+    return sessionStorage.getItem(key);
+  },
+  async set(key, value) {
+    sessionStorage.setItem(key, value);
+  },
+  async remove(key) {
+    sessionStorage.removeItem(key);
+  },
+};
+
+async function getStore(key?: string): Promise<KvStore> {
+  if (IS_EXTERNAL_SIGNER && key === SESSION_KEY) return webSessionStore;
   if (!Capacitor.isNativePlatform()) {
     await maybeMigrateLegacyData();
     return webCryptoStore;
@@ -191,7 +210,7 @@ async function getStore(): Promise<KvStore> {
 // ── Public API ──
 
 export async function readJSON<T>(key: string): Promise<T | null> {
-  const store = await getStore();
+  const store = await getStore(key);
   const raw = await store.get(key);
   if (!raw) return null;
   try {
@@ -202,12 +221,12 @@ export async function readJSON<T>(key: string): Promise<T | null> {
 }
 
 export async function writeJSON(key: string, value: unknown): Promise<void> {
-  const store = await getStore();
+  const store = await getStore(key);
   await store.set(key, JSON.stringify(value));
 }
 
 export async function removeKey(key: string): Promise<void> {
-  const store = await getStore();
+  const store = await getStore(key);
   await store.remove(key);
 }
 

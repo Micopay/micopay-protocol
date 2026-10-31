@@ -138,11 +138,11 @@ export async function getPendingMutations(): Promise<QueueItem[]> {
   return new Promise((resolve, reject) => {
     const transaction = database.transaction([STORE_NAME], 'readonly');
     const store = transaction.objectStore(STORE_NAME);
-    const index = store.index('synced');
-    const request = index.getAll(IDBKeyRange.only(false)); // false = not synced
+    // Un booleano no es una clave valida de IndexedDB: filtrar por el indice lanza.
+    const request = store.getAll();
 
     request.onsuccess = () => {
-      const items = request.result as QueueItem[];
+      const items = (request.result as QueueItem[]).filter((item) => !item.synced);
       resolve(items.sort((a, b) => a.timestamp - b.timestamp));
     };
 

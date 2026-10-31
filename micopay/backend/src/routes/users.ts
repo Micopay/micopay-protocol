@@ -7,7 +7,10 @@ import { authMiddleware } from "../middleware/auth.middleware.js";
 import { deleteAccount } from "../services/account.service.js";
 import { createRateLimiter } from '../middleware/rateLimit.middleware.js';
 import { ConflictError, ValidationError } from "../utils/errors.js";
-import { verifyAndConsumeChallenge } from "../services/challenge.service.js";
+import {
+  verifyAndConsumeChallenge,
+  verifyAndConsumeSep10Challenge,
+} from "../services/challenge.service.js";
 import { setProviderAvailability } from "../services/providerEnrollment.service.js";
 
 const authRateLimit = createRateLimiter({
@@ -25,6 +28,7 @@ export async function userRoutes(app: FastifyInstance) {
    * register someone else's public Stellar address before they do (address
    * squatting), since Stellar addresses are public. See
    * docs/AUDIT_MOBILE_MAINNET.md, "Registro sin prueba de posesión de llave".
+   * La web manda `transaction` (reto SEP-10 firmado) en vez de challenge + signature.
    */
   app.post(
     "/users/register",
@@ -33,7 +37,11 @@ export async function userRoutes(app: FastifyInstance) {
       schema: {
         body: {
           type: "object",
-          required: ["stellar_address", "username", "challenge", "signature"],
+          required: ["stellar_address", "username"],
+          anyOf: [
+            { required: ["challenge", "signature"] },
+            { required: ["transaction"] },
+          ],
           properties: {
             stellar_address: { type: "string", minLength: 56, maxLength: 56 },
             username: {
@@ -45,18 +53,20 @@ export async function userRoutes(app: FastifyInstance) {
             phone_hash: { type: "string", maxLength: 64 },
             challenge: { type: "string" },
             signature: { type: "string" },
+            transaction: { type: "string", minLength: 1, maxLength: 4096 },
           },
           additionalProperties: false,
         },
       },
     },
     async (request, reply) => {
-      const { stellar_address, username, phone_hash, challenge, signature } = request.body as {
+      const { stellar_address, username, phone_hash, challenge, signature, transaction } = request.body as {
         stellar_address: string;
         username: string;
         phone_hash?: string;
-        challenge: string;
-        signature: string;
+        challenge?: string;
+        signature?: string;
+        transaction?: string;
       };
 
       if (!StrKey.isValidEd25519PublicKey(stellar_address)) {
@@ -67,7 +77,18 @@ export async function userRoutes(app: FastifyInstance) {
         );
       }
 
-      await verifyAndConsumeChallenge(stellar_address, challenge, signature);
+      if (transaction) {
+        const account = await verifyAndConsumeSep10Challenge(transaction);
+        if (account !== stellar_address) {
+          throw new ValidationError(
+            "INVALID_STELLAR_ADDRESS",
+            "La dirección de Stellar no es válida.",
+            "SEP-10 challenge was signed for another account",
+          );
+        }
+      } else {
+        await verifyAndConsumeChallenge(stellar_address, challenge as string, signature as string);
+      }
 
       // Check for existing user. Two very distinct situations hide behind the
       // same 409, and collapsing them into one message is a dead end for the
@@ -115,7 +136,7 @@ export async function userRoutes(app: FastifyInstance) {
       const jti = randomUUID();
       const token = app.jwt.sign(
         { id: user.id, stellar_address: user.stellar_address, jti },
-        { expiresIn: config.jwtExpiry },
+        { expiresIn: transaction ? config.webJwtExpiry : config.jwtExpiry },
       );
 
       request.log.info({ user_id: user.id, stellar_address, category: 'auth' }, '[auth] User registered');

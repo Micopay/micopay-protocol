@@ -1,6 +1,9 @@
 import axios from 'axios';
+import { Networks } from '@stellar/stellar-sdk';
 import { extractApiErrorPayload, toApiError } from '../utils/apiError';
 import { signChallenge, getPublicKey, signTransactionXdr } from '../lib/keystore';
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
+import { assertWebAuthChallenge } from '../lib/signer/webAuthChallenge';
 import { validatePreparedEscrowTx } from './escrowTxValidation';
 // CASH-5A: el conjunto canónico de estados vive en TradeStateBadge, que es su
 // dueño según el issue. Import de solo tipo: se borra al compilar, así que no
@@ -303,6 +306,19 @@ export async function updateMerchantLocation(
   return res.data.location;
 }
 
+/** Lo que dice la billetera llega tal cual; solo se traducen las respuestas del backend. */
+function webAuthError(e: unknown): unknown {
+  return axios.isAxiosError(e) ? toApiError(extractApiErrorPayload(e)) : e;
+}
+
+/** Reto SEP-10 firmado por la billetera. Se revisa antes de pedir la firma. */
+async function signedWebChallenge(account: string): Promise<string> {
+  const passphrase = import.meta.env.VITE_NETWORK_PASSPHRASE || Networks.TESTNET;
+  const res = await http.get('/auth/sep10', { params: { account } });
+  assertWebAuthChallenge(res.data.transaction, account, passphrase);
+  return signTransactionXdr(res.data.transaction, passphrase, 'web_auth');
+}
+
 /**
  * Registers a new user. The backend requires proof that this device holds
  * stellar_address's private key (same challenge/response dance as login) —
@@ -319,6 +335,21 @@ export async function registerUser(username: string, phoneHash?: string): Promis
   const stellar_address = await getPublicKey();
   if (!stellar_address) {
     throw new Error('No device keypair found — generateAndStoreKeypair() must run before registerUser()');
+  }
+
+  if (IS_EXTERNAL_SIGNER) {
+    try {
+      const body: Record<string, string> = {
+        username,
+        stellar_address,
+        transaction: await signedWebChallenge(stellar_address),
+      };
+      if (phoneHash) body.phone_hash = phoneHash;
+      const res = await http.post('/users/register', body);
+      return { ...res.data.user, token: res.data.token };
+    } catch (e: unknown) {
+      throw webAuthError(e);
+    }
   }
 
   const challengeRes = await fetch(`${BASE_URL}/auth/challenge`, {
@@ -356,6 +387,16 @@ export async function getAuthToken(): Promise<string> {
   const stellar_address = await getPublicKey();
   if (!stellar_address) {
     throw new Error('No device keypair found — generateAndStoreKeypair() must run before getAuthToken()');
+  }
+
+  if (IS_EXTERNAL_SIGNER) {
+    try {
+      const transaction = await signedWebChallenge(stellar_address);
+      const res = await http.post('/auth/sep10', { transaction });
+      return res.data.token;
+    } catch (e: unknown) {
+      throw webAuthError(e);
+    }
   }
 
   // Step 1: request a one-time challenge from the server
@@ -411,6 +452,12 @@ export async function createTrade(
   } catch (e: unknown) {
     throw toApiError(extractApiErrorPayload(e));
   }
+}
+
+/** Operaciones abiertas de esta cuenta, para ubicar una firma pedida desde la web. */
+export async function getActiveTrades(token: string): Promise<TradeData[]> {
+  const res = await http.get('/trades/active', authHeaders(token));
+  return res.data.trades;
 }
 
 export async function getTrade(

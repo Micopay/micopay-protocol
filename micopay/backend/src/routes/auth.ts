@@ -6,7 +6,12 @@ import { createRateLimiter } from '../middleware/rateLimit.middleware.js';
 import { NotFoundError } from '../utils/errors.js';
 import { revokeToken } from '../services/tokenRevocation.service.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
-import { issueChallenge, verifyAndConsumeChallenge } from '../services/challenge.service.js';
+import {
+  issueChallenge,
+  issueSep10Challenge,
+  verifyAndConsumeChallenge,
+  verifyAndConsumeSep10Challenge,
+} from '../services/challenge.service.js';
 
 const authRateLimit = createRateLimiter({
   windowMs: config.authRateLimitWindowMs,
@@ -34,7 +39,7 @@ export async function authRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const { stellar_address } = request.body as { stellar_address: string };
 
-    const { challenge, expiresAt } = issueChallenge(stellar_address);
+    const { challenge, expiresAt } = await issueChallenge(stellar_address);
 
     request.log.info({ stellar_address, category: 'auth' }, '[auth] Challenge issued');
     return { challenge, expires_at: new Date(expiresAt).toISOString() };
@@ -92,6 +97,69 @@ export async function authRoutes(app: FastifyInstance) {
     );
 
     request.log.info({ stellar_address, user_id: user.id, category: 'auth' }, '[auth] Token issued');
+    return { token, user };
+  });
+
+  /**
+   * GET /auth/sep10?account=G...
+   * Reto SEP-10 para billeteras externas. WEB_AUTH_ENDPOINT del stellar.toml.
+   */
+  app.get('/auth/sep10', {
+    preHandler: [authRateLimit],
+    schema: {
+      querystring: {
+        type: 'object',
+        required: ['account'],
+        properties: {
+          account: { type: 'string', minLength: 56, maxLength: 56 },
+        },
+      },
+    },
+  }, async (request) => {
+    const { account } = request.query as { account: string };
+    const issued = await issueSep10Challenge(account);
+    request.log.info({ stellar_address: account, category: 'auth' }, '[auth] SEP-10 challenge issued');
+    return issued;
+  });
+
+  /**
+   * POST /auth/sep10
+   * Recibe el reto firmado por la billetera y entrega una sesion corta de navegador.
+   */
+  app.post('/auth/sep10', {
+    preHandler: [authRateLimit],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['transaction'],
+        properties: {
+          transaction: { type: 'string', minLength: 1, maxLength: 4096 },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request) => {
+    const { transaction } = request.body as { transaction: string };
+    const account = await verifyAndConsumeSep10Challenge(transaction);
+
+    const user = await db.getOne(
+      'SELECT id, stellar_address, username FROM users WHERE stellar_address = $1',
+      [account],
+    );
+    if (!user) {
+      throw new NotFoundError(
+        'USER_NOT_FOUND',
+        'Usuario no encontrado. Por favor, regístrate primero.',
+        'User not found. Register first via POST /users/register'
+      );
+    }
+
+    const token = app.jwt.sign(
+      { id: user.id, stellar_address: user.stellar_address, jti: randomUUID() },
+      { expiresIn: config.webJwtExpiry },
+    );
+
+    request.log.info({ stellar_address: account, user_id: user.id, category: 'auth' }, '[auth] SEP-10 token issued');
     return { token, user };
   });
 

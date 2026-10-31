@@ -204,6 +204,14 @@ export const config = {
   // JWT
   jwtSecret: process.env.JWT_SECRET || 'dev_jwt_secret',
   jwtExpiry: process.env.JWT_EXPIRY || '24h',
+  /** Sesion del navegador: mas corta que la de la APK (WP4 de MicoPay web). */
+  webJwtExpiry: process.env.WEB_JWT_EXPIRY || '2h',
+
+  // SEP-10. La llave solo autentica: sin fondos y distinta de PLATFORM_SECRET_KEY.
+  // Sin ella, las rutas web responden 503 y el login de la APK sigue igual.
+  sep10SigningSecret: process.env.SEP10_SIGNING_SECRET || '',
+  sep10HomeDomain: process.env.SEP10_HOME_DOMAIN || 'app.micopay.com.mx',
+  sep10WebAuthDomain: process.env.SEP10_WEB_AUTH_DOMAIN || 'api.micopay.app',
 
   // Firebase / FCM (for push notifications)
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
@@ -329,6 +337,15 @@ export function validateConfig() {
     config.maxEffectiveFeePercent > 100
   ) {
     errors.push("MAX_EFFECTIVE_FEE_PERCENT must be a number between the 0.8% platform fee and 100%.");
+  }
+
+  if (config.sep10SigningSecret) {
+    if (!/^S[A-Z2-7]{55}$/.test(config.sep10SigningSecret)) {
+      errors.push("SEP10_SIGNING_SECRET is invalid. It must be a valid Stellar secret key (56 characters starting with 'S').");
+    }
+    if (config.sep10SigningSecret === config.platformSecretKey) {
+      errors.push("SEP10_SIGNING_SECRET must not be PLATFORM_SECRET_KEY.");
+    }
   }
 
   if (config.isProduction) {

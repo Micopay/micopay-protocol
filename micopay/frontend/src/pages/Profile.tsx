@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
 import { useTranslation } from "react-i18next";
 import DeleteAccountModal from "../components/DeleteAccountModal";
 import SecretKeyBackupModal from "../components/SecretKeyBackupModal";
@@ -228,6 +229,11 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
 
           {!loading && profile && (
               <>
+                {!IS_EXTERNAL_SIGNER && (
+                  <a href="#/conexiones-web" className="block bg-papel rounded-sm p-4 border-2 border-tinta text-sm font-bold">
+                    Conexiones web
+                  </a>
+                )}
                 <section className="bg-verde-suave rounded-sm p-5 border-2 border-tinta ">
                   <div className="flex items-center gap-4">
                     <div
@@ -361,19 +367,23 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                     >
                       {t('profile.copyAddress')}
                     </button>
-                    <button
-                        onClick={() => setShowImportModal(true)}
-                        className="flex-1 min-h-12 text-sm font-bold border-2 border-tinta text-gris rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
-                    >
-                      {t('profile.importKey')}
-                    </button>
+                    {!IS_EXTERNAL_SIGNER && (
+                      <button
+                          onClick={() => setShowImportModal(true)}
+                          className="flex-1 min-h-12 text-sm font-bold border-2 border-tinta text-gris rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
+                      >
+                        {t('profile.importKey')}
+                      </button>
+                    )}
                   </div>
-                  <button
-                      onClick={handleExport}
-                      className="w-full min-h-12 text-sm font-bold text-rojo border-2 border-tinta rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
-                  >
-                    {t('profile.exportKey')}
-                  </button>
+                  {!IS_EXTERNAL_SIGNER && (
+                    <button
+                        onClick={handleExport}
+                        className="w-full min-h-12 text-sm font-bold text-rojo border-2 border-tinta rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all"
+                    >
+                      {t('profile.exportKey')}
+                    </button>
+                  )}
                 </section>
 
                 {/* Language switcher */}
