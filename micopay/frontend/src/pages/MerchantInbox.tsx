@@ -375,6 +375,8 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
       setScanView({ type: 'parse_error', message: error });
       return;
     }
+    // La persona cerro el escaner de la web: no es un error.
+    if (IS_EXTERNAL_SIGNER && !value) return;
 
     // Parse the scanned QR into a typed MicoPay payload.
     const parsed = parseQRPayload(value);

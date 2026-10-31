@@ -5,6 +5,7 @@ import { IS_EXTERNAL_SIGNER } from './lib/signer/mode';
 import WalletLogin from './pages/WalletLogin';
 import WebSessionGuard from './components/WebSessionGuard';
 import WebShell, { type WebNavItem } from './components/WebShell';
+import WebScanDialog from './components/WebScanDialog';
 import {
   HashRouter,
   Routes,
@@ -1013,6 +1014,7 @@ function WebFrame({ children }: { children: React.ReactNode }) {
       address={address}
     >
       {children}
+      <WebScanDialog />
     </WebShell>
   );
 }
