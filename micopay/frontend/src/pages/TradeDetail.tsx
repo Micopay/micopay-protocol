@@ -1415,16 +1415,30 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
         // emite. CASH-5B trae aquí la acción real, repartida por flujo y
         // actor: la vista de confirmación ya no queda inalcanzable.
         return (
-          <RevealingView
-            trade={trade}
-            actor={actor}
-            onComplete={handleComplete}
-            token={token}
-            onShowQR={() => navigate('/qr-reveal')}
-            onOpenChat={() => navigate(`/chat/${trade.id}`)}
-            onGoToScanner={() => navigate('/inbox', { state: { autoScan: true } })}
-            cashHandoffConfirmed={cashHandoffConfirmed}
-          />
+          <>
+            <RevealingView
+              trade={trade}
+              actor={actor}
+              onComplete={handleComplete}
+              token={token}
+              onShowQR={() => navigate('/qr-reveal')}
+              onOpenChat={() => navigate(`/chat/${trade.id}`)}
+              onGoToScanner={() => navigate('/inbox', { state: { autoScan: true } })}
+              cashHandoffConfirmed={cashHandoffConfirmed}
+            />
+            {/* En un retiro, `revealing` es cuando el cliente ya genero su QR.
+                Cancelar sigue siendo posible hasta la entrega; el backend
+                decide (p. ej. lo rechaza mientras el QR siga vigente). */}
+            {actor.flow === 'cashout' && !cashHandoffConfirmed && (
+              <LockedCancel
+                allowed={actor.party === 'client' || (actor.party === 'provider' && merchantUnavailable)}
+                mustPauseFirst={actor.party === 'provider' && !merchantUnavailable}
+                cancelling={isCancelling}
+                error={cancelError}
+                onCancel={handleCancel}
+              />
+            )}
+          </>
         );
       case 'completed':
         return <CompletedView trade={trade} />;

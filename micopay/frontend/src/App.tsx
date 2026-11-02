@@ -500,6 +500,7 @@ function ChatRoute() {
           isProvider={isProvider}
           onBack={() => navigate(routeTradeId ? `/trade/${routeTradeId}` : '/map')}
           onViewQR={() => navigate('/qr-reveal')}
+          onScan={() => navigate('/inbox', { state: { autoScan: true } })}
       />
   );
 }
