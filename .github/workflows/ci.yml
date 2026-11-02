@@ -90,6 +90,7 @@ jobs:
           # copiar sql/, que vive fuera de backend/. Ver el Dockerfile.
           context: micopay
           file: micopay/backend/Dockerfile
+          build-args: GIT_COMMIT=${{ github.sha }}
           platforms: linux/amd64
           push: false
           load: true
