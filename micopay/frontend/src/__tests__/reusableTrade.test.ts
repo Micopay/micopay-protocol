@@ -36,10 +36,18 @@ describe('pickReusableTrade', () => {
     expect(created).toEqual(['new-0']);
   });
 
-  it('an open trade with the same agent, flow and amount is resumed', () => {
+  it('an open trade with the same agent, flow and amount is offered, not taken', () => {
     const open = trade({ id: 'open', status: 'locked' });
     const r = pickReusableTrade({ retry: null, active: [open], counterpartyId: AGENT, flow: 'cashout', amountMxn: 500 });
+    expect(r.trade).toBeNull();
+    expect(r.offer?.id).toBe('open');
+  });
+
+  it('once the offer is accepted, the open trade is resumed', () => {
+    const open = trade({ id: 'open', status: 'locked' });
+    const r = pickReusableTrade({ retry: null, active: [open], counterpartyId: AGENT, flow: 'cashout', amountMxn: 500, acceptedOfferId: 'open' });
     expect(r.trade?.id).toBe('open');
+    expect(r.offer).toBeNull();
   });
 
   it('a different amount is a conflict, not a silent reuse', () => {

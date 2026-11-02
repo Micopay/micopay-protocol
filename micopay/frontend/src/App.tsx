@@ -1168,6 +1168,8 @@ function App() {
   // WP3: operacion ya creada cuyo bloqueo fallo. Reintentar bloquea ESA, no
   // crea otra (cada reintento dejaba una operacion fantasma).
   const lockRetryRef = useRef<{ tradeId: string; counterpartyId: string; flow: TradeFlow } | null>(null);
+  // WP3: operacion activa que ya se le ofrecio retomar. Confirmar otra vez la acepta.
+  const resumeOfferRef = useRef<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [devicePublicKey, setDevicePublicKey] = useState<string | null>(null);
 
@@ -1385,7 +1387,9 @@ function App() {
       : null;
     if (!retry || retry.status !== 'pending') lockRetryRef.current = null;
     const active = await getActiveTrades(token).catch(() => [] as TradeData[]);
-    return pickReusableTrade({ retry, active, counterpartyId, flow: tradeFlow, amountMxn: activeAmount });
+    return pickReusableTrade({
+      retry, active, counterpartyId, flow: tradeFlow, amountMxn: activeAmount, acceptedOfferId: resumeOfferRef.current,
+    });
   };
 
   const runTradeFlow = async (counterpartyId: string, tradeFlow: TradeFlow = 'deposit'): Promise<boolean> => {
@@ -1395,7 +1399,15 @@ function App() {
     setTradeLoading(true);
     setTradeError(null);
     try {
-      const { trade: reusable, conflict } = await findReusableTrade(counterpartyId, tradeFlow, sessionUser.token);
+      const { trade: reusable, conflict, offer } = await findReusableTrade(counterpartyId, tradeFlow, sessionUser.token);
+      if (offer) {
+        // Se ofrece, no se decide por la persona: el segundo intento la acepta.
+        resumeOfferRef.current = offer.id;
+        const message = `Ya tienes una operación activa de $${offer.amount_mxn} MXN con este agente. Confirma de nuevo para retomarla en lugar de crear otra.`;
+        setTradeError({ ...mapApiError(new Error(message)), message, action: 'retry' });
+        return false;
+      }
+      resumeOfferRef.current = null;
       if (conflict) {
         const message = `Ya tienes una operación activa de $${conflict.amount_mxn} MXN con este agente. Ábrela desde tu actividad o cancélala antes de crear otra.`;
         setTradeError({ ...mapApiError(new Error(message)), message });
