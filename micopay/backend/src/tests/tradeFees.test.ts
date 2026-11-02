@@ -136,11 +136,23 @@ function testSixPercentServerSideCap() {
   const normalAmount = computeTradeFees(500, MAX_PROVIDER_FEE_PERCENT, "cashout");
   ok(isEffectiveFeeAllowed(normalAmount), "500 MXN al maximo nominal queda dentro de 6%");
 
-  // Dos redondeos `ceil` pueden rebasar el nominal en montos pequenos. El
-  // control se aplica al resultado real, no solo a 5.2 + 0.8.
-  const roundedOver = computeTradeFees(100, MAX_PROVIDER_FEE_PERCENT, "cashout");
-  ok(!isEffectiveFeeAllowed(roundedOver), "el redondeo que produce 7% efectivo se bloquea");
-  console.log("  ✓ el backend bloquea el coste total por encima del tope configurable");
+  // #6: dos `ceil` rebasaban el nominal (100 MXN daba 6 + 1 = 7%). La
+  // comision del agente se recorta al tope en pesos.
+  const small = computeTradeFees(100, MAX_PROVIDER_FEE_PERCENT, "cashout");
+  strictEqual(small.providerFeeMxn, 5, "100 MXN: el agente cobra 5");
+  strictEqual(small.platformFeeMxn, 1, "100 MXN: la plataforma cobra 1");
+  const mid = computeTradeFees(900, MAX_PROVIDER_FEE_PERCENT, "cashout");
+  strictEqual(mid.providerFeeMxn, 46, "900 MXN: el agente cobra 46");
+  strictEqual(mid.platformFeeMxn, 8, "900 MXN: la plataforma cobra 8");
+
+  // Al tope nominal, el agente aparece en todos los montos y nunca pasa de 6%.
+  for (let amount = 100; amount <= 50000; amount += 1) {
+    for (const flow of ["cashout", "deposit"] as const) {
+      const f = computeTradeFees(amount, MAX_PROVIDER_FEE_PERCENT, flow);
+      ok(isEffectiveFeeAllowed(f), `${amount} MXN (${flow}) dentro del tope`);
+    }
+  }
+  console.log("  ✓ al tope nominal el agente cabe en todos los montos y nunca pasa del tope");
 }
 
 // ── 2. Lo que anuncia el mapa ──────────────────────────────────────────────
