@@ -210,6 +210,8 @@ export interface TradeDetailResponse {
   };
   /** Buyer may sign decline() for this exact contract and trade state. */
   decline_available: boolean;
+  /** Cash-out: el agente ya escaneó el QR y registró la entrega. */
+  cash_handoff_confirmed?: boolean;
   merchant_unavailable: boolean;
   seller_username: string | null;
   buyer_username: string | null;

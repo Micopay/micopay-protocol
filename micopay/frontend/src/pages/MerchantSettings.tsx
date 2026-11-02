@@ -173,6 +173,11 @@ export default function MerchantSettings({
 
   const save = async () => {
     if (!token) return;
+    if (![form.rate_percent, form.min_trade_mxn, form.max_trade_mxn, form.daily_cap_mxn].every(Number.isFinite)) {
+      setMessage('Completa la tasa, el mínimo, el máximo y el tope diario antes de guardar.');
+      setMessageType('error');
+      return;
+    }
     setSaving(true);
     setMessage(null);
     setMessageType(null);
@@ -196,7 +201,13 @@ export default function MerchantSettings({
         setMessageType('success');
       }
     } catch (err: any) {
-      setMessage(resolveErrorMessage(err).message);
+      // #13: el mensaje generico ocultaba la causa (p. ej. tasa fuera de rango).
+      const resolved = resolveErrorMessage(err);
+      const serverMessage = err?.response?.data?.message;
+      setMessage(resolved.key === 'generic.fallback' && typeof serverMessage === 'string' && serverMessage
+        ? serverMessage
+        : resolved.message);
+      setMessageType('error');
     } finally {
       setSaving(false);
     }
@@ -245,28 +256,28 @@ export default function MerchantSettings({
             min={0}
             max={maxProviderFeePercent}
             onChange={(v) =>
-              setForm((f) => ({ ...f, rate_percent: Number(v) }))
+              setForm((f) => ({ ...f, rate_percent: toFieldNumber(v) }))
             }
           />
           <Field
             label="Monto mínimo (MXN)"
             value={form.min_trade_mxn}
             onChange={(v) =>
-              setForm((f) => ({ ...f, min_trade_mxn: Number(v) }))
+              setForm((f) => ({ ...f, min_trade_mxn: toFieldNumber(v) }))
             }
           />
           <Field
             label="Monto máximo (MXN)"
             value={form.max_trade_mxn}
             onChange={(v) =>
-              setForm((f) => ({ ...f, max_trade_mxn: Number(v) }))
+              setForm((f) => ({ ...f, max_trade_mxn: toFieldNumber(v) }))
             }
           />
           <Field
             label="Tope diario (MXN)"
             value={form.daily_cap_mxn}
             onChange={(v) =>
-              setForm((f) => ({ ...f, daily_cap_mxn: Number(v) }))
+              setForm((f) => ({ ...f, daily_cap_mxn: toFieldNumber(v) }))
             }
           />
 
@@ -405,6 +416,11 @@ export default function MerchantSettings({
   );
 }
 
+/** #13: un campo vacio queda vacio (NaN), no se vuelve 0 con el cursor detras. */
+function toFieldNumber(v: string): number {
+  return v.trim() === '' ? NaN : Number(v);
+}
+
 function Field({
   label,
   value,
@@ -429,7 +445,7 @@ function Field({
         step={step}
         min={min}
         max={max}
-        value={Number.isFinite(value) ? value : 0}
+        value={Number.isFinite(value) ? value : ''}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-sm border border-slate-200 px-4 py-3"
       />

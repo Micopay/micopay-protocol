@@ -645,7 +645,12 @@ export async function getTradeById(tradeId: string, userId: string) {
 export async function getTradeDetailForParticipant(tradeId: string, userId: string) {
   const trade = await getTradeById(tradeId, userId);
   const seller = await getSellerMerchantRow(trade.seller_id);
-  const merchant_unavailable = isMerchantUnavailableForTrade(trade, seller);
+  // La disponibilidad es la del agente (provider_id), igual que en cancelTrade.
+  // En un retiro el vendedor del escrow es el cliente.
+  const provider = trade.provider_id && trade.provider_id !== trade.seller_id
+    ? await getSellerMerchantRow(trade.provider_id)
+    : seller;
+  const merchant_unavailable = isMerchantUnavailableForTrade(trade, provider);
   const buyer = await db.getOne<{ username: string | null; stellar_address: string }>(
     'SELECT username, stellar_address FROM users WHERE id = $1',
     [trade.buyer_id],
@@ -663,6 +668,9 @@ export async function getTradeDetailForParticipant(tradeId: string, userId: stri
   return {
     trade,
     decline_available,
+    // #2/#17: la entrega ya quedo registrada (cash-out). La pantalla del agente
+    // ofrece liberar y la del cliente deja de pedir otro QR.
+    cash_handoff_confirmed: Boolean(handoff),
     merchant_unavailable,
     seller_username: seller?.username ?? null,
     buyer_username: buyer?.username ?? null,

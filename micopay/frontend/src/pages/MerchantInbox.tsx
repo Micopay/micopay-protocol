@@ -322,11 +322,13 @@ function ScanErrorCard({
 interface MerchantInboxProps {
   token: string | null;
   onBack: () => void;
+  /** #4: abre el detalle, donde estan las acciones (bloquear, liberar, chat). */
+  onOpenTrade?: (tradeId: string) => void;
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
+const MerchantInbox = ({ token, onBack, onOpenTrade }: MerchantInboxProps) => {
   const { t } = useTranslation();
   const [trades, setTrades] = useState<MerchantTrade[]>([]);
   const [loading, setLoading] = useState(true);
@@ -608,7 +610,13 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
         ) : (
           <div className="space-y-4">
             {trades.map((trade) => (
-              <div key={trade.id} className="bg-papel rounded-sm p-4 ">
+              <button
+                type="button"
+                key={trade.id}
+                onClick={() => onOpenTrade?.(trade.id)}
+                disabled={!onOpenTrade}
+                className="block w-full text-left bg-papel rounded-sm p-4 border-2 border-transparent hover:border-tinta focus-visible:border-tinta disabled:hover:border-transparent"
+              >
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <p className="font-medium text-on-surface">{trade.client_handle}</p>
@@ -644,7 +652,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
                     <span className="font-medium">{t('inbox.pending')}</span>
                   </div>
                 )}
-              </div>
+              </button>
             ))}
           </div>
         )}

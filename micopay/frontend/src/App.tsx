@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { generateAndStoreKeypair, keypairExists, getPublicKey, revealSecretKey } from './lib/keystore';
 import { IS_EXTERNAL_SIGNER } from './lib/signer/mode';
@@ -234,6 +234,7 @@ function InboxRoute() {
       <MerchantInbox
           token={sessionUser?.token ?? null}
           onBack={() => navigate('/')}
+          onOpenTrade={(tradeId) => navigate(`/trade/${tradeId}`)}
       />
   );
 }
@@ -468,7 +469,8 @@ function useTradeParticipantInfo(activeTrade: TradeData | null, sessionUser: Use
         setCounterpartyName(isMeTheEscrowSeller ? buyer_username : seller_username);
         // Cash-out (/chat): the client locks crypto (escrow seller); the agent
         // hands over cash (escrow buyer). isProvider marks the agent view.
-        setIsProvider(!isMeTheEscrowSeller);
+        // `provider_id` decides when present, so a deposit agent is right too.
+        setIsProvider(trade.provider_id ? trade.provider_id === sessionUser.id : !isMeTheEscrowSeller);
       })
       .catch(() => {});
   }, [activeTrade, sessionUser?.token, sessionUser?.id]);
@@ -479,17 +481,22 @@ function useTradeParticipantInfo(activeTrade: TradeData | null, sessionUser: Use
 function ChatRoute() {
   const navigate = useNavigate();
   const { lockTxHash, activeTrade, sessionUser } = useAppCtx();
-  const { counterpartyName, isProvider } = useTradeParticipantInfo(activeTrade, sessionUser);
+  // #3: desde el detalle la operacion llega en la ruta. El agente no tiene
+  // `activeTrade` en memoria, asi que su chat salia vacio.
+  const { tradeId: routeTradeId } = useParams();
+  const routeTrade = useMemo(() => (routeTradeId ? ({ id: routeTradeId } as TradeData) : null), [routeTradeId]);
+  const chatTrade = routeTrade ?? activeTrade;
+  const { counterpartyName, isProvider } = useTradeParticipantInfo(chatTrade, sessionUser);
   return (
       <ChatRoom
-          tradeId={activeTrade?.id ?? ''}
+          tradeId={chatTrade?.id ?? ''}
           userId={sessionUser?.id ?? ''}
           token={sessionUser?.token}
           apiBaseUrl={import.meta.env.VITE_API_URL}
           lockTxHash={lockTxHash}
           counterpartyName={counterpartyName}
           isProvider={isProvider}
-          onBack={() => navigate('/map')}
+          onBack={() => navigate(routeTradeId ? `/trade/${routeTradeId}` : '/map')}
           onViewQR={() => navigate('/qr-reveal')}
       />
   );
@@ -831,6 +838,7 @@ function ProfileRoute() {
           onNavigateTerms={() => navigate('/terms')}
           onNavigateKyc={() => navigate('/kyc/didit?return=profile')}
           onNavigateJoinNetwork={() => navigate('/join-network')}
+          onNavigateMerchantSettings={() => navigate('/merchant-settings')}
           providerStatus={providerStatus}
           availability={availability}
           onToggleAvailability={async (next) => {
@@ -1589,6 +1597,7 @@ function App() {
                 <Route path="/confirm" element={<ProtectedRoute><ConfirmRoute /></ProtectedRoute>} />
                 <Route path="/map-deposit" element={<ProtectedRoute><MapDepositRoute /></ProtectedRoute>} />
                 <Route path="/chat" element={<ProtectedRoute><ChatRoute /></ProtectedRoute>} />
+                <Route path="/chat/:tradeId" element={<ProtectedRoute><ChatRoute /></ProtectedRoute>} />
                 <Route path="/chat-deposit" element={<ProtectedRoute><ChatDepositRoute /></ProtectedRoute>} />
                 <Route path="/qr-reveal" element={<ProtectedRoute><QRRevealRoute /></ProtectedRoute>} />
                 <Route path="/qr-deposit" element={<ProtectedRoute><QRDepositRoute /></ProtectedRoute>} />
