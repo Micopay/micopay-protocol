@@ -844,12 +844,38 @@ export async function prepareLockTrade(
       secretHash: trade.secret_hash,
     });
   } catch (err: any) {
-    if (!String(err?.message ?? '').includes('Error(Contract, #10)')) throw err;
+    const message = String(err?.message ?? '');
+    const assetLabel = lockAssetLabel(trade.asset_code);
+    // WP6: los errores del token (SAC) en la simulacion llegaban como 500.
+    // #13 es `TrustlineMissingError`; el escrow no tiene un #13 propio.
+    if (message.includes('Error(Contract, #13)')) {
+      throw new AppError(
+        'LOCK_TRUSTLINE_MISSING',
+        `Tu cuenta no tiene la línea de confianza del ${assetLabel} que usa MicoPay. Agrégala en tu billetera y vuelve a intentar.`,
+        `Lock simulation for trade ${trade.id}: seller has no trustline for the escrow token (${message.slice(0, 120)})`,
+        422,
+      );
+    }
+    if (!message.includes('Error(Contract, #10)')) throw err;
+    // #10 es `TradeAlreadyExists` del escrow o `BalanceError` del token. Si el
+    // escrow no conoce la operacion, es saldo.
     await explainTradeAlreadyExists(request, trade, contractId, seller.stellar_address, buyer.stellar_address, err);
-    throw err;
+    throw new AppError(
+      'LOCK_INSUFFICIENT_BALANCE',
+      `No tienes saldo suficiente de ${assetLabel} para bloquear esta operación.`,
+      `Lock simulation for trade ${trade.id}: token balance error (${message.slice(0, 120)})`,
+      422,
+    );
   }
 
   return { xdr: prepared.xdr, network_passphrase: prepared.networkPassphrase };
+}
+
+/** Nombre del activo para los mensajes; con emisor configurado, abreviado. */
+function lockAssetLabel(assetCode: unknown): string {
+  const code = String(assetCode || config.escrowAsset || 'XLM').toUpperCase();
+  const issuer = config.escrowAssetIssuers[code];
+  return issuer ? `${code} (emisor ${issuer.slice(0, 4)}…${issuer.slice(-4)})` : code;
 }
 
 /**

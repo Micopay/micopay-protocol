@@ -37,6 +37,7 @@ export type ReceiverReadiness =
 interface HorizonBalance {
   asset_type: string;
   asset_code?: string;
+  asset_issuer?: string;
   balance: string;
   selling_liabilities?: string;
 }
@@ -56,7 +57,12 @@ export interface HorizonAccount {
  * codigo y es de otro emisor, la app la detecta al liberar; aqui solo se evita
  * crear operaciones que no pueden terminar por falta de cuenta o de XLM.
  */
-export function evaluateReceiverAccount(account: HorizonAccount | null, assetCode: string): ReceiverReadiness {
+export function evaluateReceiverAccount(
+  account: HorizonAccount | null,
+  assetCode: string,
+  /** WP6: emisor del token del escrow. Sin el, se compara solo el codigo. */
+  assetIssuer?: string,
+): ReceiverReadiness {
   if (!account) return { ready: false, reason: 'account_not_found' };
 
   const native = account.balances.find((b) => b.asset_type === 'native');
@@ -66,9 +72,14 @@ export function evaluateReceiverAccount(account: HorizonAccount | null, assetCod
   const spendableXlm = balance - entries * BASE_RESERVE_XLM - sellingLiabilities;
 
   const code = assetCode.trim().toUpperCase();
+  // Una trustline del mismo codigo pero de otro emisor no sirve: hay que crear
+  // la correcta, y con ella su reserva.
   const needsTrustline =
     code !== 'XLM' &&
-    !account.balances.some((b) => b.asset_type !== 'native' && b.asset_code?.toUpperCase() === code);
+    !account.balances.some((b) =>
+      b.asset_type !== 'native'
+      && b.asset_code?.toUpperCase() === code
+      && (!assetIssuer || b.asset_issuer === assetIssuer));
 
   const requiredXlm = RELEASE_FEE_BUFFER_XLM + (needsTrustline ? BASE_RESERVE_XLM : 0);
   if (spendableXlm < requiredXlm) {
@@ -150,6 +161,7 @@ export async function assertReceiverCanReceive(params: {
     );
   }
 
-  const readiness = evaluateReceiverAccount(account, params.assetCode);
+  const issuer = config.escrowAssetIssuers[params.assetCode.trim().toUpperCase()];
+  const readiness = evaluateReceiverAccount(account, params.assetCode, issuer);
   if (!readiness.ready) throw new ReceiverNotReadyError(readiness, params.receiverIsCaller);
 }
