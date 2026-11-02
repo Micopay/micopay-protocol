@@ -308,9 +308,10 @@ function DepositRoute() {
 
 function MapDepositRoute() {
   const navigate = useNavigate();
-  const { activeAmount, handleDepositOfferSelected, tradeLoading, tradeError, clearTradeError, retryTradeFlow } = useAppCtx();
+  const { activeAmount, handleDepositOfferSelected, tradeLoading, tradeError, clearTradeError, retryTradeFlow, sessionUser } = useAppCtx();
   return (
       <DepositMap
+          viewerId={sessionUser?.id ?? null}
           onBack={() => navigate('/deposit')}
           onProceedToConfirm={(offer) => {
             navigate('/confirm', {
@@ -348,9 +349,10 @@ function MapDepositRoute() {
 
 function MapRoute() {
   const navigate = useNavigate();
-  const { activeAmount, handleOfferSelected, tradeLoading, tradeError, clearTradeError, retryTradeFlow } = useAppCtx();
+  const { activeAmount, handleOfferSelected, tradeLoading, tradeError, clearTradeError, retryTradeFlow, sessionUser } = useAppCtx();
   return (
       <ExploreMap
+          viewerId={sessionUser?.id ?? null}
           amount={activeAmount}
           loading={tradeLoading}
           onBack={() => navigate('/cashout')}

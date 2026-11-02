@@ -155,8 +155,12 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
     }
   };
 
+  // #20: con billetera externa no hay llave local; la cuenta es la conectada,
+  // que el servidor devuelve en el perfil. Antes decia "Sin clave generada".
+  const accountAddress = devicePublicKey ?? (IS_EXTERNAL_SIGNER ? profile?.stellar_address ?? null : null);
+
   const handleCopyAddress = () => {
-    if (devicePublicKey) navigator.clipboard.writeText(devicePublicKey);
+    if (accountAddress) navigator.clipboard.writeText(accountAddress);
   };
 
   // La llave ya no pasa por el portapapeles: se revela en un modal con
@@ -357,12 +361,12 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                     {t(IS_EXTERNAL_SIGNER ? 'profile.walletAccount' : 'profile.deviceKey')}
                   </p>
                   <p className="font-mono text-xs text-tinta break-all select-all bg-fondo rounded-sm p-3">
-                    {devicePublicKey ?? t('profile.noKeyGenerated')}
+                    {accountAddress ?? t('profile.noKeyGenerated')}
                   </p>
                   <div className="flex gap-2">
                     <button
                         onClick={handleCopyAddress}
-                        disabled={!devicePublicKey}
+                        disabled={!accountAddress}
                         className="flex-1 min-h-12 text-sm font-bold border-2 border-tinta text-verde rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-40"
                     >
                       {t('profile.copyAddress')}

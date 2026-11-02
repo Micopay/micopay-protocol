@@ -1,3 +1,4 @@
+import { PRIVACY_EMAIL } from '../constants/contact';
 interface PrivacyProps {
   onBack: () => void;
 }
@@ -99,7 +100,7 @@ const Privacy = ({ onBack }: PrivacyProps) => {
             <li><strong>Integridad financiera:</strong> Para cumplir con normativas de seguridad e integridad de la plataforma, el historial de transacciones (trades) y los hashes de transacciones públicas en el ledger de Stellar se conservan únicamente vinculados a tu perfil ya anonimizado.</li>
           </ul>
           <p className="text-sm text-gris leading-relaxed">
-            Para dudas sobre el proceso o para ejercer otros derechos ARCO, contáctanos en <a href="mailto:privacidad@micopay.app" className="text-primary hover:underline">privacidad@micopay.app</a>.
+            Para dudas sobre el proceso o para ejercer otros derechos ARCO, contáctanos en <a href={`mailto:${PRIVACY_EMAIL}`} className="text-primary hover:underline">{PRIVACY_EMAIL}</a>.
           </p>
         </section>
 

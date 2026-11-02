@@ -1,3 +1,4 @@
+import { SUPPORT_EMAIL } from '../constants/contact';
 import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -72,7 +73,6 @@ async function isCurrentUserSeller(tradeSellerId: string): Promise<boolean> {
 }
 
 const TRADE_POLL_INTERVAL = 5000;
-const SUPPORT_EMAIL = 'support@micopay.io';
 
 /**
  * CASH-5A: la píldora compacta del detalle. La presentación puede diferir de
@@ -158,12 +158,12 @@ function PendingView({
         </span>
       </div>
       <h2 className="text-2xl font-bold text-on-surface mb-2">
-        {isSeller ? 'Bloquea los fondos para iniciar' : 'Esperando al vendedor'}
+        {isSeller ? 'Bloquea los fondos para iniciar' : 'Esperando el bloqueo de fondos'}
       </h2>
       <p className="text-on-surface-variant mb-6">
         {isSeller
           ? `Firma con tu ${IS_EXTERNAL_SIGNER ? 'billetera' : 'llave'} para bloquear los fondos en el contrato de garantía.`
-          : 'El vendedor aún no ha bloqueado los fondos. Tu operación está segura en garantía.'}
+          : 'La otra parte aún no bloquea los fondos. Todavía no se ha movido nada.'}
       </p>
 
       <div className="bg-surface-container-low rounded-sm p-4 w-full mb-6">
@@ -877,9 +877,10 @@ function RefundConfirmDialog({
           <div className="mt-4 rounded-sm border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
             <p>{error}</p>
             <p className="mt-2 text-xs">
-              <a href="mailto:soporte@micopay.app" className="font-semibold underline">
+              <a href={`mailto:${SUPPORT_EMAIL}`} className="font-semibold underline">
                 Contactar soporte
-              </a>
+              </a>{' '}
+              ({SUPPORT_EMAIL})
             </p>
           </div>
         )}

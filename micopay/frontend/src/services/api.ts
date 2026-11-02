@@ -786,19 +786,23 @@ export async function getCETESRate(amount = "100"): Promise<CETESRate> {
   return res.data;
 }
 
+// #12: estas rutas exigen sesion. Sin el token el backend respondia 401 y el
+// interceptor global cerraba la sesion: el sitio "se reiniciaba".
 export async function buyCETES(
     amount: string,
     sourceAsset: "XLM" | "USDC",
+    token: string,
 ): Promise<CETESTxResult> {
-  const res = await http.post("/defi/cetes/buy", { amount, sourceAsset });
+  const res = await http.post("/defi/cetes/buy", { amount, sourceAsset }, authHeaders(token));
   return res.data;
 }
 
 export async function sellCETES(
     amount: string,
     destAsset: "XLM" | "USDC",
+    token: string,
 ): Promise<CETESTxResult> {
-  const res = await http.post("/defi/cetes/sell", { amount, destAsset });
+  const res = await http.post("/defi/cetes/sell", { amount, destAsset }, authHeaders(token));
   return res.data;
 }
 
@@ -842,21 +846,23 @@ export async function getBlendPools(): Promise<BlendPoolsResponse> {
 export async function blendSupply(
     amount: string,
     asset: string,
-    collateral = false,
+    collateral: boolean,
+    token: string,
 ): Promise<BlendTxResult> {
   const res = await http.post("/defi/blend/supply", {
     amount,
     asset,
     collateral,
-  });
+  }, authHeaders(token));
   return res.data;
 }
 
 export async function blendBorrow(
     amount: string,
     asset: string,
+    token: string,
 ): Promise<BlendTxResult> {
-  const res = await http.post("/defi/blend/borrow", { amount, asset });
+  const res = await http.post("/defi/blend/borrow", { amount, asset }, authHeaders(token));
   return res.data;
 }
 

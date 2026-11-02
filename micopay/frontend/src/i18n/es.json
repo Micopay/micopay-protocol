@@ -773,8 +773,8 @@
     "back": "Volver",
     "close": "Cerrar",
     "copyPublicKey": "Copiar clave pública",
-    "notifications": "Notificaciones",
-    "notificationsPending": "Notificaciones, {{count}} pendientes",
+    "notifications": "Bandeja de entrada",
+    "notificationsPending": "Bandeja de entrada, {{count}} pendientes",
     "userAvatar": "Foto de perfil"
   },
   "offlineQueue": {

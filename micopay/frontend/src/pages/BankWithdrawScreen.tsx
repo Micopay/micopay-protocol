@@ -1,3 +1,4 @@
+import { STELLAR_NETWORK_LABEL } from '../utils/stellarExplorer';
 import { NO_KEY_MESSAGE } from '../lib/signer/mode';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -112,6 +113,11 @@ export default function BankWithdrawScreen({ onBack, onVerifyIdentity, userToken
       </header>
 
       <main className="flex-1 p-4 flex flex-col gap-4">
+        {STELLAR_NETWORK_LABEL === 'Testnet' && (
+          <p className="p-3 border-2 border-tinta bg-amarillo text-sm font-bold">
+            Entorno de pruebas: no se envía dinero a ningún banco. No escribas tu RFC, CURP ni domicilio reales.
+          </p>
+        )}
         {loading && <p>Cargando…</p>}
         {!loading && error && (
           <div className="p-4 border-2 border-tinta bg-amarillo">

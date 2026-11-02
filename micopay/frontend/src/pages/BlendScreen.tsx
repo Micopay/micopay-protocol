@@ -17,7 +17,7 @@ interface BlendScreenProps {
 
 type MainTab = 'loan' | 'yield';
 
-const BlendScreen = ({ onBack }: BlendScreenProps) => {
+const BlendScreen = ({ onBack, userToken = '' }: BlendScreenProps) => {
   const { t } = useTranslation();
   const [tab, setTab] = useState<MainTab>('loan');
   const [pools, setPools] = useState<BlendPool[]>([]);
@@ -61,7 +61,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
     setCollateralLoading(true);
     setError(null);
     try {
-      const result = await blendSupply(collateralAmount, 'XLM', true);
+      const result = await blendSupply(collateralAmount, 'XLM', true, userToken);
       setCollateralResult(result);
     } catch (err: unknown) {
       setError(extractApiErrorPayload(err).message);
@@ -75,7 +75,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
     setBorrowLoading(true);
     setError(null);
     try {
-      const result = await blendBorrow(borrowAmount, borrowAsset);
+      const result = await blendBorrow(borrowAmount, borrowAsset, userToken);
       setBorrowResult(result);
     } catch (err: unknown) {
       setError(extractApiErrorPayload(err).message);
@@ -89,7 +89,7 @@ const BlendScreen = ({ onBack }: BlendScreenProps) => {
     setSupplyLoading(true);
     setError(null);
     try {
-      const result = await blendSupply(supplyAmount, supplyAsset, false);
+      const result = await blendSupply(supplyAmount, supplyAsset, false, userToken);
       setSupplyResult(result);
     } catch (err: unknown) {
       setError(extractApiErrorPayload(err).message);
