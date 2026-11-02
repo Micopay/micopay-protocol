@@ -114,13 +114,13 @@ export default function BankWithdrawScreen({ onBack, onVerifyIdentity, userToken
 
       <main className="flex-1 p-4 flex flex-col gap-4">
         {STELLAR_NETWORK_LABEL === 'Testnet' && (
-          <p className="p-3 border-2 border-tinta bg-amarillo text-sm font-bold">
+          <p className="p-3 border-2 border-naranja bg-naranja-suave text-tinta text-sm font-bold rounded-sm">
             Entorno de pruebas: no se envía dinero a ningún banco. No escribas tu RFC, CURP ni domicilio reales.
           </p>
         )}
         {loading && <p>Cargando…</p>}
         {!loading && error && (
-          <div className="p-4 border-2 border-tinta bg-amarillo">
+          <div className="p-4 border-2 border-naranja bg-naranja-suave">
             <p className="font-bold">{error}</p>
             <button onClick={() => refresh(true)} className="mt-2 underline">Reintentar</button>
           </div>
@@ -171,7 +171,7 @@ function StageView({
       return <KycForm userToken={userToken} onDone={onChanged} />;
     case 'kyc_review':
       return (
-        <section className="p-4 border-2 border-tinta bg-amarillo">
+        <section className="p-4 border-2 border-naranja bg-naranja-suave">
           <h2 className="font-bold mb-2">En revisión</h2>
           <p>
             Etherfuse esta revisando tus datos. Esto suele tomar minutos.
@@ -322,7 +322,7 @@ function KycActionView({ userToken, message }: { userToken: string; message: str
   };
 
   return (
-    <section className="p-4 border-2 border-tinta bg-amarillo flex flex-col gap-3">
+    <section className="p-4 border-2 border-tinta bg-naranja-suave flex flex-col gap-3">
       <h2 className="font-bold">Te falta un paso en Etherfuse</h2>
       <p>
         {message
@@ -410,7 +410,7 @@ function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void 
 
   if (launched) {
     return (
-      <section className="p-4 border-2 border-tinta bg-amarillo flex flex-col gap-3">
+      <section className="p-4 border-2 border-tinta bg-naranja-suave flex flex-col gap-3">
         <h2 className="font-bold">Abrimos el verificador</h2>
         <p>
           Haz la selfie y acepta el contrato en la pestana que se abrio.
@@ -668,7 +668,7 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
       ? `$${stage.destinationMxn ?? '--'} MXN a tu cuenta ${clabeMasked ?? ''}`
       : `Estado: ${stage.status}`;
     return (
-      <section className="p-4 border-2 border-tinta bg-amarillo">
+      <section className="p-4 border-2 border-naranja bg-naranja-suave">
         <h2 className="font-bold mb-2">{title}</h2>
         <p>{detail}</p>
       </section>
@@ -704,7 +704,7 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
       )}
 
       {stage.kind === 'quoted' && (
-        <div className="flex flex-col gap-3 border-2 border-tinta p-3 bg-amarillo">
+        <div className="flex flex-col gap-3 border-2 border-tinta p-3 bg-naranja-suave">
           <p>Te llegan <strong>${stage.quote.destinationAmount} MXN</strong></p>
           <p className="text-sm">Conversión: hasta {stage.quote.sourceAmount} USDC → {stage.quote.fundingAmount} CETES</p>
           <p className="text-sm">Comisión de Etherfuse: {stage.quote.feeAmount} {stage.quote.feeAsset.split(':')[0]} ({stage.quote.feeBps / 100}%)</p>
