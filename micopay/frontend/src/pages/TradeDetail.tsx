@@ -139,6 +139,7 @@ function PendingView({
   onLock,
   locking,
   lockError,
+  cancelError = null,
 }: {
   trade: TradeDetailData;
   onCancel: () => void;
@@ -146,6 +147,8 @@ function PendingView({
   onLock: () => void;
   locking: boolean;
   lockError: string | null;
+  /** WP3: antes un fallo al cancelar solo iba a la consola. */
+  cancelError?: string | null;
 }) {
   const { label: countdownLabel, expired: countdownExpired } = useCountdown(trade.expires_at ?? null);
   const countdown = countdownExpired ? 'Expirado' : countdownLabel;
@@ -207,6 +210,11 @@ function PendingView({
         </button>
       )}
 
+      {cancelError && (
+        <p role="alert" className="w-full mb-3 p-3 bg-red-50 border border-red-200 rounded-sm text-red-700 text-sm font-medium">
+          {cancelError}
+        </p>
+      )}
       <button
         onClick={onCancel}
         disabled={locking}
@@ -1356,6 +1364,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
             onLock={handleLock}
             locking={isLocking}
             lockError={lockError}
+            cancelError={cancelError}
           />
         );
       case 'locked':
@@ -1483,6 +1492,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
             onLock={handleLock}
             locking={isLocking}
             lockError={lockError}
+            cancelError={cancelError}
           />
         );
     }

@@ -1609,8 +1609,6 @@ export async function cancelTrade(
       throw new ForbiddenError('Not a participant of this trade');
     }
 
-    await assertCanCancelTrade(userId);
-
     const lockTx: string | null = trade.lock_tx_hash ?? null;
     // CASH-2: el proveedor sale de la columna canonica, nunca del rol del
     // escrow. Es el arreglo central de este issue.
@@ -1648,6 +1646,12 @@ export async function cancelTrade(
       });
       return result;
     };
+
+    // WP3: el limite de cancelaciones aplica solo con fondos en juego. Una
+    // operacion `pending` que no se pudo bloquear (p. ej. un error del
+    // servidor) no debe castigar a quien la cancela.
+    const hasFunds = Boolean(lockTx || trade.lock_submitted_tx_hash);
+    if (hasFunds) await assertCanCancelTrade(userId);
 
     if (trade.status === 'pending') {
       // Nada en cadena: cancelar aqui solo suelta la reserva.
