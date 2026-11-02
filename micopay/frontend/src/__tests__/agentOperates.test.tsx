@@ -82,7 +82,7 @@ describe('WP2 · agente', () => {
     renderAs(PROVIDER, 'revealing');
     fireEvent.click(await screen.findByRole('button', { name: 'Liberar fondos' }));
     await waitFor(() => expect(mockCompleteTrade).toHaveBeenCalledWith('trade-123', 'tok'));
-    expect(screen.queryByRole('button', { name: /ir a escanear/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /abrir escáner/i })).toBeNull();
   });
 
   it('#3: el chat del agente abre la operación por su id', async () => {

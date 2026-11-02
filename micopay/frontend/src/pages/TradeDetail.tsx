@@ -359,7 +359,7 @@ function LockedView({
           onClick={onGoToScanner}
           className="w-full min-h-12 py-3 mb-3 rounded-sm bg-naranja text-papel border-2 border-tinta shadow-solida font-bold"
         >
-          Ir a escanear
+          Abrir escáner
         </button>
       )}
 
@@ -533,7 +533,7 @@ function RevealingView({
           iconTone="text-naranja"
           title="Escanea el código del cliente"
           body="Entrega el efectivo y escanea el código que te muestra. Los fondos se liberan a tu cuenta al confirmar la entrega."
-          primary={{ label: 'Ir a escanear', onClick: onGoToScanner }}
+          primary={{ label: 'Abrir escáner', onClick: onGoToScanner }}
           secondary={{ label: 'Abrir chat', onClick: onOpenChat }}
         />
       );
@@ -1380,7 +1380,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
             actor={actor}
             onOpenChat={() => navigate(`/chat/${trade.id}`)}
             onShowQR={() => navigate('/qr-reveal')}
-            onGoToScanner={() => navigate('/inbox')}
+            onGoToScanner={() => navigate('/inbox', { state: { autoScan: true } })}
             cancel={{
               allowed: actor.party === 'client' || (actor.party === 'provider' && merchantUnavailable),
               mustPauseFirst: actor.party === 'provider' && !merchantUnavailable,
@@ -1422,7 +1422,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
             token={token}
             onShowQR={() => navigate('/qr-reveal')}
             onOpenChat={() => navigate(`/chat/${trade.id}`)}
-            onGoToScanner={() => navigate('/inbox')}
+            onGoToScanner={() => navigate('/inbox', { state: { autoScan: true } })}
             cashHandoffConfirmed={cashHandoffConfirmed}
           />
         );
