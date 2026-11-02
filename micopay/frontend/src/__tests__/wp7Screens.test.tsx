@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import BankWithdrawScreen from '../pages/BankWithdrawScreen';
 import WalletLogin from '../pages/WalletLogin';
+import DepositQR from '../pages/DepositQR';
 
 vi.mock('../services/api', () => ({
   confirmBankWithdrawOrder: vi.fn(),
@@ -16,6 +17,8 @@ vi.mock('../services/api', () => ({
   getAuthToken: vi.fn(),
   getCurrentUser: vi.fn(),
   registerUser: vi.fn(),
+  getTrade: vi.fn().mockResolvedValue(null),
+  completeTrade: vi.fn(),
 }));
 vi.mock('../lib/keystore', () => ({ getPublicKey: vi.fn() }));
 vi.mock('../services/stellarRamp', () => ({
@@ -38,5 +41,12 @@ describe('WP7 · avisos', () => {
       </MemoryRouter>,
     );
     expect(screen.getByText(/Guarda la frase de recuperación de tu billetera/)).toBeInTheDocument();
+  });
+
+  it('el depósito no muestra mensajes que el agente no escribió', () => {
+    render(
+      <DepositQR activeTrade={null} buyerToken={null} onBack={() => {}} onChat={() => {}} onSuccess={() => {}} />,
+    );
+    expect(screen.queryByText(/Ya recibí tu solicitud/)).toBeNull();
   });
 });
