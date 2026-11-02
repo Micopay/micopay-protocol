@@ -371,8 +371,8 @@ function RevealingView({
           icon="qr_code_scanner"
           tone="bg-naranja-suave"
           iconTone="text-naranja"
-          title="Escanea el código del cliente"
-          body="Entrega el efectivo y escanea el código que te muestra. Los fondos se liberan a tu cuenta al confirmar la entrega."
+          title="Primero el código, luego el efectivo"
+          body="Pide al cliente que te muestre su código y ten el escáner abierto. Escanéalo en el mismo momento en que le entregas el efectivo; no sueltes el efectivo sin haberlo escaneado. Los fondos se liberan a tu cuenta al confirmar la entrega."
           primary={{ label: 'Ir a escanear', onClick: onGoToScanner }}
           secondary={{ label: 'Abrir chat', onClick: onOpenChat }}
         />
