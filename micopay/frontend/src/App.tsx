@@ -166,6 +166,8 @@ export interface AppCtx {
   handleDepositOfferSelected: (offerId: string) => Promise<boolean>;
   clearTradeError: () => void;
   retryTradeFlow: () => Promise<boolean>;
+  /** WP3: crear una operacion nueva aunque haya una activa con ese agente. */
+  allowNewTrade: () => void;
   handleAccountDeleted: () => void;
   resetTradeFlow: () => void;
   envName: string;
@@ -398,7 +400,7 @@ function MapRoute() {
 function ConfirmRoute() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { handleOfferSelected, handleDepositOfferSelected, tradeLoading, tradeError, clearTradeError, activeAssetKey } =
+  const { handleOfferSelected, handleDepositOfferSelected, tradeLoading, tradeError, clearTradeError, activeAssetKey, allowNewTrade } =
     useAppCtx();
   const state = location.state as {
     merchantName: string;
@@ -443,6 +445,8 @@ function ConfirmRoute() {
       loading={tradeLoading}
       errorMessage={tradeError?.message ?? null}
       errorAction={tradeError?.action}
+      errorCode={tradeError?.error}
+      onCreateNewInstead={allowNewTrade}
       onVerifyIdentity={() => navigate(`/kyc/didit?return=${isDeposit ? 'depositMap' : 'cashoutMap'}&level=${tradeError?.requiredLevel === 2 ? 2 : 1}`)}
       onChooseAnotherAgent={() => {
         clearTradeError();
@@ -1178,6 +1182,13 @@ function App() {
   const lockRetryRef = useRef<{ tradeId: string; counterpartyId: string; flow: TradeFlow } | null>(null);
   // WP3: operacion activa que ya se le ofrecio retomar. Confirmar otra vez la acepta.
   const resumeOfferRef = useRef<string | null>(null);
+  // WP3: la persona eligio "Crear otra operación" en vez de retomar.
+  const forceNewTradeRef = useRef(false);
+  const allowNewTrade = () => {
+    forceNewTradeRef.current = true;
+    resumeOfferRef.current = null;
+    setTradeError(null);
+  };
   const [authReady, setAuthReady] = useState(false);
   const [devicePublicKey, setDevicePublicKey] = useState<string | null>(null);
 
@@ -1407,18 +1418,22 @@ function App() {
     setTradeLoading(true);
     setTradeError(null);
     try {
-      const { trade: reusable, conflict, offer } = await findReusableTrade(counterpartyId, tradeFlow, sessionUser.token);
+      const forceNew = forceNewTradeRef.current;
+      forceNewTradeRef.current = false;
+      const { trade: reusable, conflict, offer } = forceNew
+        ? { trade: null, conflict: null, offer: null }
+        : await findReusableTrade(counterpartyId, tradeFlow, sessionUser.token);
       if (offer) {
         // Se ofrece, no se decide por la persona: el segundo intento la acepta.
         resumeOfferRef.current = offer.id;
-        const message = `Ya tienes una operación activa de $${offer.amount_mxn} MXN con este agente. Confirma de nuevo para retomarla en lugar de crear otra.`;
-        setTradeError({ ...mapApiError(new Error(message)), message, action: 'retry' });
+        const message = `Ya tienes una operación activa de $${offer.amount_mxn} MXN con este agente. Confirma de nuevo para retomarla, o crea otra.`;
+        setTradeError({ ...mapApiError(new Error(message)), message, action: 'retry', error: 'ACTIVE_TRADE_OFFER' });
         return false;
       }
       resumeOfferRef.current = null;
       if (conflict) {
-        const message = `Ya tienes una operación activa de $${conflict.amount_mxn} MXN con este agente. Ábrela desde tu actividad o cancélala antes de crear otra.`;
-        setTradeError({ ...mapApiError(new Error(message)), message });
+        const message = `Ya tienes una operación activa de $${conflict.amount_mxn} MXN con este agente. Puedes abrirla desde tu actividad, o crear otra.`;
+        setTradeError({ ...mapApiError(new Error(message)), message, error: 'ACTIVE_TRADE_OFFER' });
         return false;
       }
       // WP-C: el codigo del activo elegido. Si la clave no existe en el
@@ -1596,6 +1611,7 @@ function App() {
     handleDepositOfferSelected,
     clearTradeError,
     retryTradeFlow,
+    allowNewTrade,
     handleAccountDeleted,
     resetTradeFlow,
     envName,
