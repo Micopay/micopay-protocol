@@ -695,7 +695,22 @@ function ExpiredView({ canRefund, onRefund, refunding, trade, title, description
   );
 }
 
-function RefundedView({ trade }: { trade: TradeDetailData }) {
+/** #15: lo que se le dice a quien mira una operacion cancelada con fondos. */
+function cancelledRefundCopy(eligibility: RefundEligibility | null): string {
+  if (eligibility?.eligible) {
+    return 'La operación fue cancelada y el plazo ya venció. Los fondos regresan solos a quien los bloqueó; también puedes pedirlo ahora.';
+  }
+  if (eligibility?.reason === 'cash_handoff_confirmed' || eligibility?.reason === 'cash_claim_open') {
+    return 'La operación fue cancelada, pero hay una entrega de efectivo registrada o reportada. Soporte revisará el caso antes de mover los fondos.';
+  }
+  if (eligibility?.refund_available_at) {
+    const at = new Date(eligibility.refund_available_at).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
+    return `La operación fue cancelada. Los fondos siguen en el contrato y regresan solos a quien los bloqueó a partir del ${at}.`;
+  }
+  return 'La operación fue cancelada. Los fondos siguen en el contrato y regresan solos a quien los bloqueó cuando venza el plazo.';
+}
+
+function RefundedView({ trade, refundKind = null }: { trade: TradeDetailData; refundKind?: 'decline' | 'timeout' | null }) {
   const refundTxHash = trade.release_tx_hash;
 
   return (
@@ -706,8 +721,13 @@ function RefundedView({ trade }: { trade: TradeDetailData }) {
         </span>
       </div>
       <h2 className="text-2xl font-bold text-on-surface mb-2">Fondos reembolsados</h2>
+      {/* #16: el decline no es un vencimiento. */}
       <p className="text-on-surface-variant mb-6">
-        Los fondos fueron devueltos exitosamente. El tiempo para completar la operación había expirado.
+        {refundKind === 'decline'
+          ? 'Los fondos fueron devueltos a quien los bloqueó: la operación se canceló y se autorizó la devolución inmediata.'
+          : refundKind === 'timeout'
+            ? 'Los fondos fueron devueltos a quien los bloqueó. El tiempo para completar la operación había vencido.'
+            : 'Los fondos fueron devueltos a quien los bloqueó.'}
       </p>
 
       <div className="bg-surface-container-low rounded-sm p-4 w-full mb-6">
@@ -930,6 +950,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
   // `locked` o `revealing` vencida quedaba sin salida visible.
   const [refundEligibility, setRefundEligibility] = useState<RefundEligibility | null>(null);
   const [declineAvailable, setDeclineAvailable] = useState(false);
+  const [refundKind, setRefundKind] = useState<'decline' | 'timeout' | null>(null);
 
   // Se consulta al cargar y tras cada cambio de estado, para que el CTA
   // aparezca en cuanto venza sin depender del reloj del dispositivo.
@@ -974,6 +995,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       const data = await fetchTradeDetail(id, effectiveToken);
       setTrade(data.trade as TradeDetailData);
       setDeclineAvailable(Boolean(data.decline_available));
+      setRefundKind(data.refund_kind ?? null);
       setError(null);
     } catch (e: any) {
       const status = e?.response?.status;
@@ -1265,14 +1287,16 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
               />
             );
           }
+          // #15: el boton y el texto salen de la elegibilidad del servidor. Antes
+          // decia "puedes recuperarlos ahora" horas antes del plazo.
           return (
             <ExpiredView
-              canRefund={isBuyer || isSeller}
+              canRefund={Boolean(refundEligibility?.eligible)}
               onRefund={handleRefundClick}
               refunding={isRefunding}
               trade={trade}
               title="Reembolso pendiente"
-              description="Esta operación fue cancelada. Tus fondos siguen en el contrato y se liberan automáticamente — también puedes recuperarlos ahora."
+              description={cancelledRefundCopy(refundEligibility)}
             />
           );
         }
@@ -1289,7 +1313,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
           />
         );
       case 'refunded':
-        return <RefundedView trade={trade} />;
+        return <RefundedView trade={trade} refundKind={refundKind} />;
       default:
         return (
           <PendingView

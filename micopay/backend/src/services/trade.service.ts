@@ -660,9 +660,24 @@ export async function getTradeDetailForParticipant(tradeId: string, userId: stri
     && !cashConfirmed
     && escrowContractSupportsDecline(trade);
 
+  // #16: el decline y el vencimiento terminan igual (`refunded`); el registro
+  // de auditoria dice cual fue.
+  let refund_kind: 'decline' | 'timeout' | null = null;
+  if (trade.status === 'refunded') {
+    const events = await db.getMany<{ metadata: unknown }>(
+      `SELECT metadata FROM audit_log WHERE trade_id = $1 AND to_state = 'refunded'`,
+      [tradeId],
+    );
+    const settlement = events
+      .map((e) => (typeof e.metadata === 'string' ? JSON.parse(e.metadata) : e.metadata) as { settlement?: string } | null)
+      .some((m) => m?.settlement === 'decline');
+    refund_kind = settlement ? 'decline' : 'timeout';
+  }
+
   return {
     trade,
     decline_available,
+    refund_kind,
     merchant_unavailable,
     seller_username: seller?.username ?? null,
     buyer_username: buyer?.username ?? null,
@@ -1965,7 +1980,9 @@ export async function refundTrade(
  * cancelled trade can be left with real funds still sitting in escrow with
  * no further app-driven trigger. This scans for exactly that situation and
  * settles it automatically, so a user is never depending on remembering to
- * manually retry a refund. Safe to call repeatedly — each trade is only
+ * manually retry a refund. WP5 (#10): expired 'locked'/'revealing' trades
+ * without a cash confirmation or an open claim are settled the same way.
+ * Safe to call repeatedly — each trade is only
  * refunded once (replay-guarded by `assertNotReplayed` + the `release_tx_hash
  * IS NULL` filter). Errors are per-trade and non-fatal so one bad trade can't
  * block the rest of the sweep.
@@ -1986,7 +2003,7 @@ export async function sweepPendingRefunds(
     `SELECT id, status, secret_hash, seller_id, expires_at, asset_code, escrow_contract_id,
             lock_tx_hash, funds_timeout_ledger, funds_expires_at_estimate,
             flow, reveal_requested_at FROM trades
-     WHERE status = 'cancelled'
+     WHERE status IN ('cancelled', 'locked', 'revealing')
        AND lock_tx_hash IS NOT NULL
        AND release_tx_hash IS NULL
        AND expires_at < NOW()`,
@@ -2001,12 +2018,14 @@ export async function sweepPendingRefunds(
     // The contract itself would reject an early call (TimeoutNotReached),
     // but failing fast here avoids a wasted RPC round-trip either way.
     if (new Date(trade.expires_at) > new Date()) continue;
-    // D2: `cancelTrade` ya impide cancelar con entrega confirmada, asi que no
-    // deberia llegar ninguna; si llega, no se reembolsa sola.
+    // D2/D4: con constancia de efectivo o reclamo abierto no se reembolsa sola;
+    // la revisa soporte. WP5 (#10): sin ninguna de las dos, una operacion
+    // `locked`/`revealing` vencida regresa a quien bloqueo igual que una
+    // cancelada; antes se quedaba en el escrow hasta que alguien la pidiera.
     if (await hasCashConfirmation(trade) || await getOpenCashClaim(trade.id)) {
       logger.warn(
-        { trade_id: trade.id, category: 'trade.lifecycle' },
-        '[refund-sweep] Cancelled trade has a cash confirmation or claim — left for support',
+        { trade_id: trade.id, status: trade.status, category: 'trade.lifecycle' },
+        '[refund-sweep] Expired trade has a cash confirmation or claim — left for support',
       );
       continue;
     }

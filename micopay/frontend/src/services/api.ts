@@ -210,6 +210,8 @@ export interface TradeDetailResponse {
   };
   /** Buyer may sign decline() for this exact contract and trade state. */
   decline_available: boolean;
+  /** #16: en `refunded`, si fue decline o vencimiento. */
+  refund_kind?: 'decline' | 'timeout' | null;
   merchant_unavailable: boolean;
   seller_username: string | null;
   buyer_username: string | null;
