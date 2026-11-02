@@ -201,12 +201,13 @@ export default function MerchantSettings({
         setMessageType('success');
       }
     } catch (err: any) {
-      // #13: el mensaje generico ocultaba la causa (p. ej. tasa fuera de rango).
-      const resolved = resolveErrorMessage(err);
+      // #13: un 400 de validacion caia en "La operacion no pudo terminarse." y
+      // ocultaba la causa (p. ej. tasa fuera de rango). Si el servidor dice
+      // por que, eso es lo que se muestra.
       const serverMessage = err?.response?.data?.message;
-      setMessage(resolved.key === 'generic.fallback' && typeof serverMessage === 'string' && serverMessage
+      setMessage(typeof serverMessage === 'string' && serverMessage
         ? serverMessage
-        : resolved.message);
+        : resolveErrorMessage(err).message);
       setMessageType('error');
     } finally {
       setSaving(false);

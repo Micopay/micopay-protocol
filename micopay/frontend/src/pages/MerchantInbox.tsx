@@ -1,5 +1,5 @@
 import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useQRScanner } from '../hooks/useQRScanner';
 import { useCountdown } from '../hooks/useCountdown';
@@ -324,11 +324,16 @@ interface MerchantInboxProps {
   onBack: () => void;
   /** #4: abre el detalle, donde estan las acciones (bloquear, liberar, chat). */
   onOpenTrade?: (tradeId: string) => void;
+  /**
+   * WP1: llegar desde el detalle de un retiro abre el escaner de una vez, para
+   * que el agente escanee en el momento en que entrega el efectivo.
+   */
+  autoScan?: boolean;
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-const MerchantInbox = ({ token, onBack, onOpenTrade }: MerchantInboxProps) => {
+const MerchantInbox = ({ token, onBack, onOpenTrade, autoScan = false }: MerchantInboxProps) => {
   const { t } = useTranslation();
   const [trades, setTrades] = useState<MerchantTrade[]>([]);
   const [loading, setLoading] = useState(true);
@@ -425,6 +430,13 @@ const MerchantInbox = ({ token, onBack, onOpenTrade }: MerchantInboxProps) => {
       setScanView({ type: 'api_error', message, tradeId });
     }
   }, [token, scan, activeFilter, fetchTrades, t]);
+
+  const autoScanned = useRef(false);
+  useEffect(() => {
+    if (!autoScan || !token || autoScanned.current) return;
+    autoScanned.current = true;
+    void handleScan();
+  }, [autoScan, token, handleScan]);
 
   // Main effect: fetch trades on filter change
   useEffect(() => {

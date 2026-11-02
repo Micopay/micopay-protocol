@@ -10,9 +10,10 @@ vi.mock('../services/api', () => ({
   completeTrade: vi.fn(),
 }));
 
+const { scan } = vi.hoisted(() => ({ scan: vi.fn().mockResolvedValue({ value: null, error: null }) }));
 vi.mock('../hooks/useQRScanner', () => ({
   useQRScanner: () => ({
-    scan: vi.fn(),
+    scan,
   }),
 }));
 
@@ -50,5 +51,19 @@ describe('MerchantInbox i18n', () => {
     render(<MerchantInbox token="token" onBack={() => {}} onOpenTrade={onOpenTrade} />);
     fireEvent.click(await screen.findByText('@cliente'));
     expect(onOpenTrade).toHaveBeenCalledWith('trade-9');
+  });
+
+  // WP1: desde el detalle de un retiro el escaner se abre solo, una vez.
+  it('opens the scanner right away when asked to', async () => {
+    scan.mockClear();
+    render(<MerchantInbox token="token" onBack={() => {}} autoScan />);
+    await waitFor(() => expect(scan).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not open the scanner by itself otherwise', async () => {
+    scan.mockClear();
+    render(<MerchantInbox token="token" onBack={() => {}} />);
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Inbox' })).toBeInTheDocument());
+    expect(scan).not.toHaveBeenCalled();
   });
 });

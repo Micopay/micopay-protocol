@@ -234,12 +234,14 @@ function TradeDetailRoute() {
 
 function InboxRoute() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { sessionUser } = useAppCtx();
   return (
       <MerchantInbox
           token={sessionUser?.token ?? null}
           onBack={() => navigate('/')}
           onOpenTrade={(tradeId) => navigate(`/trade/${tradeId}`)}
+          autoScan={Boolean((location.state as { autoScan?: boolean } | null)?.autoScan)}
       />
   );
 }
