@@ -65,6 +65,7 @@ function renderAs(userId: string, status: 'locked' | 'revealing') {
         <Route path="/trade/:id" element={<TradeDetail token="tok" userId={userId} onBack={() => {}} />} />
         <Route path="/chat/:tradeId" element={<div>RUTA_CHAT_TRADE</div>} />
         <Route path="/inbox" element={<div>RUTA_INBOX</div>} />
+        <Route path="/qr-deposit/:tradeId" element={<div>RUTA_QR_DEPOSITO</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -122,5 +123,19 @@ describe('WP2 · agente', () => {
     renderAs(CLIENT, 'revealing');
     await screen.findByText(/muestra tu código/i);
     expect(screen.queryByRole('button', { name: 'Cancelar operación' })).toBeNull();
+  });
+
+  it('prueba local 4.2: el cliente de un depósito llega a su código (donde está el reclamo)', async () => {
+    mockGetTrade.mockResolvedValue({ ...cashoutTrade('locked'), flow: 'deposit', seller_id: PROVIDER, buyer_id: CLIENT });
+    render(
+      <MemoryRouter initialEntries={['/trade/trade-123']}>
+        <Routes>
+          <Route path="/trade/:id" element={<TradeDetail token="tok" userId={CLIENT} onBack={() => {}} />} />
+          <Route path="/qr-deposit/:tradeId" element={<div>RUTA_QR_DEPOSITO</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver mi código' }));
+    expect(await screen.findByText('RUTA_QR_DEPOSITO')).toBeInTheDocument();
   });
 });

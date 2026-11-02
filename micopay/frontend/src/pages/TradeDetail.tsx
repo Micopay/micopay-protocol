@@ -354,7 +354,7 @@ function LockedView({
         </a>
       )}
 
-      {actor?.flow === 'cashout' && actor.party === 'client' && onShowQR && (
+      {actor?.party === 'client' && onShowQR && (
         <button
           onClick={onShowQR}
           className="w-full min-h-12 py-3 mb-3 rounded-sm bg-naranja text-papel border-2 border-tinta shadow-solida font-bold"
@@ -1388,7 +1388,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
             trade={trade}
             actor={actor}
             onOpenChat={() => navigate(`/chat/${trade.id}`)}
-            onShowQR={() => navigate('/qr-reveal')}
+            onShowQR={() => navigate(trade.flow === 'deposit' ? `/qr-deposit/${trade.id}` : '/qr-reveal')}
             onGoToScanner={() => navigate('/inbox', { state: { autoScan: true } })}
             cancel={{
               allowed: actor.party === 'client' || (actor.party === 'provider' && merchantUnavailable),

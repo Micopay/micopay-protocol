@@ -467,11 +467,13 @@ function ConfirmRoute() {
 function useTradeParticipantInfo(activeTrade: TradeData | null, sessionUser: UserData | null) {
   const [counterpartyName, setCounterpartyName] = useState<string | null>(null);
   const [isProvider, setIsProvider] = useState(false);
+  const [flow, setFlow] = useState<TradeFlow | null>(null);
 
   useEffect(() => {
     if (!activeTrade || !sessionUser?.token) return;
     fetchTradeDetail(activeTrade.id, sessionUser.token)
       .then(({ trade, seller_username, buyer_username }) => {
+        setFlow(trade.flow === 'cashout' ? 'cashout' : 'deposit');
         const isMeTheEscrowSeller = trade.seller_id === sessionUser.id;
         setCounterpartyName(isMeTheEscrowSeller ? buyer_username : seller_username);
         // Cash-out (/chat): the client locks crypto (escrow seller); the agent
@@ -482,7 +484,7 @@ function useTradeParticipantInfo(activeTrade: TradeData | null, sessionUser: Use
       .catch(() => {});
   }, [activeTrade, sessionUser?.token, sessionUser?.id]);
 
-  return { counterpartyName, isProvider };
+  return { counterpartyName, isProvider, flow };
 }
 
 function ChatRoute() {
@@ -493,7 +495,7 @@ function ChatRoute() {
   const { tradeId: routeTradeId } = useParams();
   const routeTrade = useMemo(() => (routeTradeId ? ({ id: routeTradeId } as TradeData) : null), [routeTradeId]);
   const chatTrade = routeTrade ?? activeTrade;
-  const { counterpartyName, isProvider } = useTradeParticipantInfo(chatTrade, sessionUser);
+  const { counterpartyName, isProvider, flow } = useTradeParticipantInfo(chatTrade, sessionUser);
   return (
       <ChatRoom
           tradeId={chatTrade?.id ?? ''}
@@ -504,7 +506,8 @@ function ChatRoute() {
           counterpartyName={counterpartyName}
           isProvider={isProvider}
           onBack={() => navigate(routeTradeId ? `/trade/${routeTradeId}` : '/map')}
-          onViewQR={() => navigate('/qr-reveal')}
+          // En un deposito el QR del cliente es otra pantalla (`DepositQR`).
+          onViewQR={() => navigate(routeTradeId && flow === 'deposit' ? `/qr-deposit/${routeTradeId}` : '/qr-reveal')}
           onScan={() => navigate('/inbox', { state: { autoScan: true } })}
       />
   );
@@ -550,13 +553,17 @@ function QRRevealRoute() {
 function QRDepositRoute() {
   const navigate = useNavigate();
   const { activeTrade, sessionUser } = useAppCtx();
+  // Desde el detalle o el chat la operacion llega en la ruta: ahi esta el
+  // reclamo "Pague y no me confirmaron".
+  const { tradeId: routeTradeId } = useParams();
+  const routeTrade = useMemo(() => (routeTradeId ? ({ id: routeTradeId } as TradeData) : null), [routeTradeId]);
   return (
       <DepositQR
-          activeTrade={activeTrade}
+          activeTrade={routeTrade ?? activeTrade}
           buyerToken={sessionUser?.token ?? null}
           viewerId={sessionUser?.id ?? null}
-          onBack={() => navigate('/chat-deposit')}
-          onChat={() => navigate('/chat-deposit')}
+          onBack={() => navigate(routeTradeId ? `/trade/${routeTradeId}` : '/chat-deposit')}
+          onChat={() => navigate(routeTradeId ? `/chat/${routeTradeId}` : '/chat-deposit')}
           onSuccess={() => navigate('/success')}
       />
   );
@@ -1670,6 +1677,7 @@ function App() {
                 <Route path="/chat-deposit" element={<ProtectedRoute><ChatDepositRoute /></ProtectedRoute>} />
                 <Route path="/qr-reveal" element={<ProtectedRoute><QRRevealRoute /></ProtectedRoute>} />
                 <Route path="/qr-deposit" element={<ProtectedRoute><QRDepositRoute /></ProtectedRoute>} />
+                <Route path="/qr-deposit/:tradeId" element={<ProtectedRoute><QRDepositRoute /></ProtectedRoute>} />
                 <Route path="/success" element={<ProtectedRoute><SuccessRoute /></ProtectedRoute>} />
                 <Route path="/explore" element={<ProtectedRoute><ExploreRoute /></ProtectedRoute>} />
                 <Route path="/cetes" element={<ProtectedRoute><CetesRoute /></ProtectedRoute>} />
