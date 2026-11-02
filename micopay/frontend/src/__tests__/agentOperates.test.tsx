@@ -109,4 +109,18 @@ describe('WP2 · agente', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Cancelar operación' }));
     expect(await screen.findByText('Tu código QR para el agente sigue vigente.')).toBeInTheDocument();
   });
+
+  it('2.10: el cliente puede intentar cancelar despues de generar su QR (revealing)', async () => {
+    mockCancel.mockRejectedValue(new Error('Tu código QR para el agente sigue vigente.'));
+    renderAs(CLIENT, 'revealing');
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar operación' }));
+    expect(await screen.findByText('Tu código QR para el agente sigue vigente.')).toBeInTheDocument();
+  });
+
+  it('con la entrega registrada ya no se ofrece cancelar', async () => {
+    detailFlags = { cash_handoff_confirmed: true };
+    renderAs(CLIENT, 'revealing');
+    await screen.findByText(/muestra tu código/i);
+    expect(screen.queryByRole('button', { name: 'Cancelar operación' })).toBeNull();
+  });
 });
