@@ -670,7 +670,7 @@ export async function getTradeDetailForParticipant(tradeId: string, userId: stri
     decline_available,
     // #2/#17: la entrega ya quedo registrada (cash-out). La pantalla del agente
     // ofrece liberar y la del cliente deja de pedir otro QR.
-    cash_handoff_confirmed: Boolean(handoff),
+    cash_handoff_confirmed: Boolean(cashConfirmed),
     merchant_unavailable,
     seller_username: seller?.username ?? null,
     buyer_username: buyer?.username ?? null,
