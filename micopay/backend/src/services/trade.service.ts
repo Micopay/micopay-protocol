@@ -655,14 +655,14 @@ export async function getTradeDetailForParticipant(tradeId: string, userId: stri
     'SELECT username, stellar_address FROM users WHERE id = $1',
     [trade.buyer_id],
   );
-  const handoff = trade.lock_tx_hash && !trade.release_tx_hash
-    ? await getCashHandoff(tradeId)
-    : null;
+  const cashConfirmed = trade.lock_tx_hash && !trade.release_tx_hash
+    ? await hasCashConfirmation(trade)
+    : false;
   const decline_available = trade.buyer_id === userId
     && Boolean(trade.lock_tx_hash)
     && !trade.release_tx_hash
     && ['locked', 'revealing', 'cancelled'].includes(trade.status)
-    && !handoff
+    && !cashConfirmed
     && escrowContractSupportsDecline(trade);
 
   return {
@@ -1406,12 +1406,11 @@ async function getDeclineableTrade(tradeId: string, userId: string) {
     );
   }
 
-  const handoff = await getCashHandoff(tradeId);
-  if (handoff) {
+  if (await hasCashConfirmation(trade)) {
     throw new ConflictError(
       'CASH_HANDOFF_CONFIRMED',
       'La entrega de efectivo ya fue confirmada. Completa la operación o abre soporte.',
-      `Trade ${tradeId} has a confirmed cash handoff by ${handoff.provider_id}`,
+      `Trade ${tradeId} has a confirmed cash handoff`,
     );
   }
 
@@ -1657,13 +1656,28 @@ export async function cancelTrade(
     if (trade.status === 'locked' || trade.status === 'revealing') {
       // Con la entrega ya confirmada, el efectivo cambio de manos. Cancelar
       // dejaria al proveedor sin cripto y sin efectivo.
-      const handoff = await getCashHandoff(tradeId);
-      if (handoff) {
+      // En el deposito la constancia es la confirmacion del agente: si ya dijo
+      // que recibio el efectivo, tampoco puede pausarse y cancelar.
+      if (await hasCashConfirmation(trade)) {
         throw new ConflictError(
           'CASH_HANDOFF_CONFIRMED',
           'La entrega de efectivo ya fue confirmada. Completa la operación o abre soporte.',
-          `Trade ${tradeId} has a confirmed cash handoff by ${handoff.provider_id}`,
+          `Trade ${tradeId} has a confirmed cash handoff`,
         );
+      }
+
+      // Retiro: mientras el cliente tenga un QR vigente, el agente puede estar
+      // entregando el efectivo. Al vencer el QR puede volver a cancelar.
+      if (!isProvider && trade.flow === 'cashout') {
+        const liveUntil = await liveReleaseQrExpiry(tradeId);
+        if (liveUntil) {
+          const minutes = Math.max(1, Math.ceil((liveUntil.getTime() - Date.now()) / 60_000));
+          throw new ConflictError(
+            'RELEASE_QR_ACTIVE',
+            `Tu código QR para el agente sigue vigente. Si no vas a recibir el efectivo, espera ${minutes} min a que venza y vuelve a cancelar.`,
+            `Trade ${tradeId} has a live release QR until ${liveUntil.toISOString()}`,
+          );
+        }
       }
 
       if (isProvider) {
@@ -1794,6 +1808,8 @@ export interface RefundEligibility {
     | 'not_expired_yet'
     | 'already_settled'
     | 'cash_handoff_confirmed'
+    /** D4: el cliente reclamo haber pagado; lo revisa soporte. */
+    | 'cash_claim_open'
     /** WP3: no se pudo leer el plazo en cadena; nunca se toma por vencido. */
     | 'unverifiable';
   /** Caducidad de la solicitud. */
@@ -1840,8 +1856,11 @@ export async function getRefundEligibility(
   if (['completed', 'refunded'].includes(trade.status)) {
     return { ...base, eligible: false, reason: 'already_settled' };
   }
-  if (await getCashHandoff(tradeId)) {
+  if (await hasCashConfirmation(trade)) {
     return { ...base, eligible: false, reason: 'cash_handoff_confirmed' };
+  }
+  if (await getOpenCashClaim(tradeId)) {
+    return { ...base, eligible: false, reason: 'cash_claim_open' };
   }
 
   // WP3: decide el ledger del contrato, no `expires_at`.
@@ -1906,11 +1925,20 @@ export async function refundTrade(
     // devuelve tambien la cripto por su cuenta; el caso va a soporte. El
     // contrato sigue aceptando un refund directo: esto no lo impide, solo
     // evita que la app lo ofrezca.
-    if (await getCashHandoff(tradeId)) {
+    if (await hasCashConfirmation(trade)) {
       throw new ConflictError(
         'CASH_HANDOFF_CONFIRMED',
         'La entrega de efectivo ya fue confirmada. Este intercambio lo revisa soporte.',
         `Trade ${tradeId} has a confirmed cash handoff; refund goes to support`,
+      );
+    }
+    // D4: el reclamo del cliente pesa igual que una constancia hasta que
+    // soporte lo resuelva.
+    if (await getOpenCashClaim(tradeId)) {
+      throw new ConflictError(
+        'CASH_CLAIM_OPEN',
+        'El cliente reportó que ya pagó. Este intercambio lo revisa soporte.',
+        `Trade ${tradeId} has an open cash claim; refund goes to support`,
       );
     }
 
@@ -1964,7 +1992,8 @@ export async function sweepPendingRefunds(
     // despues de crear la solicitud y dura lo mismo que ella, asi que el plazo
     // en cadena nunca vence antes. Lo decide `fundsRefundTiming` abajo.
     `SELECT id, status, secret_hash, seller_id, expires_at, asset_code, escrow_contract_id,
-            lock_tx_hash, funds_timeout_ledger, funds_expires_at_estimate FROM trades
+            lock_tx_hash, funds_timeout_ledger, funds_expires_at_estimate,
+            flow, reveal_requested_at FROM trades
      WHERE status = 'cancelled'
        AND lock_tx_hash IS NOT NULL
        AND release_tx_hash IS NULL
@@ -1982,10 +2011,10 @@ export async function sweepPendingRefunds(
     if (new Date(trade.expires_at) > new Date()) continue;
     // D2: `cancelTrade` ya impide cancelar con entrega confirmada, asi que no
     // deberia llegar ninguna; si llega, no se reembolsa sola.
-    if (await getCashHandoff(trade.id)) {
+    if (await hasCashConfirmation(trade) || await getOpenCashClaim(trade.id)) {
       logger.warn(
         { trade_id: trade.id, category: 'trade.lifecycle' },
-        '[refund-sweep] Cancelled trade has a confirmed cash handoff — left for support',
+        '[refund-sweep] Cancelled trade has a cash confirmation or claim — left for support',
       );
       continue;
     }
@@ -2150,6 +2179,116 @@ export async function getCashHandoff(tradeId: string): Promise<CashHandoff | nul
     [tradeId],
   );
   return row ?? null;
+}
+
+/**
+ * Constancia de que el efectivo ya cambio de manos (D2, D4). Con ella la app no
+ * cancela, no ofrece decline y no reembolsa: el caso va a soporte.
+ *
+ *   · retiro: la entrega registrada al escanear el QR del cliente.
+ *   · deposito: el agente confirmo el efectivo (`revealTrade`). La marca
+ *     `reveal_requested_at` sobrevive a una cancelacion posterior.
+ */
+export async function hasCashConfirmation(trade: {
+  id: string;
+  flow?: string | null;
+  reveal_requested_at?: unknown;
+}): Promise<boolean> {
+  if (trade.flow === 'deposit' && trade.reveal_requested_at) return true;
+  return Boolean(await getCashHandoff(trade.id));
+}
+
+export interface CashClaim {
+  trade_id: string;
+  claimant_id: string;
+  note: string | null;
+  status: string;
+  created_at: string;
+}
+
+/** D4: reclamo abierto del cliente de un deposito. */
+export async function getOpenCashClaim(tradeId: string): Promise<CashClaim | null> {
+  const row = await db.getOne<CashClaim>(
+    `SELECT trade_id, claimant_id, note, status, created_at FROM trade_cash_claims
+     WHERE trade_id = $1 AND status = 'open'`,
+    [tradeId],
+  );
+  return row ?? null;
+}
+
+/**
+ * D4: "Pagué y no me confirmaron". Solo el cliente de un deposito con fondos
+ * bloqueados. No mueve fondos: deja la palabra del cliente, bloquea el
+ * reembolso por la app y avisa a soporte. Repetirlo devuelve el mismo reclamo.
+ */
+export async function openCashClaim(
+  request: FastifyRequest,
+  tradeId: string,
+  userId: string,
+  note?: string,
+): Promise<CashClaim> {
+  const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (!trade) throw new NotFoundError('TRADE_NOT_FOUND', 'El intercambio no existe', 'Trade not found');
+  if (trade.flow !== 'deposit' || trade.buyer_id !== userId) {
+    throw new ForbiddenError(
+      'CASH_CLAIM_NOT_ALLOWED',
+      'Solo el cliente de un depósito puede reportar que ya pagó.',
+      `User ${userId} cannot open a cash claim on trade ${tradeId}`,
+    );
+  }
+  if (!trade.lock_tx_hash || trade.release_tx_hash || !['locked', 'revealing', 'cancelled'].includes(trade.status)) {
+    throw new ConflictError(
+      'CASH_CLAIM_NOT_ALLOWED',
+      'Esta operación ya no tiene fondos en garantía que revisar.',
+      `Trade ${tradeId} is ${trade.status}; no locked funds to hold`,
+    );
+  }
+
+  const existing = await getOpenCashClaim(tradeId);
+  if (existing) return existing;
+
+  const claim = await db.getOne<CashClaim>(
+    `INSERT INTO trade_cash_claims (trade_id, claimant_id, note, status)
+     VALUES ($1, $2, $3, 'open')
+     RETURNING trade_id, claimant_id, note, status, created_at`,
+    [tradeId, userId, note?.trim() || null],
+  );
+  if (!claim) throw new Error('Failed to record cash claim');
+
+  await insertTradeAuditEvent({
+    tradeId,
+    fromState: trade.status,
+    toState: trade.status,
+    actor: userId,
+    requestId: getRequestId(request),
+    metadata: { success: true, cash_claim_opened: true },
+  });
+  request.log.warn(
+    { trade_id: tradeId, user_id: userId, category: 'trade.support' },
+    '[trade] Cash claim opened — refund held for support',
+  );
+  notifyTradeUpdate(trade.provider_id, {
+    tradeId,
+    kind: 'cash_claim',
+    amountMxn: Number(trade.amount_mxn),
+  });
+
+  return claim;
+}
+
+/** Vencimiento del QR de liberacion vigente mas tardio, o null si no hay. */
+async function liveReleaseQrExpiry(tradeId: string): Promise<Date | null> {
+  const tokens = await db.getMany<{ expires_at: string }>(
+    `SELECT expires_at FROM trade_claim_tokens
+     WHERE trade_id = $1 AND consumed_at IS NULL`,
+    [tradeId],
+  );
+  const now = Date.now();
+  const live = tokens
+    .map((t) => new Date(t.expires_at))
+    .filter((at) => at.getTime() > now);
+  if (live.length === 0) return null;
+  return new Date(Math.max(...live.map((at) => at.getTime())));
 }
 
 export async function merchantConfirmScan(

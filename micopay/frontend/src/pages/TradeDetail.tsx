@@ -531,8 +531,8 @@ function RevealingView({
           icon="qr_code_scanner"
           tone="bg-naranja-suave"
           iconTone="text-naranja"
-          title="Escanea el código del cliente"
-          body="Entrega el efectivo y escanea el código que te muestra. Los fondos se liberan a tu cuenta al confirmar la entrega."
+          title="Primero el código, luego el efectivo"
+          body="Pide al cliente que te muestre su código y ten el escáner abierto. Escanéalo en el mismo momento en que le entregas el efectivo; no sueltes el efectivo sin haberlo escaneado. Los fondos se liberan a tu cuenta al confirmar la entrega."
           primary={{ label: 'Abrir escáner', onClick: onGoToScanner }}
           secondary={{ label: 'Abrir chat', onClick: onOpenChat }}
         />
@@ -1375,6 +1375,13 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
           );
         }
         return (
+          <>
+            {/* D4: el agente debe saber que hay un reclamo antes de esperar el vencimiento. */}
+            {actor.party === 'provider' && refundEligibility?.reason === 'cash_claim_open' && (
+              <p role="status" className="w-full mb-4 p-3 border-2 border-naranja bg-naranja-suave text-tinta text-sm font-bold rounded-sm">
+                El cliente reportó que ya te entregó el efectivo. Los fondos se quedan en garantía y soporte revisará el caso. Si ya lo recibiste, confírmalo aquí.
+              </p>
+            )}
           <LockedView
             trade={trade}
             actor={actor}
@@ -1395,6 +1402,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
               onConfirm: handleConfirmCash,
             }}
           />
+          </>
         );
       case 'revealing':
         // CASH-6: igual que en `locked` — vencida con fondos dentro, la salida

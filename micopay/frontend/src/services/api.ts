@@ -267,6 +267,15 @@ export async function cancelTradeRequest(tradeId: string, buyerToken: string): P
   }
 }
 
+/** D4: el cliente de un depósito reporta que pagó y el agente no confirmó. */
+export async function openCashClaim(tradeId: string, token: string, note?: string): Promise<void> {
+  try {
+    await http.post(`/trades/${tradeId}/cash-claim`, note ? { note } : {}, authHeaders(token));
+  } catch (e: unknown) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
 export async function patchMerchantAvailability(
     token: string,
     merchant_available: boolean,
@@ -1218,6 +1227,8 @@ export interface RefundEligibility {
     | 'already_settled'
     /** Ya hubo entrega de efectivo: el reembolso lo revisa soporte (D2). */
     | 'cash_handoff_confirmed'
+    /** D4: el cliente reportó que pagó; lo revisa soporte. */
+    | 'cash_claim_open'
     /** No se pudo leer el plazo en cadena; se reintenta, nunca se da por vencido. */
     | 'unverifiable';
   /** Caducidad de la solicitud. */
