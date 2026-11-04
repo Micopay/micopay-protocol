@@ -59,9 +59,11 @@ export function extractApiErrorPayload(err: unknown): ApiErrorPayload {
       },
       message: err.message,
     });
+    // Un 409 de reglas de la operacion trae su propio texto para el usuario
+    // (p. ej. RELEASE_QR_ACTIVE dice cuanto esperar): el generico lo tapaba.
     const message =
-      typeof data?.message === 'string' && data.message.length > 0
-        ? resolved.message
+      err.response?.status === 409 && typeof data?.message === 'string' && data.message.length > 0
+        ? data.message
         : resolved.message;
     // Backend's global error handler sends `code` (see index.ts setErrorHandler),
     // not `error` — `error` is kept as a fallback for any endpoint that still
