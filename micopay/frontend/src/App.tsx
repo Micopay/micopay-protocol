@@ -312,6 +312,7 @@ function MapDepositRoute() {
   return (
       <DepositMap
           viewerId={sessionUser?.id ?? null}
+          amount={activeAmount}
           onBack={() => navigate('/deposit')}
           onProceedToConfirm={(offer) => {
             navigate('/confirm', {
