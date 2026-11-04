@@ -3,6 +3,7 @@ import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, Link } from 'react-router-dom';
+import SharedSupportLink from '../components/SupportLink';
 
 import {
   fetchTradeDetail,
@@ -117,15 +118,12 @@ function TradeStatusPill({ status }: { status: string }) {
   );
 }
 
+/** #11: el mismo enlace que el resto de la app (en PC copia el correo en vez de abrir `mailto:`). */
 function SupportLink() {
+  const { id } = useParams<{ id: string }>();
   return (
-    <div className="mt-8 text-center">
-      <p className="text-sm text-on-surface-variant">
-        ¿Necesitas ayuda?{' '}
-        <a href={`mailto:${SUPPORT_EMAIL}`} className="text-primary font-semibold hover:underline">
-          Contactar soporte
-        </a>
-      </p>
+    <div className="mt-8 flex justify-center">
+      <SharedSupportLink tradeId={id} state="TRADE_DETAIL" />
     </div>
   );
 }

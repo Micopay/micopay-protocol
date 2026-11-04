@@ -395,7 +395,7 @@ describe('TradeDetail', () => {
 
         await waitFor(() => {
           expect(screen.getByText(/¿necesitas ayuda\?/i)).toBeInTheDocument();
-          expect(screen.getByText(/contactar soporte/i)).toBeInTheDocument();
+          expect(screen.getByRole('button', { name: /copiar soporte@/i })).toBeInTheDocument();
         });
       });
     });
@@ -419,7 +419,7 @@ describe('TradeDetail', () => {
       renderWithRouter();
 
       await waitFor(() => {
-        expect(screen.getByText(/contactar soporte/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /copiar soporte@/i })).toBeInTheDocument();
       });
     });
 
@@ -431,7 +431,7 @@ describe('TradeDetail', () => {
       renderWithRouter();
 
       await waitFor(() => {
-        expect(screen.getByText(/contactar soporte/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /copiar soporte@/i })).toBeInTheDocument();
       });
     });
   });
