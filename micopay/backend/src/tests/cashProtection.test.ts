@@ -245,6 +245,19 @@ async function testClaimBlocksRefundAndIsIdempotent() {
   console.log("  ✓ D4: el reclamo bloquea el reembolso por la app y no se duplica");
 }
 
+async function testConcurrentClaimsReturnTheSameClaim() {
+  const client = await createUser("cli");
+  const provider = await createUser("prov");
+  const tradeId = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "locked" });
+
+  // Doble toque: varias peticiones a la vez no deben chocar con la llave primaria.
+  const claims = await Promise.all(Array.from({ length: 30 }, () => openCashClaim(fakeRequest, tradeId, client)));
+  ok(claims.every((c) => c.trade_id === tradeId && c.status === "open"), "todas devuelven el reclamo abierto");
+  const rows = await db.getMany("SELECT trade_id FROM trade_cash_claims WHERE trade_id = $1", [tradeId]);
+  strictEqual(rows.length, 1, "un solo reclamo aunque lleguen a la vez");
+  console.log("  ✓ D4: reclamos simultáneos devuelven el mismo reclamo");
+}
+
 async function testSweepSkipsConfirmationAndClaim() {
   const client = await createUser("cli");
   const provider = await createUser("prov");
@@ -273,6 +286,7 @@ async function main() {
   await testCashoutRevealIsNotConfirmation();
   await testOnlyDepositClientCanClaim();
   await testClaimBlocksRefundAndIsIdempotent();
+  await testConcurrentClaimsReturnTheSameClaim();
   await testSweepSkipsConfirmationAndClaim();
   console.log("\nAll WP1 cash protection tests passed.\n");
 }

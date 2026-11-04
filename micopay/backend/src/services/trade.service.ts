@@ -2270,13 +2270,24 @@ export async function openCashClaim(
   const existing = await getOpenCashClaim(tradeId);
   if (existing) return existing;
 
-  const claim = await db.getOne<CashClaim>(
+  // Un doble toque manda dos reclamos a la vez: el segundo devuelve el primero
+  // en vez de chocar con la llave primaria.
+  const claim = await db.insertUnique<CashClaim>(
     `INSERT INTO trade_cash_claims (trade_id, claimant_id, note, status)
      VALUES ($1, $2, $3, 'open')
      RETURNING trade_id, claimant_id, note, status, created_at`,
     [tradeId, userId, note?.trim() || null],
+    'trade_id',
   );
-  if (!claim) throw new Error('Failed to record cash claim');
+  if (!claim) {
+    const concurrent = await getOpenCashClaim(tradeId);
+    if (concurrent) return concurrent;
+    throw new ConflictError(
+      'CASH_CLAIM_CLOSED',
+      'Soporte ya revisó el reclamo de esta operación.',
+      `Trade ${tradeId} already has a resolved cash claim`,
+    );
+  }
 
   await insertTradeAuditEvent({
     tradeId,
