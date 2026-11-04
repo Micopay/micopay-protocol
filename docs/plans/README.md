@@ -3,6 +3,7 @@
 ## Current
 
 - [Secure APK and escrow implementation](./current/PLAN_IMPLEMENTACION_APK_ESCROW_SEGURO_2026-10-26.md)
+- [Escrow audit fixes (2026-10-29)](./current/PLAN_IMPLEMENTACION_CORRECCIONES_ESCROW_2026-10-29.md)
 
 ## Archived
 

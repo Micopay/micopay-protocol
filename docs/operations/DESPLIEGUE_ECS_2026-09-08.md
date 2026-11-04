@@ -92,3 +92,22 @@ aws ecs describe-services --cluster micopay --services micopay-backend \
   --query "services[0].healthCheckGracePeriodSeconds"
 aws cloudwatch describe-alarms --alarm-name-prefix micopay
 ```
+
+## 5. Actualización 2026-10-30: el corte real era de 7 minutos, no de 40 segundos
+
+En el despliegue de WP1 (2026-10-29, task def 34) la API estuvo sin tareas de 22:03 a 22:10. Según los eventos del servicio:
+- a las 22:04:05, ECS sacó la tarea vieja del balanceador y empezó a esperar que terminaran sus conexiones;
+- a las 22:09:59, arrancó la nueva;
+- a las 22:10:28, la nueva quedó registrada.
+
+La espera era `deregistration_delay.timeout_seconds = 300`, el valor por defecto del target group `micopay-tg`. Con 100/0, la tarea nueva no arranca hasta que la vieja termina esa espera, y por eso este documento calculaba ~40 s.
+
+**Cambio aplicado el 2026-10-30:** `deregistration_delay.timeout_seconds = 20`. Las peticiones de la API duran segundos. Se revierte con el mismo comando y otro valor:
+```
+aws elbv2 modify-target-group-attributes --target-group-arn <micopay-tg>   --attributes Key=deregistration_delay.timeout_seconds,Value=20
+```
+
+Faltaba en la lista de la §3.4 para poder tener dos tareas a la vez (200/100):
+- los desafíos de inicio de sesión viven en un `Map` del proceso (`challenge.service.ts`): si el desafío lo emite una tarea y la respuesta llega a la otra, el inicio de sesión falla;
+- los contadores de límite de peticiones (`rateLimit.middleware.ts`) y los avisos de pago ya enviados (`paymentNotify.service.ts`) también son de cada proceso;
+- la resolución de locks de WP2 (`resolveSubmittedLocks`) corre junto al sweep. Es idempotente, pero entra en la misma regla.
