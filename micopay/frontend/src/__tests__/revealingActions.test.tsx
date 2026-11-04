@@ -100,7 +100,7 @@ describe('CASH-5B · cash-out', () => {
 
   it('el proveedor va a escanear, no a liberar a ciegas', async () => {
     renderAs(PROVIDER, 'cashout');
-    await waitFor(() => expect(screen.getByText(/escanea el código del cliente/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/primero el código, luego el efectivo/i)).toBeInTheDocument());
 
     // CASH-4 exige la constancia de entrega antes de liberar: ofrecerle
     // "liberar" aquí produciría un 409. La acción honesta es el escáner.

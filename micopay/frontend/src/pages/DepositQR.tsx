@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
-import { completeTrade, getTrade, TradeData } from '../services/api';
+import { completeTrade, getTrade, openCashClaim, TradeData } from '../services/api';
 import TradeEscrowSummary from '../components/TradeEscrowSummary';
 import { shouldKeepPollingTrade } from '../utils/escrowAmounts';
 
@@ -54,6 +54,24 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
     // de la operación). Hasta entonces el servidor rechaza la liberación, así
     // que el botón espera a `revealing` en vez de fallar con un error.
     const cashConfirmed = displayTrade?.status === 'revealing';
+    // #9: hasta que el agente bloquea, no hay cripto en garantía. No se pide
+    // el efectivo ni se muestra el QR.
+    const fundsLocked = displayTrade?.status === 'locked' || cashConfirmed;
+    // D4: "Pagué y no me confirmaron".
+    const [claimState, setClaimState] = useState<'idle' | 'sending' | 'sent'>('idle');
+
+    const handleCashClaim = async () => {
+        if (!activeTrade || !buyerToken || claimState !== 'idle') return;
+        setClaimState('sending');
+        setError(null);
+        try {
+            await openCashClaim(activeTrade.id, buyerToken);
+            setClaimState('sent');
+        } catch (e) {
+            setClaimState('idle');
+            setError(e instanceof Error && e.message ? e.message : 'No se pudo enviar el reporte. Intenta de nuevo.');
+        }
+    };
 
     const handleComplete = async () => {
         if (!activeTrade || !buyerToken || !cashConfirmed || isConfirming) return;
@@ -97,7 +115,9 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
                     </div>
-                    <p className="font-headline font-bold text-primary tracking-tight">Ve al agente y entrégale el efectivo</p>
+                    <p className="font-headline font-bold text-primary tracking-tight">
+                        {fundsLocked ? 'Ve al agente y entrégale el efectivo' : 'Esperando a que el agente bloquee los fondos'}
+                    </p>
                 </div>
 
                 {/* Chat Preview */}
@@ -131,17 +151,26 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
 
                 {/* QR Content Card */}
                 <div className="bg-surface-container-low rounded-sm p-8 flex flex-col items-center space-y-6 ">
-                    <div className="bg-papel p-6 rounded-sm border-2 border-tinta">
-                        <QRCodeSVG
-                            value={`micopay://confirm?trade_id=${activeTrade?.id ?? ''}`}
-                            size={192}
-                            bgColor="transparent"
-                            fgColor="#16130f"
-                            level="M"
-                        />
-                    </div>
+                    {fundsLocked && activeTrade?.id ? (
+                        <div className="bg-papel p-6 rounded-sm border-2 border-tinta">
+                            <QRCodeSVG
+                                value={`micopay://confirm?trade_id=${activeTrade.id}`}
+                                size={192}
+                                bgColor="transparent"
+                                fgColor="#16130f"
+                                level="M"
+                            />
+                        </div>
+                    ) : (
+                        <div className="bg-papel p-6 rounded-sm border-2 border-tinta w-[240px] h-[240px] flex flex-col items-center justify-center gap-3 text-center">
+                            <span className="material-symbols-outlined text-gris text-4xl">hourglass_top</span>
+                            <p className="text-[13px] text-gris leading-snug">El código aparece cuando los fondos del agente quedan en garantía.</p>
+                        </div>
+                    )}
                     <div className="text-center space-y-2">
-                        <p className="font-bold text-[11px] tracking-[0.15em] text-primary uppercase">MUESTRA ESTE CÓDIGO AL AGENTE</p>
+                        {fundsLocked ? (
+                            <p className="font-bold text-[11px] tracking-[0.15em] text-primary uppercase">MUESTRA ESTE CÓDIGO AL AGENTE</p>
+                        ) : null}
                         {displayTrade ? (
                             <p className="num font-headline font-black text-2xl text-on-surface">${displayTrade.amount_mxn} MXN</p>
                         ) : null}
@@ -153,7 +182,9 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
                 <div className="bg-surface-container-lowest rounded-sm p-4 flex gap-4 items-start border-2 border-tinta ">
                     <span className="material-symbols-outlined text-primary shrink-0">info</span>
                         <p className="text-[13px] leading-relaxed text-on-surface/80">
-                        Entrega el efectivo al agente. Al recibirlo, escaneará este código y entonces podrás recibir tus activos.
+                        {fundsLocked
+                            ? 'Entrega el efectivo al agente. Al recibirlo, escaneará este código y entonces podrás recibir tus activos.'
+                            : 'No entregues efectivo todavía. Primero el agente bloquea en garantía los fondos que vas a recibir; esta pantalla se actualiza sola.'}
                     </p>
                 </div>
 
@@ -189,6 +220,22 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
                             ? 'El agente confirmó que recibió tu efectivo.'
                             : 'El botón se activa cuando el agente escanea tu código.'}
                     </p>
+                    {displayTrade?.status === 'locked' ? (
+                        claimState === 'sent' ? (
+                            <p className="text-[12px] text-tinta text-center mt-4 leading-relaxed px-2 font-medium">
+                                Reporte enviado. Los fondos se quedan en garantía y soporte revisará el caso.
+                            </p>
+                        ) : (
+                            <button
+                                onClick={handleCashClaim}
+                                disabled={claimState === 'sending'}
+                                className="w-full min-h-12 mt-4 px-4 rounded-sm border-2 border-tinta bg-papel text-tinta font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-40"
+                            >
+                                <span className="material-symbols-outlined text-sm">support_agent</span>
+                                Pagué y no me confirmaron
+                            </button>
+                        )
+                    ) : null}
                 </div>
             </main>
         </div>

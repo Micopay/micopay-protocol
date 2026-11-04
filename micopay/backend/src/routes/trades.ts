@@ -309,6 +309,30 @@ export async function tradeRoutes(app: FastifyInstance) {
   });
 
   /**
+   * POST /trades/:id/cash-claim
+   *
+   * D4: el cliente de un depósito reporta que pagó y el agente no confirmó.
+   * Bloquea el reembolso por la app y deja el caso a soporte.
+   */
+  app.post('/trades/:id/cash-claim', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          note: { type: 'string', maxLength: 1000 },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { note } = (request.body as { note?: string } | undefined) ?? {};
+    const claim = await tradeService.openCashClaim(request, id, request.user.id, note);
+    reply.status(201);
+    return { claim };
+  });
+
+  /**
    * POST /trades/:id/refund
    *
    * Buyer triggers on-chain refund for an expired trade. Calls refund() on the Soroban contract
