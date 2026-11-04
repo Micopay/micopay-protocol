@@ -1382,26 +1382,26 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
                 El cliente reportó que ya te entregó el efectivo. Los fondos se quedan en garantía y soporte revisará el caso. Si ya lo recibiste, confírmalo aquí.
               </p>
             )}
-          <LockedView
-            trade={trade}
-            actor={actor}
-            onOpenChat={() => navigate(`/chat/${trade.id}`)}
-            onShowQR={() => navigate(trade.flow === 'deposit' ? `/qr-deposit/${trade.id}` : '/qr-reveal')}
-            onGoToScanner={() => navigate('/inbox', { state: { autoScan: true } })}
-            cancel={{
-              allowed: actor.party === 'client' || (actor.party === 'provider' && merchantUnavailable),
-              mustPauseFirst: actor.party === 'provider' && !merchantUnavailable,
-              cancelling: isCancelling,
-              error: cancelError,
-              onCancel: handleCancel,
-            }}
-            cashConfirm={{
-              canConfirm: canConfirmCashReceived(actor, trade.status),
-              confirming: isConfirmingCash,
-              error: cashError,
-              onConfirm: handleConfirmCash,
-            }}
-          />
+            <LockedView
+              trade={trade}
+              actor={actor}
+              onOpenChat={() => navigate(`/chat/${trade.id}`)}
+              onShowQR={() => navigate(trade.flow === 'deposit' ? `/qr-deposit/${trade.id}` : '/qr-reveal')}
+              onGoToScanner={() => navigate('/inbox', { state: { autoScan: true } })}
+              cancel={{
+                allowed: actor.party === 'client' || (actor.party === 'provider' && merchantUnavailable),
+                mustPauseFirst: actor.party === 'provider' && !merchantUnavailable,
+                cancelling: isCancelling,
+                error: cancelError,
+                onCancel: handleCancel,
+              }}
+              cashConfirm={{
+                canConfirm: canConfirmCashReceived(actor, trade.status),
+                confirming: isConfirmingCash,
+                error: cashError,
+                onConfirm: handleConfirmCash,
+              }}
+            />
           </>
         );
       case 'revealing':
