@@ -1203,15 +1203,23 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
           );
         }
         return (
-          <LockedView
-            trade={trade}
-            cashConfirm={{
-              canConfirm: canConfirmCashReceived(actor, trade.status),
-              confirming: isConfirmingCash,
-              error: cashError,
-              onConfirm: handleConfirmCash,
-            }}
-          />
+          <>
+            {/* D4: el agente debe saber que hay un reclamo antes de esperar el vencimiento. */}
+            {actor.party === 'provider' && refundEligibility?.reason === 'cash_claim_open' && (
+              <p role="status" className="w-full mb-4 p-3 border-2 border-naranja bg-naranja-suave text-tinta text-sm font-bold rounded-sm">
+                El cliente reportó que ya te entregó el efectivo. Los fondos se quedan en garantía y soporte revisará el caso. Si ya lo recibiste, confírmalo aquí.
+              </p>
+            )}
+            <LockedView
+              trade={trade}
+              cashConfirm={{
+                canConfirm: canConfirmCashReceived(actor, trade.status),
+                confirming: isConfirmingCash,
+                error: cashError,
+                onConfirm: handleConfirmCash,
+              }}
+            />
+          </>
         );
       case 'revealing':
         // CASH-6: igual que en `locked` — vencida con fondos dentro, la salida
