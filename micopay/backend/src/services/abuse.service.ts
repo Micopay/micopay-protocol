@@ -400,9 +400,11 @@ export async function assertCanCancelTrade(userId: string): Promise<void> {
 
   const since = new Date(Date.now() - config.cancelCooldownWindowMs).toISOString();
   const recent = await db.getOne<{ count: string }>(
+    // WP3: solo cuentan las cancelaciones con fondos bloqueados.
     `SELECT COUNT(*)::text AS count FROM audit_log
      WHERE actor = $1
        AND to_state = 'cancelled'
+       AND metadata->>'refund_expected' = 'true'
        AND occurred_at >= $2`,
     [userId, since],
   );

@@ -35,6 +35,10 @@ export interface TradeConfirmationPageProps {
   loading?: boolean;
   errorMessage?: string | null;
   errorAction?: ApiErrorAction;
+  /** Codigo del error; `ACTIVE_TRADE_OFFER` ofrece crear otra operacion. */
+  errorCode?: string;
+  /** WP3: la persona prefiere crear otra en vez de retomar la activa. */
+  onCreateNewInstead?: () => void;
   onVerifyIdentity?: () => void;
   onChooseAnotherAgent?: () => void;
   /** Effective-fee threshold (%) above which a warning is shown. Defaults to the shared guardrail. */
@@ -63,6 +67,8 @@ export default function TradeConfirmationPage({
   loading = false,
   errorMessage,
   errorAction,
+  errorCode,
+  onCreateNewInstead,
   onVerifyIdentity,
   onChooseAnotherAgent,
   maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
@@ -121,6 +127,15 @@ export default function TradeConfirmationPage({
             role="alert"
           >
             <p>{errorMessage}</p>
+            {errorCode === 'ACTIVE_TRADE_OFFER' && onCreateNewInstead ? (
+              <button
+                type="button"
+                onClick={async () => { onCreateNewInstead(); await onConfirm(); }}
+                className="mt-3 w-full min-h-12 rounded-sm border-2 border-tinta bg-papel px-4 font-bold text-tinta"
+              >
+                Crear otra operación
+              </button>
+            ) : null}
             {errorAction === 'verify_identity' && onVerifyIdentity ? (
               <button
                 type="button"

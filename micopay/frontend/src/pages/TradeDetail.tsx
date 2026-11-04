@@ -139,6 +139,7 @@ function PendingView({
   onLock,
   locking,
   lockError,
+  cancelError = null,
 }: {
   trade: TradeDetailData;
   onCancel: () => void;
@@ -146,6 +147,8 @@ function PendingView({
   onLock: () => void;
   locking: boolean;
   lockError: string | null;
+  /** WP3: antes un fallo al cancelar solo iba a la consola. */
+  cancelError?: string | null;
 }) {
   const { label: countdownLabel, expired: countdownExpired } = useCountdown(trade.expires_at ?? null);
   const countdown = countdownExpired ? 'Expirado' : countdownLabel;
@@ -207,6 +210,11 @@ function PendingView({
         </button>
       )}
 
+      {cancelError && (
+        <p role="alert" className="w-full mb-3 p-3 bg-red-50 border border-red-200 rounded-sm text-red-700 text-sm font-medium">
+          {cancelError}
+        </p>
+      )}
       <button
         onClick={onCancel}
         disabled={locking}
@@ -226,7 +234,33 @@ interface CashConfirmProps {
   onConfirm: () => void;
 }
 
-function LockedView({ trade, cashConfirm }: { trade: TradeDetailData; cashConfirm?: CashConfirmProps }) {
+interface LockedCancelProps {
+  /** El backend lo permite: cliente, o agente en pausa. */
+  allowed: boolean;
+  /** Agente disponible: el backend le pide pausarse antes. */
+  mustPauseFirst: boolean;
+  cancelling: boolean;
+  error: string | null;
+  onCancel: () => void;
+}
+
+function LockedView({
+  trade,
+  cashConfirm,
+  actor,
+  onOpenChat,
+  onShowQR,
+  onGoToScanner,
+  cancel,
+}: {
+  trade: TradeDetailData;
+  cashConfirm?: CashConfirmProps;
+  actor?: TradeActor;
+  onOpenChat?: () => void;
+  onShowQR?: () => void;
+  onGoToScanner?: () => void;
+  cancel?: LockedCancelProps;
+}) {
   // Segundo paso antes de confirmar: al confirmar, el cliente puede liberar la
   // cripto del agente, así que un toque accidental le costaría sus fondos.
   const [askingCash, setAskingCash] = useState(false);
@@ -305,10 +339,8 @@ function LockedView({ trade, cashConfirm }: { trade: TradeDetailData; cashConfir
           lock
         </span>
       </div>
-      <h2 className="text-2xl font-bold text-on-surface mb-2">Fondos bloqueados</h2>
-      <p className="text-on-surface-variant mb-6">
-        Los fondos están seguros en el contrato inteligente. Esperando confirmación del vendedor.
-      </p>
+      <h2 className="text-2xl font-bold text-on-surface mb-2">{lockedTitle(actor)}</h2>
+      <p className="text-on-surface-variant mb-6">{lockedBody(actor)}</p>
 
       {trade.lock_tx_hash && (
         <a
@@ -322,8 +354,139 @@ function LockedView({ trade, cashConfirm }: { trade: TradeDetailData; cashConfir
         </a>
       )}
 
-      <button className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity">
-        Abrir chat con el vendedor
+      {actor?.party === 'client' && onShowQR && (
+        <button
+          onClick={onShowQR}
+          className="w-full min-h-12 py-3 mb-3 rounded-sm bg-naranja text-papel border-2 border-tinta shadow-solida font-bold"
+        >
+          Ver mi código
+        </button>
+      )}
+      {actor?.flow === 'cashout' && actor.party === 'provider' && onGoToScanner && (
+        <button
+          onClick={onGoToScanner}
+          className="w-full min-h-12 py-3 mb-3 rounded-sm bg-naranja text-papel border-2 border-tinta shadow-solida font-bold"
+        >
+          Abrir escáner
+        </button>
+      )}
+
+      <button
+        onClick={onOpenChat}
+        disabled={!onOpenChat}
+        className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
+      >
+        {actor?.party === 'provider' ? 'Abrir chat con el cliente' : 'Abrir chat con el agente'}
+      </button>
+
+      {cancel && <LockedCancel {...cancel} />}
+    </div>
+  );
+}
+
+function lockedTitle(actor?: TradeActor): string {
+  if (actor?.flow === 'cashout' && actor.party === 'client') return 'Tu cripto está en garantía';
+  if (actor?.flow === 'cashout' && actor.party === 'provider') return 'La cripto del cliente está en garantía';
+  return 'Fondos bloqueados';
+}
+
+function lockedBody(actor?: TradeActor): string {
+  if (actor?.flow === 'cashout' && actor.party === 'client') {
+    return 'Ve con el agente. Muéstrale tu código cuando estés frente a él y te entregue el efectivo.';
+  }
+  if (actor?.flow === 'cashout' && actor.party === 'provider') {
+    return 'Cuando llegue el cliente, pídele su código y escanéalo en el momento en que le entregas el efectivo.';
+  }
+  if (actor?.flow === 'deposit' && actor.party === 'client') {
+    return 'Los fondos del agente están en garantía. Entrégale el efectivo; cuando lo confirme podrás recibir tus activos.';
+  }
+  return 'Los fondos están seguros en el contrato inteligente.';
+}
+
+/** #5: con fondos bloqueados, cancelar detiene el flujo; no devuelve fondos. */
+function LockedCancel({ allowed, mustPauseFirst, cancelling, error, onCancel }: LockedCancelProps) {
+  return (
+    <div className="w-full mt-4">
+      {error && (
+        <p role="alert" className="w-full mb-3 p-3 bg-red-50 border border-red-200 rounded-sm text-red-700 text-sm font-medium">
+          {error}
+        </p>
+      )}
+      {allowed ? (
+        <button
+          onClick={onCancel}
+          disabled={cancelling}
+          className="w-full min-h-12 py-3 rounded-sm border-2 border-tinta text-tinta font-bold disabled:opacity-40"
+        >
+          {cancelling ? 'Cancelando…' : 'Cancelar operación'}
+        </button>
+      ) : mustPauseFirst ? (
+        <p className="text-sm text-gris">
+          Para dejar esta operación, primero ponte en pausa desde tu perfil. Luego podrás cancelarla aquí.
+        </p>
+      ) : null}
+      {allowed && (
+        <p className="text-xs text-gris mt-2">
+          Cancelar no devuelve los fondos al instante: regresan a quien los bloqueó cuando vence el plazo.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * #2: el agente ya escaneo y la entrega quedo registrada; falta liberar.
+ * Reintentar retoma la misma entrega: no hay que volver a escanear.
+ */
+function ReleaseAfterHandoffView({ trade, token, onComplete, onOpenChat }: { trade: TradeDetailData; token: string | null; onComplete: () => void; onOpenChat: () => void }) {
+  const [releasing, setReleasing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const liberar = async () => {
+    const effectiveToken = token ?? (await getStoredToken());
+    if (!effectiveToken || releasing) return;
+    setReleasing(true);
+    setError(null);
+    try {
+      const { release_tx_hash } = await completeTrade(trade.id, effectiveToken);
+      if (!release_tx_hash) {
+        setError('La red no devolvió el comprobante. Intenta de nuevo.');
+        return;
+      }
+      onComplete();
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : 'No se pudo liberar. Intenta de nuevo; la entrega ya quedó registrada.');
+    } finally {
+      setReleasing(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center text-center">
+      <div className="w-16 h-16 rounded-sm bg-verde-suave border-2 border-tinta flex items-center justify-center mb-6">
+        <span aria-hidden="true" className="material-symbols-outlined text-verde text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
+          check_circle
+        </span>
+      </div>
+      <h2 className="text-2xl font-bold text-on-surface mb-2">Entrega registrada</h2>
+      <p className="text-on-surface-variant mb-6">Ya escaneaste el código del cliente. Libera los fondos para recibirlos en tu cuenta.</p>
+      {error && (
+        <p role="alert" className="w-full mb-4 p-3 bg-red-50 border border-red-200 rounded-sm text-red-700 text-sm font-medium">
+          {error}
+        </p>
+      )}
+      <button
+        onClick={liberar}
+        disabled={releasing}
+        className="w-full min-h-12 py-3 rounded-sm bg-naranja text-papel border-2 border-tinta shadow-solida font-bold mb-4 disabled:opacity-60"
+      >
+        {releasing ? 'Liberando…' : 'Liberar fondos'}
+      </button>
+      <button
+        onClick={onOpenChat}
+        className="w-full min-h-12 py-3 rounded-sm border-2 border-tinta text-tinta font-bold"
+      >
+        Abrir chat
       </button>
     </div>
   );
@@ -350,9 +513,11 @@ function RevealingView({
   onShowQR,
   onOpenChat,
   onGoToScanner,
+  cashHandoffConfirmed = false,
 }: {
   trade: TradeDetailData;
   actor: TradeActor;
+  cashHandoffConfirmed?: boolean;
   onComplete: () => void;
   token: string | null;
   onShowQR: () => void;
@@ -365,6 +530,9 @@ function RevealingView({
     // del cliente: CASH-4 exige la constancia durable de la entrega. Mandarlo
     // al escaner es la accion honesta; ofrecerle "liberar" aqui produciria un
     // 409 CASH_HANDOFF_REQUIRED.
+    if (actor.flow === 'cashout' && cashHandoffConfirmed) {
+      return <ReleaseAfterHandoffView trade={trade} token={token} onComplete={onComplete} onOpenChat={onOpenChat} />;
+    }
     if (actor.flow === 'cashout') {
       return (
         <ActionView
@@ -373,7 +541,7 @@ function RevealingView({
           iconTone="text-naranja"
           title="Primero el código, luego el efectivo"
           body="Pide al cliente que te muestre su código y ten el escáner abierto. Escanéalo en el mismo momento en que le entregas el efectivo; no sueltes el efectivo sin haberlo escaneado. Los fondos se liberan a tu cuenta al confirmar la entrega."
-          primary={{ label: 'Ir a escanear', onClick: onGoToScanner }}
+          primary={{ label: 'Abrir escáner', onClick: onGoToScanner }}
           secondary={{ label: 'Abrir chat', onClick: onOpenChat }}
         />
       );
@@ -951,6 +1119,10 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
   const [refundEligibility, setRefundEligibility] = useState<RefundEligibility | null>(null);
   const [declineAvailable, setDeclineAvailable] = useState(false);
   const [refundKind, setRefundKind] = useState<'decline' | 'timeout' | null>(null);
+  const [cashHandoffConfirmed, setCashHandoffConfirmed] = useState(false);
+  const [merchantUnavailable, setMerchantUnavailable] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   // Se consulta al cargar y tras cada cambio de estado, para que el CTA
   // aparezca en cuanto venza sin depender del reloj del dispositivo.
@@ -996,6 +1168,8 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       setTrade(data.trade as TradeDetailData);
       setDeclineAvailable(Boolean(data.decline_available));
       setRefundKind(data.refund_kind ?? null);
+      setCashHandoffConfirmed(Boolean(data.cash_handoff_confirmed));
+      setMerchantUnavailable(Boolean(data.merchant_unavailable));
       setError(null);
     } catch (e: any) {
       const status = e?.response?.status;
@@ -1034,11 +1208,17 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
     const effectiveToken = token ?? (await getStoredToken());
     if (!effectiveToken) return;
 
+    if (isCancelling) return;
+    setIsCancelling(true);
+    setCancelError(null);
     try {
       await cancelTradeRequest(trade.id, effectiveToken);
       fetchTrade(); // Refresh trade state
     } catch (e) {
-      console.error('Failed to cancel trade', e);
+      // El backend explica por que no (espera, pausa, QR vigente...).
+      setCancelError(e instanceof Error && e.message ? e.message : 'No se pudo cancelar. Intenta de nuevo.');
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -1206,6 +1386,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
             onLock={handleLock}
             locking={isLocking}
             lockError={lockError}
+            cancelError={cancelError}
           />
         );
       case 'locked':
@@ -1232,15 +1413,26 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
                 El cliente reportó que ya te entregó el efectivo. Los fondos se quedan en garantía y soporte revisará el caso. Si ya lo recibiste, confírmalo aquí.
               </p>
             )}
-            <LockedView
-              trade={trade}
-              cashConfirm={{
-                canConfirm: canConfirmCashReceived(actor, trade.status),
-                confirming: isConfirmingCash,
-                error: cashError,
-                onConfirm: handleConfirmCash,
-              }}
-            />
+          <LockedView
+            trade={trade}
+            actor={actor}
+            onOpenChat={() => navigate(`/chat/${trade.id}`)}
+            onShowQR={() => navigate(trade.flow === 'deposit' ? `/qr-deposit/${trade.id}` : '/qr-reveal')}
+            onGoToScanner={() => navigate('/inbox', { state: { autoScan: true } })}
+            cancel={{
+              allowed: actor.party === 'client' || (actor.party === 'provider' && merchantUnavailable),
+              mustPauseFirst: actor.party === 'provider' && !merchantUnavailable,
+              cancelling: isCancelling,
+              error: cancelError,
+              onCancel: handleCancel,
+            }}
+            cashConfirm={{
+              canConfirm: canConfirmCashReceived(actor, trade.status),
+              confirming: isConfirmingCash,
+              error: cashError,
+              onConfirm: handleConfirmCash,
+            }}
+          />
           </>
         );
       case 'revealing':
@@ -1262,15 +1454,30 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
         // emite. CASH-5B trae aquí la acción real, repartida por flujo y
         // actor: la vista de confirmación ya no queda inalcanzable.
         return (
-          <RevealingView
-            trade={trade}
-            actor={actor}
-            onComplete={handleComplete}
-            token={token}
-            onShowQR={() => navigate('/qr-reveal')}
-            onOpenChat={() => navigate('/chat')}
-            onGoToScanner={() => navigate('/inbox')}
-          />
+          <>
+            <RevealingView
+              trade={trade}
+              actor={actor}
+              onComplete={handleComplete}
+              token={token}
+              onShowQR={() => navigate('/qr-reveal')}
+              onOpenChat={() => navigate(`/chat/${trade.id}`)}
+              onGoToScanner={() => navigate('/inbox', { state: { autoScan: true } })}
+              cashHandoffConfirmed={cashHandoffConfirmed}
+            />
+            {/* En un retiro, `revealing` es cuando el cliente ya genero su QR.
+                Cancelar sigue siendo posible hasta la entrega; el backend
+                decide (p. ej. lo rechaza mientras el QR siga vigente). */}
+            {actor.flow === 'cashout' && !cashHandoffConfirmed && (
+              <LockedCancel
+                allowed={actor.party === 'client' || (actor.party === 'provider' && merchantUnavailable)}
+                mustPauseFirst={actor.party === 'provider' && !merchantUnavailable}
+                cancelling={isCancelling}
+                error={cancelError}
+                onCancel={handleCancel}
+              />
+            )}
+          </>
         );
       case 'completed':
         return <CompletedView trade={trade} />;
@@ -1331,6 +1538,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
             onLock={handleLock}
             locking={isLocking}
             lockError={lockError}
+            cancelError={cancelError}
           />
         );
     }

@@ -158,6 +158,9 @@ export interface TradeData {
   /** Roles del escrow. GET /trades/:id y POST /trades los devuelven. */
   seller_id?: string;
   buyer_id?: string;
+  /** CASH-1: flujo de producto y agente, columnas de `trades`. */
+  flow?: TradeFlow;
+  provider_id?: string;
   seller_stellar_address?: string | null;
   buyer_stellar_address?: string | null;
   escrow_contract_id?: string | null;
@@ -212,6 +215,8 @@ export interface TradeDetailResponse {
   decline_available: boolean;
   /** #16: en `refunded`, si fue decline o vencimiento. */
   refund_kind?: 'decline' | 'timeout' | null;
+  /** Cash-out: el agente ya escaneó el QR y registró la entrega. */
+  cash_handoff_confirmed?: boolean;
   merchant_unavailable: boolean;
   seller_username: string | null;
   buyer_username: string | null;

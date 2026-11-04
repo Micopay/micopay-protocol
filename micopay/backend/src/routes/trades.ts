@@ -162,6 +162,7 @@ export async function tradeRoutes(app: FastifyInstance) {
       trade,
       decline_available,
       refund_kind,
+      cash_handoff_confirmed,
       merchant_unavailable,
       seller_username,
       buyer_username,
@@ -182,6 +183,8 @@ export async function tradeRoutes(app: FastifyInstance) {
       decline_available,
       // #16: la pantalla dice si fue devolucion inmediata o vencimiento.
       refund_kind,
+      // #2/#17: con la entrega registrada, el agente ve "Liberar fondos" y el cliente deja de pedir otro QR.
+      cash_handoff_confirmed,
       merchant_unavailable,
       seller_username,
       buyer_username,
