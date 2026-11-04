@@ -161,6 +161,7 @@ export async function tradeRoutes(app: FastifyInstance) {
     const {
       trade,
       decline_available,
+      cash_handoff_confirmed,
       merchant_unavailable,
       seller_username,
       buyer_username,
@@ -179,6 +180,8 @@ export async function tradeRoutes(app: FastifyInstance) {
         buyer_stellar_address,
       },
       decline_available,
+      // #2/#17: con la entrega registrada, el agente ve "Liberar fondos" y el cliente deja de pedir otro QR.
+      cash_handoff_confirmed,
       merchant_unavailable,
       seller_username,
       buyer_username,
