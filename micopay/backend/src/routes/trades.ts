@@ -161,6 +161,7 @@ export async function tradeRoutes(app: FastifyInstance) {
     const {
       trade,
       decline_available,
+      refund_kind,
       merchant_unavailable,
       seller_username,
       buyer_username,
@@ -179,6 +180,8 @@ export async function tradeRoutes(app: FastifyInstance) {
         buyer_stellar_address,
       },
       decline_available,
+      // #16: la pantalla dice si fue devolucion inmediata o vencimiento.
+      refund_kind,
       merchant_unavailable,
       seller_username,
       buyer_username,
