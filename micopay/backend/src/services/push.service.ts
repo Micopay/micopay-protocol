@@ -197,7 +197,7 @@ export async function sendTradeNotificationToMerchant(
  * Antes solo se avisaba al agente de una operacion nueva; el cliente no se
  * enteraba de nada si no tenia la pantalla abierta.
  */
-export type TradeUpdateKind = 'locked' | 'cancelled' | 'refunded' | 'completed';
+export type TradeUpdateKind = 'locked' | 'cancelled' | 'refunded' | 'completed' | 'cash_claim';
 
 export interface TradeUpdatePayload {
   tradeId: string;
@@ -243,6 +243,11 @@ export function buildTradeUpdateMessage(payload: TradeUpdatePayload): { title: s
       return {
         title: 'Operación completada',
         body: `La operación de ${amount} se completó.`,
+      };
+    case 'cash_claim':
+      return {
+        title: 'El cliente dice que ya te pagó',
+        body: `Reportó que entregó ${amount} y no lo confirmaste. Confírmalo en la app o soporte revisará el caso.`,
       };
   }
 }

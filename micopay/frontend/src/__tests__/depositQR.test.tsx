@@ -15,8 +15,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import i18n from '../i18n';
 
-const { getTrade } = vi.hoisted(() => ({ getTrade: vi.fn() }));
-vi.mock('../services/api', () => ({ getTrade, completeTrade: vi.fn() }));
+const { getTrade, openCashClaim } = vi.hoisted(() => ({ getTrade: vi.fn(), openCashClaim: vi.fn() }));
+vi.mock('../services/api', () => ({ getTrade, completeTrade: vi.fn(), openCashClaim }));
 
 import DepositQR from '../pages/DepositQR';
 
@@ -46,6 +46,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   getTrade.mockReset();
+  openCashClaim.mockReset();
 });
 
 describe('DepositQR', () => {
@@ -70,6 +71,53 @@ describe('DepositQR', () => {
     );
     await waitFor(() => expect(getTrade).toHaveBeenCalled());
     expect(screen.queryByTestId('trade-escrow-summary')).toBeNull();
+  });
+});
+
+describe('DepositQR antes del bloqueo (#9)', () => {
+  it('does not ask for cash nor show the QR until the agent locks', async () => {
+    getTrade.mockResolvedValue(depositTrade({ status: 'pending', lock_tx_hash: null }));
+    const created = depositTrade({ status: 'pending', lock_tx_hash: null }) as any;
+    const { container } = render(
+      <DepositQR activeTrade={created} buyerToken="tok" viewerId={CLIENT} onBack={() => {}} onChat={() => {}} onSuccess={() => {}} />,
+    );
+    await waitFor(() => expect(getTrade).toHaveBeenCalled());
+    expect(screen.getByText('Esperando a que el agente bloquee los fondos')).toBeInTheDocument();
+    expect(screen.queryByText('Ve al agente y entrégale el efectivo')).toBeNull();
+    expect(screen.queryByText('MUESTRA ESTE CÓDIGO AL AGENTE')).toBeNull();
+    expect(container.querySelector('svg[height="192"]')).toBeNull();
+  });
+
+  it('shows the QR once the funds are locked', async () => {
+    getTrade.mockResolvedValue(depositTrade());
+    render(
+      <DepositQR activeTrade={depositTrade({ status: 'pending', lock_tx_hash: null }) as any} buyerToken="tok" viewerId={CLIENT} onBack={() => {}} onChat={() => {}} onSuccess={() => {}} />,
+    );
+    expect(await screen.findByText('MUESTRA ESTE CÓDIGO AL AGENTE')).toBeInTheDocument();
+    expect(screen.getByText('Ve al agente y entrégale el efectivo')).toBeInTheDocument();
+  });
+});
+
+describe('DepositQR reclamo D4', () => {
+  it('lets the client report that they paid and were not confirmed', async () => {
+    getTrade.mockResolvedValue(depositTrade());
+    openCashClaim.mockResolvedValue(undefined);
+    render(
+      <DepositQR activeTrade={depositTrade() as any} buyerToken="tok" viewerId={CLIENT} onBack={() => {}} onChat={() => {}} onSuccess={() => {}} />,
+    );
+    const button = await screen.findByText('Pagué y no me confirmaron');
+    button.click();
+    expect(await screen.findByText(/Reporte enviado/)).toBeInTheDocument();
+    expect(openCashClaim).toHaveBeenCalledWith('trade-dep', 'tok');
+  });
+
+  it('hides the report once the agent confirmed the cash', async () => {
+    getTrade.mockResolvedValue(depositTrade({ status: 'revealing' }));
+    render(
+      <DepositQR activeTrade={depositTrade({ status: 'revealing' }) as any} buyerToken="tok" viewerId={CLIENT} onBack={() => {}} onChat={() => {}} onSuccess={() => {}} />,
+    );
+    await screen.findByText('Recibir mis activos');
+    expect(screen.queryByText('Pagué y no me confirmaron')).toBeNull();
   });
 });
 

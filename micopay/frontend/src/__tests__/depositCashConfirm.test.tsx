@@ -160,7 +160,7 @@ describe('TradeDetail · locked deposit', () => {
 
   it('the provider of a cash-out does not get the button', async () => {
     renderDetailAs(PROVIDER, 'cashout');
-    await screen.findByText(/fondos bloqueados/i);
+    await screen.findByText(/la cripto del cliente está en garantía/i);
     expect(screen.queryByRole('button', { name: 'Recibí el efectivo' })).toBeNull();
   });
 });
