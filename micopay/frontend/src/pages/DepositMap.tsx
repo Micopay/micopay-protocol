@@ -24,6 +24,8 @@ function formatDistance(km: number): string {
 
 interface DepositMapProps {
   onBack: () => void;
+  /** #14: quien mira. Si es agente, no se ofrece a si mismo. */
+  viewerId?: string | null;
   onSelectOffer: (offerId: string) => void;
   /**
    * Paso de confirmacion, igual que en cash-out. El deposito saltaba directo al
@@ -239,6 +241,7 @@ function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) 
 
 const DepositMap = ({
   onBack,
+  viewerId = null,
   onSelectOffer,
   onProceedToConfirm,
   loading = false,
@@ -269,7 +272,7 @@ const DepositMap = ({
     return <FetchError onBack={onBack} onRetry={refetch} />;
   }
 
-  const merchants = state.status === 'success' ? state.merchants : [];
+  const merchants = (state.status === 'success' ? state.merchants : []).filter((m) => !viewerId || m.seller_id !== viewerId);
 
   return (
     <div className="bg-surface text-on-surface min-h-screen pb-24">

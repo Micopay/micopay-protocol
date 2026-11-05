@@ -108,8 +108,11 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
                                 <span className="material-symbols-outlined text-emerald-700 text-lg">storefront</span>
                             </div>
                             <div className="flex-1">
+                                {/* Era un mensaje fijo atribuido al agente ("Ya recibí tu
+                                    solicitud") que nadie escribio. Los mensajes reales
+                                    estan en el chat. */}
                                 <p className="text-sm font-medium text-on-surface-variant leading-snug">
-                                    <span className="font-bold text-on-surface">Agente:</span> Ya recibí tu solicitud.
+                                    Habla con el agente por el chat de la operación.
                                 </p>
                             </div>
                         </div>

@@ -37,11 +37,12 @@ describe('.env.play', () => {
     const play = vars('.env.play');
     expect(play.VITE_ENABLE_DEFI_TRADING).toBe('false');
     expect(play.VITE_ENABLE_SPEI_RAMP).toBe('false');
+    expect(play.VITE_ENABLE_BLEND).toBe('false');
   });
 
   it('en todo lo demás es igual a .env.testnet', () => {
-    const { VITE_ENABLE_DEFI_TRADING: _a, VITE_ENABLE_SPEI_RAMP: _b, ...play } = vars('.env.play');
-    const { VITE_ENABLE_DEFI_TRADING: _c, VITE_ENABLE_SPEI_RAMP: _d, ...testnet } = vars('.env.testnet');
+    const { VITE_ENABLE_DEFI_TRADING: _a, VITE_ENABLE_SPEI_RAMP: _b, VITE_ENABLE_BLEND: _e, ...play } = vars('.env.play');
+    const { VITE_ENABLE_DEFI_TRADING: _c, VITE_ENABLE_SPEI_RAMP: _d, VITE_ENABLE_BLEND: _f, ...testnet } = vars('.env.testnet');
     expect(play).toEqual(testnet);
   });
 
@@ -51,6 +52,17 @@ describe('.env.play', () => {
 });
 
 describe('features', () => {
+  it('#12: Blend tiene bandera propia y CETES no la enciende', async () => {
+    vi.resetModules();
+    vi.stubEnv('VITE_ENABLE_DEFI_TRADING', 'true');
+    vi.stubEnv('VITE_ENABLE_BLEND', '');
+    const f = await import('../constants/features');
+    expect(f.CETES_AVAILABLE).toBe(true);
+    expect(f.BLEND_AVAILABLE).toBe(false);
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
   it('sin banderas, CETES y Blend quedan cerrados', async () => {
     vi.stubEnv('VITE_ENABLE_DEFI_TRADING', 'false');
     vi.stubEnv('VITE_ENABLE_SPEI_RAMP', 'false');

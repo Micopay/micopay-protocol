@@ -110,6 +110,11 @@ export default function WalletLogin({ onLoginSuccess }: WalletLoginProps) {
             <p className="text-sm text-gris text-center">
               Tu llave se queda en tu billetera. MicoPay te pedirá firmar y nunca la verá.
             </p>
+            {/* #26: el web no guarda llaves; perder la billetera es perder la cuenta. */}
+            <p className="text-sm text-tinta border-2 border-tinta rounded-sm px-3 py-2">
+              Guarda la frase de recuperación de tu billetera. Si olvidas su contraseña, solo esa frase te devuelve la
+              cuenta: MicoPay no puede recuperarla.
+            </p>
             <button type="button" onClick={handleConnect} disabled={loading} className={buttonClass}>
               {loading ? 'Esperando tu billetera…' : 'Conectar billetera'}
             </button>

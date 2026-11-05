@@ -226,7 +226,7 @@ const Home = ({
               aria-hidden="true"
               className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center"
             >
-              notifications
+              inbox
             </span>
             {pendingCount > 0 && (
               /* §4.5: cuadro de 18 dp con radio 2 px y borde de tinta, en

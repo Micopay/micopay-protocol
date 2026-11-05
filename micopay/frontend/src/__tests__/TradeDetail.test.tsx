@@ -123,7 +123,7 @@ describe('TradeDetail', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Pendiente')).toBeInTheDocument();
-        expect(screen.getByText(/esperando al vendedor/i)).toBeInTheDocument();
+        expect(screen.getByText(/esperando el bloqueo de fondos/i)).toBeInTheDocument();
         expect(screen.getByText(/cancelar operación/i)).toBeInTheDocument();
       });
     });
@@ -395,7 +395,7 @@ describe('TradeDetail', () => {
 
         await waitFor(() => {
           expect(screen.getByText(/¿necesitas ayuda\?/i)).toBeInTheDocument();
-          expect(screen.getByText(/contactar soporte/i)).toBeInTheDocument();
+          expect(screen.getByRole('button', { name: /copiar soporte@/i })).toBeInTheDocument();
         });
       });
     });
@@ -419,7 +419,7 @@ describe('TradeDetail', () => {
       renderWithRouter();
 
       await waitFor(() => {
-        expect(screen.getByText(/contactar soporte/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /copiar soporte@/i })).toBeInTheDocument();
       });
     });
 
@@ -431,7 +431,7 @@ describe('TradeDetail', () => {
       renderWithRouter();
 
       await waitFor(() => {
-        expect(screen.getByText(/contactar soporte/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /copiar soporte@/i })).toBeInTheDocument();
       });
     });
   });

@@ -773,8 +773,8 @@
     "back": "Go back",
     "close": "Close",
     "copyPublicKey": "Copy public key",
-    "notifications": "Notifications",
-    "notificationsPending": "Notifications, {{count}} pending",
+    "notifications": "Inbox",
+    "notificationsPending": "Inbox, {{count}} pending",
     "userAvatar": "Profile picture"
   },
   "offlineQueue": {
