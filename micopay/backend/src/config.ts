@@ -163,6 +163,27 @@ const ESCROW_CONTRACTS = parseEscrowContracts(
   process.env.ESCROW_CONTRACT_ID || '',
   ESCROW_ASSET_ENV,
 );
+/**
+ * WP6: emisor del token de cada escrow, `ESCROW_ASSET_ISSUERS=USDC=G...`.
+ * Hay varios USDC con el mismo codigo (Circle, el de pruebas del escrow): sin
+ * el emisor, una trustline del USDC equivocado pasaba por buena. Un activo sin
+ * emisor configurado se compara solo por codigo, como antes.
+ */
+function parseAssetIssuers(raw: string | undefined): Record<string, string> {
+  const map: Record<string, string> = {};
+  if (!raw || !raw.trim()) return map;
+  for (const pair of raw.split(',')) {
+    const [asset, issuer] = pair.split('=').map((x) => x?.trim());
+    if (!asset || !issuer) {
+      throw new Error(`ESCROW_ASSET_ISSUERS mal formado: "${pair}". Se espera ACTIVO=EMISOR.`);
+    }
+    map[asset.toUpperCase()] = issuer;
+  }
+  return map;
+}
+
+const ESCROW_ASSET_ISSUERS = parseAssetIssuers(process.env.ESCROW_ASSET_ISSUERS);
+
 const ESCROW_DECLINE_CONTRACT_IDS = (process.env.ESCROW_DECLINE_CONTRACT_IDS || '')
   .split(',')
   .map((value) => value.trim())
@@ -185,6 +206,8 @@ export const config = {
    * refund iria al contrato nuevo, que no las conoce.
    */
   escrowLegacyContractId: process.env.ESCROW_LEGACY_CONTRACT_ID || '',
+  /** WP6: activo -> emisor del token del escrow (ver parseAssetIssuers). */
+  escrowAssetIssuers: ESCROW_ASSET_ISSUERS as Readonly<Record<string, string>>,
   /** Contract IDs deployed with buyer-authorized decline(). */
   escrowDeclineContractIds: ESCROW_DECLINE_CONTRACT_IDS as readonly string[],
   /** Activo por defecto de las operaciones nuevas (ver assetRate.service). */

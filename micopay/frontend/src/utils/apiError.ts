@@ -110,6 +110,21 @@ export function mapApiError(err: unknown): MappedApiError {
       };
     }
 
+    // WP6: el servidor ya explica que falta (linea de confianza o saldo del
+    // USDC que usa el escrow); el mapa generico lo cambiaba por "No pudimos
+    // terminar esta accion".
+    if (error === 'LOCK_TRUSTLINE_MISSING' || error === 'LOCK_INSUFFICIENT_BALANCE') {
+      const serverMessage = typeof (err.response?.data as { message?: unknown } | undefined)?.message === 'string'
+        ? (err.response?.data as { message: string }).message
+        : message;
+      return {
+        message: serverMessage,
+        error,
+        action: 'retry',
+        status,
+      };
+    }
+
     if (!err.response) {
       return {
         message: 'Sin conexión al servidor. Revisa tu internet e inténtalo de nuevo.',
