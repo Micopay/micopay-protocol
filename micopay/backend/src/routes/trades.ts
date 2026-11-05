@@ -161,6 +161,7 @@ export async function tradeRoutes(app: FastifyInstance) {
     const {
       trade,
       decline_available,
+      cash_handoff_confirmed,
       merchant_unavailable,
       seller_username,
       buyer_username,
@@ -179,6 +180,8 @@ export async function tradeRoutes(app: FastifyInstance) {
         buyer_stellar_address,
       },
       decline_available,
+      // #2/#17: con la entrega registrada, el agente ve "Liberar fondos" y el cliente deja de pedir otro QR.
+      cash_handoff_confirmed,
       merchant_unavailable,
       seller_username,
       buyer_username,
@@ -303,6 +306,30 @@ export async function tradeRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const { reason } = (request.body as { reason?: string } | undefined) ?? {};
     return tradeService.cancelTrade(request, id, request.user.id, reason);
+  });
+
+  /**
+   * POST /trades/:id/cash-claim
+   *
+   * D4: el cliente de un depósito reporta que pagó y el agente no confirmó.
+   * Bloquea el reembolso por la app y deja el caso a soporte.
+   */
+  app.post('/trades/:id/cash-claim', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          note: { type: 'string', maxLength: 1000 },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { note } = (request.body as { note?: string } | undefined) ?? {};
+    const claim = await tradeService.openCashClaim(request, id, request.user.id, note);
+    reply.status(201);
+    return { claim };
   });
 
   /**

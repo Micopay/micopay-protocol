@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { App as CapApp } from '@capacitor/app';
 import { QRCodeSVG } from 'qrcode.react';
-import { getSecret, revealTrade, lockTrade, getTrade, TradeData } from '../services/api';
+import { getSecret, revealTrade, lockTrade, getTrade, fetchTradeDetail, TradeData } from '../services/api';
 import { getTradeStateDebugOverride, normalizeTradeState, TradeState } from '../components/TradeStateBadge';
 import ErrorBanner from '../components/ErrorBanner';
 import SupportLink from '../components/SupportLink';
@@ -45,6 +45,8 @@ const QRReveal = ({ activeTrade, token, viewerId, counterpartyName, ownName, onB
     const [secretError, setSecretError] = useState<MappedApiError | null>(null);
     const [lockTxHash, setLockTxHash] = useState<string | null>(null);
     const [completedTxHash, setCompletedTxHash] = useState<string | null>(null);
+    // #17: la entrega no cambia `status`; el detalle dice si ya se registro.
+    const [handoffConfirmed, setHandoffConfirmed] = useState(false);
     const [tradeState, setTradeState] = useState<TradeState>('locked');
 
     const loadSecret = useCallback(async () => {
@@ -119,6 +121,12 @@ const QRReveal = ({ activeTrade, token, viewerId, counterpartyName, ownName, onB
                 }
             } catch {
                 // keep polling
+            }
+            try {
+                const detail = await fetchTradeDetail(activeTrade.id, token);
+                setHandoffConfirmed(Boolean(detail.cash_handoff_confirmed));
+            } catch {
+                // sin el dato se sigue mostrando el QR
             }
         };
 
@@ -239,6 +247,12 @@ const QRReveal = ({ activeTrade, token, viewerId, counterpartyName, ownName, onB
                             supportTradeId={activeTrade?.id}
                             supportState="QR_REVEAL_SECRET"
                         />
+                    ) : handoffConfirmed && !completedTxHash ? (
+                        <div className="flex flex-col items-center gap-3 py-10">
+                            <span aria-hidden="true" className="material-symbols-outlined text-verde text-4xl" style={{ fontVariationSettings: '"FILL" 1' }}>check_circle</span>
+                            <p className="text-sm font-semibold text-on-surface">El agente registró la entrega del efectivo.</p>
+                            <p className="text-xs text-outline max-w-xs">Ya no necesitas otro código. La operación se cierra cuando el agente libere los fondos.</p>
+                        </div>
                     ) : qrExpired ? (
                         <div className="flex flex-col items-center gap-4 py-10">
                             <span aria-hidden="true" className="material-symbols-outlined text-outline text-4xl">timer_off</span>

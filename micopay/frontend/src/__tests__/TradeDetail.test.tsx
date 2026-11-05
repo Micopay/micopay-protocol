@@ -136,7 +136,7 @@ describe('TradeDetail', () => {
       await waitFor(() => {
         expect(screen.getByText('Bloqueado')).toBeInTheDocument();
         expect(screen.getByText(/fondos bloqueados/i)).toBeInTheDocument();
-        expect(screen.getByText(/abrir chat con el vendedor/i)).toBeInTheDocument();
+        expect(screen.getByText(/abrir chat con el agente/i)).toBeInTheDocument();
       });
     });
 
