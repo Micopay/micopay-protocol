@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { generateAndStoreKeypair, keypairExists, getPublicKey, revealSecretKey } from './lib/keystore';
 import { IS_EXTERNAL_SIGNER } from './lib/signer/mode';
@@ -74,6 +74,8 @@ import {
   type ProviderStatus,
   createTrade,
   fetchTradeDetail,
+  getActiveTrades,
+  getTrade,
   UserData,
   TradeData,
   TradeFlow,
@@ -82,10 +84,13 @@ import {
 import { readJSON, writeJSON, removeKey, isBackupConfirmed, setBackupConfirmed } from "./services/secureStorage";
 import { ApiError, mapApiError, type MappedApiError } from "./utils/apiError";
 import { IS_DEMO_MODE } from "./utils/demoMode";
+import { OPEN_TRADE_STATUSES, pickReusableTrade } from "./utils/reusableTrade";
 import { DEFAULT_ESCROW_ASSET_KEY, getEscrowAssetOption } from "./constants/escrowAssets";
 import { startPush, PUSH_PERMISSION_GRANTED_EVENT } from "./lib/push";
 
 const USERS_STORAGE_KEY = "micopay_user";
+/** WP3: id de la operacion en curso, para retomarla al recargar. */
+const ACTIVE_TRADE_STORAGE_KEY = "micopay_active_trade_id";
 /**
  * "Ya vio la explicacion del producto". Vive solo en el dispositivo: la
  * incorporacion de persona no cambia nada en el servidor, asi que guardarla
@@ -161,6 +166,8 @@ export interface AppCtx {
   handleDepositOfferSelected: (offerId: string) => Promise<boolean>;
   clearTradeError: () => void;
   retryTradeFlow: () => Promise<boolean>;
+  /** WP3: crear una operacion nueva aunque haya una activa con ese agente. */
+  allowNewTrade: () => void;
   handleAccountDeleted: () => void;
   resetTradeFlow: () => void;
   envName: string;
@@ -229,11 +236,14 @@ function TradeDetailRoute() {
 
 function InboxRoute() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { sessionUser } = useAppCtx();
   return (
       <MerchantInbox
           token={sessionUser?.token ?? null}
           onBack={() => navigate('/')}
+          onOpenTrade={(tradeId) => navigate(`/trade/${tradeId}`)}
+          autoScan={Boolean((location.state as { autoScan?: boolean } | null)?.autoScan)}
       />
   );
 }
@@ -390,7 +400,7 @@ function MapRoute() {
 function ConfirmRoute() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { handleOfferSelected, handleDepositOfferSelected, tradeLoading, tradeError, clearTradeError, activeAssetKey } =
+  const { handleOfferSelected, handleDepositOfferSelected, tradeLoading, tradeError, clearTradeError, activeAssetKey, allowNewTrade } =
     useAppCtx();
   const state = location.state as {
     merchantName: string;
@@ -435,6 +445,8 @@ function ConfirmRoute() {
       loading={tradeLoading}
       errorMessage={tradeError?.message ?? null}
       errorAction={tradeError?.action}
+      errorCode={tradeError?.error}
+      onCreateNewInstead={allowNewTrade}
       onVerifyIdentity={() => navigate(`/kyc/didit?return=${isDeposit ? 'depositMap' : 'cashoutMap'}&level=${tradeError?.requiredLevel === 2 ? 2 : 1}`)}
       onChooseAnotherAgent={() => {
         clearTradeError();
@@ -459,38 +471,48 @@ function ConfirmRoute() {
 function useTradeParticipantInfo(activeTrade: TradeData | null, sessionUser: UserData | null) {
   const [counterpartyName, setCounterpartyName] = useState<string | null>(null);
   const [isProvider, setIsProvider] = useState(false);
+  const [flow, setFlow] = useState<TradeFlow | null>(null);
 
   useEffect(() => {
     if (!activeTrade || !sessionUser?.token) return;
     fetchTradeDetail(activeTrade.id, sessionUser.token)
       .then(({ trade, seller_username, buyer_username }) => {
+        setFlow(trade.flow === 'cashout' ? 'cashout' : 'deposit');
         const isMeTheEscrowSeller = trade.seller_id === sessionUser.id;
         setCounterpartyName(isMeTheEscrowSeller ? buyer_username : seller_username);
         // Cash-out (/chat): the client locks crypto (escrow seller); the agent
         // hands over cash (escrow buyer). isProvider marks the agent view.
-        setIsProvider(!isMeTheEscrowSeller);
+        // `provider_id` decides when present, so a deposit agent is right too.
+        setIsProvider(trade.provider_id ? trade.provider_id === sessionUser.id : !isMeTheEscrowSeller);
       })
       .catch(() => {});
   }, [activeTrade, sessionUser?.token, sessionUser?.id]);
 
-  return { counterpartyName, isProvider };
+  return { counterpartyName, isProvider, flow };
 }
 
 function ChatRoute() {
   const navigate = useNavigate();
   const { lockTxHash, activeTrade, sessionUser } = useAppCtx();
-  const { counterpartyName, isProvider } = useTradeParticipantInfo(activeTrade, sessionUser);
+  // #3: desde el detalle la operacion llega en la ruta. El agente no tiene
+  // `activeTrade` en memoria, asi que su chat salia vacio.
+  const { tradeId: routeTradeId } = useParams();
+  const routeTrade = useMemo(() => (routeTradeId ? ({ id: routeTradeId } as TradeData) : null), [routeTradeId]);
+  const chatTrade = routeTrade ?? activeTrade;
+  const { counterpartyName, isProvider, flow } = useTradeParticipantInfo(chatTrade, sessionUser);
   return (
       <ChatRoom
-          tradeId={activeTrade?.id ?? ''}
+          tradeId={chatTrade?.id ?? ''}
           userId={sessionUser?.id ?? ''}
           token={sessionUser?.token}
           apiBaseUrl={import.meta.env.VITE_API_URL}
           lockTxHash={lockTxHash}
           counterpartyName={counterpartyName}
           isProvider={isProvider}
-          onBack={() => navigate('/map')}
-          onViewQR={() => navigate('/qr-reveal')}
+          onBack={() => navigate(routeTradeId ? `/trade/${routeTradeId}` : '/map')}
+          // En un deposito el QR del cliente es otra pantalla (`DepositQR`).
+          onViewQR={() => navigate(routeTradeId && flow === 'deposit' ? `/qr-deposit/${routeTradeId}` : '/qr-reveal')}
+          onScan={() => navigate('/inbox', { state: { autoScan: true } })}
       />
   );
 }
@@ -535,13 +557,17 @@ function QRRevealRoute() {
 function QRDepositRoute() {
   const navigate = useNavigate();
   const { activeTrade, sessionUser } = useAppCtx();
+  // Desde el detalle o el chat la operacion llega en la ruta: ahi esta el
+  // reclamo "Pague y no me confirmaron".
+  const { tradeId: routeTradeId } = useParams();
+  const routeTrade = useMemo(() => (routeTradeId ? ({ id: routeTradeId } as TradeData) : null), [routeTradeId]);
   return (
       <DepositQR
-          activeTrade={activeTrade}
+          activeTrade={routeTrade ?? activeTrade}
           buyerToken={sessionUser?.token ?? null}
           viewerId={sessionUser?.id ?? null}
-          onBack={() => navigate('/chat-deposit')}
-          onChat={() => navigate('/chat-deposit')}
+          onBack={() => navigate(routeTradeId ? `/trade/${routeTradeId}` : '/chat-deposit')}
+          onChat={() => navigate(routeTradeId ? `/chat/${routeTradeId}` : '/chat-deposit')}
           onSuccess={() => navigate('/success')}
       />
   );
@@ -831,6 +857,7 @@ function ProfileRoute() {
           onNavigateTerms={() => navigate('/terms')}
           onNavigateKyc={() => navigate('/kyc/didit?return=profile')}
           onNavigateJoinNetwork={() => navigate('/join-network')}
+          onNavigateMerchantSettings={() => navigate('/merchant-settings')}
           providerStatus={providerStatus}
           availability={availability}
           onToggleAvailability={async (next) => {
@@ -1150,6 +1177,18 @@ function App() {
   const [pendingSellerId, setPendingSellerId] = useState<string | null>(null);
   // CASH-1 (#372): the retried value is the product flow, not the escrow role.
   const [pendingFlow, setPendingFlow] = useState<TradeFlow>('deposit');
+  // WP3: operacion ya creada cuyo bloqueo fallo. Reintentar bloquea ESA, no
+  // crea otra (cada reintento dejaba una operacion fantasma).
+  const lockRetryRef = useRef<{ tradeId: string; counterpartyId: string; flow: TradeFlow } | null>(null);
+  // WP3: operacion activa que ya se le ofrecio retomar. Confirmar otra vez la acepta.
+  const resumeOfferRef = useRef<string | null>(null);
+  // WP3: la persona eligio "Crear otra operación" en vez de retomar.
+  const forceNewTradeRef = useRef(false);
+  const allowNewTrade = () => {
+    forceNewTradeRef.current = true;
+    resumeOfferRef.current = null;
+    setTradeError(null);
+  };
   const [authReady, setAuthReady] = useState(false);
   const [devicePublicKey, setDevicePublicKey] = useState<string | null>(null);
 
@@ -1334,6 +1373,44 @@ function App() {
 
   const clearTradeError = () => setTradeError(null);
 
+  // WP3: `activeTrade` vive en memoria; al recargar se perdia y las pantallas
+  // mostraban un QR sin operacion. Se guarda el id y se restaura del servidor.
+  const restoredTradeRef = useRef(false);
+  useEffect(() => {
+    if (IS_DEMO_MODE) return;
+    if (activeTrade?.id) void writeJSON(ACTIVE_TRADE_STORAGE_KEY, activeTrade.id).catch(() => {});
+    // Antes de restaurar no se borra: al montar `activeTrade` siempre es null.
+    else if (restoredTradeRef.current) void removeKey(ACTIVE_TRADE_STORAGE_KEY).catch(() => {});
+  }, [activeTrade?.id]);
+
+  useEffect(() => {
+    const token = sessionUser?.token;
+    if (!token || activeTrade || restoredTradeRef.current || IS_DEMO_MODE) return;
+    restoredTradeRef.current = true;
+    void (async () => {
+      const storedId = await readJSON<string>(ACTIVE_TRADE_STORAGE_KEY).catch(() => null);
+      if (!storedId) return;
+      const trade = await getTrade(storedId, token).catch(() => null);
+      if (trade && OPEN_TRADE_STATUSES.includes(trade.status)) {
+        setActiveTrade((prev) => prev ?? trade);
+        if (trade.lock_tx_hash) setLockTxHash((prev) => prev ?? trade.lock_tx_hash ?? null);
+      }
+    })();
+  }, [sessionUser?.token, activeTrade]);
+
+  /** WP3: la operacion que ya existe para este agente y flujo, si la hay. */
+  const findReusableTrade = async (counterpartyId: string, tradeFlow: TradeFlow, token: string) => {
+    const pendingRetry = lockRetryRef.current;
+    const retry = pendingRetry && pendingRetry.counterpartyId === counterpartyId && pendingRetry.flow === tradeFlow
+      ? await getTrade(pendingRetry.tradeId, token).catch(() => null)
+      : null;
+    if (!retry || retry.status !== 'pending') lockRetryRef.current = null;
+    const active = await getActiveTrades(token).catch(() => [] as TradeData[]);
+    return pickReusableTrade({
+      retry, active, counterpartyId, flow: tradeFlow, amountMxn: activeAmount, acceptedOfferId: resumeOfferRef.current,
+    });
+  };
+
   const runTradeFlow = async (counterpartyId: string, tradeFlow: TradeFlow = 'deposit'): Promise<boolean> => {
     if (!sessionUser) return false;
     setPendingSellerId(counterpartyId);
@@ -1341,11 +1418,29 @@ function App() {
     setTradeLoading(true);
     setTradeError(null);
     try {
+      const forceNew = forceNewTradeRef.current;
+      forceNewTradeRef.current = false;
+      const { trade: reusable, conflict, offer } = forceNew
+        ? { trade: null, conflict: null, offer: null }
+        : await findReusableTrade(counterpartyId, tradeFlow, sessionUser.token);
+      if (offer) {
+        // Se ofrece, no se decide por la persona: el segundo intento la acepta.
+        resumeOfferRef.current = offer.id;
+        const message = `Ya tienes una operación activa de $${offer.amount_mxn} MXN con este agente. Confirma de nuevo para retomarla, o crea otra.`;
+        setTradeError({ ...mapApiError(new Error(message)), message, action: 'retry', error: 'ACTIVE_TRADE_OFFER' });
+        return false;
+      }
+      resumeOfferRef.current = null;
+      if (conflict) {
+        const message = `Ya tienes una operación activa de $${conflict.amount_mxn} MXN con este agente. Puedes abrirla desde tu actividad, o crear otra.`;
+        setTradeError({ ...mapApiError(new Error(message)), message, error: 'ACTIVE_TRADE_OFFER' });
+        return false;
+      }
       // WP-C: el codigo del activo elegido. Si la clave no existe en el
       // catalogo no se envia nada y el servidor aplica su default (XLM); una
       // opcion deshabilitada no se puede elegir en el selector.
       const assetCode = getEscrowAssetOption(activeAssetKey)?.code;
-      const trade = await createTrade(counterpartyId, activeAmount, sessionUser.token, tradeFlow, assetCode);
+      const trade = reusable ?? await createTrade(counterpartyId, activeAmount, sessionUser.token, tradeFlow, assetCode);
       setActiveTrade(trade);
 
       // Confirmar ES autorizar: el bloqueo se dispara aqui, en el mismo gesto,
@@ -1359,18 +1454,22 @@ function App() {
       //
       // Solo en cash-out: ahi la persona es la vendedora del escrow y es su
       // dinero el que se bloquea. En deposito bloquea el agente, no ella.
-      if (tradeFlow === 'cashout') {
+      if (tradeFlow === 'cashout' && trade.status === 'pending') {
         try {
           const locked = await lockTrade(trade.id, sessionUser.token);
+          lockRetryRef.current = null;
           setActiveTrade((prev) => (prev ? { ...prev, ...locked } : prev));
           if (locked.lock_tx_hash) setLockTxHash(locked.lock_tx_hash);
         } catch (lockErr) {
           // La operacion ya existe y quedo `pending`. No se descarta: se avisa
           // y se deja reintentar, porque descartarla dejaria una operacion
           // huerfana en el servidor y al agente esperando.
+          lockRetryRef.current = { tradeId: trade.id, counterpartyId, flow: tradeFlow };
           setTradeError(mapApiError(lockErr));
           return false;
         }
+      } else if (trade.lock_tx_hash) {
+        setLockTxHash(trade.lock_tx_hash);
       }
       return true;
     } catch (e) {
@@ -1512,6 +1611,7 @@ function App() {
     handleDepositOfferSelected,
     clearTradeError,
     retryTradeFlow,
+    allowNewTrade,
     handleAccountDeleted,
     resetTradeFlow,
     envName,
@@ -1589,9 +1689,11 @@ function App() {
                 <Route path="/confirm" element={<ProtectedRoute><ConfirmRoute /></ProtectedRoute>} />
                 <Route path="/map-deposit" element={<ProtectedRoute><MapDepositRoute /></ProtectedRoute>} />
                 <Route path="/chat" element={<ProtectedRoute><ChatRoute /></ProtectedRoute>} />
+                <Route path="/chat/:tradeId" element={<ProtectedRoute><ChatRoute /></ProtectedRoute>} />
                 <Route path="/chat-deposit" element={<ProtectedRoute><ChatDepositRoute /></ProtectedRoute>} />
                 <Route path="/qr-reveal" element={<ProtectedRoute><QRRevealRoute /></ProtectedRoute>} />
                 <Route path="/qr-deposit" element={<ProtectedRoute><QRDepositRoute /></ProtectedRoute>} />
+                <Route path="/qr-deposit/:tradeId" element={<ProtectedRoute><QRDepositRoute /></ProtectedRoute>} />
                 <Route path="/success" element={<ProtectedRoute><SuccessRoute /></ProtectedRoute>} />
                 <Route path="/explore" element={<ProtectedRoute><ExploreRoute /></ProtectedRoute>} />
                 <Route path="/cetes" element={<ProtectedRoute><CetesRoute /></ProtectedRoute>} />

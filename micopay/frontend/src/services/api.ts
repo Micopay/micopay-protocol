@@ -158,6 +158,9 @@ export interface TradeData {
   /** Roles del escrow. GET /trades/:id y POST /trades los devuelven. */
   seller_id?: string;
   buyer_id?: string;
+  /** CASH-1: flujo de producto y agente, columnas de `trades`. */
+  flow?: TradeFlow;
+  provider_id?: string;
   seller_stellar_address?: string | null;
   buyer_stellar_address?: string | null;
   escrow_contract_id?: string | null;
@@ -210,6 +213,10 @@ export interface TradeDetailResponse {
   };
   /** Buyer may sign decline() for this exact contract and trade state. */
   decline_available: boolean;
+  /** #16: en `refunded`, si fue decline o vencimiento. */
+  refund_kind?: 'decline' | 'timeout' | null;
+  /** Cash-out: el agente ya escaneó el QR y registró la entrega. */
+  cash_handoff_confirmed?: boolean;
   merchant_unavailable: boolean;
   seller_username: string | null;
   buyer_username: string | null;
@@ -260,6 +267,15 @@ export async function cancelTradeRequest(tradeId: string, buyerToken: string): P
   try {
     const res = await http.post(`/trades/${tradeId}/cancel`, {}, authHeaders(buyerToken));
     return res.data as CancelTradeResponse;
+  } catch (e: unknown) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+/** D4: el cliente de un depósito reporta que pagó y el agente no confirmó. */
+export async function openCashClaim(tradeId: string, token: string, note?: string): Promise<void> {
+  try {
+    await http.post(`/trades/${tradeId}/cash-claim`, note ? { note } : {}, authHeaders(token));
   } catch (e: unknown) {
     throw toApiError(extractApiErrorPayload(e));
   }
@@ -1216,6 +1232,8 @@ export interface RefundEligibility {
     | 'already_settled'
     /** Ya hubo entrega de efectivo: el reembolso lo revisa soporte (D2). */
     | 'cash_handoff_confirmed'
+    /** D4: el cliente reportó que pagó; lo revisa soporte. */
+    | 'cash_claim_open'
     /** No se pudo leer el plazo en cadena; se reintenta, nunca se da por vencido. */
     | 'unverifiable';
   /** Caducidad de la solicitud. */

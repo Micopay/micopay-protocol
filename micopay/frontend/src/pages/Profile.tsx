@@ -32,6 +32,8 @@ interface ProfileProps {
   onNavigateKyc?: () => void;
   /** RED-2: entrada al alta como agente de Red MicoPay. */
   onNavigateJoinNetwork?: () => void;
+  /** #13: tasa, limites y ubicacion del agente. */
+  onNavigateMerchantSettings?: () => void;
   /** Pertenencia real, leida del servidor. No se infiere de tener sesion. */
   providerStatus?: 'not_enrolled' | 'pending_verification' | 'active' | 'suspended' | null;
   /** Disponibilidad actual; solo significa algo si eres agente activo. */
@@ -41,7 +43,7 @@ interface ProfileProps {
   onToggleDebug?: () => void;
 }
 
-const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout, onNavigatePrivacy, onNavigateTerms, onNavigateKyc, onNavigateJoinNetwork, providerStatus, availability, onToggleAvailability }: ProfileProps) => {
+const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout, onNavigatePrivacy, onNavigateTerms, onNavigateKyc, onNavigateJoinNetwork, onNavigateMerchantSettings, providerStatus, availability, onToggleAvailability }: ProfileProps) => {
   const { t, i18n } = useTranslation();
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -463,6 +465,14 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                       >
                         {availability === 'online' ? 'Ponerme en pausa' : 'Ponerme disponible'}
                       </button>
+                      {onNavigateMerchantSettings && (
+                        <button
+                          onClick={onNavigateMerchantSettings}
+                          className="w-full min-h-12 mt-3 font-bold rounded-sm border-2 border-tinta text-tinta"
+                        >
+                          Tasa, límites y ubicación
+                        </button>
+                      )}
                     </>
                   )}
 

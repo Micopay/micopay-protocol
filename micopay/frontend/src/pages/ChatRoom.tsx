@@ -26,6 +26,8 @@ interface ChatRoomProps {
     userId: string;
     onBack: () => void;
     onViewQR: () => void;
+    /** El agente no tiene QR propio en un retiro: escanea el del cliente. */
+    onScan?: () => void;
     lockTxHash?: string | null;
     apiBaseUrl?: string;
     token?: string | null;
@@ -38,6 +40,7 @@ const ChatRoom = ({
     userId,
     onBack,
     onViewQR,
+    onScan,
     lockTxHash,
     apiBaseUrl = 'http://localhost:3000',
     token,
@@ -293,6 +296,9 @@ const ChatRoom = ({
                             key={msg.id}
                             className={`flex flex-col max-w-[85%] ${msg.isOwn ? 'items-end self-end' : 'items-start'}`}
                         >
+                            <span className="text-[11px] font-bold text-gris mb-1 px-1">
+                                {msg.isOwn ? 'Tú' : (counterpartyName ?? (isProvider ? 'Cliente' : 'Agente'))}
+                            </span>
                             <div className={`p-4 rounded-t-2xl relative ${
                                 msg.isOwn
                                     ? 'bg-primary text-on-primary rounded-bl-2xl rounded-br-none ' 
@@ -323,20 +329,24 @@ const ChatRoom = ({
                     <div className="grid grid-cols-1 gap-3 mt-4">
                         {isProvider && escrowStatus === 'locked' && (
                             <button
-                                onClick={onViewQR}
+                                onClick={onScan ?? onViewQR}
                                 className="flex items-center justify-center gap-3 w-full h-[46px] rounded-sm bg-emerald-600 text-papel font-semibold hover:bg-emerald-700 transition-colors shadow-emerald-600/20"
                             >
                                 <span className="material-symbols-outlined">qr_code_scanner</span>
                                 <span className="font-body text-sm">{t('chatRoom.scanClientQr')}</span>
                             </button>
                         )}
-                        <button
-                            onClick={onViewQR}
-                            className="flex items-center justify-center gap-3 w-full h-[46px] rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity "
-                        >
-                            <span className="material-symbols-outlined">qr_code_2</span>
-                            <span className="font-body text-sm">{t('chatRoom.viewMyQr')}</span>
-                        </button>
+                        {/* "Ver mi QR" es del cliente: al agente lo llevaba a una
+                            pantalla vacia. */}
+                        {!isProvider && (
+                            <button
+                                onClick={onViewQR}
+                                className="flex items-center justify-center gap-3 w-full h-[46px] rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity "
+                            >
+                                <span className="material-symbols-outlined">qr_code_2</span>
+                                <span className="font-body text-sm">{t('chatRoom.viewMyQr')}</span>
+                            </button>
+                        )}
                     </div>
                 </div>
             </main>
