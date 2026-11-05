@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from 'fs';
+import { execSync } from 'child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -19,6 +20,14 @@ function loadEnv() {
         process.env[key] = value;
       }
     }
+  }
+}
+
+function localGitCommit(): string {
+  try {
+    return execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || 'unknown';
+  } catch {
+    return 'unknown';
   }
 }
 
@@ -225,6 +234,9 @@ export const config = {
 
   // Environment
   isProduction: process.env.NODE_ENV === 'production',
+  // Commit del que salio la imagen (build-arg GIT_COMMIT). Fuera de Docker se
+  // toma del checkout local; sin ninguno de los dos queda 'unknown'.
+  gitCommit: process.env.GIT_COMMIT || localGitCommit(),
 
   // MVP flags
   mockStellar: process.env.MOCK_STELLAR === 'true',
