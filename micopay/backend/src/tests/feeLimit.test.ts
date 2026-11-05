@@ -19,9 +19,12 @@ const allowed = computeTradeFees(500, MAX_PROVIDER_FEE_PERCENT, 'cashout');
 strictEqual(allowed.effectivePercent, MAX_EFFECTIVE_FEE_PERCENT);
 ok(isEffectiveFeeAllowed(allowed));
 
-const roundedOver = computeTradeFees(100, MAX_PROVIDER_FEE_PERCENT, 'cashout');
-strictEqual(roundedOver.effectivePercent, MAX_EFFECTIVE_FEE_PERCENT + 1);
-ok(!isEffectiveFeeAllowed(roundedOver));
+// #6: el redondeo ya no rebasa el tope; la comision del agente se recorta.
+const rounded = computeTradeFees(100, MAX_PROVIDER_FEE_PERCENT, 'cashout');
+strictEqual(rounded.effectivePercent, MAX_EFFECTIVE_FEE_PERCENT);
+ok(isEffectiveFeeAllowed(rounded));
+// La guarda sigue rechazando un desglose que pase del tope.
+ok(!isEffectiveFeeAllowed({ amountMxn: 100, providerFeeMxn: 6, platformFeeMxn: 1 }));
 
 console.log(`✓ total fee cap is configurable and blocks effective fees above ${MAX_EFFECTIVE_FEE_PERCENT}%`);
 

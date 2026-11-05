@@ -53,8 +53,6 @@ export class InMemoryStore implements RateLimitStore {
   }
 }
 
-const defaultStore = new InMemoryStore();
-
 export interface RateLimitOptions {
   windowMs: number;
   max: number;
@@ -67,7 +65,9 @@ export function createRateLimiter(options: RateLimitOptions): preHandlerHookHand
     windowMs,
     max,
     keyGenerator = (req) => req.ip,
-    store = defaultStore,
+    // Un contador por limitador: con uno compartido por IP, los logins se
+    // sumaban a la busqueda de agentes y al chat, y la ventana la fijaba el primero.
+    store = new InMemoryStore(),
   } = options;
 
   return async (request, reply) => {

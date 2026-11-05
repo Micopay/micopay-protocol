@@ -53,6 +53,13 @@ async function testRateLimiter() {
   await (limiter as any)(mockReq, mockReply);
   console.log('Hit 4: OK (Reset worked)');
 
+  // Two limiters without their own store must not share the same IP counter
+  const login = createRateLimiter({ windowMs: 60_000, max: 5 });
+  const discovery = createRateLimiter({ windowMs: 60_000, max: 2 });
+  for (let i = 0; i < 5; i++) await (login as any)(mockReq, mockReply);
+  await (discovery as any)(mockReq, mockReply);
+  console.log('Separate limiters: OK (login hits do not count for discovery)');
+
   console.log('All Rate Limiter Tests Passed!');
 }
 

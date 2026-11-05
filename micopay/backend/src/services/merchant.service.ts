@@ -234,8 +234,23 @@ export async function getAvailableMerchants(
        -- Se resuelve en SQL para que no pueda escaparse por olvido en el map().
        CASE WHEN mc.publish_storefront THEN mc.meeting_point ELSE NULL END AS storefront_address,
        ${HAVERSINE_SQL} AS distance_km,
-       COALESCE((SELECT COUNT(*) FROM trades t WHERE t.seller_id = u.id AND t.status = 'completed'), 0) AS trades_completed,
-       COALESCE((SELECT COUNT(*) FROM trades t WHERE t.seller_id = u.id AND t.status IN ('completed','cancelled','refunded')), 0) AS trades_terminal
+       -- #18: las operaciones son del agente (provider_id), no del vendedor
+       -- del escrow, que en un retiro es el cliente. No cuentan contra el
+       -- agente las que la otra parte cancelo o devolvio con decline; si
+       -- cuentan las que el agente cancelo o declino y las que vencieron.
+       COALESCE((SELECT COUNT(*) FROM trades t WHERE t.provider_id = u.id AND t.status = 'completed'), 0) AS trades_completed,
+       COALESCE((
+         SELECT COUNT(*) FROM trades t
+         WHERE t.provider_id = u.id
+           AND t.status IN ('completed','cancelled','refunded')
+           AND NOT EXISTS (
+             SELECT 1 FROM audit_log a
+             WHERE a.trade_id = t.id
+               AND a.actor <> t.provider_id::text
+               AND COALESCE(a.metadata->>'success', 'true') <> 'false'
+               AND (a.to_state = 'cancelled' OR a.metadata->>'settlement' = 'decline')
+           )
+       ), 0) AS trades_terminal
      FROM merchant_configs mc
      JOIN users u ON u.id = mc.user_id
      -- RED-1: el mapa lista agentes, no cuentas. Pertenecer a la Red

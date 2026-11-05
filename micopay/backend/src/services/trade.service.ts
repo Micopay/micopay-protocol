@@ -159,12 +159,14 @@ function getUtcDayRange(date = new Date()) {
   return { start, end };
 }
 
-async function validateAgainstMerchantLimits(sellerId: string, amountMxn: number) {
+// Los limites son del agente (`provider_id`), no del vendedor del escrow: en
+// un retiro el vendedor es el cliente.
+async function validateAgainstMerchantLimits(providerId: string, amountMxn: number) {
   const merchantConfig = await db.getOne(
     `SELECT user_id, min_trade_mxn, max_trade_mxn, daily_cap_mxn
      FROM merchant_configs
      WHERE user_id = $1`,
-    [sellerId],
+    [providerId],
   );
 
   const minTrade = merchantConfig?.min_trade_mxn ?? 100;
@@ -181,11 +183,11 @@ async function validateAgainstMerchantLimits(sellerId: string, amountMxn: number
   const todayTrades = await db.getMany<{ amount_mxn: number }>(
     `SELECT amount_mxn
      FROM trades
-     WHERE seller_id = $1
+     WHERE provider_id = $1
        AND created_at >= $2
        AND created_at < $3
        AND status IN ('pending', 'locked', 'revealing', 'completed')`,
-    [sellerId, start.toISOString(), end.toISOString()],
+    [providerId, start.toISOString(), end.toISOString()],
   );
 
   const todayVolume = todayTrades.reduce((sum, t) => sum + Number(t.amount_mxn || 0), 0);
@@ -427,7 +429,7 @@ export async function createTrade(input: CreateTradeInput) {
     receiverIsCaller: buyerId === (request as any).user?.id,
   });
 
-  await validateAgainstMerchantLimits(sellerId, amountMxn);
+  await validateAgainstMerchantLimits(providerId, amountMxn);
 
   // Generate HTLC secret
   const { secret, secretHash } = generateTradeSecret();
