@@ -1,0 +1,76 @@
+name: APK de prueba (debug, Testnet)
+
+# Por que existe
+# --------------
+# Varias issues de la app (AUTH-1, AUTH-2…) piden una prueba manual en un
+# telefono Android, pero no todo el equipo tiene Android Studio. Este workflow
+# compila el APK de debug de un PR con los pasos del README (seccion Android) y
+# lo deja como artefacto descargable en la pagina del run.
+#
+# LO QUE ESTO ES, Y LO QUE NO
+# ---------------------------
+# Es un APK de DEBUG contra Testnet (`.env.testnet`), firmado con la llave de
+# debug que genera Gradle: sirve para probar, no para distribuir. El ID es
+# `com.micopay.app.debug`, asi que no pisa una instalacion release. No usa
+# secretos ni la llave de firma de release.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'micopay/frontend/**'
+      - '.github/workflows/apk-prueba.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apk-prueba-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: APK debug (micopay/frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: micopay/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Capacitor 8 compila con Java 21.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+          cache-dependency-path: micopay/frontend/android/**/*.gradle*
+      # Mismo arreglo que ci.yml: el lock se genera en Windows y omite los
+      # binarios opcionales de Linux (npm #4828), y npm 10.9.8 falla al
+      # resolver el arbol sin lock.
+      - name: Actualizar npm
+        run: npm i -g npm@11
+      - name: Install (regenera deps opcionales por plataforma — npm #4828)
+        run: |
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
+      - name: Build web (Testnet)
+        run: npm run build:testnet
+      - name: Sincronizar Capacitor
+        run: npx cap sync android
+      - name: Compilar APK debug
+        working-directory: micopay/frontend/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+      - name: Subir APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: micopay-debug-testnet-${{ github.event.pull_request.head.sha || github.sha }}
+          path: micopay/frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
