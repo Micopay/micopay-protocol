@@ -6,7 +6,8 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    # feat/micopay-web recibe los PRs de la web antes de llegar a main.
+    branches: [main, feat/micopay-web]
   push:
     branches: [main]
 

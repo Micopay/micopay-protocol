@@ -6,12 +6,10 @@ mod types;
 use errors::EscrowError;
 use types::{DataKey, TradeEscrow, TradeStatus};
 
-use soroban_sdk::{
-    contract, contractimpl, symbol_short, token, Address, Bytes, BytesN, Env, log,
-};
+use soroban_sdk::{contract, contractimpl, log, symbol_short, token, Address, Bytes, BytesN, Env};
 
 // TTL constants (~5s per ledger on mainnet)
-const TTL_MIN: u32 = 17_280;    // ~1 day — extend if below this
+const TTL_MIN: u32 = 17_280; // ~1 day — extend if below this
 const TTL_EXTEND: u32 = 518_400; // ~30 days — extend to this
 
 fn compute_trade_id(
@@ -32,24 +30,14 @@ pub struct EscrowFactory;
 
 #[contractimpl]
 impl EscrowFactory {
-    /// Initialize the contract with admin, token address, and platform wallet.
-    /// Called once after deployment.
-    pub fn initialize(
-        env: Env,
-        admin: Address,
-        token_id: Address,
-        platform_wallet: Address,
-    ) -> Result<(), EscrowError> {
-        if env.storage().instance().has(&DataKey::Admin) {
-            return Err(EscrowError::AlreadyInitialized);
-        }
+    /// Atomically configure the contract during deployment.
+    pub fn __constructor(env: Env, admin: Address, token_id: Address, platform_wallet: Address) {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::TokenId, &token_id);
         env.storage()
             .instance()
             .set(&DataKey::PlatformWallet, &platform_wallet);
         env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
-        Ok(())
     }
 
     /// Lock funds in escrow. Called by the SELLER.
@@ -89,7 +77,9 @@ impl EscrowFactory {
         }
 
         // Transfer total (amount + platform_fee) from seller to this contract
-        let total = amount + platform_fee;
+        let total = amount
+            .checked_add(platform_fee)
+            .ok_or(EscrowError::AmountOverflow)?;
         let token_client = token::Client::new(&env, &token_id);
         token_client.transfer(&seller, &env.current_contract_address(), &total);
 
@@ -122,13 +112,7 @@ impl EscrowFactory {
         // Emit event
         env.events().publish(
             (symbol_short!("locked"),),
-            (
-                trade_id.clone(),
-                seller,
-                buyer,
-                amount,
-                timeout_ledger,
-            ),
+            (trade_id.clone(), seller, buyer, amount, timeout_ledger),
         );
 
         log!(
@@ -143,11 +127,7 @@ impl EscrowFactory {
 
     /// Release funds to buyer by presenting the secret (preimage).
     /// Called by the BUYER.
-    pub fn release(
-        env: Env,
-        trade_id: BytesN<32>,
-        secret: Bytes,
-    ) -> Result<(), EscrowError> {
+    pub fn release(env: Env, trade_id: BytesN<32>, secret: Bytes) -> Result<(), EscrowError> {
         let mut trade: TradeEscrow = env
             .storage()
             .persistent()
@@ -240,7 +220,10 @@ impl EscrowFactory {
         let token_client = token::Client::new(&env, &token_id);
 
         // Refund total (amount + platform_fee) to seller
-        let total = trade.amount + trade.platform_fee;
+        let total = trade
+            .amount
+            .checked_add(trade.platform_fee)
+            .ok_or(EscrowError::AmountOverflow)?;
         token_client.transfer(&env.current_contract_address(), &trade.seller, &total);
 
         trade.status = TradeStatus::Refunded;
@@ -263,6 +246,54 @@ impl EscrowFactory {
         Ok(())
     }
 
+    /// Return locked funds to the seller before timeout.
+    /// Only the buyer stored in the trade may authorize this early cancellation.
+    pub fn decline(env: Env, trade_id: BytesN<32>) -> Result<(), EscrowError> {
+        let mut trade: TradeEscrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Trade(trade_id.clone()))
+            .ok_or(EscrowError::TradeNotFound)?;
+
+        if trade.status != TradeStatus::Locked {
+            return Err(EscrowError::TradeNotLocked);
+        }
+
+        trade.buyer.require_auth();
+
+        let token_id: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::TokenId)
+            .ok_or(EscrowError::NotInitialized)?;
+
+        let total = trade
+            .amount
+            .checked_add(trade.platform_fee)
+            .ok_or(EscrowError::AmountOverflow)?;
+        let token_client = token::Client::new(&env, &token_id);
+        token_client.transfer(&env.current_contract_address(), &trade.seller, &total);
+
+        trade.status = TradeStatus::Refunded;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Trade(trade_id.clone()), &trade);
+
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Trade(trade_id.clone()),
+            TTL_MIN,
+            TTL_EXTEND,
+        );
+
+        env.events().publish(
+            (symbol_short!("declined"),),
+            (trade_id, trade.seller.clone()),
+        );
+
+        Ok(())
+    }
+
     /// Read trade state (view function).
     pub fn get_trade(env: Env, trade_id: BytesN<32>) -> Result<TradeEscrow, EscrowError> {
         let trade: TradeEscrow = env
@@ -272,11 +303,9 @@ impl EscrowFactory {
             .ok_or(EscrowError::TradeNotFound)?;
 
         env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
-        env.storage().persistent().extend_ttl(
-            &DataKey::Trade(trade_id),
-            TTL_MIN,
-            TTL_EXTEND,
-        );
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Trade(trade_id), TTL_MIN, TTL_EXTEND);
 
         Ok(trade)
     }

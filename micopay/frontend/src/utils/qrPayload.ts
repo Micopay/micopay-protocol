@@ -3,7 +3,6 @@
  *
  * Supported formats:
  *   - micopay://release?trade_id=<uuid>&claim_token=<hex64>
- *   - micopay://claim?request_id=<id>&amount_mxn=<number>&htlc=<hash>
  *   - micopay://confirm?trade_id=<uuid>
  *   - MICOPAY:<type>:<value>  (legacy demo format — demo builds only)
  *
@@ -11,14 +10,13 @@
  */
 
 import { IS_DEMO_MODE } from './demoMode';
-import { isHex64, isHtlcReference, isRequestId, isUuid } from './qrValidation';
+import { isHex64, isUuid } from './qrValidation';
 
 export interface QRPayloadRelease {
   type: 'release';
   tradeId: string;
   /**
-   * Token opaco de un solo uso. El preimage HTLC ya no viaja en el QR — ver
-   * docs/security-reports/SEC-02-htlc-secret-en-qr.md.
+   * Token opaco de un solo uso. El preimage HTLC nunca viaja en el QR.
    */
   claimToken: string;
 }
@@ -35,20 +33,13 @@ export interface QRPayloadConfirm {
   tradeId: string;
 }
 
-export interface QRPayloadClaim {
-  type: 'claim';
-  requestId: string;
-  amountMxn: number;
-  htlc: string;
-}
-
 export interface QRPayloadDemo {
   type: 'demo';
   subtype: string;
   value: string;
 }
 
-export type ParsedQRPayload = QRPayloadRelease | QRPayloadConfirm | QRPayloadClaim | QRPayloadDemo;
+export type ParsedQRPayload = QRPayloadRelease | QRPayloadConfirm | QRPayloadDemo;
 
 export interface QRParseSuccess {
   ok: true;
@@ -61,13 +52,6 @@ export interface QRParseError {
 }
 
 export type QRParseResult = QRParseSuccess | QRParseError;
-
-function parseAmountMxn(raw: string | null): number | null {
-  if (raw === null || raw.trim() === '') return 0;
-  const amount = Number(raw);
-  if (!Number.isFinite(amount) || amount < 0) return null;
-  return amount;
-}
 
 /**
  * Parse a raw QR string into a typed payload object.
@@ -84,7 +68,7 @@ export function parseQRPayload(raw: string | null | undefined): QRParseResult {
     try {
       // Replace micopay:// with https:// so URL constructor can parse it
       const url = new URL(trimmed.replace('micopay://', 'https://'));
-      const action = url.hostname; // 'release' or 'claim'
+      const action = url.hostname; // 'release' or 'confirm'
 
       if (action === 'release') {
         const tradeId = url.searchParams.get('trade_id');
@@ -121,42 +105,6 @@ export function parseQRPayload(raw: string | null | undefined): QRParseResult {
           return { ok: false, error: 'El ID de trade no tiene un formato UUID válido' };
         }
         return { ok: true, payload: { type: 'confirm', tradeId } };
-      }
-
-      if (action === 'claim') {
-        const requestId = url.searchParams.get('request_id');
-        const amountMxnStr = url.searchParams.get('amount_mxn');
-        const htlc = url.searchParams.get('htlc');
-
-        if (!requestId) {
-          return { ok: false, error: 'El QR de claim no contiene un ID de solicitud' };
-        }
-        if (!isRequestId(requestId)) {
-          return { ok: false, error: 'El ID de solicitud no tiene un formato válido' };
-        }
-
-        const amountMxn = parseAmountMxn(amountMxnStr);
-        if (amountMxn === null) {
-          return { ok: false, error: 'El monto MXN del QR no es válido' };
-        }
-
-        const htlcValue = htlc ?? '';
-        if (htlcValue && !isHtlcReference(htlcValue, IS_DEMO_MODE)) {
-          return {
-            ok: false,
-            error: 'La referencia HTLC debe ser un hash de 64 caracteres hexadecimales',
-          };
-        }
-
-        return {
-          ok: true,
-          payload: {
-            type: 'claim',
-            requestId,
-            amountMxn,
-            htlc: htlcValue,
-          },
-        };
       }
 
       return { ok: false, error: `Acción QR no reconocida: "${action}"` };

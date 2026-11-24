@@ -77,6 +77,7 @@ export interface OfferConfirmData {
   /** Desglose del servidor, arrastrado hasta la confirmacion sin recalcular. */
   platformFeeMxn?: number;
   providerFeeMxn?: number;
+  maxEffectiveFeePercent?: number;
   nearbyCount: number;
 }
 
@@ -90,6 +91,7 @@ interface ExploreMapProps {
   creationErrorAction?: ApiErrorAction;
   onDismissCreationError?: () => void;
   onRetryCreationError?: () => void;
+  onVerifyIdentity?: () => void;
   /** Effective-fee threshold (%) above which a warning is shown. Defaults to the shared guardrail. */
   maxEffectiveFeePercent?: number;
 }
@@ -148,6 +150,7 @@ const ExploreMap = ({
   creationErrorAction = 'retry',
   onDismissCreationError,
   onRetryCreationError,
+  onVerifyIdentity,
   maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
 }: ExploreMapProps) => {
   const { t } = useTranslation();
@@ -200,6 +203,7 @@ const ExploreMap = ({
             message={creationError}
             action={creationErrorAction}
             onRetry={onRetryCreationError}
+            onVerifyIdentity={onVerifyIdentity}
             onDismiss={onDismissCreationError}
             supportState="TRADE_CREATE"
             className="mb-6"
@@ -248,7 +252,7 @@ const ExploreMap = ({
                   amount={amount}
                   loading={loading}
                   isBest={idx === 0}
-                  maxEffectiveFeePercent={maxEffectiveFeePercent}
+                  maxEffectiveFeePercent={merchant.max_effective_fee_percent ?? maxEffectiveFeePercent}
                   flow="cashout"
                   onChoose={(m) => {
                     if (onProceedToConfirm) {
@@ -260,6 +264,7 @@ const ExploreMap = ({
                         commissionPct: m.rate_percent,
                         platformFeeMxn: m.platform_fee_mxn,
                         providerFeeMxn: m.provider_fee_mxn,
+                        maxEffectiveFeePercent: m.max_effective_fee_percent ?? maxEffectiveFeePercent,
                         nearbyCount: merchants.length,
                       });
                     } else {

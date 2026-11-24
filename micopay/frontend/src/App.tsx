@@ -30,7 +30,8 @@ import DepositQR from "./pages/DepositQR";
 import SuccessScreen, { receiptFromServer, type SuccessReceipt } from "./pages/SuccessScreen";
 import Explore from "./pages/Explore";
 import ComingSoon from "./pages/ComingSoon";
-import { CETES_AVAILABLE, BLEND_AVAILABLE, DEFI_TRADING_ENABLED, SPEI_RAMP_ENABLED } from "./constants/features";
+import { CETES_AVAILABLE, BLEND_AVAILABLE, DEFI_TRADING_ENABLED, SPEI_RAMP_ENABLED, BANK_WITHDRAW_ENABLED } from "./constants/features";
+import BankWithdrawScreen from "./pages/BankWithdrawScreen";
 import History from "./pages/History";
 import TradeDetail from "./pages/TradeDetail";
 import CETESScreen from "./pages/CETESScreen";
@@ -45,7 +46,6 @@ import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Profile from "./pages/Profile";
 import { SignatureApproval } from "./pages/SignatureApproval";
-import ClaimQR from "./pages/ClaimQR";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import MerchantSettings from "./pages/MerchantSettings";
@@ -186,6 +186,7 @@ function HomeRoute() {
           onNavigateCashout={() => { setFlow('cashout'); navigate('/cashout'); }}
           onNavigateDeposit={() => { setFlow('deposit'); navigate('/deposit'); }}
           onNavigateHistory={() => navigate('/history')}
+          onNavigateBankWithdraw={BANK_WITHDRAW_ENABLED ? () => navigate('/retirar-banco') : undefined}
           token={sessionUser?.token ?? null}
           merchantToken={sessionUser?.token ?? null}
           onNavigateInbox={() => navigate('/inbox')}
@@ -314,6 +315,7 @@ function MapDepositRoute() {
                 amountMxn: activeAmount,
                 platformFeeMxn: offer.platformFeeMxn,
                 providerFeeMxn: offer.providerFeeMxn,
+                maxEffectiveFeePercent: offer.maxEffectiveFeePercent,
                 flow: 'deposit',
                 nearbyCount: offer.nearbyCount,
               },
@@ -331,6 +333,7 @@ function MapDepositRoute() {
             const ok = await retryTradeFlow();
             if (ok) navigate('/chat-deposit');
           }}
+          onVerifyIdentity={() => navigate(`/kyc/didit?return=depositMap&level=${tradeError?.requiredLevel === 2 ? 2 : 1}`)}
       />
   );
 }
@@ -354,6 +357,7 @@ function MapRoute() {
                 amountMxn: activeAmount,
                 platformFeeMxn: offer.platformFeeMxn,
                 providerFeeMxn: offer.providerFeeMxn,
+                maxEffectiveFeePercent: offer.maxEffectiveFeePercent,
                 flow: 'cashout',
                 nearbyCount: offer.nearbyCount,
               },
@@ -370,6 +374,7 @@ function MapRoute() {
             const ok = await retryTradeFlow();
             if (ok) navigate('/chat');
           }}
+          onVerifyIdentity={() => navigate(`/kyc/didit?return=cashoutMap&level=${tradeError?.requiredLevel === 2 ? 2 : 1}`)}
       />
   );
 }
@@ -391,6 +396,7 @@ function ConfirmRoute() {
     // hasta aqui para que la pantalla no vuelva a deducirlo restando.
     platformFeeMxn?: number;
     providerFeeMxn?: number;
+    maxEffectiveFeePercent?: number;
     flow: 'cashout' | 'deposit';
     nearbyCount: number;
   } | null;
@@ -414,12 +420,22 @@ function ConfirmRoute() {
       amountMxn={state.amountMxn}
       platformFeeMxn={state.platformFeeMxn}
       providerFeeMxn={state.providerFeeMxn}
+      maxEffectiveFeePercent={state.maxEffectiveFeePercent}
       flow={state.flow ?? 'cashout'}
       nearbyCount={state.nearbyCount}
       assetKey={activeAssetKey}
       loading={tradeLoading}
       errorMessage={tradeError?.message ?? null}
-      onBack={() => navigate(-1)}
+      errorAction={tradeError?.action}
+      onVerifyIdentity={() => navigate(`/kyc/didit?return=${isDeposit ? 'depositMap' : 'cashoutMap'}&level=${tradeError?.requiredLevel === 2 ? 2 : 1}`)}
+      onChooseAnotherAgent={() => {
+        clearTradeError();
+        navigate('/map');
+      }}
+      onBack={() => {
+        clearTradeError();
+        navigate(-1);
+      }}
       onConfirm={async () => {
         const ok = isDeposit
           ? await handleDepositOfferSelected(state.merchantId)
@@ -634,6 +650,21 @@ function CetesRoute() {
   );
 }
 
+function BankWithdrawRoute() {
+  const navigate = useNavigate();
+  const { sessionUser } = useAppCtx();
+  if (!BANK_WITHDRAW_ENABLED || !sessionUser?.token) {
+    return <ComingSoon title="Retirar a banco" icon="account_balance" onBack={() => navigate('/')} />;
+  }
+  return (
+    <BankWithdrawScreen
+      onBack={() => navigate('/')}
+      onVerifyIdentity={() => navigate('/kyc/didit?return=bankWithdraw')}
+      userToken={sessionUser.token}
+    />
+  );
+}
+
 /**
  * KYC-1: destinos de retorno permitidos.
  *
@@ -647,6 +678,10 @@ const KYC_RETURN_DESTINATIONS = {
   explore: '/explore',
   inbox: '/inbox',
   profile: '/profile',
+  joinNetwork: '/join-network',
+  bankWithdraw: '/retirar-banco',
+  cashoutMap: '/map',
+  depositMap: '/map-deposit',
 } as const;
 
 type KycReturnKey = keyof typeof KYC_RETURN_DESTINATIONS;
@@ -670,10 +705,12 @@ export function DiditKYCRoute() {
   const { sessionUser } = useAppCtx();
   const [params] = useSearchParams();
   const destination = resolveKycReturn(params.get('return'), 'home');
+  const level = params.get('level') === '2' ? 2 : 1;
   return (
       <KYCScreen
           token={sessionUser?.token ?? null}
           provider="didit"
+          level={level}
           onApproved={() => {
             navigate(destination);
           }}
@@ -749,14 +786,14 @@ function WelcomeRoute() {
 }
 
 /** Incorporacion de agente. Esta SI cambia estado real en el servidor. */
-function ProviderOnboardingRoute() {
+export function ProviderOnboardingRoute() {
   const navigate = useNavigate();
   const { sessionUser, refreshProviderStatus } = useAppCtx();
   return (
       <ProviderOnboarding
           token={sessionUser?.token ?? ''}
           onExit={() => navigate('/profile')}
-          onOpenKyc={() => navigate('/kyc')}
+          onOpenKyc={() => navigate('/kyc/didit?return=joinNetwork')}
           onOpenSettings={() => navigate('/merchant-settings')}
           onActivated={() => { void refreshProviderStatus(); }}
       />
@@ -784,6 +821,7 @@ function ProfileRoute() {
           }}
           onNavigatePrivacy={() => navigate('/privacy')}
           onNavigateTerms={() => navigate('/terms')}
+          onNavigateKyc={() => navigate('/kyc/didit?return=profile')}
           onNavigateJoinNetwork={() => navigate('/join-network')}
           providerStatus={providerStatus}
           availability={availability}
@@ -884,8 +922,8 @@ const HIDE_BOTTOMNAV_ROUTES = new Set([
   "/sign-request",
 ]);
 
-// Claim and sign-request screens also hide the bottom nav (standalone deep-link UI).
-const HIDE_BOTTOMNAV_PREFIX = ['/claim/', '/sign-request/'];
+// The signing screen is a standalone deep-link UI.
+const HIDE_BOTTOMNAV_PREFIX = ['/sign-request/'];
 
 function BottomNavAdapter() {
   const navigate = useNavigate();
@@ -1132,7 +1170,13 @@ function App() {
         // Always load the keypair first — registerUser reads it to get the
         // Stellar address, so this must happen before any registerUser call.
         if (!await keypairExists()) {
-          await generateAndStoreKeypair();
+          if (import.meta.env.VITE_DEMO_MODE === 'true') {
+            await generateAndStoreKeypair();
+          } else {
+            setDevicePublicKey(null);
+            await removeKey(USERS_STORAGE_KEY);
+            return;
+          }
         }
         const pubKey = await getPublicKey();
         setDevicePublicKey(pubKey);
@@ -1461,6 +1505,7 @@ function App() {
                 <Route path="/success" element={<ProtectedRoute><SuccessRoute /></ProtectedRoute>} />
                 <Route path="/explore" element={<ProtectedRoute><ExploreRoute /></ProtectedRoute>} />
                 <Route path="/cetes" element={<ProtectedRoute><CetesRoute /></ProtectedRoute>} />
+                <Route path="/retirar-banco" element={<ProtectedRoute><BankWithdrawRoute /></ProtectedRoute>} />
                 {/* KYC-1: rutas explicitas por proposito. `/kyc` sigue
                     siendo el del anchor para no romper enlaces existentes. */}
                 <Route path="/kyc" element={<ProtectedRoute><KYCRoute /></ProtectedRoute>} />

@@ -163,6 +163,10 @@ const ESCROW_CONTRACTS = parseEscrowContracts(
   process.env.ESCROW_CONTRACT_ID || '',
   ESCROW_ASSET_ENV,
 );
+const ESCROW_DECLINE_CONTRACT_IDS = (process.env.ESCROW_DECLINE_CONTRACT_IDS || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
@@ -181,6 +185,8 @@ export const config = {
    * refund iria al contrato nuevo, que no las conoce.
    */
   escrowLegacyContractId: process.env.ESCROW_LEGACY_CONTRACT_ID || '',
+  /** Contract IDs deployed with buyer-authorized decline(). */
+  escrowDeclineContractIds: ESCROW_DECLINE_CONTRACT_IDS as readonly string[],
   /** Activo por defecto de las operaciones nuevas (ver assetRate.service). */
   escrowAsset: ESCROW_ASSET_ENV,
   /**
@@ -226,8 +232,25 @@ export const config = {
   eventListenerEnabled: process.env.EVENT_LISTENER_ENABLED === 'true',
   eventListenerPollMs: parseInt(process.env.EVENT_LISTENER_POLL_MS || '5000', 10),
   eventListenerHealthStaleMs: parseInt(process.env.EVENT_LISTENER_HEALTH_STALE_MS || '30000', 10),
+  // WP5: conciliacion contra la cadena. Solo lee; 'false' la apaga.
+  reconciliationEnabled: process.env.ESCROW_RECONCILIATION_ENABLED !== 'false',
+  reconciliationIntervalMs: parseInt(process.env.ESCROW_RECONCILIATION_INTERVAL_MS || '600000', 10),
+  reconciliationLookbackDays: parseInt(process.env.ESCROW_RECONCILIATION_LOOKBACK_DAYS || '7', 10),
+  reconciliationBatchSize: parseInt(process.env.ESCROW_RECONCILIATION_BATCH_SIZE || '200', 10),
+
+  // Tiempo minimo que debe quedarle al escrow EN CADENA para registrar una
+  // entrega de efectivo. Decision de producto del 2026-10-29 (WP0 del plan de
+  // correcciones del escrow): sin ese margen, la liberacion puede no alcanzar
+  // a entrar antes de que `refund` sea elegible.
+  cashHandoffMinMarginMinutes: parseInt(process.env.CASH_HANDOFF_MIN_MARGIN_MINUTES || '20', 10),
+  // Tiempo minimo que debe quedarle a la SOLICITUD (`expires_at`) para aceptar
+  // un lock. Decision de producto del 2026-10-30 (WP3): bloquear a minutos de
+  // que venza la solicitud no deja tiempo para encontrarse y entregar.
+  lockMinRequestMarginMinutes: parseInt(process.env.LOCK_MIN_REQUEST_MARGIN_MINUTES || '30', 10),
 
   // Rate Limiting
+  clientErrorRateLimitWindowMs: parseInt(process.env.CLIENT_ERROR_RATE_LIMIT_WINDOW_MS || '60000', 10),
+  clientErrorRateLimitMax: parseInt(process.env.CLIENT_ERROR_RATE_LIMIT_MAX || '20', 10),
   authRateLimitWindowMs: parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS || '600000', 10), // 10 min
   // Un solo bucket por IP cubre /auth/challenge, /auth/token y /users/register
   // (comparten el store por defecto del middleware). Como cada registro o
@@ -240,6 +263,11 @@ export const config = {
   authRateLimitMax: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '30', 10),
   tradeRateLimitWindowMs: parseInt(process.env.TRADE_RATE_LIMIT_WINDOW_MS || '3600000', 10), // 1 hour
   tradeRateLimitMax: parseInt(process.env.TRADE_RATE_LIMIT_MAX || '10', 10),
+  /**
+   * Tope comercial de las dos comisiones juntas (agente + MicoPay).
+   * Se configura fuera del contrato: cambiarlo no requiere redesplegar Soroban.
+   */
+  maxEffectiveFeePercent: parseFloat(process.env.MAX_EFFECTIVE_FEE_PERCENT || '6'),
   messageRateLimitWindowMs: parseInt(process.env.MESSAGE_RATE_LIMIT_WINDOW_MS || '60000', 10),
   messageRateLimitMax: parseInt(process.env.MESSAGE_RATE_LIMIT_MAX || '30', 10),
   disputeRateLimitWindowMs: parseInt(process.env.DISPUTE_RATE_LIMIT_WINDOW_MS || '3600000', 10),
@@ -300,6 +328,14 @@ export function validateConfig() {
     errors.push("SECRET_ENCRYPTION_KEY must be 64 hex characters (32 bytes) for AES-256-GCM.");
   }
 
+  if (
+    !Number.isFinite(config.maxEffectiveFeePercent) ||
+    config.maxEffectiveFeePercent < 0.8 ||
+    config.maxEffectiveFeePercent > 100
+  ) {
+    errors.push("MAX_EFFECTIVE_FEE_PERCENT must be a number between the 0.8% platform fee and 100%.");
+  }
+
   if (config.isProduction) {
     if (!process.env.JWT_SECRET || config.jwtSecret === 'dev_jwt_secret' || config.jwtSecret.length < 32) {
       errors.push("JWT_SECRET is missing or too weak (min 32 chars) — required in production.");
@@ -329,6 +365,11 @@ export function validateConfig() {
     for (const [asset, contractId] of escrowEntries) {
       if (!/^C[A-Z2-7]{55}$/.test(contractId)) {
         errors.push(`Escrow contract for ${asset} is invalid. It must be a valid Stellar contract ID (56 characters starting with 'C').`);
+      }
+    }
+    for (const contractId of config.escrowDeclineContractIds) {
+      if (!/^C[A-Z2-7]{55}$/.test(contractId)) {
+        errors.push(`ESCROW_DECLINE_CONTRACT_IDS contains an invalid contract ID: ${contractId}`);
       }
     }
 

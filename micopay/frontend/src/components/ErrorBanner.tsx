@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { ApiErrorAction } from '../utils/apiError';
 import SupportLink from './SupportLink';
 
@@ -5,6 +6,7 @@ interface ErrorBannerProps {
   message: string;
   action?: ApiErrorAction;
   onRetry?: () => void;
+  onVerifyIdentity?: () => void;
   onDismiss?: () => void;
   retryLabel?: string;
   supportTradeId?: string;
@@ -18,6 +20,7 @@ export default function ErrorBanner({
   message,
   action = 'retry',
   onRetry,
+  onVerifyIdentity,
   onDismiss,
   retryLabel = 'Reintentar',
   supportTradeId,
@@ -25,11 +28,23 @@ export default function ErrorBanner({
   variant = 'banner',
   className = '',
 }: ErrorBannerProps) {
+  const { t } = useTranslation();
+  const isChooseAgent = action === 'choose_agent';
   const showRetry = action === 'retry' && onRetry;
-  const showSupport = action === 'support' || !showRetry;
+  const showVerifyIdentity = action === 'verify_identity' && onVerifyIdentity;
+  const showSupport = !isChooseAgent && (action === 'support' || (!showRetry && !showVerifyIdentity));
 
   const actions = (
     <div className="flex flex-wrap items-center gap-3 justify-end">
+      {isChooseAgent && onDismiss ? (
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-xs font-semibold text-primary underline hover:no-underline"
+        >
+          {t('confirm.chooseAnotherAgent', 'Elegir otro agente')}
+        </button>
+      ) : null}
       {showRetry ? (
         <button
           type="button"
@@ -39,10 +54,19 @@ export default function ErrorBanner({
           {retryLabel}
         </button>
       ) : null}
+      {showVerifyIdentity ? (
+        <button
+          type="button"
+          onClick={onVerifyIdentity}
+          className="rounded-sm bg-verde px-4 py-2 text-xs font-bold text-papel"
+        >
+          Verificar mi identidad
+        </button>
+      ) : null}
       {showSupport ? (
         <SupportLink tradeId={supportTradeId} state={supportState} />
       ) : null}
-      {onDismiss ? (
+      {!isChooseAgent && onDismiss ? (
         <button
           type="button"
           onClick={onDismiss}

@@ -3,7 +3,6 @@ import { parseQRPayload } from './qrPayload';
 
 const TRADE_ID = '550e8400-e29b-41d4-a716-446655440000';
 const CLAIM_TOKEN_64 = 'deadbeef'.repeat(8);
-const HTLC_TX_HASH = 'a'.repeat(64);
 
 describe('parseQRPayload', () => {
   // ── Release format ─────────────────────────────────────────────────────
@@ -94,49 +93,6 @@ describe('parseQRPayload', () => {
     it('rejects a confirm QR whose trade_id is not a UUID', () => {
       const result = parseQRPayload('micopay://confirm?trade_id=abc-123');
       expect(result.ok).toBe(false);
-    });
-  });
-
-  describe('micopay://claim', () => {
-    it('parses a valid claim QR', () => {
-      const raw = `micopay://claim?request_id=mcr-req456&amount_mxn=500&htlc=${HTLC_TX_HASH}`;
-      const result = parseQRPayload(raw);
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.payload.type).toBe('claim');
-        if (result.payload.type === 'claim') {
-          expect(result.payload.requestId).toBe('mcr-req456');
-          expect(result.payload.amountMxn).toBe(500);
-          expect(result.payload.htlc).toBe(HTLC_TX_HASH);
-        }
-      }
-    });
-
-    it('returns error when request_id is missing', () => {
-      const raw = 'micopay://claim?amount_mxn=500';
-      const result = parseQRPayload(raw);
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain('ID de solicitud');
-      }
-    });
-
-    it('rejects malformed htlc reference', () => {
-      const raw = 'micopay://claim?request_id=mcr-req456&amount_mxn=500&htlc=0xhash';
-      const result = parseQRPayload(raw);
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain('HTLC');
-      }
-    });
-
-    it('rejects invalid amount_mxn', () => {
-      const raw = `micopay://claim?request_id=mcr-req456&amount_mxn=not-a-number&htlc=${HTLC_TX_HASH}`;
-      const result = parseQRPayload(raw);
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain('monto MXN');
-      }
     });
   });
 

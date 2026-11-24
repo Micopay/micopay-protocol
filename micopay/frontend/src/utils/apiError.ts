@@ -4,6 +4,8 @@ import { resolveErrorMessage } from '../constants/errorMap';
 export interface ApiErrorPayload {
   message: string;
   error?: string;
+  required_level?: 1 | 2;
+  current_level?: number;
   /** Full correlation ID returned by the backend in every error response. */
   request_id?: string;
   /** Short human-friendly code (e.g. "3f2a-bc91") for support conversations. */
@@ -19,6 +21,8 @@ export class ApiError extends Error {
   readonly code?: string;
   readonly requestId?: string;
   readonly supportCode?: string;
+  readonly requiredLevel?: 1 | 2;
+  readonly currentLevel?: number;
 
   constructor(payload: ApiErrorPayload) {
     super(payload.message);
@@ -26,6 +30,8 @@ export class ApiError extends Error {
     this.code = payload.error;
     this.requestId = payload.request_id;
     this.supportCode = payload.support_code;
+    this.requiredLevel = payload.required_level;
+    this.currentLevel = payload.current_level;
   }
 }
 
@@ -44,7 +50,7 @@ export function toApiError(payload: ApiErrorPayload): ApiError {
 export function extractApiErrorPayload(err: unknown): ApiErrorPayload {
   if (axios.isAxiosError(err)) {
     const data = err.response?.data as
-      | { message?: string; error?: string; code?: string; request_id?: string; support_code?: string }
+      | { message?: string; error?: string; code?: string; request_id?: string; support_code?: string; required_level?: number; current_level?: number }
       | undefined;
     const resolved = resolveErrorMessage({
       response: {
@@ -63,8 +69,10 @@ export function extractApiErrorPayload(err: unknown): ApiErrorPayload {
     const error = typeof data?.code === 'string' ? data.code : typeof data?.error === 'string' ? data.error : undefined;
     const request_id = typeof data?.request_id === 'string' ? data.request_id : undefined;
     const support_code = typeof data?.support_code === 'string' ? data.support_code : undefined;
+    const required_level = data?.required_level === 1 || data?.required_level === 2 ? data.required_level : undefined;
+    const current_level = typeof data?.current_level === 'number' ? data.current_level : undefined;
 
-    return { message, error, request_id, support_code };
+    return { message, error, request_id, support_code, required_level, current_level };
   }
   if (err instanceof Error) {
     const resolved = resolveErrorMessage(err);
@@ -73,26 +81,51 @@ export function extractApiErrorPayload(err: unknown): ApiErrorPayload {
   return { message: resolveErrorMessage(undefined).message };
 }
 
-export type ApiErrorAction = 'retry' | 'support';
+export type ApiErrorAction = 'retry' | 'support' | 'choose_agent' | 'verify_identity';
 
 export interface MappedApiError {
   message: string;
   error?: string;
   action: ApiErrorAction;
   status?: number;
+  requiredLevel?: 1 | 2;
+  currentLevel?: number;
 }
 
 /** Maps network / HTTP failures to Spanish copy with a suggested user action. */
 export function mapApiError(err: unknown): MappedApiError {
   if (axios.isAxiosError(err)) {
     const status = err.response?.status;
-    const { message, error } = extractApiErrorPayload(err);
+    const { message, error, required_level, current_level } = extractApiErrorPayload(err);
+
+    if (error === 'RECEIVER_NOT_READY') {
+      const serverMessage = typeof (err.response?.data as { message?: unknown } | undefined)?.message === 'string'
+        ? (err.response?.data as { message: string }).message
+        : message;
+      return {
+        message: serverMessage,
+        error,
+        action: 'choose_agent',
+        status,
+      };
+    }
 
     if (!err.response) {
       return {
         message: 'Sin conexión al servidor. Revisa tu internet e inténtalo de nuevo.',
         error,
         action: 'retry',
+      };
+    }
+
+    if (error === 'KYC_TIER_INSUFFICIENT') {
+      return {
+        message,
+        error,
+        action: 'verify_identity',
+        status,
+        requiredLevel: required_level,
+        currentLevel: current_level,
       };
     }
 
@@ -134,6 +167,16 @@ export function mapApiError(err: unknown): MappedApiError {
           status,
         };
     }
+  }
+
+  if (err instanceof ApiError && err.code === 'KYC_TIER_INSUFFICIENT') {
+    return {
+      message: err.message,
+      error: err.code,
+      action: 'verify_identity',
+      requiredLevel: err.requiredLevel,
+      currentLevel: err.currentLevel,
+    };
   }
 
   if (err instanceof Error) {

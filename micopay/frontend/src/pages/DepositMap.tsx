@@ -36,6 +36,7 @@ interface DepositMapProps {
   creationErrorAction?: ApiErrorAction;
   onDismissCreationError?: () => void;
   onRetryCreationError?: () => void;
+  onVerifyIdentity?: () => void;
   /** Effective-fee threshold (%) above which a warning is shown. Defaults to the shared guardrail. */
   maxEffectiveFeePercent?: number;
 }
@@ -245,6 +246,7 @@ const DepositMap = ({
   creationErrorAction = 'retry',
   onDismissCreationError,
   onRetryCreationError,
+  onVerifyIdentity,
   maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
 }: DepositMapProps) => {
   const { t } = useTranslation();
@@ -292,6 +294,7 @@ const DepositMap = ({
             message={creationError}
             action={creationErrorAction}
             onRetry={onRetryCreationError}
+            onVerifyIdentity={onVerifyIdentity}
             onDismiss={onDismissCreationError}
             supportState="TRADE_CREATE"
           />
@@ -351,13 +354,14 @@ const DepositMap = ({
                       commissionPct: m.rate_percent,
                       platformFeeMxn: m.platform_fee_mxn,
                       providerFeeMxn: m.provider_fee_mxn,
+                      maxEffectiveFeePercent: m.max_effective_fee_percent ?? maxEffectiveFeePercent,
                       nearbyCount: merchants.length,
                     });
                   } else {
                     onSelectOffer(m.seller_id);
                   }
                 }}
-                maxEffectiveFeePercent={maxEffectiveFeePercent}
+                maxEffectiveFeePercent={merchant.max_effective_fee_percent ?? maxEffectiveFeePercent}
                 flow="deposit"
               />
             ))}

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { App as CapApp } from '@capacitor/app';
 
-import { startKYC, getKYCStatus, type KYCProvider, type KYCStatus, type KYCStatusResponse } from '../services/api';
+import { startKYC, getKYCStatus, type KYCLevel, type KYCProvider, type KYCStatus, type KYCStatusResponse } from '../services/api';
 import { readJSON, writeJSON } from '../services/secureStorage';
 import { extractApiErrorPayload } from '../utils/apiError';
 
@@ -16,8 +16,8 @@ const PROVIDER_NAMES: Record<KYCProvider, string> = {
 // Cache key is per-provider so a Didit verification (#314/#315's tiered gate)
 // and an Etherfuse verification (CETES-only) never clobber each other's
 // cached status for the same user.
-function secureStorageKey(provider: KYCProvider): string {
-  return `kyc_status_${provider}`;
+function secureStorageKey(provider: KYCProvider, level: KYCLevel): string {
+  return `kyc_status_${provider}_${level}`;
 }
 
 function StatusLine({ status }: { status: KYCStatus }) {
@@ -44,6 +44,10 @@ function StatusLine({ status }: { status: KYCStatus }) {
       </div>
     );
   }
+  // El backend tambien responde un estado de "nunca empezo" que no esta en
+  // KYCStatus. Antes caia aqui y mostraba "No se pudo verificar" a quien ni
+  // siquiera habia abierto la verificacion. Solo un rechazo real lo muestra.
+  if (status !== 'rejected') return null;
   return (
     <div className="flex items-center gap-3 bg-error/10 border border-error/20 rounded-sm px-4 py-3">
       <span className="material-symbols-outlined text-error">error</span>
@@ -60,9 +64,11 @@ type KYCScreenProps = {
   token: string | null;
   /** Defaults to 'etherfuse' so the existing CETES onboarding call site is unaffected. */
   provider?: KYCProvider;
+  /** Didit verification tier; level 2 includes proof of address. */
+  level?: KYCLevel;
 };
 
-export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }: KYCScreenProps) {
+export default function KYCScreen({ onApproved, token, provider = 'etherfuse', level = 1 }: KYCScreenProps) {
   const { t } = useTranslation();
   const providerName = PROVIDER_NAMES[provider];
   const [status, setStatus] = useState<KYCStatus>('pending');
@@ -81,6 +87,13 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
 
+  // Didit captura selfie y rostro: datos biometricos, sensibles segun la
+  // LFPDPPP, que solo se tratan con consentimiento expreso. Sin la casilla
+  // marcada no se abre el flujo de Didit.
+  const needsBiometricConsent = provider === 'didit';
+  const [biometricConsent, setBiometricConsent] = useState(false);
+  const blockedByConsent = needsBiometricConsent && !biometricConsent;
+
   /**
    * KYC-1: la cache local mejora el arranque, pero NO decide.
    *
@@ -90,7 +103,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
    * estado provisional; quien desbloquea es la respuesta del backend.
    */
   const loadCachedStatus = async () => {
-    const cached = await readJSON<{ status: KYCStatus; reason?: string | null }>(secureStorageKey(provider));
+    const cached = await readJSON<{ status: KYCStatus; reason?: string | null }>(secureStorageKey(provider, level));
     if (cached?.status === 'approved') {
       setStatus('approved');
       setReason(null);
@@ -103,12 +116,12 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
       await loadCachedStatus();
       if (!token) return;
       try {
-        const res = await getKYCStatus(token, provider);
+        const res = await getKYCStatus(token, provider, level);
         if (cancelled) return;
         // El servidor manda, tambien para desmentir a la cache.
         await applyStatus(res);
         if (res.status !== 'approved') {
-          await writeJSON(secureStorageKey(provider), { status: res.status });
+          await writeJSON(secureStorageKey(provider, level), { status: res.status });
         }
       } catch {
         // Sin respuesta del servidor no se desbloquea nada: la cache se queda
@@ -120,9 +133,10 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, provider]);
+  }, [token, provider, level]);
 
   const handleOpenHostedFlow = async (emailOverride?: string) => {
+    if (blockedByConsent) return;
     if (!token) {
       setStatusPollingError(t('kyc.sessionError'));
       return;
@@ -132,7 +146,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
     setLoading(true);
 
     try {
-      const { onboardingUrl } = await startKYC(token, provider, emailOverride);
+      const { onboardingUrl } = await startKYC(token, provider, emailOverride, level);
       setNeedsEmail(false);
 
       startedAtRef.current = Date.now();
@@ -183,7 +197,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
     setStatusPollingError(null);
 
     if (res.status === 'approved') {
-      await writeJSON(secureStorageKey(provider), { status: 'approved' });
+      await writeJSON(secureStorageKey(provider, level), { status: 'approved' });
       onApproved();
     }
   };
@@ -192,7 +206,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
     if (!token) return null;
     setStatusPollingError(null);
     try {
-      const res = await getKYCStatus(token, provider);
+      const res = await getKYCStatus(token, provider, level);
       await applyStatus(res);
       return res;
     } catch (e: any) {
@@ -294,6 +308,20 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
         </section>
 
         <div className="mt-6 space-y-4">
+          {needsBiometricConsent && status !== 'approved' && (
+            <label className="flex items-start gap-3 bg-papel border-2 border-tinta rounded-sm p-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={biometricConsent}
+                onChange={(e) => setBiometricConsent(e.target.checked)}
+                className="mt-0.5 h-5 w-5 shrink-0 accent-verde"
+              />
+              <span className="text-xs text-on-surface leading-relaxed">
+                {t('kyc.biometricConsent', { provider: providerName })}
+              </span>
+            </label>
+          )}
+
           {needsEmail ? (
             <div className="bg-papel border-2 border-tinta rounded-sm p-5 space-y-3">
               <div>
@@ -332,7 +360,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
           ) : (
             <button
               onClick={() => void handleOpenHostedFlow()}
-              disabled={loading}
+              disabled={loading || blockedByConsent}
               className="w-full bg-verde text-papel font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
             >
               {loading ? (
@@ -352,7 +380,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse' }:
           {status === 'rejected' && (
             <button
               onClick={() => void handleOpenHostedFlow()}
-              disabled={loading}
+              disabled={loading || blockedByConsent}
               className="w-full bg-papel border border-error/30 text-error font-bold py-3.5 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:translate-x-[2px] active:translate-y-[2px]"
             >
               <span className="material-symbols-outlined">refresh</span>

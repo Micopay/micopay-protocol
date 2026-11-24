@@ -133,14 +133,22 @@ export async function tradeRoutes(app: FastifyInstance) {
    * GET /trades/history
    * All trades (active + completed) for the authenticated user, newest first.
    */
-  app.get('/trades/history', async (request) => {
-    const { status, page, limit } = request.query as { status?: string; page?: string; limit?: string };
-    const trades = await tradeService.getTradeHistory(
-      request.user.id,
-      status,
-      page ? parseInt(page) : 1,
-      limit ? parseInt(limit) : 20
-    );
+  app.get('/trades/history', {
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          // 'all', a stored status, or the derived 'expired'. An unknown value
+          // simply matches nothing, as before.
+          status: { type: 'string', maxLength: 32 },
+          page: { type: 'integer', minimum: 1, maximum: 10000, default: 1 },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+        },
+      },
+    },
+  }, async (request) => {
+    const { status, page, limit } = request.query as { status?: string; page: number; limit: number };
+    const trades = await tradeService.getTradeHistory(request.user.id, status, page, limit);
     return { trades };
   });
 
@@ -150,12 +158,27 @@ export async function tradeRoutes(app: FastifyInstance) {
    */
   app.get('/trades/:id', async (request) => {
     const { id } = request.params as { id: string };
-    const { trade, merchant_unavailable, seller_username, buyer_username } =
+    const {
+      trade,
+      decline_available,
+      merchant_unavailable,
+      seller_username,
+      buyer_username,
+      seller_stellar_address,
+      buyer_stellar_address,
+    } =
       await tradeService.getTradeDetailForParticipant(id, request.user.id);
 
     const { secret_enc, secret_nonce, ...safeTrade } = trade;
     return {
-      trade: { ...safeTrade, ...tradeService.escrowAmountsForTrade(trade), ...tradeService.cashBreakdownForTrade(trade) },
+      trade: {
+        ...safeTrade,
+        ...tradeService.escrowAmountsForTrade(trade),
+        ...tradeService.cashBreakdownForTrade(trade),
+        seller_stellar_address,
+        buyer_stellar_address,
+      },
+      decline_available,
       merchant_unavailable,
       seller_username,
       buyer_username,
@@ -245,6 +268,29 @@ export async function tradeRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const { signed_xdr } = (request.body as { signed_xdr?: string } | undefined) ?? {};
     return tradeService.completeTrade(request, id, request.user.id, signed_xdr);
+  });
+
+  /** Buyer-only: build the early return transaction for local signing. */
+  app.post('/trades/:id/decline/prepare', async (request) => {
+    const { id } = request.params as { id: string };
+    return tradeService.prepareDeclineTrade(request, id, request.user.id);
+  });
+
+  /** Buyer-only: submit decline() and mark refunded after Stellar confirms. */
+  app.post('/trades/:id/decline', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          signed_xdr: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request) => {
+    const { id } = request.params as { id: string };
+    const { signed_xdr } = (request.body as { signed_xdr?: string } | undefined) ?? {};
+    return tradeService.declineTrade(request, id, request.user.id, signed_xdr);
   });
 
   /**

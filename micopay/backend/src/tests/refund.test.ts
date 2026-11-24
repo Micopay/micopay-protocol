@@ -179,6 +179,51 @@ async function testSweepIgnoresNonExpiredCancelledTrades() {
   console.log("  ✓ sweepPendingRefunds leaves not-yet-expired cancelled trades alone");
 }
 
+/** Constancia de efectivo, como la deja `merchantConfirmScan`. */
+async function insertCashHandoff(tradeId: string, providerId: string) {
+  await db.execute(
+    `INSERT INTO trade_cash_handoffs (trade_id, provider_id, claim_token_hash)
+     VALUES ($1, $2, $3)`,
+    [tradeId, providerId, `handoff_${Math.random().toString(36).slice(2)}`],
+  );
+}
+
+/**
+ * D2 (decisión de producto 2026-10-29): con la entrega de efectivo confirmada,
+ * quien bloqueó ya recibió el efectivo. La app no le devuelve también la
+ * cripto; el caso va a soporte.
+ */
+async function testRefundBlockedWithCashHandoff() {
+  const sellerId = await createUser("s6");
+  const buyerId = await createUser("b6");
+  const tradeId = await insertLockedTrade(sellerId, buyerId, { expired: true });
+  await insertCashHandoff(tradeId, sellerId);
+
+  try {
+    await refundTrade(fakeRequest, tradeId, sellerId);
+    throw new Error("refund must be rejected when cash was handed over");
+  } catch (err) {
+    ok(err instanceof AppError, `expected AppError, got ${err}`);
+    strictEqual((err as AppError).code, "CASH_HANDOFF_CONFIRMED");
+  }
+  strictEqual((await getTrade(tradeId))?.status, "locked", "the trade is left for support");
+  console.log("  ✓ refundTrade refuses a trade with a confirmed cash handoff (D2)");
+}
+
+async function testSweepSkipsCancelledTradeWithCashHandoff() {
+  const sellerId = await createUser("s7");
+  const buyerId = await createUser("b7");
+  const tradeId = await insertLockedTrade(sellerId, buyerId, { expired: true });
+  await cancelTrade(fakeRequest, tradeId, buyerId);
+  // `cancelTrade` ya no deja cancelar con entrega; se inserta después para
+  // cubrir el caso que no debería existir.
+  await insertCashHandoff(tradeId, sellerId);
+
+  await sweepPendingRefunds(fakeRequest);
+  strictEqual((await getTrade(tradeId))?.status, "cancelled", "the sweep leaves it for support");
+  console.log("  ✓ sweepPendingRefunds skips a cancelled trade with a cash handoff (D2)");
+}
+
 async function main() {
   console.log("\nB3 — Cancel/refund regression tests\n");
   await testSellerCanRefundAfterCancellingLockedCashoutTrade();
@@ -186,6 +231,8 @@ async function main() {
   await testRefundIsNotDoubleSpendable();
   await testSweepAutoRefundsCancelledExpiredTrades();
   await testSweepIgnoresNonExpiredCancelledTrades();
+  await testRefundBlockedWithCashHandoff();
+  await testSweepSkipsCancelledTradeWithCashHandoff();
   console.log("\nAll B3 refund tests passed.\n");
 }
 

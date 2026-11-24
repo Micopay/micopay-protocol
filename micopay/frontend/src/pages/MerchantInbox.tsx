@@ -66,9 +66,14 @@ function TradeConfirmationCard({
   const [releaseError, setReleaseError] = useState<string | null>(null);
 
   const yaLiberado = data.status === 'completed' && !!data.release_tx_hash;
+  // N2 (auditoría del escrow 2026-10-29): la tarjeta normal salía también para
+  // una operación ya reembolsada, con solo una etiqueta gris como aviso. El
+  // backend ya no registra entregas fuera de `revealing`; esto cubre la
+  // relectura de una entrega previa sobre una fila que dejó de ser cobrable.
+  const cobrable = data.status === 'revealing' || data.status === 'completed';
   // Solo el cash-out se cierra desde aquí: en depósito quien completa es el
   // cliente desde su propia pantalla.
-  const puedeLiberar = data.flow === 'cashout' && !yaLiberado && !!token;
+  const puedeLiberar = cobrable && data.flow === 'cashout' && !yaLiberado && !!token;
 
   const liberar = async () => {
     if (!token) return;
@@ -123,6 +128,12 @@ function TradeConfirmationCard({
 
       {/* Body */}
       <div className="px-5 py-4 space-y-4">
+        {!cobrable && (
+          <div role="alert" className="bg-red-50 border-2 border-red-700 rounded-sm p-4">
+            <p className="font-bold text-sm text-red-800">{t('inbox.notCollectableTitle')}</p>
+            <p className="text-xs text-red-700 mt-1">{t('inbox.notCollectableBody')}</p>
+          </div>
+        )}
         {/* Amount */}
         <div className="text-center">
           <p className="text-3xl font-extrabold text-on-surface">

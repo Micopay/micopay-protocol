@@ -12,6 +12,10 @@ import {
   activateProvider,
 } from '../services/providerEnrollment.service.js';
 import db from '../db/schema.js';
+import {
+  MAX_EFFECTIVE_FEE_PERCENT,
+  MAX_PROVIDER_FEE_PERCENT,
+} from '../services/tradeFees.js';
 
 // G1: /merchants/available is public and unauthenticated — without a rate
 // limit it lets anyone scrape the full census of merchant locations by
@@ -116,7 +120,11 @@ export async function merchantRoutes(app: FastifyInstance) {
   app.get('/merchants/me/config', { preHandler: [authMiddleware] }, async (request) => {
     const config = await getOrCreateMerchantConfig(request.user.id);
     return {
-      config,
+      config: {
+        ...config,
+        max_effective_fee_percent: MAX_EFFECTIVE_FEE_PERCENT,
+        max_provider_fee_percent: MAX_PROVIDER_FEE_PERCENT,
+      },
       daily_cap_reset_timezone: 'UTC',
       daily_cap_reset_time: '00:00',
       daily_cap_reset_note: 'Daily cap usage resets every day at 00:00 UTC.',
@@ -130,7 +138,7 @@ export async function merchantRoutes(app: FastifyInstance) {
         type: 'object',
         required: ['rate_percent', 'min_trade_mxn', 'max_trade_mxn', 'daily_cap_mxn'],
         properties: {
-          rate_percent:  { type: 'number', minimum: 0, maximum: 100 },
+          rate_percent:  { type: 'number', minimum: 0, maximum: MAX_PROVIDER_FEE_PERCENT },
           min_trade_mxn: { type: 'integer', minimum: 100, maximum: 50000 },
           max_trade_mxn: { type: 'integer', minimum: 100, maximum: 50000 },
           daily_cap_mxn: { type: 'integer', minimum: 100 },
@@ -154,7 +162,11 @@ export async function merchantRoutes(app: FastifyInstance) {
     });
 
     return {
-      config,
+      config: {
+        ...config,
+        max_effective_fee_percent: MAX_EFFECTIVE_FEE_PERCENT,
+        max_provider_fee_percent: MAX_PROVIDER_FEE_PERCENT,
+      },
       daily_cap_reset_timezone: 'UTC',
       daily_cap_reset_time: '00:00',
       daily_cap_reset_note: 'Daily cap usage resets every day at 00:00 UTC.',

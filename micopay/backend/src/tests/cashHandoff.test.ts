@@ -365,6 +365,52 @@ async function testDepositProviderCanStillScan() {
 }
 
 
+// ── 4b. N2 · solo una operación cobrable registra entrega ──────────────────
+
+/**
+ * N2/H1 (auditoría del escrow 2026-10-29): una fila que deja de estar en
+ * `revealing` con un QR todavía vigente —p. ej. marcada `refunded` por un
+ * evento— registraba la entrega, y el agente daba efectivo que ya no podía
+ * cobrar. Ahora se rechaza sin gastar el QR ni dejar constancia.
+ */
+async function testScanRejectedWhenTradeNoLongerRevealing() {
+  for (const status of ["refunded", "locked", "pending"]) {
+    const clientId = await createUser("client");
+    const providerId = await createUser("provider");
+    const tradeId = await insertCashoutTrade(clientId, providerId);
+    const token = await claimTokenFor(tradeId, clientId);
+    await db.execute("UPDATE trades SET status = $2 WHERE id = $1", [tradeId, status]);
+
+    await expectAppError(
+      () => merchantConfirmScan(fakeRequest, tradeId, providerId, token),
+      "TRADE_NOT_COLLECTABLE",
+      `escaneo sobre ${status}`,
+    );
+    strictEqual(await getCashHandoff(tradeId), null, `${status}: no se registra entrega`);
+    const row = await db.getOne<{ consumed_at: string | null }>(
+      "SELECT consumed_at FROM trade_claim_tokens WHERE trade_id = $1",
+      [tradeId],
+    );
+    strictEqual(row?.consumed_at ?? null, null, `${status}: el QR no se gasta`);
+  }
+  console.log("  ✓ un QR vigente sobre una fila refunded/locked/pending no registra entrega ni se gasta");
+}
+
+/** La relectura de una entrega previa sigue disponible aunque la fila cambie. */
+async function testResumeStillReadableAfterStatusChange() {
+  const clientId = await createUser("client");
+  const providerId = await createUser("provider");
+  const tradeId = await insertCashoutTrade(clientId, providerId);
+  const token = await claimTokenFor(tradeId, clientId);
+  await merchantConfirmScan(fakeRequest, tradeId, providerId, token);
+  await db.execute("UPDATE trades SET status = 'refunded' WHERE id = $1", [tradeId]);
+
+  const resumed = await merchantConfirmScan(fakeRequest, tradeId, providerId, token);
+  strictEqual(resumed.resumed, true, "la entrega previa se puede releer");
+  strictEqual(resumed.status, "refunded", "y muestra el estado real, para que la app avise");
+  console.log("  ✓ la relectura de una entrega previa muestra el estado real de la fila");
+}
+
 // ── 5. Integración de dos cuentas ──────────────────────────────────────────
 
 /**
@@ -431,6 +477,8 @@ async function main() {
   await testScanAfterCompletionIsReadable();
   await testDepositIsNotRegressed();
   await testDepositProviderCanStillScan();
+  await testScanRejectedWhenTradeNoLongerRevealing();
+  await testResumeStillReadableAfterStatusChange();
   await testTwoAccountCashoutEndToEnd();
   console.log("\nAll CASH-4 cash handoff tests passed.\n");
 }

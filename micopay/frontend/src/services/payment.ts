@@ -1,6 +1,5 @@
-import { Keypair, TransactionBuilder, Operation, Memo, Networks, Asset, Horizon } from '@stellar/stellar-sdk';
-import { requireUserPresence } from '../lib/userPresence';
-import { exportSecretKey, getPublicKey } from '../lib/keystore';
+import { Keypair, Transaction, TransactionBuilder, Operation, Memo, Networks, Asset, Horizon } from '@stellar/stellar-sdk';
+import { getPublicKey, signTransactionXdr } from '../lib/keystore';
 import { getAsset } from '../constants/assets';
 import { buildTxUrl } from '../utils/stellarExplorer';
 
@@ -74,31 +73,32 @@ export async function hasTrustline(assetCode: string): Promise<boolean> {
 export async function ensureTrustline(assetCode: string): Promise<SendResult | null> {
   if (await hasTrustline(assetCode)) return null;
 
-  // Mueve dinero: se confirma antes de tocar la llave.
-  await requireUserPresence('payment');
-  const secret = await exportSecretKey();
-  if (!secret) throw new PaymentError('NO_KEY', 'No se encontró la llave de tu dispositivo.');
-  const keypair = Keypair.fromSecret(secret);
+  const publicKey = await getPublicKey();
+  if (!publicKey) throw new PaymentError('NO_KEY', 'No se encontró la llave de tu dispositivo.');
   const asset = toAsset(assetCode);
 
   let account;
   try {
-    account = await server.loadAccount(keypair.publicKey());
+    account = await server.loadAccount(publicKey);
   } catch {
     throw new PaymentError('ACCOUNT_NOT_FOUND', 'Tu cuenta aún no está activada en la red (necesita XLM).');
   }
 
-  const tx = new TransactionBuilder(account, {
+  const unsignedTx = new TransactionBuilder(account, {
     fee: '10000',
     networkPassphrase: NETWORK_PASSPHRASE,
   })
     .addOperation(Operation.changeTrust({ asset }))
     .setTimeout(120)
     .build();
-  tx.sign(keypair);
+  const signedTx = TransactionBuilder.fromXDR(
+    await signTransactionXdr(unsignedTx.toXDR(), NETWORK_PASSPHRASE, 'payment'),
+    NETWORK_PASSPHRASE,
+  );
+  if (!(signedTx instanceof Transaction)) throw new PaymentError('INVALID_TX', 'La transacción firmada no es válida.');
 
   try {
-    const res = await server.submitTransaction(tx);
+    const res = await server.submitTransaction(signedTx);
     return { hash: res.hash, explorerUrl: buildTxUrl(res.hash) };
   } catch (e: any) {
     const codes = e?.response?.data?.extras?.result_codes;
@@ -129,13 +129,10 @@ export async function sendPayment(params: {
     throw new PaymentError('BAD_AMOUNT', 'Ingresa un monto mayor a 0.');
   }
 
-  // Mueve dinero: se confirma antes de tocar la llave.
-  await requireUserPresence('payment');
-  const secret = await exportSecretKey();
-  if (!secret) throw new PaymentError('NO_KEY', 'No se encontró la llave de tu dispositivo.');
-  const keypair = Keypair.fromSecret(secret);
+  const publicKey = await getPublicKey();
+  if (!publicKey) throw new PaymentError('NO_KEY', 'No se encontró la llave de tu dispositivo.');
 
-  if (destination === keypair.publicKey()) {
+  if (destination === publicKey) {
     throw new PaymentError('SELF', 'No puedes enviarte fondos a ti mismo.');
   }
 
@@ -143,7 +140,7 @@ export async function sendPayment(params: {
 
   let account;
   try {
-    account = await server.loadAccount(keypair.publicKey());
+    account = await server.loadAccount(publicKey);
   } catch {
     throw new PaymentError('ACCOUNT_NOT_FOUND', 'Tu cuenta aún no está activada en la red.');
   }
@@ -161,11 +158,15 @@ export async function sendPayment(params: {
     builder.addMemo(Memo.text(params.memo.trim().slice(0, 28)));
   }
 
-  const tx = builder.build();
-  tx.sign(keypair);
+  const unsignedTx = builder.build();
+  const signedTx = TransactionBuilder.fromXDR(
+    await signTransactionXdr(unsignedTx.toXDR(), NETWORK_PASSPHRASE, 'payment'),
+    NETWORK_PASSPHRASE,
+  );
+  if (!(signedTx instanceof Transaction)) throw new PaymentError('INVALID_TX', 'La transacción firmada no es válida.');
 
   try {
-    const res = await server.submitTransaction(tx);
+    const res = await server.submitTransaction(signedTx);
     return {
       hash: res.hash,
       explorerUrl: buildTxUrl(res.hash),

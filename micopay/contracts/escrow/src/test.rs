@@ -8,12 +8,12 @@ use soroban_sdk::{
 
 fn setup_env() -> (
     Env,
-    Address,  // contract_id
-    Address,  // admin
-    Address,  // seller
-    Address,  // buyer
-    Address,  // platform_wallet
-    Address,  // token_id
+    Address, // contract_id
+    Address, // admin
+    Address, // seller
+    Address, // buyer
+    Address, // platform_wallet
+    Address, // token_id
 ) {
     let env = Env::default();
     env.mock_all_auths();
@@ -29,14 +29,21 @@ fn setup_env() -> (
     // Mint tokens to seller: 10,000 MXNe (7 decimals = 100_000_000_000 stroops)
     token::StellarAssetClient::new(&env, &token_id).mint(&seller, &100_000_000_000);
 
-    // Register the escrow contract
-    let contract_id = env.register_contract(None, EscrowFactory);
+    // Register and initialize atomically through the constructor.
+    let contract_id = env.register(
+        EscrowFactory,
+        EscrowFactoryArgs::__constructor(&admin, &token_id, &platform_wallet),
+    );
 
-    // Initialize
-    let escrow = EscrowFactoryClient::new(&env, &contract_id);
-    escrow.initialize(&admin, &token_id, &platform_wallet);
-
-    (env, contract_id, admin, seller, buyer, platform_wallet, token_id)
+    (
+        env,
+        contract_id,
+        admin,
+        seller,
+        buyer,
+        platform_wallet,
+        token_id,
+    )
 }
 
 fn make_secret(env: &Env) -> (Bytes, BytesN<32>) {
@@ -134,14 +141,121 @@ fn test_refund_after_timeout() {
 }
 
 #[test]
+fn test_decline_returns_total_to_seller_before_timeout() {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+
+    let (_, secret_hash) = make_secret(&env);
+    let amount: i128 = 1_500_000_000;
+    let platform_fee: i128 = 12_000_000;
+    let seller_balance_before = token_client.balance(&seller);
+
+    let trade_id = escrow.lock(
+        &seller,
+        &buyer,
+        &amount,
+        &platform_fee,
+        &secret_hash,
+        &120u32,
+    );
+
+    escrow.decline(&trade_id);
+    assert_eq!(env.auths()[0].0, buyer);
+
+    assert_eq!(token_client.balance(&seller), seller_balance_before);
+    assert_eq!(token_client.balance(&contract_id), 0);
+    assert_eq!(escrow.get_trade(&trade_id).status, TradeStatus::Refunded);
+}
+
+#[test]
+fn test_decline_after_timeout_still_requires_buyer_and_succeeds() {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+
+    let (_, secret_hash) = make_secret(&env);
+    let seller_balance_before = token_client.balance(&seller);
+    let trade_id = escrow.lock(
+        &seller,
+        &buyer,
+        &1_000_000_000i128,
+        &10_000_000i128,
+        &secret_hash,
+        &1u32,
+    );
+
+    let current = env.ledger().get();
+    env.ledger().set(LedgerInfo {
+        timestamp: current.timestamp + 120,
+        sequence_number: current.sequence_number + 20,
+        ..current
+    });
+
+    escrow.decline(&trade_id);
+
+    assert_eq!(token_client.balance(&seller), seller_balance_before);
+    assert_eq!(escrow.get_trade(&trade_id).status, TradeStatus::Refunded);
+}
+
+#[test]
+fn test_decline_is_terminal_against_release_and_refund() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+
+    let (secret, secret_hash) = make_secret(&env);
+    let trade_id = escrow.lock(
+        &seller,
+        &buyer,
+        &1_000_000_000i128,
+        &0i128,
+        &secret_hash,
+        &0u32,
+    );
+
+    escrow.decline(&trade_id);
+
+    assert_eq!(
+        escrow.try_release(&trade_id, &secret),
+        Err(Ok(EscrowError::TradeNotLocked)),
+    );
+    assert_eq!(
+        escrow.try_refund(&trade_id),
+        Err(Ok(EscrowError::TradeNotLocked)),
+    );
+    assert_eq!(
+        escrow.try_decline(&trade_id),
+        Err(Ok(EscrowError::TradeNotLocked)),
+    );
+}
+
+#[test]
+fn test_lock_rejects_amount_overflow() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let (_, secret_hash) = make_secret(&env);
+
+    assert_eq!(
+        escrow.try_lock(&seller, &buyer, &i128::MAX, &1i128, &secret_hash, &30u32,),
+        Err(Ok(EscrowError::AmountOverflow)),
+    );
+}
+
+#[test]
 #[should_panic(expected = "Error(Contract, #4)")] // InvalidSecret
 fn test_release_wrong_secret() {
     let (env, contract_id, _, seller, buyer, _, _) = setup_env();
     let escrow = EscrowFactoryClient::new(&env, &contract_id);
 
     let (_, secret_hash) = make_secret(&env);
-    let trade_id =
-        escrow.lock(&seller, &buyer, &1_000_000_000i128, &0i128, &secret_hash, &30u32);
+    let trade_id = escrow.lock(
+        &seller,
+        &buyer,
+        &1_000_000_000i128,
+        &0i128,
+        &secret_hash,
+        &30u32,
+    );
 
     let wrong_secret = Bytes::from_slice(&env, b"wrong_secret_not_matching_hash!!");
     escrow.release(&trade_id, &wrong_secret);
@@ -154,21 +268,17 @@ fn test_refund_before_timeout() {
     let escrow = EscrowFactoryClient::new(&env, &contract_id);
 
     let (_, secret_hash) = make_secret(&env);
-    let trade_id =
-        escrow.lock(&seller, &buyer, &1_000_000_000i128, &0i128, &secret_hash, &30u32);
+    let trade_id = escrow.lock(
+        &seller,
+        &buyer,
+        &1_000_000_000i128,
+        &0i128,
+        &secret_hash,
+        &30u32,
+    );
 
     // Try refund before timeout — should panic
     escrow.refund(&trade_id);
-}
-
-#[test]
-fn test_double_initialize_fails() {
-    let (env, contract_id, admin, _, _, platform_wallet, token_id) = setup_env();
-    let escrow = EscrowFactoryClient::new(&env, &contract_id);
-
-    // Second initialize should return an error
-    let result = escrow.try_initialize(&admin, &token_id, &platform_wallet);
-    assert!(result.is_err());
 }
 
 #[test]

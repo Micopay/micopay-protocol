@@ -19,3 +19,11 @@ export function escrowContractForTrade(trade: { escrow_contract_id?: string | nu
   }
   return contractId;
 }
+
+/** Old escrow instances remain refundable but do not expose decline(). */
+export function escrowContractSupportsDecline(
+  trade: { escrow_contract_id?: string | null; asset_code?: string | null },
+): boolean {
+  if (config.mockStellar) return true;
+  return config.escrowDeclineContractIds.includes(escrowContractForTrade(trade));
+}

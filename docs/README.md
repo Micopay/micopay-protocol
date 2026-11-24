@@ -1,32 +1,43 @@
-# MicoPay Team Docs
+# MicoPay documentation
 
-This folder contains the working documents for the next phase of MicoPay.
+This directory separates current product documentation from point-in-time
+audits and historical material. A dated plan or audit is evidence of what was
+known at that moment; it is not automatically the current backlog.
 
-## Current Wave focus
+## Start here
 
-The team's priority for Drips Wave 4 is **Core Retail Flow** — making one complete cash-in / cash-out flow trustworthy end to end, not broadening into new integrations. Every other milestone exists to reinforce that flow.
+1. [Project README](../README.md) — current scope, limitations, and local setup.
+2. [Contributing](../CONTRIBUTING.md) — contribution and verification rules.
+3. [Product scope](./product/PRODUCT_SCOPE.md) — boundaries of the mobile app.
+4. [Current plans](./plans/README.md) — plans still treated as active.
+5. [Current GitHub issues](https://github.com/Micopay/micopay-protocol/issues) —
+   assignment, acceptance criteria, and implementation status.
 
-See [open milestones](https://github.com/ericmt-98/micopay-protocol/milestones) for the live backlog.
+## Directory map
 
-## Reading order
+| Directory | Purpose | Authority |
+| --- | --- | --- |
+| [`product/`](./product/) | Product scope, roadmap, and UX principles | Current reference; verify feature status in code |
+| [`architecture/`](./architecture/) | Implemented mobile-app architecture | Current reference for the named subsystem |
+| [`guides/`](./guides/) | Maintainer, release, and contract guides | Operational guidance |
+| [`operations/`](./operations/) | AWS, Docker, recovery, and runtime notes | Verify dates and deployed configuration before acting |
+| [`plans/current/`](./plans/current/) | Plans explicitly still active | Planning reference, not proof of completion |
+| [`audits/`](./audits/) | Point-in-time technical reviews | Findings must be rechecked against current code |
+| [`security-reports/`](./security-reports/) | Security findings and incident evidence | Historical evidence; status may have changed |
+| [`presentations/`](./presentations/) | Shareable explanatory material | Communication artifacts |
+| [`archive/`](./archive/) | Completed campaigns, superseded plans, and old issues | Historical only |
 
-If the team needs one place to start, read these in order:
+## Source-of-truth order
 
-1. `PRODUCT_SCOPE.md`
-2. `RETAIL_ROADMAP.md`
-3. `UX_MANIFESTO.md`
-4. `DRIPS_TEAM_GUIDE.md`
-5. `STORE_COMPLIANCE.md`
+When documents disagree, use this order:
 
-Document purpose:
+1. Deployed configuration and current code.
+2. Current GitHub issue or pull request.
+3. The current product, architecture, guide, or operations document.
+4. A dated audit or active plan.
+5. Anything under `archive/`.
 
-- `PRODUCT_SCOPE.md`: defines what MicoPay is building now, what is out of scope, and what success looks like.
-- `RETAIL_ROADMAP.md`: turns the product direction into a phased execution plan.
-- `UX_MANIFESTO.md`: gives product, design, and engineering a shared UX and psychology framework.
-- `DRIPS_TEAM_GUIDE.md`: explains how the team should prepare the repo, create issues, review PRs, and operate during a Drips Wave.
-- `STORE_COMPLIANCE.md`: tracks Apple and Google store requirements for crypto-adjacent financial apps.
-
-Why these docs exist:
-
-- Vision documents explain why MicoPay matters.
-- These docs explain what to build next, how to work together, and how to win in Drips without losing focus.
+Stellar Drips Wave 10 is complete. ZK, AI-agent, XRPL, x402, and Bazaar material
+is maintained in [MicoPay Bridge](https://github.com/Micopay/micopaybridge), not
+in this mobile-app repository. Git history preserves the former copies if an old
+decision needs to be traced.

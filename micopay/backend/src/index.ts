@@ -19,7 +19,10 @@ import { rampRoutes } from './routes/ramp.js';
 import { signRequestsRoutes } from './routes/sign-requests.js';
 import { paymentRoutes } from './routes/payments.js';
 import { clientErrorRoutes } from './routes/client-errors.js';
-import { AppError } from './utils/errors.js';
+import { jwksRoutes } from './routes/jwks.js';
+import { bankWithdrawRoutes } from './routes/bank-withdraw.js';
+import { bankWithdrawWebhookRoutes } from './routes/bank-withdraw-webhooks.js';
+import { AppError, KycTierInsufficientError } from './utils/errors.js';
 import { Keypair } from '@stellar/stellar-sdk';
 import fastifyStatic from '@fastify/static';
 import { dirname, join } from 'node:path';
@@ -28,7 +31,10 @@ import { registerRequestId, toSupportCode } from './middleware/requestId.middlew
 import { createProductionListener } from './services/event-listener.service.js';
 import type { EscrowEventListener } from './services/event-listener.service.js';
 import { sweepPendingRefunds } from './services/trade.service.js';
+import { resolveSubmittedLocks } from './services/lockAttempt.service.js';
+import { reconcileEscrowTrades } from './services/escrowReconciliation.service.js';
 import { startComplianceJob, stopComplianceJob } from './services/compliance.service.js';
+import { assertEscrowContractsOnNetwork } from './services/escrowNetworkCheck.service.js';
 
 // Resolve the absolute path to the public/ directory next to src/
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -157,11 +163,16 @@ app.setErrorHandler((error, request, reply) => {
       request.log.info({ err: error }, `[${error.code}] ${error.devMessage}`);
     }
 
+    const details = error instanceof KycTierInsufficientError
+      ? { required_level: error.requiredLevel, current_level: error.currentLevel }
+      : {};
+
     reply.status(error.httpStatus).send({
       code: error.code,
       message: error.userMessage,
       request_id: requestId,
       support_code: supportCode,
+      ...details,
     });
     return;
   }
@@ -190,8 +201,16 @@ app.setErrorHandler((error, request, reply) => {
 
 // --- Routes ---
 
-// Holds the singleton event listener (null when disabled or mock mode).
-let eventListener: EscrowEventListener | null = null;
+// One cursor/listener per configured escrow instance, including the legacy one.
+let eventListeners: EscrowEventListener[] = [];
+
+function eventListenerState(): 'disabled' | 'running' | 'reconnecting' | 'stopped' {
+  if (eventListeners.length === 0) return 'disabled';
+  const states = eventListeners.map((listener) => listener.currentState());
+  if (states.every((state) => state === 'running')) return 'running';
+  if (states.some((state) => state === 'reconnecting')) return 'reconnecting';
+  return 'stopped';
+}
 
 app.get('/health', async (_request, reply) => {
   // B-7: real readiness — actually round-trip to PostgreSQL, don't just
@@ -206,8 +225,10 @@ app.get('/health', async (_request, reply) => {
     timestamp: new Date().toISOString(),
     mockStellar: config.mockStellar,
     dbConnected,
-    eventListenerHealthy: eventListener?.isHealthy() ?? false,
-    eventListenerState: eventListener?.currentState() ?? 'disabled',
+    eventListenerHealthy: eventListeners.length > 0 && eventListeners.every((listener) => listener.isHealthy()),
+    eventListenerState: eventListenerState(),
+    eventListenerContracts: eventListeners.map((listener) => listener.contractId),
+    eventListenerLagLedgers: eventListeners.length > 0 ? Math.max(...eventListeners.map((listener) => listener.lagLedgers())) : null,
     configCheck: {
       hasPlatformKey: !!config.platformSecretKey,
       hasContractId: !!config.escrowContractId,
@@ -256,6 +277,9 @@ app.register(paymentRoutes, { prefix: '' });
 // que hasta ahora todo reporte de crash caía en un 404
 // (docs/AUDIT_MOBILE_MAINNET.md §6, "Ruta backend definida pero no registrada").
 app.register(clientErrorRoutes, { prefix: '' });
+app.register(jwksRoutes, { prefix: '' });
+app.register(bankWithdrawRoutes, { prefix: '' });
+app.register(bankWithdrawWebhookRoutes, { prefix: '' });
 
 // --- Start server ---
 
@@ -525,7 +549,12 @@ async function seedDemoMerchants(): Promise<void> {
 }
 
 async function startEventListener(): Promise<void> {
-  if (!config.eventListenerEnabled || config.mockStellar || !config.escrowContractId) {
+  const contractIds = [...new Set([
+    ...Object.values(config.escrowContracts),
+    config.escrowLegacyContractId,
+  ].filter(Boolean))];
+
+  if (!config.eventListenerEnabled || config.mockStellar || contractIds.length === 0) {
     app.log.info(
       { category: 'event-listener', enabled: config.eventListenerEnabled, mock: config.mockStellar },
       '[event-listener] Skipped (disabled, mock mode, or no contract ID configured)',
@@ -534,23 +563,44 @@ async function startEventListener(): Promise<void> {
   }
 
   try {
-    eventListener = createProductionListener(
-      config.escrowContractId,
+    eventListeners = contractIds.map((contractId) => createProductionListener(
+      contractId,
       config.stellarRpcUrl,
       {
         pollIntervalMs: config.eventListenerPollMs,
         healthStaleMs: config.eventListenerHealthStaleMs,
       },
-    );
-    await eventListener.start();
+    ));
+    await Promise.all(eventListeners.map((listener) => listener.start()));
     app.log.info(
-      { contract_id: config.escrowContractId, poll_ms: config.eventListenerPollMs, category: 'event-listener' },
-      '[event-listener] Soroban event listener active',
+      { contract_ids: contractIds, poll_ms: config.eventListenerPollMs, category: 'event-listener' },
+      '[event-listener] Soroban event listeners active',
     );
   } catch (err) {
     // Non-fatal: polling fallback remains active.
     app.log.error({ err, category: 'event-listener' }, '[event-listener] Failed to start — polling fallback is active');
   }
+}
+
+let reconciliationInterval: NodeJS.Timeout | null = null;
+
+/** WP5: compara las filas con el contrato. Solo lee la cadena. */
+function startReconciliation(): void {
+  if (config.mockStellar || !config.reconciliationEnabled) {
+    app.log.info({ category: 'escrow-reconciliation' }, '[reconciliation] Disabled');
+    return;
+  }
+  reconciliationInterval = setInterval(async () => {
+    try {
+      const counts = await reconcileEscrowTrades();
+      if (counts.corrected > 0 || counts.review > 0 || counts.unreadable > 0) {
+        app.log.info({ ...counts, category: 'escrow-reconciliation' }, '[reconciliation] Cycle complete');
+      }
+    } catch (err) {
+      app.log.error({ err, category: 'escrow-reconciliation' }, '[reconciliation] Cycle failed');
+    }
+  }, config.reconciliationIntervalMs);
+  reconciliationInterval.unref?.();
 }
 
 // Holds the refund-sweep interval handle (null when disabled, e.g. mock mode).
@@ -571,6 +621,16 @@ function startRefundSweep(): void {
   }
 
   refundSweepInterval = setInterval(async () => {
+    // WP2: primero los locks enviados sin confirmar. Uno que entro despues de
+    // cancelarse queda con `lock_tx_hash` y el sweep de abajo lo reembolsa.
+    try {
+      const { locked, cleared, pending } = await resolveSubmittedLocks();
+      if (locked > 0 || cleared > 0 || pending > 0) {
+        app.log.info({ locked, cleared, pending, category: 'lock-attempt' }, '[lock-attempt] Cycle complete');
+      }
+    } catch (err) {
+      app.log.error({ err, category: 'lock-attempt' }, '[lock-attempt] Cycle failed');
+    }
     try {
       const { swept, failed } = await sweepPendingRefunds({ log: app.log });
       if (swept > 0 || failed > 0) {
@@ -591,6 +651,8 @@ async function start() {
   try {
     // Validate config at startup. Will throw and crash if critical config is missing.
     validateConfig();
+    // WP1a: un contrato de otra red detiene el arranque antes de servir.
+    await assertEscrowContractsOnNetwork(app.log);
 
     // Ensure the schema exists before seeding/serving. Idempotent; only runs
     // against a real PostgreSQL connection (the in-memory store needs no migrations).
@@ -627,6 +689,7 @@ async function start() {
     
     await startEventListener();
     startRefundSweep();
+    startReconciliation();
     startComplianceJob();
   } catch (err) {
     app.log.error(err);
@@ -637,8 +700,9 @@ async function start() {
 // Graceful shutdown: stop the listener loop before the process exits.
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {
-    eventListener?.stop();
+    for (const listener of eventListeners) listener.stop();
     if (refundSweepInterval) clearInterval(refundSweepInterval);
+    if (reconciliationInterval) clearInterval(reconciliationInterval);
     stopComplianceJob();
     process.exit(0);
   });

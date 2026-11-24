@@ -18,7 +18,8 @@ import Fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import db from '../db/schema.js';
 import { kycRoutes } from '../routes/kyc.js';
-import { verifyDiditWebhookSignature } from '../lib/webhook-auth.js';
+import { verifyDiditWebhookSignature, verifyDiditWebhookSignatures } from '../lib/webhook-auth.js';
+import { extractDiditDecisionReason, mapDiditStatus } from '../services/didit.service.js';
 import { AppError } from '../utils/errors.js';
 
 const JWT_SECRET = 'test_jwt_secret_kyc_didit';
@@ -27,15 +28,35 @@ const DIDIT_SESSION_URL = 'https://verify.didit.me/session/mock-session-abc';
 
 process.env.DIDIT_API_KEY = 'test_didit_api_key';
 process.env.DIDIT_WORKFLOW_ID = 'test_workflow';
+process.env.DIDIT_WORKFLOW_ID_L2 = 'test_workflow_l2';
 process.env.DIDIT_WEBHOOK_SECRET = DIDIT_WEBHOOK_SECRET;
 
+let lastDiditRequest: { url: string; body: any } | null = null;
+
 function mockDiditSessionCreate(sessionId: string): void {
-  globalThis.fetch = (async () =>
-    new Response(JSON.stringify({ session_id: sessionId, url: DIDIT_SESSION_URL }), { status: 200 })) as typeof fetch;
+  globalThis.fetch = (async (url: any, init?: RequestInit) => {
+    lastDiditRequest = { url: String(url), body: init?.body ? JSON.parse(String(init.body)) : null };
+    return new Response(JSON.stringify({ session_id: sessionId, url: DIDIT_SESSION_URL }), { status: 201 });
+  }) as typeof fetch;
 }
 
 function signDidit(rawBody: string, secret: string, timestampSec: number) {
   return createHmac('sha256', secret).update(rawBody).digest('hex');
+}
+
+function sortJsonKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJsonKeys);
+  if (value !== null && typeof value === 'object') {
+    return Object.keys(value as Record<string, unknown>).sort().reduce<Record<string, unknown>>((sorted, key) => {
+      sorted[key] = sortJsonKeys((value as Record<string, unknown>)[key]);
+      return sorted;
+    }, {});
+  }
+  return value;
+}
+
+function signDiditV2(body: unknown, secret: string) {
+  return createHmac('sha256', secret).update(JSON.stringify(sortJsonKeys(body)), 'utf8').digest('hex');
 }
 
 async function seedUser(): Promise<string> {
@@ -125,21 +146,65 @@ function testSignatureVerification_missingHeaders() {
   console.log('verifyDiditWebhookSignature: missing headers rejected OK');
 }
 
+function testSignatureVerification_v2UnicodeAndRotation() {
+  const body = { status: 'Approved', decision: { full_name: 'José 🇲🇽' }, session_id: 's-v2' };
+  const rawBody = JSON.stringify({ session_id: 's-v2', decision: body.decision, status: 'Approved' }, null, 2);
+  const now = Date.now();
+  const timestamp = String(Math.floor(now / 1000));
+  const signature = signDiditV2(body, DIDIT_WEBHOOK_SECRET);
+
+  const current = verifyDiditWebhookSignatures(
+    rawBody,
+    body,
+    { signatureV2: signature, signature: 'invalid-raw-signature', timestamp },
+    DIDIT_WEBHOOK_SECRET,
+    { now },
+  );
+  strictEqual(current.valid, true, 'V2 must verify canonical sorted JSON with unescaped Unicode');
+  strictEqual(current.variant, 'v2', 'V2 must be preferred over the raw fallback');
+
+  const rotating = verifyDiditWebhookSignatures(
+    rawBody,
+    body,
+    { signatureV2Previous: signature, timestamp },
+    DIDIT_WEBHOOK_SECRET,
+    { now },
+  );
+  strictEqual(rotating.valid, true, 'the previous V2 header must work during secret rotation');
+
+  const tampered = verifyDiditWebhookSignatures(
+    rawBody,
+    { ...body, status: 'Declined' },
+    { signatureV2: signature, timestamp },
+    DIDIT_WEBHOOK_SECRET,
+    { now },
+  );
+  strictEqual(tampered.valid, false, 'V2 must reject a changed parsed payload');
+  console.log('verifyDiditWebhookSignatures: V2 Unicode + rotation headers OK');
+}
+
 // ── 2. Route-level: start (Etherfuse untouched, Didit new) ──────────────────
 
 async function testStart_defaultsToEtherfuse_untouched() {
   // No provider query param → must still hit the Etherfuse branch, not Didit.
-  // ETHERFUSE_API_KEY is intentionally not set in this test process, so the
-  // distinguishing signal is the *specific* 503 code Etherfuse's branch throws.
+  // Explicitly remove the key so a developer's local .env cannot change the
+  // distinguishing signal from the Etherfuse branch.
+  const savedKey = process.env.ETHERFUSE_API_KEY;
+  delete process.env.ETHERFUSE_API_KEY;
   const app = await createApp();
-  const userId = await seedUser();
-  const token = makeToken(app, userId);
+  try {
+    const userId = await seedUser();
+    const token = makeToken(app, userId);
 
-  const res = await app.inject({ method: 'POST', url: '/defi/kyc/start', headers: { authorization: `Bearer ${token}` } });
-  strictEqual(res.statusCode, 503);
-  strictEqual(JSON.parse(res.body).code, 'ETHERFUSE_NOT_CONFIGURED', 'no provider param must default to the untouched Etherfuse path');
-  console.log('POST /defi/kyc/start: defaults to Etherfuse (unaffected by this change) OK');
-  await app.close();
+    const res = await app.inject({ method: 'POST', url: '/defi/kyc/start', headers: { authorization: `Bearer ${token}` } });
+    strictEqual(res.statusCode, 503);
+    strictEqual(JSON.parse(res.body).code, 'ETHERFUSE_NOT_CONFIGURED', 'no provider param must default to the untouched Etherfuse path');
+    console.log('POST /defi/kyc/start: defaults to Etherfuse (unaffected by this change) OK');
+  } finally {
+    await app.close();
+    if (savedKey === undefined) delete process.env.ETHERFUSE_API_KEY;
+    else process.env.ETHERFUSE_API_KEY = savedKey;
+  }
 }
 
 async function testStart_didit_notConfigured() {
@@ -154,7 +219,8 @@ async function testStart_didit_notConfigured() {
     strictEqual(res.statusCode, 503);
     strictEqual(JSON.parse(res.body).code, 'DIDIT_NOT_CONFIGURED');
   } finally {
-    process.env.DIDIT_API_KEY = savedKey;
+      if (savedKey === undefined) delete process.env.DIDIT_API_KEY;
+      else process.env.DIDIT_API_KEY = savedKey;
   }
   console.log('POST /defi/kyc/start?provider=didit: DIDIT_NOT_CONFIGURED graceful failure OK');
   await app.close();
@@ -180,8 +246,119 @@ async function testStart_didit_returnsOnboardingUrlAndCreatesSession() {
   strictEqual(session!.user_id, userId);
   strictEqual(session!.requested_level, 1, 'defaults to level 1 when ?level= is omitted');
   strictEqual(session!.status, 'pending');
+  ok(lastDiditRequest!.url.endsWith('/v3/session/'), 'session must be created on the v3 endpoint');
+  strictEqual(lastDiditRequest!.body.workflow_id, 'test_workflow');
+  strictEqual(lastDiditRequest!.body.vendor_data, userId, 'vendor_data is the stable user id');
   console.log('POST /defi/kyc/start?provider=didit: onboardingUrl + pending session row OK');
   await app.close();
+}
+
+async function testStart_didit_level2UsesItsOwnWorkflow() {
+  const app = await createApp();
+  const userId = await seedUser();
+  const token = makeToken(app, userId);
+  mockDiditSessionCreate('sess-l2-workflow');
+
+  const res = await app.inject({ method: 'POST', url: '/defi/kyc/start?provider=didit&level=2', headers: { authorization: `Bearer ${token}` } });
+  strictEqual(res.statusCode, 200);
+  strictEqual(lastDiditRequest!.body.workflow_id, 'test_workflow_l2', 'level 2 must use the level-2 workflow');
+
+  const saved = process.env.DIDIT_WORKFLOW_ID_L2;
+  delete process.env.DIDIT_WORKFLOW_ID_L2;
+  lastDiditRequest = null;
+  try {
+    const res2 = await app.inject({ method: 'POST', url: '/defi/kyc/start?provider=didit&level=2', headers: { authorization: `Bearer ${token}` } });
+    strictEqual(res2.statusCode, 503);
+    strictEqual(JSON.parse(res2.body).code, 'DIDIT_NOT_CONFIGURED');
+    strictEqual(lastDiditRequest, null, 'without a level-2 workflow Didit must not be called');
+  } finally {
+    process.env.DIDIT_WORKFLOW_ID_L2 = saved;
+  }
+  console.log('POST /defi/kyc/start?provider=didit&level=2: own workflow, 503 without it OK');
+  await app.close();
+}
+
+async function testStart_didit_reusedSessionNotInsertedTwice() {
+  const app = await createApp();
+  const userId = await seedUser();
+  const token = makeToken(app, userId);
+  mockDiditSessionCreate('sess-reused-1');
+
+  const first = await app.inject({ method: 'POST', url: '/defi/kyc/start?provider=didit', headers: { authorization: `Bearer ${token}` } });
+  const second = await app.inject({ method: 'POST', url: '/defi/kyc/start?provider=didit', headers: { authorization: `Bearer ${token}` } });
+  strictEqual(first.statusCode, 200);
+  strictEqual(second.statusCode, 200, 'Didit returning the same unfinished session must not fail');
+
+  const { rows } = await db.query(
+    `SELECT session_id FROM kyc_didit_sessions WHERE session_id = $1`,
+    ['sess-reused-1'],
+  );
+  strictEqual(rows.length, 1);
+  console.log('POST /defi/kyc/start?provider=didit: reused Didit session stored once OK');
+  await app.close();
+}
+
+async function testStatus_didit_doesNotUseLevel1ForLevel2() {
+  const app = await createApp();
+  const userId = await seedUser();
+  const token = makeToken(app, userId);
+
+  await db.execute(
+    `INSERT INTO kyc_didit_sessions (session_id, user_id, requested_level, status)
+     VALUES ($1, $2, 1, 'approved')`,
+    ['sess-approved-l1', userId],
+  );
+  await db.execute(
+    `UPDATE users
+     SET kyc_level = 1, kyc_provider = 'didit', kyc_level_verified_at = NOW()
+     WHERE id = $1`,
+    [userId],
+  );
+
+  const level1 = await app.inject({
+    method: 'GET',
+    url: '/defi/kyc/status?provider=didit&level=1',
+    headers: { authorization: `Bearer ${token}` },
+  });
+  strictEqual(level1.statusCode, 200);
+  strictEqual(JSON.parse(level1.body).status, 'approved');
+
+  const level2 = await app.inject({
+    method: 'GET',
+    url: '/defi/kyc/status?provider=didit&level=2',
+    headers: { authorization: `Bearer ${token}` },
+  });
+  strictEqual(level2.statusCode, 200);
+  strictEqual(JSON.parse(level2.body).status, 'not_started');
+  strictEqual(JSON.parse(level2.body).level, 2);
+
+  console.log('GET /defi/kyc/status: level 1 approval cannot unlock level 2 OK');
+  await app.close();
+}
+
+function testMapDiditStatus_exactV3Vocabulary() {
+  strictEqual(mapDiditStatus('Approved'), 'approved');
+  for (const s of ['Declined', 'Abandoned', 'Expired', 'Kyc Expired']) {
+    strictEqual(mapDiditStatus(s), 'rejected', `${s} ends the session without approval`);
+  }
+  for (const s of ['Not Started', 'In Progress', 'In Review', 'Resubmitted', 'approved', 'KYC Expired', undefined]) {
+    strictEqual(mapDiditStatus(s as any), 'pending', `${s} must not decide anything`);
+  }
+  console.log('mapDiditStatus: exact v3 vocabulary OK');
+}
+
+function testExtractDiditDecisionReason() {
+  strictEqual(extractDiditDecisionReason(undefined), null);
+  strictEqual(extractDiditDecisionReason({ status: 'Approved', id_verifications: [{ warnings: [] }] }), null);
+  strictEqual(
+    extractDiditDecisionReason({
+      session_id: 's',
+      id_verifications: [{ warnings: [{ risk: 'DOCUMENT_EXPIRED', short_description: 'x' }] }],
+      liveness_checks: [{ warnings: [{ risk: 'LOW_LIVENESS_SCORE' }, { risk: 'DOCUMENT_EXPIRED' }] }],
+    }),
+    'DOCUMENT_EXPIRED,LOW_LIVENESS_SCORE',
+  );
+  console.log('extractDiditDecisionReason: risk codes only OK');
 }
 
 // ── 3. Full path: start → webhook → users.kyc_level update ──────────────────
@@ -198,12 +375,12 @@ async function testFullPath_startWebhookApproves() {
   const webhookBodyObj = {
     session_id: 'sess-full-path-1',
     status: 'Approved',
-    vendor_data: `${userId}:2`,
-    decision: { reason: null },
+    vendor_data: userId,
+    decision: { status: 'Approved', id_verifications: [{ status: 'Approved', warnings: [] }] },
   };
   const rawBody = JSON.stringify(webhookBodyObj);
   const timestampSec = Math.floor(Date.now() / 1000);
-  const signature = signDidit(rawBody, DIDIT_WEBHOOK_SECRET, timestampSec);
+  const signature = signDiditV2(webhookBodyObj, DIDIT_WEBHOOK_SECRET);
 
   const webhookRes = await app.inject({
     method: 'POST',
@@ -211,7 +388,7 @@ async function testFullPath_startWebhookApproves() {
     payload: rawBody,
     headers: {
       'content-type': 'application/json',
-      'x-signature': signature,
+      'x-signature-v2': signature,
       'x-timestamp': String(timestampSec),
     },
   });
@@ -271,7 +448,12 @@ async function testWebhook_declinedDoesNotRaiseKycLevel() {
   const startToken = makeToken(app, userId);
   await app.inject({ method: 'POST', url: '/defi/kyc/start?provider=didit', headers: { authorization: `Bearer ${startToken}` } });
 
-  const rawBody = JSON.stringify({ session_id: 'sess-declined-1', status: 'Declined', vendor_data: `${userId}:1`, decision: { reason: 'liveness_failed' } });
+  const rawBody = JSON.stringify({
+    session_id: 'sess-declined-1',
+    status: 'Declined',
+    vendor_data: userId,
+    decision: { status: 'Declined', liveness_checks: [{ status: 'Declined', warnings: [{ risk: 'LIVENESS_FAILED' }] }] },
+  });
   const timestampSec = Math.floor(Date.now() / 1000);
   const signature = signDidit(rawBody, DIDIT_WEBHOOK_SECRET, timestampSec);
 
@@ -291,7 +473,7 @@ async function testWebhook_declinedDoesNotRaiseKycLevel() {
     ['sess-declined-1'],
   );
   strictEqual(session!.status, 'rejected');
-  strictEqual(session!.decision_reason, 'liveness_failed');
+  strictEqual(session!.decision_reason, 'LIVENESS_FAILED');
   console.log('POST /defi/kyc/webhook/didit: declined verification does not raise kyc_level OK');
   await app.close();
 }
@@ -303,9 +485,15 @@ async function run() {
   testSignatureVerification_tamperedBody();
   testSignatureVerification_replayed();
   testSignatureVerification_missingHeaders();
+  testSignatureVerification_v2UnicodeAndRotation();
   await testStart_defaultsToEtherfuse_untouched();
   await testStart_didit_notConfigured();
   await testStart_didit_returnsOnboardingUrlAndCreatesSession();
+  await testStart_didit_level2UsesItsOwnWorkflow();
+  await testStart_didit_reusedSessionNotInsertedTwice();
+  await testStatus_didit_doesNotUseLevel1ForLevel2();
+  testMapDiditStatus_exactV3Vocabulary();
+  testExtractDiditDecisionReason();
   await testFullPath_startWebhookApproves();
   await testWebhook_rejectsBadSignature();
   await testWebhook_declinedDoesNotRaiseKycLevel();

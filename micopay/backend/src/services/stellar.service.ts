@@ -50,12 +50,20 @@ function getHorizonUrl(): string {
  */
 async function assertInvocationMatches(
   tx: import('@stellar/stellar-sdk').Transaction | import('@stellar/stellar-sdk').FeeBumpTransaction,
-  expected: { contractId: string; functionName: string; args: unknown[] },
+  expected: { sourceAccount: string; contractId: string; functionName: string; args: unknown[] },
 ) {
   const { Address, scValToNative, FeeBumpTransaction } = await import('@stellar/stellar-sdk');
 
   if (tx instanceof FeeBumpTransaction) {
-    throw new BadRequestError('INVALID_TX_SHAPE', 'La transacción firmada no es válida.', 'Fee-bump transactions are not accepted for lock/release');
+    throw new BadRequestError('INVALID_TX_SHAPE', 'La transacción firmada no es válida.', 'Fee-bump transactions are not accepted for escrow actions');
+  }
+
+  if (tx.source !== expected.sourceAccount) {
+    throw new BadRequestError(
+      'TX_SOURCE_MISMATCH',
+      'La cuenta que firma no corresponde a este intercambio.',
+      `Expected source ${expected.sourceAccount}, got ${tx.source}`,
+    );
   }
 
   if (tx.operations.length !== 1 || tx.operations[0].type !== 'invokeHostFunction') {
@@ -79,12 +87,11 @@ async function assertInvocationMatches(
     throw new BadRequestError('TX_FUNCTION_MISMATCH', 'La transacción firmada no corresponde a esta operación.', `Expected function ${expected.functionName}, got ${functionName}`);
   }
 
-  // Only the leading args we pass in `expected` are checked. Callers must list
-  // every argument that decides who ends up with the funds — for lock() that
-  // includes timeout_minutes, which sets when refund() opens.
+  // Callers list every contract argument. Exact length prevents an altered XDR
+  // from being accepted just because its leading fields match the trade.
   const actualArgs = invocation.args().map((a) => scValToNative(a));
-  if (actualArgs.length < expected.args.length) {
-    throw new BadRequestError('TX_ARGS_MISMATCH', 'La transacción firmada no corresponde a este intercambio.', `Arg count mismatch: expected at least ${expected.args.length}, got ${actualArgs.length}`);
+  if (actualArgs.length !== expected.args.length) {
+    throw new BadRequestError('TX_ARGS_MISMATCH', 'La transacción firmada no corresponde a este intercambio.', `Arg count mismatch: expected ${expected.args.length}, got ${actualArgs.length}`);
   }
   for (let i = 0; i < expected.args.length; i++) {
     const a = actualArgs[i];
@@ -219,6 +226,11 @@ export async function submitLockTx(params: {
   amountStroops: bigint;
   platformFeeStroops: bigint;
   secretHash: string;
+  /**
+   * WP2 (N1): se llama con el hash del XDR ya validado, ANTES de enviarlo.
+   * Quien llama lo persiste; si lanza, no se envia nada.
+   */
+  onSubmitting?: (txHash: string) => Promise<void>;
 }): Promise<{ txHash: string }> {
   const { TransactionBuilder, Networks } = await import('@stellar/stellar-sdk');
   const networkPassphrase = getNetworkPassphrase(Networks);
@@ -226,6 +238,7 @@ export async function submitLockTx(params: {
   const tx = TransactionBuilder.fromXDR(params.signedXdr, networkPassphrase);
 
   await assertInvocationMatches(tx, {
+    sourceAccount: params.sellerAddress,
     contractId: params.contractId,
     functionName: 'lock',
     args: [
@@ -238,20 +251,62 @@ export async function submitLockTx(params: {
     ],
   });
 
+  await params.onSubmitting?.(tx.hash().toString('hex'));
+
   const sendResult = await submitSignedTx(config.stellarRpcUrl, tx);
   if (sendResult.status === 'ERROR') {
     params.request.log.error({ detail: sendResult.errorResult, category: 'stellar.tx' }, '[Stellar] Lock send failed');
     throw new BadRequestError('STELLAR_LOCK_SEND_FAILED', 'La transacción de bloqueo fue rechazada por la red.', `Send failed: ${JSON.stringify(sendResult.errorResult)}`);
   }
+  if (sendResult.status === 'TRY_AGAIN_LATER') {
+    // La red no la acepto en la cola: no se envio. Antes se seguia esperando
+    // la confirmacion de algo que nunca iba a llegar.
+    throw new UpstreamError(
+      'STELLAR_LOCK_NOT_ACCEPTED',
+      'La red está saturada y no recibió el bloqueo. Intenta de nuevo en un momento.',
+      `Lock ${sendResult.hash} returned TRY_AGAIN_LATER`,
+      503,
+    );
+  }
 
-  return pollForConfirmation(
-    params.request,
-    sendResult.hash,
-    'Lock',
-    'STELLAR_TRANSACTION_FAILED',
-    'STELLAR_TIMEOUT',
-    'La transacción de bloqueo falló en la blockchain.',
-    'La transacción de bloqueo está tardando más de lo esperado.',
+  return confirmLockByRpc(params.request, sendResult.hash);
+}
+
+/** Espera de la confirmacion del lock. Mutable solo para las pruebas. */
+export const lockConfirmation = { polls: 15, intervalMs: 2000 };
+
+/**
+ * Confirma el lock con `getTransaction` del RPC, el mismo nodo que lo recibio,
+ * en lugar de Horizon. Agotar la espera NO es un fallo: la transaccion puede
+ * entrar despues, y el intento queda guardado para resolverse (WP2).
+ */
+async function confirmLockByRpc(
+  request: { log: { info: (...args: any[]) => void; [key: string]: any } },
+  txHash: string,
+): Promise<{ txHash: string }> {
+  for (let i = 0; i < lockConfirmation.polls; i++) {
+    await new Promise((r) => setTimeout(r, lockConfirmation.intervalMs));
+    let status: string;
+    try {
+      status = (await rpcRead(config.stellarRpcUrl, (s) => s.getTransaction(txHash), { retry: false })).status;
+    } catch {
+      continue; // RPC caido o lento: seguir esperando
+    }
+    if (status === 'SUCCESS') {
+      request.log.info({ tx_hash: txHash, category: 'stellar.tx' }, '[Stellar] Lock confirmed');
+      return { txHash };
+    }
+    if (status === 'FAILED') {
+      throw new UpstreamError('STELLAR_TRANSACTION_FAILED', 'La transacción de bloqueo falló en la blockchain.', `Lock transaction failed on-chain: ${txHash}`);
+    }
+    // NOT_FOUND: aun no entra en un ledger
+  }
+
+  throw new UpstreamError(
+    'STELLAR_LOCK_PENDING',
+    'Tu bloqueo se envió y la red aún no lo confirma. No lo vuelvas a firmar: revisa en un momento.',
+    `Lock tx ${txHash} not confirmed within ${(lockConfirmation.polls * lockConfirmation.intervalMs) / 1000}s`,
+    504,
   );
 }
 
@@ -312,6 +367,7 @@ export async function submitReleaseTx(params: {
   /** Contrato del escrow de la operacion (`escrowContractForTrade`). */
   contractId: string;
   signedXdr: string;
+  buyerAddress: string;
   tradeIdBytes: Buffer;
   secretBytes: Buffer;
 }): Promise<{ txHash: string }> {
@@ -321,6 +377,7 @@ export async function submitReleaseTx(params: {
   const tx = TransactionBuilder.fromXDR(params.signedXdr, networkPassphrase);
 
   await assertInvocationMatches(tx, {
+    sourceAccount: params.buyerAddress,
     contractId: params.contractId,
     functionName: 'release',
     args: [params.tradeIdBytes, params.secretBytes],
@@ -340,6 +397,74 @@ export async function submitReleaseTx(params: {
     'STELLAR_RELEASE_TIMEOUT',
     'La transacción de liberación falló en la blockchain.',
     'La transacción de liberación está tardando más de lo esperado.',
+  );
+}
+
+/**
+ * Build and simulate the buyer-authorized decline() invocation.
+ * The buyer signs locally; the backend never receives their secret key.
+ */
+export async function prepareDeclineTx(params: {
+  request: FastifyRequest;
+  contractId: string;
+  buyerAddress: string;
+  tradeIdBytes: Buffer;
+}): Promise<{ xdr: string; networkPassphrase: string }> {
+  const { Contract, TransactionBuilder, Networks, nativeToScVal } = await import('@stellar/stellar-sdk');
+  const networkPassphrase = getNetworkPassphrase(Networks);
+  const account = await rpcRead(config.stellarRpcUrl, (s) => s.getAccount(params.buyerAddress));
+  const contract = new Contract(params.contractId);
+
+  const tx = new TransactionBuilder(account, { fee: '1000000', networkPassphrase })
+    .addOperation(
+      contract.call('decline', nativeToScVal(params.tradeIdBytes, { type: 'bytes' })),
+    )
+    .setTimeout(180)
+    .build();
+
+  try {
+    const prepared = await rpcRead(config.stellarRpcUrl, (s) => s.prepareTransaction(tx));
+    return { xdr: prepared.toXDR(), networkPassphrase };
+  } catch (err: any) {
+    if (err instanceof AppError) throw err;
+    params.request.log.error({ err: err.message, category: 'stellar.tx' }, '[Stellar] Decline simulation failed');
+    throw new Error(`Decline simulation failed: ${err.message}. Check if trade exists and is still locked.`);
+  }
+}
+
+/** Submit a buyer-signed decline() after checking the exact contract call. */
+export async function submitDeclineTx(params: {
+  request: FastifyRequest;
+  contractId: string;
+  signedXdr: string;
+  buyerAddress: string;
+  tradeIdBytes: Buffer;
+}): Promise<{ txHash: string }> {
+  const { TransactionBuilder, Networks } = await import('@stellar/stellar-sdk');
+  const networkPassphrase = getNetworkPassphrase(Networks);
+  const tx = TransactionBuilder.fromXDR(params.signedXdr, networkPassphrase);
+
+  await assertInvocationMatches(tx, {
+    sourceAccount: params.buyerAddress,
+    contractId: params.contractId,
+    functionName: 'decline',
+    args: [params.tradeIdBytes],
+  });
+
+  const sendResult = await submitSignedTx(config.stellarRpcUrl, tx);
+  if (sendResult.status === 'ERROR') {
+    params.request.log.error({ detail: sendResult.errorResult, category: 'stellar.tx' }, '[Stellar] Decline send failed');
+    throw new BadRequestError('STELLAR_DECLINE_SEND_FAILED', 'La devolución fue rechazada por la red.', `Decline send failed: ${JSON.stringify(sendResult.errorResult)}`);
+  }
+
+  return pollForConfirmation(
+    params.request,
+    sendResult.hash,
+    'Decline',
+    'STELLAR_DECLINE_FAILED',
+    'STELLAR_DECLINE_TIMEOUT',
+    'La devolución falló en la blockchain.',
+    'La devolución está tardando más de lo esperado.',
   );
 }
 
@@ -406,6 +531,87 @@ export async function callRefundOnChain(params: {
     'La transacción de reembolso falló en la blockchain.',
     'La transacción de reembolso está tardando más de lo esperado.',
   );
+}
+
+/** Estado de un escrow tal como lo guarda el contrato (`get_trade`). */
+export interface OnChainEscrowTrade {
+  seller: string;
+  buyer: string;
+  amount: bigint;
+  platformFee: bigint;
+  timeoutLedger: number;
+  status: 'Locked' | 'Released' | 'Refunded';
+}
+
+/** `EscrowError::TradeNotFound` del contrato. */
+const ESCROW_TRADE_NOT_FOUND = 3;
+
+/**
+ * Lee `get_trade` por simulacion: no firma, no envia y no gasta. Devuelve el
+ * escrow (o null si el contrato no lo tiene) y el ultimo ledger cerrado, que es
+ * contra lo que se mide el plazo.
+ *
+ * Cualquier otra falla (RPC caido, registro archivado, error del host) se
+ * lanza: quien llama no debe tratar "no pude leer" como "no existe".
+ */
+export async function readEscrowTrade(params: {
+  contractId: string;
+  tradeIdBytes: Buffer;
+}): Promise<{ trade: OnChainEscrowTrade | null; latestLedger: number }> {
+  const {
+    Contract, TransactionBuilder, Networks, Keypair, nativeToScVal, scValToNative, rpc,
+  } = await import('@stellar/stellar-sdk');
+
+  const networkPassphrase = getNetworkPassphrase(Networks);
+  const source = Keypair.fromSecret(config.platformSecretKey).publicKey();
+  const account = await rpcRead(config.stellarRpcUrl, (s) => s.getAccount(source));
+
+  const tx = new TransactionBuilder(account, { fee: '100', networkPassphrase })
+    .addOperation(
+      new Contract(params.contractId).call('get_trade', nativeToScVal(params.tradeIdBytes, { type: 'bytes' })),
+    )
+    .setTimeout(30)
+    .build();
+
+  const sim: import('@stellar/stellar-sdk').rpc.Api.SimulateTransactionResponse =
+    await rpcRead(config.stellarRpcUrl, (s) => s.simulateTransaction(tx));
+  const unverifiable = (dev: string) => new UpstreamError(
+    'ESCROW_UNVERIFIABLE',
+    'No pudimos confirmar el estado del escrow. Intenta de nuevo en un momento.',
+    dev,
+    503,
+  );
+
+  if (rpc.Api.isSimulationError(sim)) {
+    // El contrato no conoce ese trade_id. El numero solo es fiable aqui porque
+    // `get_trade` no llama a ningun otro contrato (N4 de la auditoria: los
+    // errores del token comparten numeracion con EscrowError).
+    if (sim.error.includes(`Error(Contract, #${ESCROW_TRADE_NOT_FOUND})`)) {
+      return { trade: null, latestLedger: sim.latestLedger };
+    }
+    throw unverifiable(`get_trade simulation failed: ${sim.error}`);
+  }
+  // Un registro archivado necesita restaurarse antes de leerse: no se sabe su
+  // estado. Se mira `restorePreamble` directo, sin depender de que la respuesta
+  // traiga todos los campos que espera el guard del SDK.
+  if (rpc.Api.isSimulationRestore(sim) || ('restorePreamble' in sim && sim.restorePreamble) || !sim.result) {
+    throw unverifiable('get_trade needs a restore or returned no result');
+  }
+
+  const raw = scValToNative(sim.result.retval) as Record<string, unknown>;
+  // Un enum de variantes unitarias llega como ["Locked"].
+  const status = Array.isArray(raw.status) ? String(raw.status[0]) : String(raw.status);
+  return {
+    trade: {
+      seller: String(raw.seller),
+      buyer: String(raw.buyer),
+      amount: BigInt(raw.amount as bigint),
+      platformFee: BigInt(raw.platform_fee as bigint),
+      timeoutLedger: Number(raw.timeout_ledger),
+      status: status as OnChainEscrowTrade['status'],
+    },
+    latestLedger: sim.latestLedger,
+  };
 }
 
 /**

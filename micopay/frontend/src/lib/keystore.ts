@@ -1,6 +1,8 @@
+import { Capacitor } from '@capacitor/core';
 import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
 import { readJSON, writeJSON, removeKey } from '../services/secureStorage';
 import { requireUserPresence, type PresenceReason } from './userPresence';
+import { StellarKeyVault, type NativeVaultStatus } from './nativeKeyVault';
 
 const KEYPAIR_KEY = 'stellar_keypair';
 
@@ -9,7 +11,57 @@ interface StoredKeypair {
     secretKey: string; // never leaves this module via HTTP
 }
 
+function usesNativeVault(): boolean {
+    return Capacitor.getPlatform() === 'android';
+}
+
+async function nativeStatus(): Promise<NativeVaultStatus> {
+    return StellarKeyVault.status();
+}
+
+let nativeMigrationInFlight: Promise<NativeVaultStatus> | null = null;
+
+/**
+ * One-time migration for APKs that stored the seed through secureStorage.
+ * The old record is removed only after native code confirms the same G address.
+ */
+async function performNativeMigration(): Promise<NativeVaultStatus> {
+    const status = await nativeStatus();
+    const legacy = await readJSON<StoredKeypair>(KEYPAIR_KEY);
+    if (!legacy?.secretKey) return status;
+
+    if (status.exists && status.publicKey === legacy.publicKey) {
+        await removeKey(KEYPAIR_KEY);
+        return status;
+    }
+
+    const migrated = await StellarKeyVault.importSeed({
+        secretKey: legacy.secretKey,
+        expectedPublicKey: legacy.publicKey,
+        replace: status.exists,
+        reason: 'migration',
+    });
+    if (migrated.publicKey !== legacy.publicKey) {
+        throw new Error('La migración de seguridad produjo una cuenta diferente. No se borró la cuenta anterior.');
+    }
+    await removeKey(KEYPAIR_KEY);
+    return { exists: true, publicKey: migrated.publicKey, securityLevel: migrated.securityLevel };
+}
+
+async function ensureNativeMigration(): Promise<NativeVaultStatus> {
+    if (!nativeMigrationInFlight) {
+        nativeMigrationInFlight = performNativeMigration().finally(() => {
+            nativeMigrationInFlight = null;
+        });
+    }
+    return nativeMigrationInFlight;
+}
+
 export async function generateAndStoreKeypair(): Promise<string> {
+    if (usesNativeVault()) {
+        const result = await StellarKeyVault.generate({ reason: 'migration' });
+        return result.publicKey;
+    }
     const kp = Keypair.random();
     await writeJSON(KEYPAIR_KEY, {
         publicKey: kp.publicKey(),
@@ -19,16 +71,30 @@ export async function generateAndStoreKeypair(): Promise<string> {
 }
 
 export async function getPublicKey(): Promise<string | null> {
+    if (usesNativeVault()) {
+        const status = await ensureNativeMigration();
+        return status.exists ? status.publicKey ?? null : null;
+    }
     const stored = await readJSON<StoredKeypair>(KEYPAIR_KEY);
     return stored?.publicKey ?? null;
 }
 
 export async function keypairExists(): Promise<boolean> {
+    if (usesNativeVault()) {
+        const status = await nativeStatus();
+        if (status.exists) return true;
+        const legacy = await readJSON<StoredKeypair>(KEYPAIR_KEY);
+        return Boolean(legacy?.secretKey);
+    }
     const stored = await readJSON<StoredKeypair>(KEYPAIR_KEY);
     return stored !== null && !!stored.secretKey;
 }
 
 export async function signChallenge(challenge: string): Promise<string> {
+    if (usesNativeVault()) {
+        await ensureNativeMigration();
+        return (await StellarKeyVault.signChallenge({ challenge, reason: 'sign_request' })).signature;
+    }
     const stored = await readJSON<StoredKeypair>(KEYPAIR_KEY);
     if (!stored?.secretKey) throw new Error('No keypair — call generateAndStoreKeypair first');
     const kp = Keypair.fromSecret(stored.secretKey);
@@ -47,6 +113,10 @@ export async function signTransactionXdr(
     networkPassphrase: string,
     reason: PresenceReason = 'sign_request',
 ): Promise<string> {
+    if (usesNativeVault()) {
+        await ensureNativeMigration();
+        return (await StellarKeyVault.signTransaction({ xdr, networkPassphrase, reason })).signedXdr;
+    }
     // La compuerta va DENTRO, no en cada llamador: esta funcion firma
     // transacciones que mueven dinero, y un llamador nuevo que se olvide de
     // pedir confirmacion volveria a abrir el hueco en silencio.
@@ -60,6 +130,17 @@ export async function signTransactionXdr(
 }
 
 export async function importKeypair(secretKey: string): Promise<string> {
+    if (usesNativeVault()) {
+        const kp = Keypair.fromSecret(secretKey);
+        const result = await StellarKeyVault.importSeed({
+            secretKey,
+            expectedPublicKey: kp.publicKey(),
+            replace: (await nativeStatus()).exists,
+            reason: 'migration',
+        });
+        await removeKey(KEYPAIR_KEY);
+        return result.publicKey;
+    }
     const kp = Keypair.fromSecret(secretKey); // throws on bad input
     await writeJSON(KEYPAIR_KEY, {
         publicKey: kp.publicKey(),
@@ -78,6 +159,9 @@ export async function importKeypair(secretKey: string): Promise<string> {
  * Para enseñarsela a la persona, usar `revealSecretKey()`.
  */
 export async function exportSecretKey(): Promise<string> {
+    if (usesNativeVault()) {
+        throw new Error('La llave protegida no se puede exportar por una ruta de firma. Usa revealSecretKey().');
+    }
     const stored = await readJSON<StoredKeypair>(KEYPAIR_KEY);
     if (!stored?.secretKey) throw new Error('No keypair stored');
     return stored.secretKey;
@@ -89,10 +173,18 @@ export async function exportSecretKey(): Promise<string> {
  * puede vaciar la cuenta desde cualquier otro dispositivo.
  */
 export async function revealSecretKey(): Promise<string> {
+    if (usesNativeVault()) {
+        await ensureNativeMigration();
+        return (await StellarKeyVault.revealSeed({ reason: 'reveal_key' })).secretKey;
+    }
     await requireUserPresence('reveal_key', true);
     return exportSecretKey();
 }
 
 export async function deleteKeypair(): Promise<void> {
+    if (usesNativeVault()) {
+        const status = await nativeStatus();
+        if (status.exists) await StellarKeyVault.deleteKey({ reason: 'migration' });
+    }
     await removeKey(KEYPAIR_KEY);
 }

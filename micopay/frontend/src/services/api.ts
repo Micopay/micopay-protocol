@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { extractApiErrorPayload, toApiError } from '../utils/apiError';
 import { signChallenge, getPublicKey, signTransactionXdr } from '../lib/keystore';
+import { validatePreparedEscrowTx } from './escrowTxValidation';
 // CASH-5A: el conjunto canónico de estados vive en TradeStateBadge, que es su
 // dueño según el issue. Import de solo tipo: se borra al compilar, así que no
 // crea dependencia en runtime de services -> components.
@@ -22,11 +23,13 @@ function authHeaders(token: string) {
 // tiered gate; both share the same POST start / GET status polling contract) ──
 
 export type KYCProvider = 'etherfuse' | 'didit';
-export type KYCStatus = 'pending' | 'approved' | 'rejected';
+export type KYCLevel = 1 | 2;
+export type KYCStatus = 'not_started' | 'pending' | 'approved' | 'rejected';
 
 export interface KYCStatusResponse {
   status: KYCStatus;
   reason?: string | null;
+  level?: KYCLevel;
 }
 
 /**
@@ -37,8 +40,9 @@ export async function startKYC(
   token: string,
   provider: KYCProvider = 'etherfuse',
   email?: string,
+  level: KYCLevel = 1,
 ): Promise<{ onboardingUrl: string }> {
-  const res = await http.post('/defi/kyc/start', { email }, { ...authHeaders(token), params: { provider } });
+  const res = await http.post('/defi/kyc/start', { email }, { ...authHeaders(token), params: { provider, level } });
   return res.data;
 }
 
@@ -48,8 +52,9 @@ export async function startKYC(
 export async function getKYCStatus(
   token: string,
   provider: KYCProvider = 'etherfuse',
+  level: KYCLevel = 1,
 ): Promise<KYCStatusResponse> {
-  const res = await http.get('/defi/kyc/status', { ...authHeaders(token), params: { provider } });
+  const res = await http.get('/defi/kyc/status', { ...authHeaders(token), params: { provider, level } });
   return res.data;
 }
 
@@ -150,6 +155,9 @@ export interface TradeData {
   /** Roles del escrow. GET /trades/:id y POST /trades los devuelven. */
   seller_id?: string;
   buyer_id?: string;
+  seller_stellar_address?: string | null;
+  buyer_stellar_address?: string | null;
+  escrow_contract_id?: string | null;
   lock_tx_hash?: string | null;
   release_tx_hash?: string | null;
   /**
@@ -185,6 +193,8 @@ export interface TradeDetailResponse {
   trade: TradeData & {
     lock_tx_hash?: string | null;
     release_tx_hash?: string | null;
+    /** WP5: la base y el contrato no coinciden; soporte lo revisa. */
+    chain_review_reason?: string | null;
     platform_fee_mxn?: number;
     /** Congeladas al crear la operacion (tradeFees.ts del backend). */
     provider_fee_mxn?: number;
@@ -197,6 +207,8 @@ export interface TradeDetailResponse {
     completed_at?: string | null;
     expires_at?: string;
   };
+  /** Buyer may sign decline() for this exact contract and trade state. */
+  decline_available: boolean;
   merchant_unavailable: boolean;
   seller_username: string | null;
   buyer_username: string | null;
@@ -218,6 +230,29 @@ export interface CancelTradeResponse {
   /** CASH-2: desde cuándo se puede reclamar. `null` si no hay fondos. */
   refund_available_at: string | null;
   lock_tx_hash: string | null;
+  decline_available: boolean;
+}
+
+export async function declineTradeRequest(tradeId: string, token: string): Promise<RefundTradeResponse> {
+  try {
+    const trade = await getTrade(tradeId, token);
+    const prepareRes = await http.post(`/trades/${tradeId}/decline/prepare`, {}, authHeaders(token));
+    const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
+    let signedXdr: string | undefined;
+    if (!('mock' in prepared)) {
+      await validatePreparedEscrowTx(prepared.xdr, prepared.network_passphrase, trade, 'decline');
+      signedXdr = await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'decline');
+    }
+    const res = await http.post(
+      `/trades/${tradeId}/decline`,
+      signedXdr ? { signed_xdr: signedXdr } : {},
+      authHeaders(token),
+    );
+    return res.data as RefundTradeResponse;
+  } catch (e: unknown) {
+    const { message } = extractApiErrorPayload(e);
+    throw new Error(message);
+  }
 }
 
 export async function cancelTradeRequest(tradeId: string, buyerToken: string): Promise<CancelTradeResponse> {
@@ -397,16 +432,25 @@ export async function lockTrade(
     tradeId: string,
     sellerToken: string,
 ): Promise<{ status?: TradeState; lock_tx_hash: string }> {
+  const trade = await getTrade(tradeId, sellerToken);
   const prepareRes = await http.post(
       `/trades/${tradeId}/lock/prepare`,
       {},
       authHeaders(sellerToken),
   );
-  const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
-  const signedXdr =
-    'mock' in prepared
-      ? undefined
-      : await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'lock');
+  const prepared = prepareRes.data as
+    | { mock: true }
+    | { xdr: string; network_passphrase: string }
+    | { status: TradeState; lock_tx_hash: string };
+  // Un lock anterior que tardo en confirmarse ya entro: no se firma otro.
+  if ('lock_tx_hash' in prepared) {
+    return { status: prepared.status, lock_tx_hash: prepared.lock_tx_hash };
+  }
+  let signedXdr: string | undefined;
+  if (!('mock' in prepared)) {
+    await validatePreparedEscrowTx(prepared.xdr, prepared.network_passphrase, trade, 'lock');
+    signedXdr = await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'lock');
+  }
 
   const res = await http.post(
       `/trades/${tradeId}/lock`,
@@ -473,10 +517,11 @@ export async function completeTrade(
 
   const prepareRes = await http.post(`/trades/${tradeId}/complete/prepare`, {}, authHeaders(token));
   const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
-  const signedXdr =
-    'mock' in prepared
-      ? undefined
-      : await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'release');
+  let signedXdr: string | undefined;
+  if (!('mock' in prepared)) {
+    await validatePreparedEscrowTx(prepared.xdr, prepared.network_passphrase, trade, 'release');
+    signedXdr = await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'release');
+  }
 
   const res = await http.post(`/trades/${tradeId}/complete`, signedXdr ? { signed_xdr: signedXdr } : {}, authHeaders(token));
   return res.data;
@@ -540,8 +585,13 @@ export async function getMerchantTrades(
 
 export async function getTradeHistory(
     token: string,
+    status?: string,
 ): Promise<TradeHistoryItem[]> {
-  const res = await http.get("/trades/history", authHeaders(token));
+  const res = await http.get("/trades/history", {
+    ...authHeaders(token),
+    // The server filters; "all" (or no value) means no status filter.
+    params: status && status !== "all" ? { status } : undefined,
+  });
   return res.data.trades;
 }
 
@@ -770,6 +820,9 @@ export interface MerchantConfig {
   min_trade_mxn: number;
   max_trade_mxn: number;
   daily_cap_mxn: number;
+  /** Politica vigente del servidor. No se reenvian al guardar. */
+  max_effective_fee_percent?: number;
+  max_provider_fee_percent?: number;
   latitude?: number | null;
   longitude?: number | null;
   address_text?: string | null;
@@ -862,6 +915,8 @@ export interface AvailableMerchant {
   provider_fee_mxn?: number;
   platform_fee_mxn?: number;
   effective_fee_percent?: number;
+  /** Tope vigente enviado por el backend; permite cambiarlo sin recompilar el APK. */
+  max_effective_fee_percent?: number;
   seller_id: string;
   username: string;
   rate_percent: number;
@@ -895,10 +950,10 @@ export interface AvailableMerchant {
 
 /**
  * Effective-fee guardrail. Validations V-1/V-3/V-7/V-8 found a universal ceiling:
- * users abandon MicoPay when the *total* cost exceeds ~5%. The UI warns above this
- * threshold. Kept here (not hardcoded in components) so it can be tuned centrally.
+ * Fallback para APKs o respuestas antiguas. El backend envia el tope vigente
+ * en discovery para que pueda cambiarse sin recompilar la app.
  */
-export const MAX_EFFECTIVE_FEE_PERCENT = 5;
+export const MAX_EFFECTIVE_FEE_PERCENT = 6;
 
 /**
  * Total effective cost the user pays = provider commission + platform fee.
@@ -1113,8 +1168,15 @@ export interface RefundEligibility {
     | 'not_participant'
     | 'no_funds_locked'
     | 'not_expired_yet'
-    | 'already_settled';
+    | 'already_settled'
+    /** Ya hubo entrega de efectivo: el reembolso lo revisa soporte (D2). */
+    | 'cash_handoff_confirmed'
+    /** No se pudo leer el plazo en cadena; se reintenta, nunca se da por vencido. */
+    | 'unverifiable';
+  /** Caducidad de la solicitud. */
   expires_at: string;
+  /** Desde cuándo se estima que se puede reembolsar (plazo del contrato, aprox.). */
+  refund_available_at?: string;
   /** Hora del servidor: la cuenta atrás no depende del reloj del teléfono. */
   server_time: string;
   seconds_remaining: number;
@@ -1126,4 +1188,199 @@ export async function fetchRefundEligibility(
 ): Promise<RefundEligibility> {
   const res = await http.get(`/trades/${tradeId}/refund-eligibility`, authHeaders(token));
   return res.data as RefundEligibility;
+}
+
+// ─── Retirar a banco (SPEI, via Etherfuse v2) ──────────────────────────────
+// Un metodo por ruta de /defi/bank-withdraw/*. El backend las resuelve contra
+// Etherfuse y preserva el estado en la base; la app solo pinta.
+
+export type BankWithdrawStage =
+  | 'needs_didit'
+  | 'needs_kyc'
+  | 'kyc_review'
+  | 'kyc_action'
+  | 'needs_bank'
+  | 'ready';
+
+export interface BankWithdrawStatusResponse {
+  stage: BankWithdrawStage;
+  clabeMasked?: string;
+  kycMessage?: string | null;
+}
+
+/**
+ * `detail` pide al backend los requisitos de Etherfuse (mas lento): al abrir la
+ * pantalla y al volver de /idv, no en el polling.
+ */
+export async function fetchBankWithdrawStatus(token: string, opts: { detail?: boolean } = {}): Promise<BankWithdrawStatusResponse> {
+  try {
+    const res = await http.get('/defi/bank-withdraw/status', {
+      ...authHeaders(token),
+      params: opts.detail ? { detail: '1' } : undefined,
+    });
+    return res.data as BankWithdrawStatusResponse;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+/** Launch form nuevo para volver a /idv sin reenviar los datos. */
+export async function relaunchBankKyc(token: string): Promise<BankKycLaunchForm> {
+  try {
+    const res = await http.post('/defi/bank-withdraw/kyc/launch', {}, authHeaders(token));
+    return (res.data as { launch: BankKycLaunchForm }).launch;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+export interface StartBankKycRequest {
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;    // YYYY-MM-DD
+  taxId: string;          // RFC
+  curp: string;
+  country: string;        // ISO alpha-3 ("MEX")
+  address: {
+    street: string;
+    city: string;
+    country: string;
+    region?: string;
+    postalCode?: string;
+    buildingNumber?: string;
+    flatNumber?: string;
+  };
+  email: string;
+  displayName: string;
+}
+
+export interface BankKycLaunchForm {
+  /** URL a abrir con POST desde el navegador del telefono. */
+  url: string;
+  fields: Record<string, string>;
+}
+
+export interface StartBankKycResponse {
+  customerOrgId: string;
+  verification: { overall: string; userMessage?: string | null };
+  launch: BankKycLaunchForm;
+}
+
+export async function startBankKyc(token: string, req: StartBankKycRequest): Promise<StartBankKycResponse> {
+  try {
+    const res = await http.post('/defi/bank-withdraw/kyc', req, authHeaders(token));
+    return res.data as StartBankKycResponse;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+export interface RegisterBankAccountRequest {
+  clabe: string;              // 18 digitos
+  accountHolderName: string;
+  taxId: string;              // RFC
+}
+
+export interface RegisterBankAccountResponse {
+  paymentAccountId: string;
+  status: 'pending' | 'ready' | 'rejected' | 'disabled';
+}
+
+export async function registerBankAccount(
+  token: string,
+  req: RegisterBankAccountRequest,
+): Promise<RegisterBankAccountResponse> {
+  try {
+    const res = await http.post('/defi/bank-withdraw/bank-account', req, authHeaders(token));
+    return res.data as RegisterBankAccountResponse;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+export interface BankWithdrawQuote {
+  quoteId: string;
+  sourceAmount: string;
+  sourceAsset: string;        // "USDC:ISSUER"
+  fundingAmount: string;      // CETES exactos que recibira Etherfuse
+  fundingAsset: string;       // "CETES:ISSUER"
+  dexPath: Array<{ code: string; issuer?: string }>;
+  destinationAmount: string;  // MXN
+  destinationAsset: 'MXN';
+  feeBps: number;
+  feeAmount: string;
+  feeAsset: string;
+  expiresAt: string;
+  clabeMasked: string;
+}
+
+export async function createBankWithdrawQuote(
+  token: string,
+  req: { asset: 'USDC'; amount: string },
+): Promise<BankWithdrawQuote> {
+  try {
+    const res = await http.post('/defi/bank-withdraw/quote', req, authHeaders(token));
+    return res.data as BankWithdrawQuote;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+export type BankOrderStatus =
+  | 'created' | 'funded' | 'claimable' | 'completed' | 'failed' | 'canceled' | 'refunded';
+
+export interface BankWithdrawOrder {
+  orderId: string;
+  status: BankOrderStatus;
+  fundingInstructions?: {
+    rail: string;
+    reference: string;
+    fundingDeadline: string;
+    destination?: {
+      address?: string;
+      memo?: string;
+      chain?: string;
+      clabe?: string;
+      bankName?: string;
+      recipientName?: string;
+    };
+  };
+  /** XDR sin firmar; la app lo valida con validatePreparedWithdrawTx. */
+  preparedTransaction?: string;
+  swap: {
+    sendAsset: { code: string; issuer?: string };
+    sendMax: string;
+    destinationAsset: { code: string; issuer?: string };
+    destinationAmount: string;
+    path: Array<{ code: string; issuer?: string }>;
+  };
+}
+
+export async function confirmBankWithdrawOrder(
+  token: string,
+  quoteId: string,
+): Promise<BankWithdrawOrder> {
+  try {
+    const res = await http.post('/defi/bank-withdraw/order', { quoteId }, authHeaders(token));
+    return res.data as BankWithdrawOrder;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+export interface BankWithdrawOrderSummary {
+  orderId: string;
+  status: BankOrderStatus;
+  destinationMxn: string | null;
+  createdAt: string;
+  statusUpdatedAt: string | null;
+}
+
+export async function fetchBankWithdrawOrders(token: string): Promise<BankWithdrawOrderSummary[]> {
+  try {
+    const res = await http.get('/defi/bank-withdraw/orders', authHeaders(token));
+    return (res.data as { orders: BankWithdrawOrderSummary[] }).orders;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
 }

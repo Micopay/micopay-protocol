@@ -33,6 +33,11 @@ import db from '../db/schema.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
+/** Contrato de las filas de prueba: el dispatcher solo aplica eventos suyos. */
+const TEST_CONTRACT = 'C_TEST';
+/** Otra instancia del escrow, con el mismo trade_id posible (H1). */
+const OTHER_CONTRACT = 'C_OTHER';
+
 function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -40,6 +45,7 @@ function delay(ms: number): Promise<void> {
 function makeEvent(id: string, topic0: string, valueBytes: Buffer): RawContractEvent {
   return {
     id,
+    contractId: TEST_CONTRACT,
     topic: [topic0],       // tests provide pre-stringified topics
     value: [valueBytes],   // tests provide pre-parsed values
     txHash: `txhash_${id}`,
@@ -54,7 +60,8 @@ function makeDeps(overrides: Partial<EventListenerDeps> = {}): EventListenerDeps
     currentLedger: async () => 1000,
     loadCursor: async () => 100,
     saveCursor: async () => {},
-    isDuplicate: async () => false,
+    isProcessed: async () => false,
+    markProcessed: async () => {},
     dispatch: async () => {},
     ...overrides,
   };
@@ -169,34 +176,202 @@ async function testReconnectAfterError() {
   console.log('  ✓ Listener retries after fetch error with backoff');
 }
 
-async function testCursorResetOnOldestLedgerError() {
+async function testGapOnOldestLedgerError() {
   let savedCursor = 12345; // simulate a very old cursor
-  let resetCalled = false;
+  const gaps: Array<[number, number]> = [];
+  let fetches = 0;
 
   const deps = makeDeps({
     loadCursor: async () => savedCursor,
-    saveCursor: async (ledger) => {
-      savedCursor = ledger;
-      if (ledger === 0) resetCalled = true;
-    },
+    saveCursor: async (ledger) => { savedCursor = ledger; },
     fetchEvents: async () => {
-      throw new Error('start is before oldest ledger');
+      fetches++;
+      if (fetches === 1) throw new Error('start is before oldest ledger');
+      return { events: [], latestLedger: savedCursor };
     },
     currentLedger: async () => 99999,
+    onGap: async (from, to) => { gaps.push([from, to]); },
   });
 
   const listener = new EscrowEventListener('C_TEST', deps, {
-    pollIntervalMs: 50,
+    pollIntervalMs: 20,
     backoffBaseMs: 10,
     backoffMaxMs: 20,
   });
 
   await listener.start();
-  await delay(150);
+  await delay(100);
   listener.stop();
 
-  ok(resetCalled, 'Cursor should be reset to 0 when RPC window exceeded');
-  console.log('  ✓ Cursor resets to 0 on oldest-ledger error');
+  strictEqual(savedCursor, 99999, 'Cursor jumps to the current ledger, never to 0');
+  strictEqual(gaps.length, 1, 'The gap is reported exactly once');
+  strictEqual(gaps[0][0], 12346, 'Gap starts right after the old cursor');
+  strictEqual(gaps[0][1], 99999, 'Gap ends at the current ledger');
+  console.log('  ✓ Cursor outside the RPC window: reports the exact gap and jumps to current');
+}
+
+// ── WP4: eventos durables y completos ─────────────────────────────────────
+
+function ledgerEvent(id: string, ledger: number): RawContractEvent {
+  return { ...makeEvent(id, 'released', Buffer.alloc(32)), ledger };
+}
+
+async function testFailedDispatchIsRetriedOnce() {
+  const processed = new Set<string>();
+  const applied: string[] = [];
+  let cursor = 100;
+  let failNext = true;
+  const events = [ledgerEvent('a', 105), ledgerEvent('b', 107), ledgerEvent('c', 110)];
+
+  const deps = makeDeps({
+    loadCursor: async () => cursor,
+    saveCursor: async (ledger) => { cursor = ledger; },
+    fetchEvents: async (start) => ({
+      events: events.filter((e) => e.ledger >= start),
+      latestLedger: 120,
+    }),
+    isProcessed: async (key) => processed.has(key),
+    markProcessed: async (key) => { processed.add(key); },
+    dispatch: async (event) => {
+      if (event.id === 'b' && failNext) {
+        failNext = false;
+        throw new Error('db down');
+      }
+      applied.push(event.id);
+    },
+  });
+
+  const listener = new EscrowEventListener(TEST_CONTRACT, deps, {
+    pollIntervalMs: 10,
+    backoffBaseMs: 1,
+    backoffMaxMs: 2,
+  });
+  await listener.start();
+  await delay(120);
+  listener.stop();
+
+  strictEqual(applied.join(','), 'a,b,c', 'Each event is applied exactly once, in order');
+  strictEqual(cursor, 120, 'Cursor reaches the latest ledger after the retry');
+  console.log('  ✓ A failed dispatch stops the batch and is retried, without duplicates');
+}
+
+async function testFailedDispatchHoldsTheCursor() {
+  let cursor = 100;
+  const saved: number[] = [];
+  const deps = makeDeps({
+    loadCursor: async () => cursor,
+    saveCursor: async (ledger) => { saved.push(ledger); cursor = ledger; },
+    fetchEvents: async () => ({ events: [ledgerEvent('x', 105)], latestLedger: 120 }),
+    dispatch: async () => { throw new Error('db down'); },
+  });
+
+  const listener = new EscrowEventListener(TEST_CONTRACT, deps, {
+    pollIntervalMs: 1_000,
+    backoffBaseMs: 1_000,
+    backoffMaxMs: 1_000,
+  });
+  await listener.start();
+  await delay(50);
+  listener.stop();
+
+  strictEqual(saved.join(','), '104', 'Cursor stops right before the failed event');
+  ok(listener.lagLedgers() > 0, 'The lag is visible');
+  ok(!saved.includes(120), 'Cursor never skips past a failed event');
+  console.log('  ✓ The cursor never advances past an event that failed');
+}
+
+async function testAllPagesAreProcessed() {
+  const total = 250;
+  const all = Array.from({ length: total }, (_, i) => ledgerEvent(`p${i}`, 101 + Math.floor(i / 10)));
+  const applied: string[] = [];
+  const cursors: Array<string | undefined> = [];
+  let cursor = 100;
+
+  const deps = makeDeps({
+    loadCursor: async () => cursor,
+    saveCursor: async (ledger) => { cursor = ledger; },
+    fetchEvents: async (_start, page) => {
+      cursors.push(page);
+      const offset = page ? Number(page) : 0;
+      const slice = all.slice(offset, offset + 200);
+      const next = offset + 200;
+      return { events: slice, latestLedger: 500, ...(next < total ? { nextCursor: String(next) } : {}) };
+    },
+    dispatch: async (event) => { applied.push(event.id); },
+  });
+
+  const listener = new EscrowEventListener(TEST_CONTRACT, deps, { pollIntervalMs: 10_000 });
+  await listener.start();
+  await delay(60);
+  listener.stop();
+
+  strictEqual(applied.length, total, 'All 250 events are applied, not just the first 200');
+  strictEqual(applied[0], 'p0');
+  strictEqual(applied[total - 1], `p${total - 1}`, 'In order');
+  strictEqual(cursors[1], '200', 'The second page asks for the RPC cursor');
+  strictEqual(cursor, 500, 'Cursor advances only after the last page');
+  console.log('  ✓ 250 events over two pages: all applied, in order');
+}
+
+async function testPageCapResumesOnNextPoll() {
+  let cursor = 100;
+  let polls = 0;
+  const applied = new Set<string>();
+  const processed = new Set<string>();
+
+  const deps = makeDeps({
+    loadCursor: async () => cursor,
+    saveCursor: async (ledger) => { cursor = ledger; },
+    fetchEvents: async (start, page) => {
+      if (!page) polls++;
+      const offset = page ? Number(page) : 0;
+      const event = ledgerEvent(`e${offset}`, Math.max(start, 101 + offset));
+      if (offset >= 30) return { events: [event], latestLedger: 500 };
+      return { events: [event], latestLedger: 500, nextCursor: String(offset + 1) };
+    },
+    isProcessed: async (key) => processed.has(key),
+    markProcessed: async (key) => { processed.add(key); },
+    dispatch: async (event) => { applied.add(event.id); },
+  });
+
+  const listener = new EscrowEventListener(TEST_CONTRACT, deps, {
+    pollIntervalMs: 20,
+    backoffBaseMs: 5,
+    backoffMaxMs: 10,
+  });
+  await listener.start();
+  await delay(30);
+  listener.stop();
+
+  ok(cursor < 500, `Cursor stays behind the unread pages after the cap (got ${cursor})`);
+  ok(polls >= 1, 'The poll ran');
+  console.log('  ✓ At the page cap the cursor stays behind what was not read');
+}
+
+async function testFailureOnSecondPageKeepsItsLedger() {
+  let cursor = 100;
+  const firstPage = [ledgerEvent('p1', 105)];
+  const secondPage = [ledgerEvent('p2', 130)];
+  const deps = makeDeps({
+    loadCursor: async () => cursor,
+    saveCursor: async (ledger) => { cursor = ledger; },
+    fetchEvents: async (_start, page) => (page
+      ? { events: secondPage, latestLedger: 500 }
+      : { events: firstPage, latestLedger: 500, nextCursor: 'next' }),
+    dispatch: async (event) => { if (event.id === 'p2') throw new Error('db down'); },
+  });
+
+  const listener = new EscrowEventListener(TEST_CONTRACT, deps, {
+    pollIntervalMs: 1_000,
+    backoffBaseMs: 1_000,
+    backoffMaxMs: 1_000,
+  });
+  await listener.start();
+  await delay(50);
+  listener.stop();
+
+  strictEqual(cursor, 129, 'Cursor stops right before the failed event of page 2');
+  console.log('  ✓ A failure on a later page keeps the cursor just before it');
 }
 
 // ── EscrowEventListener — deduplication ──────────────────────────────────
@@ -212,11 +387,8 @@ async function testDuplicateEventSkipped() {
       events: [sameEvent, sameEvent], // same event delivered twice in one batch
       latestLedger: 102,
     }),
-    isDuplicate: async (id) => {
-      if (processedIds.has(id)) return true;
-      processedIds.add(id);
-      return false;
-    },
+    isProcessed: async (id) => processedIds.has(id),
+    markProcessed: async (id) => { processedIds.add(id); },
     dispatch: async () => { dispatchCount++; },
   });
 
@@ -243,11 +415,8 @@ async function testDuplicateAcrossPolls() {
         latestLedger: 100 + pollCount,
       };
     },
-    isDuplicate: async (id) => {
-      if (processedIds.has(id)) return true;
-      processedIds.add(id);
-      return false;
-    },
+    isProcessed: async (id) => processedIds.has(id),
+    markProcessed: async (id) => { processedIds.add(id); },
     dispatch: async () => { dispatchCount++; },
   });
 
@@ -274,6 +443,7 @@ async function testParseReleasedEvent() {
 
   const event: RawContractEvent = {
     id: 'evt-parse-1',
+    contractId: TEST_CONTRACT,
     topic: ['released'],
     value: [tradeId, 'GSELLER...', 'GBUYER...'],
     txHash: 'tx_abc',
@@ -296,6 +466,7 @@ async function testParseRefundedEvent() {
 
   const event: RawContractEvent = {
     id: 'evt-parse-2',
+    contractId: TEST_CONTRACT,
     topic: ['refunded'],
     value: [tradeId, 'GSELLER...'], // refunded only has trade_id + seller
     txHash: 'tx_def',
@@ -310,12 +481,31 @@ async function testParseRefundedEvent() {
   console.log('  ✓ parseEscrowEvent handles refunded event');
 }
 
+async function testParseDeclinedEvent() {
+  const tradeId = Buffer.from('d'.repeat(64), 'hex');
+  const mockParser = (v: unknown) => v;
+  const parsed = parseEscrowEvent({
+    id: 'evt-parse-declined',
+    contractId: TEST_CONTRACT,
+    topic: ['declined'],
+    value: [tradeId, 'GSELLER...'],
+    txHash: 'tx_declined',
+    ledger: 502,
+  }, mockParser);
+
+  ok(parsed !== null);
+  strictEqual(parsed!.type, 'declined');
+  strictEqual(parsed!.contractTradeIdHex, 'd'.repeat(64));
+  console.log('  ✓ parseEscrowEvent handles declined event');
+}
+
 async function testParseLockedEvent() {
   const tradeId = Buffer.from('c'.repeat(64), 'hex');
   const mockParser = (v: unknown) => v;
 
   const event: RawContractEvent = {
     id: 'evt-parse-3',
+    contractId: TEST_CONTRACT,
     topic: ['locked'],
     value: [tradeId, 'GSELLER...', 'GBUYER...', BigInt(1000), 9999],
     txHash: 'tx_ghi',
@@ -379,6 +569,7 @@ async function insertTestTrade(overrides: {
   id: string;
   status: string;
   contractTradeId: string;
+  escrowContractId?: string;
 }): Promise<void> {
   // CASH-1: fixtures model a deposit, so the escrow seller is also the
   // provider. Hoisted because provider_id must equal seller_id — two separate
@@ -402,8 +593,8 @@ async function insertTestTrade(overrides: {
   await db.execute(
     `INSERT INTO trades
        (id, status, contract_trade_id, seller_id, buyer_id, flow, provider_id,
-        amount_mxn, amount_stroops, platform_fee_mxn, secret_hash)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        amount_mxn, amount_stroops, platform_fee_mxn, secret_hash, escrow_contract_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
     [
       overrides.id,
       overrides.status,
@@ -416,6 +607,7 @@ async function insertTestTrade(overrides: {
       '1000000000',   // amount_stroops
       1,              // platform_fee_mxn
       'testhash',     // secret_hash
+      overrides.escrowContractId ?? TEST_CONTRACT,
     ],
   );
 }
@@ -428,6 +620,7 @@ async function testApplyReleasedIdempotentOnCompleted() {
 
   const parsed: ParsedEscrowEvent = {
     type: 'released',
+    contractId: TEST_CONTRACT,
     contractTradeIdHex: contractTradeId,
     eventId: 'evt-idem-1',
     txHash: 'tx_idem_1',
@@ -454,6 +647,7 @@ async function testApplyRefundedSettlesCancelledTrade() {
 
   const parsed: ParsedEscrowEvent = {
     type: 'refunded',
+    contractId: TEST_CONTRACT,
     contractTradeIdHex: contractTradeId,
     eventId: 'evt-idem-2',
     txHash: 'tx_idem_2',
@@ -501,7 +695,7 @@ async function testRefundedEventIsIdempotent() {
 
   await insertTestTrade({ id: tradeId, status: 'locked', contractTradeId });
   const ev: ParsedEscrowEvent = {
-    type: 'refunded', contractTradeIdHex: contractTradeId, eventId: 'evt-rep', txHash: 'tx_rep_1', ledger: 600,
+    type: 'refunded', contractId: TEST_CONTRACT, contractTradeIdHex: contractTradeId, eventId: 'evt-rep', txHash: 'tx_rep_1', ledger: 600,
   };
   await applyEscrowEvent(ev);
   await applyEscrowEvent({ ...ev, txHash: 'tx_rep_2' });
@@ -521,6 +715,7 @@ async function testApplyReleasedUpdatesActiveTradeToCompleted() {
 
   const parsed: ParsedEscrowEvent = {
     type: 'released',
+    contractId: TEST_CONTRACT,
     contractTradeIdHex: contractTradeId,
     eventId: 'evt-idem-3',
     txHash: 'tx_idem_3',
@@ -542,6 +737,7 @@ async function testApplyRefundedUpdatesActiveTradeToRefunded() {
 
   const parsed: ParsedEscrowEvent = {
     type: 'refunded',
+    contractId: TEST_CONTRACT,
     contractTradeIdHex: contractTradeId,
     eventId: 'evt-idem-4',
     txHash: 'tx_idem_4',
@@ -557,16 +753,176 @@ async function testApplyRefundedUpdatesActiveTradeToRefunded() {
   console.log('  ✓ applyEscrowEvent(refunded) refunds an active trade and records the hash');
 }
 
+async function testApplyDeclinedUpdatesCancelledTradeToRefunded() {
+  const contractTradeId = '5e'.repeat(32);
+  const tradeId = randomUUID();
+  await insertTestTrade({ id: tradeId, status: 'cancelled', contractTradeId });
+  const before = await db.getOne<{ id: string; status: string }>(
+    'SELECT id, status FROM trades WHERE contract_trade_id = $1', [contractTradeId]);
+  strictEqual(before?.id, tradeId, 'declined fixture must be addressable by contract trade id');
+
+  await applyEscrowEvent({
+    type: 'declined',
+    contractId: TEST_CONTRACT,
+    contractTradeIdHex: contractTradeId,
+    eventId: 'evt-declined-1',
+    txHash: 'tx_declined_1',
+    ledger: 401,
+  });
+
+  const after = await db.getOne<{ status: string; release_tx_hash: string | null }>(
+    'SELECT status, release_tx_hash FROM trades WHERE id = $1', [tradeId]);
+  strictEqual(after?.status, 'refunded');
+  strictEqual(after?.release_tx_hash, 'tx_declined_1');
+  console.log('  ✓ applyEscrowEvent(declined) confirms the early return');
+}
+
+// ── H1 · identidad contrato + trade_id ────────────────────────────────────
+//
+// El trade_id es sha256(secret_hash) y el hash es publico. Un atacante puede
+// repetirlo en OTRA instancia del escrow, reembolsarla al instante y emitir un
+// `refunded` autentico con el mismo trade_id. Ese evento no debe tocar la
+// operacion del primer contrato.
+
+async function testRefundFromOtherContractDoesNotTouchTrade() {
+  const contractTradeId = '1'.repeat(64);
+  const tradeId = randomUUID();
+  await insertTestTrade({ id: tradeId, status: 'revealing', contractTradeId });
+  await db.execute(
+    `UPDATE trades SET secret_enc = $2, secret_nonce = $3 WHERE id = $1`,
+    [tradeId, 'enc_keep', 'nonce_keep'],
+  );
+
+  for (const type of ['refunded', 'declined', 'released'] as const) {
+    await applyEscrowEvent({
+      type,
+      contractId: OTHER_CONTRACT,
+      contractTradeIdHex: contractTradeId,
+      eventId: `evt-foreign-${type}`,
+      txHash: `tx_foreign_${type}`,
+      ledger: 900,
+    });
+  }
+
+  const after = await db.getOne<{ status: string; secret_enc: string | null; release_tx_hash: string | null }>(
+    'SELECT status, secret_enc, release_tx_hash FROM trades WHERE id = $1',
+    [tradeId],
+  );
+  strictEqual(after?.status, 'revealing', 'A foreign contract event must not settle the trade');
+  strictEqual(after?.secret_enc, 'enc_keep', 'A foreign contract event must not wipe the secret');
+  strictEqual(after?.release_tx_hash ?? null, null, 'A foreign contract event must not record a settlement');
+  console.log('  ✓ refunded/declined/released from another contract leave the trade untouched');
+}
+
+async function testRefundFromOwnContractStillSettles() {
+  const contractTradeId = '2'.repeat(64);
+  const tradeId = randomUUID();
+  await insertTestTrade({ id: tradeId, status: 'locked', contractTradeId });
+
+  await applyEscrowEvent({
+    type: 'refunded',
+    contractId: TEST_CONTRACT,
+    contractTradeIdHex: contractTradeId,
+    eventId: 'evt-own-refund',
+    txHash: 'tx_own_refund',
+    ledger: 901,
+  });
+
+  const after = await db.getOne<{ status: string }>('SELECT status FROM trades WHERE id = $1', [tradeId]);
+  strictEqual(after?.status, 'refunded', 'The contract that holds the trade still settles it');
+  console.log('  ✓ refunded from the trade contract still settles it');
+}
+
+async function testSameTradeIdInTwoContractsOnlyMatchingRowChanges() {
+  const contractTradeId = '3'.repeat(64);
+  const tradeA = randomUUID();
+  const tradeB = randomUUID();
+  await insertTestTrade({ id: tradeA, status: 'revealing', contractTradeId, escrowContractId: TEST_CONTRACT });
+  await insertTestTrade({ id: tradeB, status: 'locked', contractTradeId, escrowContractId: OTHER_CONTRACT });
+
+  await applyEscrowEvent({
+    type: 'refunded',
+    contractId: OTHER_CONTRACT,
+    contractTradeIdHex: contractTradeId,
+    eventId: 'evt-b-refund',
+    txHash: 'tx_b_refund',
+    ledger: 902,
+  });
+
+  const a = await db.getOne<{ status: string }>('SELECT status FROM trades WHERE id = $1', [tradeA]);
+  const b = await db.getOne<{ status: string }>('SELECT status FROM trades WHERE id = $1', [tradeB]);
+  strictEqual(a?.status, 'revealing', 'Trade in contract A is untouched');
+  strictEqual(b?.status, 'refunded', 'Trade in contract B is settled');
+  console.log('  ✓ with the same trade_id in two contracts, only the emitting contract row changes');
+}
+
+async function testParseRejectsEventWithoutContract() {
+  const parsed = parseEscrowEvent({
+    id: 'evt-no-contract',
+    topic: ['refunded'],
+    value: [Buffer.from('4'.repeat(64), 'hex'), 'GSELLER...'],
+    txHash: 'tx_no_contract',
+    ledger: 903,
+  }, (v: unknown) => v);
+  strictEqual(parsed, null, 'An event without its contract cannot be applied');
+  console.log('  ✓ parseEscrowEvent rejects an event without its contract');
+}
+
+async function testParseRejectsFailedCallEvent() {
+  const parsed = parseEscrowEvent({
+    id: 'evt-failed-call',
+    contractId: TEST_CONTRACT,
+    inSuccessfulContractCall: false,
+    topic: ['released'],
+    value: [Buffer.from('5'.repeat(64), 'hex'), 'GSELLER...', 'GBUYER...'],
+    txHash: 'tx_failed_call',
+    ledger: 904,
+  }, (v: unknown) => v);
+  strictEqual(parsed, null, 'An event from a failed contract call is not a settlement');
+  console.log('  ✓ parseEscrowEvent rejects an event from a failed contract call');
+}
+
+async function testListenerSkipsEventFromAnotherContract() {
+  const dispatched: RawContractEvent[] = [];
+  const keys: string[] = [];
+  const foreign = { ...makeEvent('evt-l-foreign', 'refunded', Buffer.alloc(32)), contractId: OTHER_CONTRACT };
+  const missing = { ...makeEvent('evt-l-missing', 'refunded', Buffer.alloc(32)), contractId: undefined };
+  const own = makeEvent('evt-l-own', 'refunded', Buffer.alloc(32));
+  let served = false;
+
+  const deps = makeDeps({
+    fetchEvents: async (): Promise<EventBatch> => {
+      if (served) return { events: [], latestLedger: 102 };
+      served = true;
+      return { events: [foreign, missing, own], latestLedger: 102 };
+    },
+    isProcessed: async (key) => { keys.push(key); return false; },
+    dispatch: async (event) => { dispatched.push(event); },
+  });
+  const listener = new EscrowEventListener(TEST_CONTRACT, deps, { pollIntervalMs: 10_000 });
+  await listener.start();
+  await delay(50);
+  listener.stop();
+
+  strictEqual(dispatched.length, 2, 'Only events of this listener contract are dispatched');
+  ok(dispatched.every((e) => e.contractId === TEST_CONTRACT), 'Dispatched events carry the listener contract');
+  ok(!dispatched.some((e) => e.id === 'evt-l-foreign'), 'The foreign event is not dispatched');
+  ok(keys.every((k) => k.startsWith(`${TEST_CONTRACT}:`)), 'Dedup key includes the contract');
+  console.log('  ✓ listener skips events from another contract and scopes the rest to its own');
+}
+
 // ── Runner ────────────────────────────────────────────────────────────────
 
 const SUITES = [
   { name: 'jitteredBackoff', tests: [testBackoffRange, testBackoffGrowth] },
   { name: 'isBeforeOldestLedgerError', tests: [testBeforeOldestLedgerError] },
   { name: 'EscrowEventListener — health', tests: [testHealthWhenStopped, testHealthAfterSuccessfulPoll, testHealthAfterStale] },
-  { name: 'EscrowEventListener — reconnect', tests: [testReconnectAfterError, testCursorResetOnOldestLedgerError] },
+  { name: 'EscrowEventListener — reconnect', tests: [testReconnectAfterError, testGapOnOldestLedgerError] },
+  { name: 'WP4 — durable and complete events', tests: [testFailedDispatchIsRetriedOnce, testFailedDispatchHoldsTheCursor, testAllPagesAreProcessed, testPageCapResumesOnNextPoll, testFailureOnSecondPageKeepsItsLedger] },
   { name: 'EscrowEventListener — deduplication', tests: [testDuplicateEventSkipped, testDuplicateAcrossPolls] },
-  { name: 'parseEscrowEvent', tests: [testParseReleasedEvent, testParseRefundedEvent, testParseLockedEvent, testParseUnknownEventReturnsNull, testParseMalformedValueReturnsNull, testParseWrongTradeIdLength] },
-  { name: 'applyEscrowEvent — idempotency', tests: [testApplyReleasedIdempotentOnCompleted, testApplyRefundedSettlesCancelledTrade, testLateRefundedEventKeepsRefundedTrade, testRefundedEventIsIdempotent, testApplyReleasedUpdatesActiveTradeToCompleted, testApplyRefundedUpdatesActiveTradeToRefunded] },
+  { name: 'parseEscrowEvent', tests: [testParseReleasedEvent, testParseRefundedEvent, testParseDeclinedEvent, testParseLockedEvent, testParseUnknownEventReturnsNull, testParseMalformedValueReturnsNull, testParseWrongTradeIdLength] },
+  { name: 'H1 — contract + trade_id identity', tests: [testRefundFromOtherContractDoesNotTouchTrade, testRefundFromOwnContractStillSettles, testSameTradeIdInTwoContractsOnlyMatchingRowChanges, testParseRejectsEventWithoutContract, testParseRejectsFailedCallEvent, testListenerSkipsEventFromAnotherContract] },
+  { name: 'applyEscrowEvent — idempotency', tests: [testApplyReleasedIdempotentOnCompleted, testApplyRefundedSettlesCancelledTrade, testLateRefundedEventKeepsRefundedTrade, testRefundedEventIsIdempotent, testApplyReleasedUpdatesActiveTradeToCompleted, testApplyRefundedUpdatesActiveTradeToRefunded, testApplyDeclinedUpdatesCancelledTradeToRefunded] },
 ];
 
 async function runAll() {

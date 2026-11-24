@@ -108,13 +108,17 @@ describe('Login', () => {
   });
 
   it('sin llave en el telefono no hay nada que proteger: no pregunta', async () => {
+    // Desde main, sin llave ya no se genera una nueva al entrar: se pide
+    // restaurar con la llave secreta. Lo que este test fija sigue igual: no hay
+    // llave que proteger, asi que no se muestra el dialogo del sistema.
     mockKeypairExists.mockResolvedValue(false);
     const onLoginSuccess = renderLogin();
     fireEvent.click(entrar());
 
-    await waitFor(() => expect(onLoginSuccess).toHaveBeenCalled());
-    expect(mockGenerate).toHaveBeenCalled();
+    expect(await screen.findByText(/No encontré tu cuenta en este dispositivo/)).toBeInTheDocument();
     expect(mockPresence).not.toHaveBeenCalled();
+    expect(mockGenerate).not.toHaveBeenCalled();
+    expect(onLoginSuccess).not.toHaveBeenCalled();
   });
 
   it('restaurar con llave secreta no pregunta', async () => {

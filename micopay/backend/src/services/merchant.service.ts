@@ -1,6 +1,14 @@
 import db from '../db/schema.js';
 import { BadRequestError, NotFoundError } from '../utils/errors.js';
-import { computeTradeFees, normalizeFeeFlow } from './tradeFees.js';
+import { config } from '../config.js';
+import {
+  computeTradeFees,
+  isEffectiveFeeAllowed,
+  isProviderRateAllowed,
+  MAX_PROVIDER_FEE_PERCENT,
+  normalizeFeeFlow,
+  PLATFORM_FEE_PERCENT,
+} from './tradeFees.js';
 
 export const GLOBAL_MIN_AMOUNT_MXN = 100;
 export const GLOBAL_MAX_AMOUNT_MXN = 50000;
@@ -51,6 +59,10 @@ export interface AvailableMerchant {
   platform_fee_mxn: number;
   /** Coste total sobre el monto, en %. */
   effective_fee_percent: number;
+  /** Politica server-side vigente para agente + plataforma. */
+  max_effective_fee_percent: number;
+  /** Porcentaje de plataforma usado en el desglose. */
+  platform_fee_pct: number;
   /** Completed trades as seller — reputation signal */
   trades_completed: number;
   /** Completion rate (%) over terminal trades, null if no history */
@@ -97,8 +109,10 @@ const DEFAULT_CONFIG = {
 function validateConfig(input: UpdateMerchantConfigInput) {
   const { ratePercent, minTradeMxn, maxTradeMxn, dailyCapMxn } = input;
 
-  if (ratePercent < 0 || ratePercent > 100) {
-    throw new BadRequestError('rate_percent must be between 0 and 100');
+  if (!isProviderRateAllowed(ratePercent)) {
+    throw new BadRequestError(
+      `rate_percent must be between 0 and ${MAX_PROVIDER_FEE_PERCENT} so total fees stay within ${config.maxEffectiveFeePercent}%`,
+    );
   }
 
   if (minTradeMxn < GLOBAL_MIN_AMOUNT_MXN || minTradeMxn > GLOBAL_MAX_AMOUNT_MXN) {
@@ -245,7 +259,7 @@ export async function getAvailableMerchants(
     [lat, lng, amount_mxn, radius_km],
   );
 
-  return rows.map((r) => {
+  return rows.flatMap((r) => {
     const ratePercent = parseFloat(r.rate_percent as unknown as string);
     const distanceKm = parseFloat(r.distance_km as unknown as string);
     // Antes esto anunciaba `monto * (1 - tarifa)`: ignoraba la comision de
@@ -255,13 +269,16 @@ export async function getAvailableMerchants(
     // El mismo modulo y el mismo flujo que `createTrade` (H5): la cifra del mapa
     // es la que se liquida.
     const fees = computeTradeFees(amount_mxn, ratePercent, normalizeFeeFlow(flow));
+    // Defensa para configuraciones antiguas y para el redondeo a pesos. Un
+    // agente fuera de politica no se anuncia y createTrade tambien lo rechaza.
+    if (!isProviderRateAllowed(ratePercent) || !isEffectiveFeeAllowed(fees)) return [];
     const payoutMxn = fees.payoutMxn;
     const completed = parseInt(r.trades_completed as unknown as string, 10) || 0;
     const terminal = parseInt(r.trades_terminal as unknown as string, 10) || 0;
     const completionRate = terminal > 0 ? Math.round((completed / terminal) * 100) : null;
     const tier = completed >= 50 ? 'Oro' : completed >= 10 ? 'Plata' : completed >= 1 ? 'Bronce' : 'Nuevo';
 
-    return {
+    return [{
       seller_id: r.seller_id,
       username: r.username,
       rate_percent: ratePercent,
@@ -284,12 +301,14 @@ export async function getAvailableMerchants(
       provider_fee_mxn: fees.providerFeeMxn,
       platform_fee_mxn: fees.platformFeeMxn,
       effective_fee_percent: fees.effectivePercent,
+      max_effective_fee_percent: config.maxEffectiveFeePercent,
+      platform_fee_pct: PLATFORM_FEE_PERCENT,
       // H5: retiro = paga de su saldo / recibe en efectivo; deposito = al reves.
       client_pays_mxn: fees.clientPaysMxn,
       client_receives_mxn: fees.clientReceivesMxn,
       trades_completed: completed,
       completion_rate: completionRate,
       tier,
-    };
+    }];
   });
 }

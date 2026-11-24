@@ -4,9 +4,15 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 import db from '../db/schema.js';
 import { UpstreamError, NotFoundError, BadRequestError } from '../utils/errors.js';
 import { createOnboardingUrl, getKycStatus } from '../services/etherfuse.service.js';
-import { createDiditSession, mapDiditStatus } from '../services/didit.service.js';
-import { verifyDiditWebhookSignature } from '../lib/webhook-auth.js';
+import {
+  createDiditSession,
+  diditWorkflowIdForLevel,
+  extractDiditDecisionReason,
+  mapDiditStatus,
+} from '../services/didit.service.js';
+import { verifyDiditWebhookSignatures } from '../lib/webhook-auth.js';
 import { CircuitOpenError, UpstreamTimeoutError } from '../lib/circuitBreaker.js';
+import { getEffectiveKycLevel } from '../services/kyc-gate.service.js';
 
 // Etherfuse uses a HOSTED onboarding flow: we generate customerId/bankAccountId
 // UUIDs and a presigned URL; the user completes identity verification, document
@@ -35,17 +41,12 @@ interface DiditSessionRow {
   decision_reason: string | null;
 }
 
-/** `vendor_data` we send Didit at session creation — see didit.service.ts. */
-function encodeVendorData(userId: string, level: number): string {
-  return `${userId}:${level}`;
-}
-
 // KYC-1: aqui vivia `parseVendorData`, que leia usuario y nivel del cuerpo
 // del webhook para decidir a quien verificar. Se retira a proposito: ese dato
 // vuelve del proveedor y no puede ser la fuente de la decision. Ahora el
 // `session_id` se resuelve contra `kyc_didit_sessions` y de ahi salen el
-// usuario y el nivel. `encodeVendorData` se conserva porque seguimos
-// enviandolo al crear la sesion; solo dejo de creerselo al volver.
+// usuario y el nivel. `vendor_data` va solo como el user id: Didit pide un
+// identificador estable por persona, no uno por nivel.
 
 async function startEtherfuseKyc(request: any) {
   if (!process.env.ETHERFUSE_API_KEY) {
@@ -134,18 +135,35 @@ async function startDiditKyc(request: any) {
   const userId = request.user.id;
   const level = request.query?.level === '2' ? 2 : 1;
 
+  // Cada nivel tiene su workflow. Antes el nivel 2 usaba el del nivel 1 y al
+  // aprobarse grababa nivel 2 sin que nadie revisara el domicilio.
+  const workflowId = diditWorkflowIdForLevel(level);
+  if (!workflowId) {
+    throw new UpstreamError(
+      'DIDIT_NOT_CONFIGURED',
+      'La verificación de identidad no está disponible por el momento.',
+      `Didit workflow for level ${level} not configured`,
+      503,
+    );
+  }
+
   const user = await db.getOne<{ id: string }>('SELECT id FROM users WHERE id = $1', [userId]);
   if (!user) {
     throw new NotFoundError('User not found');
   }
 
   try {
-    const session = await createDiditSession({ vendorData: encodeVendorData(userId, level) });
+    const session = await createDiditSession({ vendorData: userId, workflowId });
 
-    await db.execute(
+    // Didit devuelve la misma sesion si la persona tiene una sin terminar en
+    // ese workflow. Ya esta registrada: no se inserta dos veces. En una sola
+    // sentencia, para que un doble toque simultaneo no choque con el UNIQUE.
+    await db.insertUnique(
       `INSERT INTO kyc_didit_sessions (session_id, user_id, requested_level, status)
-       VALUES ($1, $2, $3, 'pending')`,
+       VALUES ($1, $2, $3, 'pending')
+       RETURNING *`,
       [session.sessionId, userId, level],
+      'session_id',
     );
 
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
@@ -188,18 +206,28 @@ async function getEtherfuseStatus(request: any) {
 
 async function getDiditStatus(request: any) {
   const userId = request.user.id;
+  const requestedLevel = request.query?.level === '2' ? 2 : 1;
+  const effectiveLevel = await getEffectiveKycLevel(userId);
+  if (effectiveLevel >= requestedLevel) {
+    return { status: 'approved', level: requestedLevel };
+  }
+
   // Didit's decision only ever arrives via webhook (no live status API call
   // here, unlike Etherfuse) — so this reads our own last-known session state
-  // rather than round-tripping to Didit on every poll.
+  // rather than round-tripping to Didit on every poll. The requested level is
+  // part of the lookup so an approved level-1 session can never unlock the
+  // level-2 screen while proof of address is still missing.
   const session = await db.getOne<DiditSessionRow>(
     `SELECT session_id, user_id, requested_level, status, decision_reason
-     FROM kyc_didit_sessions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
-    [userId],
+     FROM kyc_didit_sessions
+     WHERE user_id = $1 AND requested_level = $2
+     ORDER BY created_at DESC LIMIT 1`,
+    [userId, requestedLevel],
   );
   if (!session) {
-    return { status: 'not_started' };
+    return { status: 'not_started', level: requestedLevel };
   }
-  return { status: session.status, rejectionReason: session.decision_reason };
+  return { status: session.status, rejectionReason: session.decision_reason, level: requestedLevel };
 }
 
 export async function kycRoutes(app: FastifyInstance): Promise<void> {
@@ -242,11 +270,21 @@ export async function kycRoutes(app: FastifyInstance): Promise<void> {
 
     scoped.post('/defi/kyc/webhook/didit', async (request: any, reply) => {
       const { raw, json } = request.body as { raw: string; json: any };
-      const signature = request.headers['x-signature'] as string | undefined;
       const timestamp = request.headers['x-timestamp'] as string | undefined;
       const secret = process.env.DIDIT_WEBHOOK_SECRET;
 
-      const { valid, error } = verifyDiditWebhookSignature(raw, signature, timestamp, secret);
+      const { valid, error } = verifyDiditWebhookSignatures(
+        raw,
+        json,
+        {
+          signatureV2: request.headers['x-signature-v2'] as string | undefined,
+          signatureV2Previous: request.headers['x-signature-v2-previous'] as string | undefined,
+          signature: request.headers['x-signature'] as string | undefined,
+          signaturePrevious: request.headers['x-signature-previous'] as string | undefined,
+          timestamp,
+        },
+        secret,
+      );
       if (!valid) {
         return reply.status(401).send({ error: `webhook signature verification failed: ${error}` });
       }
@@ -297,7 +335,7 @@ export async function kycRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(200).send({ received: true });
       }
 
-      const reason: string | null = json?.decision?.reason ?? null;
+      const reason = extractDiditDecisionReason(json?.decision);
 
       await db.execute(
         `UPDATE kyc_didit_sessions SET status = $1, decision_reason = $2, updated_at = NOW() WHERE session_id = $3`,

@@ -15,8 +15,8 @@
  *     archivo entero daria falsos positivos: hay comentarios tecnicos legitimos
  *     que explican por que se quito USDC.
  *
- * USDC y MXNe siguen siendo legitimos fuera del flujo (cartera, CETES, Blend,
- * ClaimQR) y en el catalogo `constants/escrowAssets.ts`, que no se revisan aqui.
+ * USDC y MXNe siguen siendo legitimos fuera del flujo (cartera, CETES y Blend)
+ * y en el catalogo `constants/escrowAssets.ts`, que no se revisan aqui.
  */
 
 import { describe, it, expect } from 'vitest';
