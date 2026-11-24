@@ -1,4 +1,4 @@
-import { NO_KEY_MESSAGE } from '../lib/signer/mode';
+import { noKeyMessage } from '../lib/signer/mode';
 import { Keypair, Transaction, TransactionBuilder, Operation, Memo, Networks, Asset, Horizon } from '@stellar/stellar-sdk';
 import { getPublicKey, signTransactionXdr } from '../lib/keystore';
 import { getAsset } from '../constants/assets';
@@ -54,7 +54,7 @@ export async function hasTrustline(assetCode: string): Promise<boolean> {
   // solo para derivarla, lo que ademas obligaria a pedir huella para mirar un
   // saldo si la compuerta estuviera aqui.
   const publicKey = await getPublicKey();
-  if (!publicKey) throw new PaymentError('NO_KEY', NO_KEY_MESSAGE);
+  if (!publicKey) throw new PaymentError('NO_KEY', noKeyMessage());
 
   let account;
   try {
@@ -78,7 +78,7 @@ export async function ensureTrustline(assetCode: string): Promise<SendResult | n
   if (await hasTrustline(assetCode)) return null;
 
   const publicKey = await getPublicKey();
-  if (!publicKey) throw new PaymentError('NO_KEY', NO_KEY_MESSAGE);
+  if (!publicKey) throw new PaymentError('NO_KEY', noKeyMessage());
   const asset = toAsset(assetCode);
 
   let account;
@@ -134,7 +134,7 @@ export async function sendPayment(params: {
   }
 
   const publicKey = await getPublicKey();
-  if (!publicKey) throw new PaymentError('NO_KEY', NO_KEY_MESSAGE);
+  if (!publicKey) throw new PaymentError('NO_KEY', noKeyMessage());
 
   if (destination === publicKey) {
     throw new PaymentError('SELF', tr('paymentErrors.self'));

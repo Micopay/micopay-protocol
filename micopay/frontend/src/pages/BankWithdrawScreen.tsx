@@ -1,5 +1,5 @@
 import { STELLAR_NETWORK_LABEL } from '../utils/stellarExplorer';
-import { NO_KEY_MESSAGE } from '../lib/signer/mode';
+import { noKeyMessage } from '../lib/signer/mode';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   confirmBankWithdrawOrder,
@@ -588,7 +588,7 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
     try {
       setBusy(true); setError(null);
       const pub = await getPublicKey();
-      if (!pub) throw new Error(NO_KEY_MESSAGE);
+      if (!pub) throw new Error(noKeyMessage());
       const [sourceCode, sourceIssuer] = q.sourceAsset.split(':');
       const sourceBalance = await getStellarAssetBalance(pub, { code: sourceCode, issuer: sourceIssuer });
       if (Number(sourceBalance) < Number(q.sourceAmount)) {

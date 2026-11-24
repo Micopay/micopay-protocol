@@ -1432,5 +1432,22 @@
     "forbidden": "Esta operación no es tuya o no te toca confirmar el efectivo.",
     "notFound": "No encontramos esta operación.",
     "notWaiting": "Esta operación ya no está esperando la confirmación del efectivo."
+  },
+  "signerErrors": {
+    "noKeyWeb": "Conecta tu billetera para continuar.",
+    "noKeyDevice": "No se encontró la llave de tu dispositivo.",
+    "mismatchWeb": "la billetera conectada no coincide con la cuenta del retiro",
+    "mismatchDevice": "la llave del dispositivo no coincide con la cuenta del retiro",
+    "disconnected": "Tu billetera se desconectó.",
+    "accountChanged": "Cambiaste de cuenta en tu billetera.",
+    "networkChanged": "Cambiaste de red en tu billetera.",
+    "wrongNetwork": "Tu billetera está en otra red. Cámbiala a {{network}}.",
+    "connectWallet": "Conecta tu billetera para continuar.",
+    "accountChangedLogin": "Cambiaste de cuenta en tu billetera. Inicia sesión de nuevo.",
+    "differentTx": "La billetera devolvió una transacción distinta.",
+    "notSignedByAccount": "La billetera no firmó con la cuenta conectada.",
+    "webAuthNotConfigured": "El inicio de sesión web no está configurado.",
+    "challengeOtherAccount": "El reto de inicio de sesión es de otra cuenta.",
+    "walletDescription": "Efectivo y cripto, firmado desde tu billetera"
   }
 }

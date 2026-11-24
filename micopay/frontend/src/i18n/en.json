@@ -1432,5 +1432,22 @@
     "forbidden": "This operation isn't yours, or it isn't your turn to confirm the cash.",
     "notFound": "We couldn't find this operation.",
     "notWaiting": "This operation is no longer waiting for the cash confirmation."
+  },
+  "signerErrors": {
+    "noKeyWeb": "Connect your wallet to continue.",
+    "noKeyDevice": "Your device's key wasn't found.",
+    "mismatchWeb": "the connected wallet doesn't match the withdrawal account",
+    "mismatchDevice": "the device key doesn't match the withdrawal account",
+    "disconnected": "Your wallet disconnected.",
+    "accountChanged": "You switched accounts in your wallet.",
+    "networkChanged": "You switched networks in your wallet.",
+    "wrongNetwork": "Your wallet is on another network. Switch it to {{network}}.",
+    "connectWallet": "Connect your wallet to continue.",
+    "accountChangedLogin": "You switched accounts in your wallet. Log in again.",
+    "differentTx": "The wallet returned a different transaction.",
+    "notSignedByAccount": "The wallet didn't sign with the connected account.",
+    "webAuthNotConfigured": "Web login isn't configured.",
+    "challengeOtherAccount": "The login challenge belongs to another account.",
+    "walletDescription": "Cash and crypto, signed from your wallet"
   }
 }

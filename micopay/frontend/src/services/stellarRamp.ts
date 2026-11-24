@@ -1,4 +1,4 @@
-import { KEY_MISMATCH_MESSAGE, NO_KEY_MESSAGE } from '../lib/signer/mode';
+import { keyMismatchMessage, noKeyMessage } from '../lib/signer/mode';
 import { TransactionBuilder, Operation, Memo, Networks, Asset, Horizon, Transaction, Account } from '@stellar/stellar-sdk';
 import { getPublicKey, signTransactionXdr } from '../lib/keystore';
 import { Buffer } from 'buffer';
@@ -31,7 +31,7 @@ export async function sendCETESToEtherfuse(
   cetesIssuer: string
 ): Promise<{ hash: string; explorerUrl: string }> {
   const publicKey = await getPublicKey();
-  if (!publicKey) throw new Error(NO_KEY_MESSAGE);
+  if (!publicKey) throw new Error(noKeyMessage());
   const account = await server.loadAccount(publicKey);
 
   const memoBuffer = Buffer.from(withdrawMemo, 'base64');
@@ -186,9 +186,9 @@ export async function signAndSubmitPreparedWithdrawTx(
   validatePreparedWithdrawTx(xdr, expected);
 
   const publicKey = await getPublicKey();
-  if (!publicKey) throw new Error(NO_KEY_MESSAGE);
+  if (!publicKey) throw new Error(noKeyMessage());
   if (publicKey !== expected.fromAddress) {
-    throw new WithdrawTxMismatchError(KEY_MISMATCH_MESSAGE);
+    throw new WithdrawTxMismatchError(keyMismatchMessage());
   }
 
   const parsed = TransactionBuilder.fromXDR(
@@ -246,9 +246,9 @@ export async function signAndSubmitBankWithdrawPathPayment(
   swap: BankWithdrawSwapPlan,
 ): Promise<{ hash: string; explorerUrl: string }> {
   const publicKey = await getPublicKey();
-  if (!publicKey) throw new Error(NO_KEY_MESSAGE);
+  if (!publicKey) throw new Error(noKeyMessage());
   if (publicKey !== expectedFunding.fromAddress) {
-    throw new WithdrawTxMismatchError(KEY_MISMATCH_MESSAGE);
+    throw new WithdrawTxMismatchError(keyMismatchMessage());
   }
 
   const account = await server.loadAccount(publicKey);

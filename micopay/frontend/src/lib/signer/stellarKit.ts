@@ -2,6 +2,9 @@ import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit';
 import { KitEventType, Networks, type ModuleInterface } from '@creit.tech/stellar-wallets-kit/types';
 import { VarialModule } from '@creit.tech/stellar-wallets-kit/modules/varial';
 import type { WalletBackend } from './externalSigner';
+import i18n from '../../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 const PROJECT_ID = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID as string | undefined;
 const OFFICIAL_ORIGIN = (import.meta.env.VITE_WALLET_OFFICIAL_ORIGIN as string | undefined) || 'https://app.micopay.com.mx';
@@ -18,7 +21,7 @@ async function walletModules(): Promise<ModuleInterface[]> {
       projectId: PROJECT_ID,
       metadata: {
         name: 'MicoPay',
-        description: 'Efectivo y cripto, firmado desde tu billetera',
+        description: tr('signerErrors.walletDescription'),
         url: OFFICIAL_ORIGIN,
         icons: [],
       },
