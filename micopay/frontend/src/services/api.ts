@@ -354,7 +354,11 @@ export async function registerUser(username: string, phoneHash?: string): Promis
  * username to pass. (It used to take one, which was never sent anywhere — the
  * login screen was asking for a value it then ignored.)
  */
-export async function getAuthToken(): Promise<string> {
+/**
+ * @param reason `'login'` cuando la persona entra a su cuenta (Login,
+ *   "Entrar a mi cuenta"): en Android la boveda lo dice en el dialogo.
+ */
+export async function getAuthToken(reason: 'sign_request' | 'login' = 'sign_request'): Promise<string> {
   const stellar_address = await getPublicKey();
   if (!stellar_address) {
     throw new Error('No device keypair found — generateAndStoreKeypair() must run before getAuthToken()');
@@ -371,7 +375,7 @@ export async function getAuthToken(): Promise<string> {
   if (!challenge) throw new Error(`Auth challenge failed (${challengeRes.status}): ${challengeData.error ?? 'no challenge'}`);
 
   // Step 2: sign with the device keypair — private key never leaves the device
-  const signature = await signChallenge(challenge);
+  const signature = await signChallenge(challenge, reason);
 
   // Step 3: exchange challenge + signature for a JWT
   const tokenRes = await fetch(`${BASE_URL}/auth/token`, {

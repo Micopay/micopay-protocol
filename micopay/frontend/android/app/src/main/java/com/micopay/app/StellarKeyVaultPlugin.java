@@ -418,6 +418,8 @@ public class StellarKeyVaultPlugin extends Plugin {
         if ("decline".equals(reason)) return "Confirma para devolver los fondos";
         if ("reveal_key".equals(reason)) return "Confirma para ver tu llave secreta";
         if ("migration".equals(reason)) return "Confirma para proteger tu cuenta con Android Keystore";
+        // Iniciar sesion (AUTH-1): mismo texto que `requireUserPresence('login')` en web.
+        if ("login".equals(reason)) return "Confirma que eres tú para entrar";
         return "Confirma para firmar esta operación";
     }
 
