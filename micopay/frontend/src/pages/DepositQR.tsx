@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
-import { completeTrade, getTrade, TradeData } from '../services/api';
+import { completeTrade, getTrade, openCashClaim, TradeData } from '../services/api';
 import TradeEscrowSummary from '../components/TradeEscrowSummary';
 import { shouldKeepPollingTrade } from '../utils/escrowAmounts';
+import i18n from '../i18n';
+
+// Textos que no pasan por el hook: el arbol se vuelve a pintar al cambiar de idioma.
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 const DEPOSIT_QR_POLL_MS = 5000;
 
@@ -54,6 +58,24 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
     // de la operación). Hasta entonces el servidor rechaza la liberación, así
     // que el botón espera a `revealing` en vez de fallar con un error.
     const cashConfirmed = displayTrade?.status === 'revealing';
+    // #9: hasta que el agente bloquea, no hay cripto en garantía. No se pide
+    // el efectivo ni se muestra el QR.
+    const fundsLocked = displayTrade?.status === 'locked' || cashConfirmed;
+    // D4: "Pagué y no me confirmaron".
+    const [claimState, setClaimState] = useState<'idle' | 'sending' | 'sent'>('idle');
+
+    const handleCashClaim = async () => {
+        if (!activeTrade || !buyerToken || claimState !== 'idle') return;
+        setClaimState('sending');
+        setError(null);
+        try {
+            await openCashClaim(activeTrade.id, buyerToken);
+            setClaimState('sent');
+        } catch (e) {
+            setClaimState('idle');
+            setError(e instanceof Error && e.message ? e.message : tr('depositQr.s1'));
+        }
+    };
 
     const handleComplete = async () => {
         if (!activeTrade || !buyerToken || !cashConfirmed || isConfirming) return;
@@ -65,7 +87,7 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
         } catch (e) {
             console.error('Deposit completion failed', e);
             setIsConfirming(false);
-            setError('No se pudo completar el depósito. Intenta de nuevo.');
+            setError(tr('depositQr.s2'));
         }
     };
 
@@ -79,10 +101,10 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
                     </button>
                     <div className="flex flex-col">
                         <div className="flex items-center gap-1">
-                            <h1 className="font-headline font-bold text-xl text-tinta">Depósito</h1>
+                            <h1 className="font-headline font-bold text-xl text-tinta">{tr('depositQr.s3')}</h1>
                             <span className="material-symbols-outlined text-verde text-[18px]" style={{ fontVariationSettings: '"FILL" 1' }}>verified</span>
                         </div>
-                        <span className="text-[10px] tracking-wide uppercase font-semibold text-primary">Agente Autorizado</span>
+                        <span className="text-[10px] tracking-wide uppercase font-semibold text-primary">{tr('depositQr.s4')}</span>
                     </div>
                 </div>
                 <div className="w-10 h-10 rounded-sm bg-primary-container flex items-center justify-center text-papel">
@@ -97,7 +119,9 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
                     </div>
-                    <p className="font-headline font-bold text-primary tracking-tight">Ve al agente y entrégale el efectivo</p>
+                    <p className="font-headline font-bold text-primary tracking-tight">
+                        {fundsLocked ? tr('depositQr.s5') : tr('depositQr.s6')}
+                    </p>
                 </div>
 
                 {/* Chat Preview */}
@@ -108,8 +132,10 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
                                 <span className="material-symbols-outlined text-emerald-700 text-lg">storefront</span>
                             </div>
                             <div className="flex-1">
-                                <p className="text-sm font-medium text-on-surface-variant leading-snug">
-                                    <span className="font-bold text-on-surface">Agente:</span> Ya recibí tu solicitud.
+                                {/* Era un mensaje fijo atribuido al agente ("Ya recibí tu
+                                    solicitud") que nadie escribio. Los mensajes reales
+                                    estan en el chat. */}
+                                <p className="text-sm font-medium text-on-surface-variant leading-snug">{tr('depositQr.s7')}
                                 </p>
                             </div>
                         </div>
@@ -118,12 +144,10 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
                                 onClick={onChat}
                                 className="flex-1 min-h-12 px-4 rounded-sm border-2 border-tinta bg-papel text-tinta font-bold font-bold text-xs hover:bg-primary/5 transition-colors flex items-center justify-center gap-2"
                             >
-                                <span className="material-symbols-outlined text-sm">chat</span>
-                                Abrir chat
+                                <span className="material-symbols-outlined text-sm">chat</span>{tr('depositQr.s8')}
                             </button>
                             <button className="flex-1 min-h-12 px-4 rounded-sm border-2 border-tinta bg-papel text-tinta font-bold font-bold text-xs hover:bg-primary/5 transition-colors flex items-center justify-center gap-2">
-                                <span className="material-symbols-outlined text-sm">location_on</span>
-                                Compartir ubicación
+                                <span className="material-symbols-outlined text-sm">location_on</span>{tr('depositQr.s9')}
                             </button>
                         </div>
                     </div>
@@ -131,17 +155,26 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
 
                 {/* QR Content Card */}
                 <div className="bg-surface-container-low rounded-sm p-8 flex flex-col items-center space-y-6 ">
-                    <div className="bg-papel p-6 rounded-sm border-2 border-tinta">
-                        <QRCodeSVG
-                            value={`micopay://confirm?trade_id=${activeTrade?.id ?? ''}`}
-                            size={192}
-                            bgColor="transparent"
-                            fgColor="#16130f"
-                            level="M"
-                        />
-                    </div>
+                    {fundsLocked && activeTrade?.id ? (
+                        <div className="bg-papel p-6 rounded-sm border-2 border-tinta">
+                            <QRCodeSVG
+                                value={`micopay://confirm?trade_id=${activeTrade.id}`}
+                                size={192}
+                                bgColor="transparent"
+                                fgColor="#16130f"
+                                level="M"
+                            />
+                        </div>
+                    ) : (
+                        <div className="bg-papel p-6 rounded-sm border-2 border-tinta w-[240px] h-[240px] flex flex-col items-center justify-center gap-3 text-center">
+                            <span className="material-symbols-outlined text-gris text-4xl">hourglass_top</span>
+                            <p className="text-[13px] text-gris leading-snug">{tr('depositQr.s10')}</p>
+                        </div>
+                    )}
                     <div className="text-center space-y-2">
-                        <p className="font-bold text-[11px] tracking-[0.15em] text-primary uppercase">MUESTRA ESTE CÓDIGO AL AGENTE</p>
+                        {fundsLocked ? (
+                            <p className="font-bold text-[11px] tracking-[0.15em] text-primary uppercase">{tr('depositQr.s11')}</p>
+                        ) : null}
                         {displayTrade ? (
                             <p className="num font-headline font-black text-2xl text-on-surface">${displayTrade.amount_mxn} MXN</p>
                         ) : null}
@@ -153,7 +186,9 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
                 <div className="bg-surface-container-lowest rounded-sm p-4 flex gap-4 items-start border-2 border-tinta ">
                     <span className="material-symbols-outlined text-primary shrink-0">info</span>
                         <p className="text-[13px] leading-relaxed text-on-surface/80">
-                        Entrega el efectivo al agente. Al recibirlo, escaneará este código y entonces podrás recibir tus activos.
+                        {fundsLocked
+                            ? tr('depositQr.s12')
+                            : tr('depositQr.s13')}
                     </p>
                 </div>
 
@@ -173,7 +208,7 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
                             className="w-full h-[52px] bg-primary text-papel font-bold rounded-sm flex items-center justify-center gap-2 active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-40"
                         >
                             <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>check_circle</span>
-                            {cashConfirmed ? 'Recibir mis activos' : 'Esperando que el agente confirme el efectivo…'}
+                            {cashConfirmed ? 'Recibir mis activos' : tr('depositQr.s14')}
                         </button>
                     ) : (
                         <div className="flex flex-col items-center gap-3 py-6">
@@ -181,14 +216,28 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
                                 <div className="absolute inset-0 border-4 border-surface-container-high rounded-full"></div>
                                 <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
                             </div>
-                            <p className="text-sm font-medium text-gris">Liberando tus activos digitales…</p>
+                            <p className="text-sm font-medium text-gris">{tr('depositQr.s15')}</p>
                         </div>
                     )}
                     <p className="text-[11px] text-gris text-center mt-4 leading-relaxed px-2">
                         {cashConfirmed
-                            ? 'El agente confirmó que recibió tu efectivo.'
-                            : 'El botón se activa cuando el agente escanea tu código.'}
+                            ? tr('depositQr.s16')
+                            : tr('depositQr.s17')}
                     </p>
+                    {displayTrade?.status === 'locked' ? (
+                        claimState === 'sent' ? (
+                            <p className="text-[12px] text-tinta text-center mt-4 leading-relaxed px-2 font-medium">{tr('depositQr.s18')}
+                            </p>
+                        ) : (
+                            <button
+                                onClick={handleCashClaim}
+                                disabled={claimState === 'sending'}
+                                className="w-full min-h-12 mt-4 px-4 rounded-sm border-2 border-tinta bg-papel text-tinta font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-40"
+                            >
+                                <span className="material-symbols-outlined text-sm">support_agent</span>{tr('depositQr.s19')}
+                            </button>
+                        )
+                    ) : null}
                 </div>
             </main>
         </div>

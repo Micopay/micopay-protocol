@@ -27,6 +27,28 @@ if (!(stellarNetwork in ['TESTNET', 'PUBLIC'])) {
     throw new GradleException('MICOPAY_STELLAR_NETWORK must be TESTNET or PUBLIC')
 }
 
+// Contratos que el firmador nativo acepta para lock, release y decline. Incluye
+// las instancias anteriores porque sus operaciones siguen liberandose ahi
+// (contracts/TESTNET.md).
+def escrowContracts = System.getenv('MICOPAY_ESCROW_CONTRACTS')
+    ?: project.findProperty('micopayEscrowContracts')
+    ?: (stellarNetwork == 'TESTNET' ? [
+        'CALS46FVLSLLPASFHAZVRCSQCUFUSKW64547L6OUDLLPEORKNCXDUDH3',
+        'CCX5E4ALJ5J5ZUOW7ZKXYDJ23ZREKDWYR6JR62NBOSTHUQ3LIGKG6GU4',
+        'CDUI253FSVVVXUBI4SU3PEQIDNCYWGABGUOCRBIINRCJ4SJ5XVKWYGAX',
+        'CBFDXYUPL4Q37JP3JD6JHFG6BQGNG6VOTTGMBTTPE5TYDHOVRY5UNQWE',
+        'CB4M5777YFQWKGDUULCX5W6PXEDJSJARDTMH4VV6FXC4W4UPANALO3HZ',
+    ].join(',') : null)
+if (!escrowContracts) {
+    throw new GradleException('MICOPAY_ESCROW_CONTRACTS is required for PUBLIC builds')
+}
+
+// Llave publica que firma los retos SEP-10. Vacia, la APK no firma inicios de
+// sesion web.
+def sep10SigningKey = System.getenv('MICOPAY_SEP10_SIGNING_KEY')
+    ?: project.findProperty('micopaySep10SigningKey')
+    ?: (stellarNetwork == 'TESTNET' ? 'GDI4RVFVG3O2UVGJDVXIZG3Q2KW5E64LILFMMYENWA25BXLVBK5634RN' : '')
+
 android {
     namespace = "com.micopay.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -39,6 +61,10 @@ android {
         resConfigs "es", "en"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "String", "STELLAR_NETWORK", "\"${stellarNetwork}\""
+        buildConfigField "String", "ESCROW_CONTRACTS", "\"${escrowContracts}\""
+        buildConfigField "String", "SEP10_SIGNING_KEY", "\"${sep10SigningKey}\""
+        buildConfigField "String", "SEP10_HOME_DOMAIN", "\"app.micopay.com.mx\""
+        buildConfigField "String", "SEP10_WEB_AUTH_DOMAIN", "\"api.micopay.app\""
         aaptOptions {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }

@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TradeData, TradeDetailResponse } from '../services/api';
-import { buildTxUrl, truncateHash } from '../utils/stellarExplorer';
+import { buildTxUrl, truncateHash, STELLAR_NETWORK_LABEL } from '../utils/stellarExplorer';
+import { formatStroops } from '../utils/escrowAmounts';
 import SupportLink from '../components/SupportLink';
 import TradeEscrowSummary from '../components/TradeEscrowSummary';
 
@@ -106,16 +108,44 @@ const SuccessScreen = ({ type, trade, viewerId, agentName, onHome }: SuccessScre
         return `${day} ${month} · ${displayHours}:${minutes} ${ampm}`;
     };
 
+    // #21: el recibo lleva lo que alguien necesita para verificarlo fuera de la
+    // app: red, fecha, monto en cripto y los hashes completos con su enlace.
+    const cryptoAmount = trade.asset_code && trade.amount_stroops && /^\d+$/.test(trade.amount_stroops)
+        ? `${formatStroops(trade.amount_stroops)} ${trade.asset_code}`
+        : null;
+    const receiptDate = trade.completed_at ?? trade.created_at;
+    const buildReceiptText = () => {
+        const receiptType = type === 'cashout' ? t('success.receiptWithdrawal') : t('success.receiptDeposit');
+        return [
+            `${t('success.receiptTextTitle', { type: receiptType })}${isSimulated ? ` (${t('success.testnetSimulated')})` : ''}`,
+            `Red: Stellar ${STELLAR_NETWORK_LABEL.toUpperCase()}`,
+            receiptDate ? `Fecha: ${new Date(receiptDate).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}` : '',
+            `${t('success.receiptAmount')}: $${amount} MXN`,
+            cryptoAmount ? `Cripto: ${cryptoAmount}` : '',
+            received !== null ? `${t('success.receiptReceived')}: $${received} MXN` : '',
+            commission !== null ? `${t('success.receiptCommission')}: $${commission} MXN` : '',
+            `${t('success.receiptAgent')}: ${agentLabel}`,
+            `${t('success.receiptTradeId')}: ${trade.id}`,
+            lockTxHash ? `${t('success.receiptLock')}: ${lockTxHash}\n${buildTxUrl(lockTxHash)}` : '',
+            releaseTxHash ? `${t('success.receiptRelease')}: ${releaseTxHash}\n${buildTxUrl(releaseTxHash)}` : '',
+        ].filter(Boolean).join('\n');
+    };
+
+    // En PC el menú de compartir de Windows se atora con algunas apps: copiar
+    // es la vía directa.
+    const [copied, setCopied] = useState(false);
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(buildReceiptText());
+            setCopied(true);
+        } catch {
+            setCopied(false);
+        }
+    };
+
     const handleShare = async () => {
         const receiptType = type === 'cashout' ? t('success.receiptWithdrawal') : t('success.receiptDeposit');
-        const receiptText = `${t('success.receiptTextTitle', { type: receiptType })}${isSimulated ? ` (${t('success.testnetSimulated')})` : ''}
-${t('success.receiptAmount')}: $${amount} MXN
-${received !== null ? `${t('success.receiptReceived')}: $${received} MXN` : ''}
-${commission !== null ? `${t('success.receiptCommission')}: $${commission} MXN` : ''}
-${t('success.receiptAgent')}: ${agentLabel}
-${t('success.receiptTradeId')}: ${trade.id}
-${lockTxHash ? `${t('success.receiptLock')}: ${truncateHash(lockTxHash, 16)}` : ''}
-${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash, 16)}` : ''}`;
+        const receiptText = buildReceiptText();
 
         if (navigator.share) {
             try {
@@ -309,13 +339,22 @@ ${releaseTxHash ? `${t('success.receiptRelease')}: ${truncateHash(releaseTxHash,
 
                 {/* Share button */}
                 <section>
-                    <button
-                        onClick={handleShare}
-                        className="text-primary font-bold text-sm hover:opacity-80 transition-opacity flex items-center justify-center gap-2 mx-auto bg-primary/10 px-4 py-2 rounded-sm"
-                    >
-                        {t('success.shareReceipt')}
-                        <span className="material-symbols-outlined text-[18px]">share</span>
-                    </button>
+                    <div className="flex flex-wrap justify-center gap-2">
+                        <button
+                            onClick={handleCopy}
+                            className="text-primary font-bold text-sm hover:opacity-80 transition-opacity flex items-center justify-center gap-2 bg-primary/10 px-4 py-2 rounded-sm"
+                        >
+                            {copied ? 'Recibo copiado' : 'Copiar recibo'}
+                            <span className="material-symbols-outlined text-[18px]">content_copy</span>
+                        </button>
+                        <button
+                            onClick={handleShare}
+                            className="text-primary font-bold text-sm hover:opacity-80 transition-opacity flex items-center justify-center gap-2 bg-primary/10 px-4 py-2 rounded-sm"
+                        >
+                            {t('success.shareReceipt')}
+                            <span className="material-symbols-outlined text-[18px]">share</span>
+                        </button>
+                    </div>
                 </section>
 
                 {/* Star rating */}

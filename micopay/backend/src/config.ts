@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from 'fs';
+import { execSync } from 'child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -19,6 +20,14 @@ function loadEnv() {
         process.env[key] = value;
       }
     }
+  }
+}
+
+function localGitCommit(): string {
+  try {
+    return execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || 'unknown';
+  } catch {
+    return 'unknown';
   }
 }
 
@@ -163,6 +172,27 @@ const ESCROW_CONTRACTS = parseEscrowContracts(
   process.env.ESCROW_CONTRACT_ID || '',
   ESCROW_ASSET_ENV,
 );
+/**
+ * WP6: emisor del token de cada escrow, `ESCROW_ASSET_ISSUERS=USDC=G...`.
+ * Hay varios USDC con el mismo codigo (Circle, el de pruebas del escrow): sin
+ * el emisor, una trustline del USDC equivocado pasaba por buena. Un activo sin
+ * emisor configurado se compara solo por codigo, como antes.
+ */
+function parseAssetIssuers(raw: string | undefined): Record<string, string> {
+  const map: Record<string, string> = {};
+  if (!raw || !raw.trim()) return map;
+  for (const pair of raw.split(',')) {
+    const [asset, issuer] = pair.split('=').map((x) => x?.trim());
+    if (!asset || !issuer) {
+      throw new Error(`ESCROW_ASSET_ISSUERS mal formado: "${pair}". Se espera ACTIVO=EMISOR.`);
+    }
+    map[asset.toUpperCase()] = issuer;
+  }
+  return map;
+}
+
+const ESCROW_ASSET_ISSUERS = parseAssetIssuers(process.env.ESCROW_ASSET_ISSUERS);
+
 const ESCROW_DECLINE_CONTRACT_IDS = (process.env.ESCROW_DECLINE_CONTRACT_IDS || '')
   .split(',')
   .map((value) => value.trim())
@@ -185,6 +215,8 @@ export const config = {
    * refund iria al contrato nuevo, que no las conoce.
    */
   escrowLegacyContractId: process.env.ESCROW_LEGACY_CONTRACT_ID || '',
+  /** WP6: activo -> emisor del token del escrow (ver parseAssetIssuers). */
+  escrowAssetIssuers: ESCROW_ASSET_ISSUERS as Readonly<Record<string, string>>,
   /** Contract IDs deployed with buyer-authorized decline(). */
   escrowDeclineContractIds: ESCROW_DECLINE_CONTRACT_IDS as readonly string[],
   /** Activo por defecto de las operaciones nuevas (ver assetRate.service). */
@@ -204,6 +236,14 @@ export const config = {
   // JWT
   jwtSecret: process.env.JWT_SECRET || 'dev_jwt_secret',
   jwtExpiry: process.env.JWT_EXPIRY || '24h',
+  /** Sesion del navegador: mas corta que la de la APK (WP4 de MicoPay web). */
+  webJwtExpiry: process.env.WEB_JWT_EXPIRY || '2h',
+
+  // SEP-10. La llave solo autentica: sin fondos y distinta de PLATFORM_SECRET_KEY.
+  // Sin ella, las rutas web responden 503 y el login de la APK sigue igual.
+  sep10SigningSecret: process.env.SEP10_SIGNING_SECRET || '',
+  sep10HomeDomain: process.env.SEP10_HOME_DOMAIN || 'app.micopay.com.mx',
+  sep10WebAuthDomain: process.env.SEP10_WEB_AUTH_DOMAIN || 'api.micopay.app',
 
   // Firebase / FCM (for push notifications)
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
@@ -217,6 +257,9 @@ export const config = {
 
   // Environment
   isProduction: process.env.NODE_ENV === 'production',
+  // Commit del que salio la imagen (build-arg GIT_COMMIT). Fuera de Docker se
+  // toma del checkout local; sin ninguno de los dos queda 'unknown'.
+  gitCommit: process.env.GIT_COMMIT || localGitCommit(),
 
   // MVP flags
   mockStellar: process.env.MOCK_STELLAR === 'true',
@@ -334,6 +377,15 @@ export function validateConfig() {
     config.maxEffectiveFeePercent > 100
   ) {
     errors.push("MAX_EFFECTIVE_FEE_PERCENT must be a number between the 0.8% platform fee and 100%.");
+  }
+
+  if (config.sep10SigningSecret) {
+    if (!/^S[A-Z2-7]{55}$/.test(config.sep10SigningSecret)) {
+      errors.push("SEP10_SIGNING_SECRET is invalid. It must be a valid Stellar secret key (56 characters starting with 'S').");
+    }
+    if (config.sep10SigningSecret === config.platformSecretKey) {
+      errors.push("SEP10_SIGNING_SECRET must not be PLATFORM_SECRET_KEY.");
+    }
   }
 
   if (config.isProduction) {

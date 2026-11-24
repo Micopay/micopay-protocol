@@ -37,6 +37,7 @@ export type PresenceReason =
   | 'payment'
   | 'reveal_key'
   | 'sign_request'
+  | 'web_auth'
   | 'login';
 
 const PROMPTS: Record<PresenceReason, string> = {
@@ -46,6 +47,7 @@ const PROMPTS: Record<PresenceReason, string> = {
   payment: 'Confirma para enviar el pago',
   reveal_key: 'Confirma para ver tu llave secreta',
   sign_request: 'Confirma para autorizar esta operación',
+  web_auth: 'Confirma para iniciar sesión en la web',
   login: 'Confirma que eres tú para entrar',
 };
 

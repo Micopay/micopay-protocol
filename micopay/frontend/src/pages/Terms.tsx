@@ -1,3 +1,4 @@
+import { SUPPORT_EMAIL } from '../constants/contact';
 interface TermsProps {
   onBack: () => void;
 }
@@ -83,7 +84,7 @@ const Terms = ({ onBack }: TermsProps) => {
         <section className="bg-papel rounded-sm p-5 border-2 border-tinta/60 space-y-4">
           <h2 className="font-bold text-base text-tinta">7. Contacto</h2>
           <p className="text-sm text-gris leading-relaxed">
-            Para dudas sobre estos términos escríbenos a legal@micopay.app.
+            Para dudas sobre estos términos escríbenos a {SUPPORT_EMAIL}.
           </p>
         </section>
       </main>

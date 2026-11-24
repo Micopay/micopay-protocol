@@ -3,7 +3,16 @@ import { initReactI18next } from 'react-i18next';
 import es from './es.json';
 import en from './en.json';
 
-const saved = localStorage.getItem('micopay_lang') ?? 'es';
+// Sin eleccion guardada, el idioma del navegador: quien lo tiene en ingles no
+// deberia tener que encontrar el selector en espanol. Las pruebas fijan 'es'.
+function initialLanguage(): 'es' | 'en' {
+  const stored = localStorage.getItem('micopay_lang');
+  if (stored === 'es' || stored === 'en') return stored;
+  if (import.meta.env.MODE === 'test' || typeof navigator === 'undefined') return 'es';
+  return navigator.language?.toLowerCase().startsWith('es') ? 'es' : 'en';
+}
+
+const saved = initialLanguage();
 
 i18n
   .use(initReactI18next)

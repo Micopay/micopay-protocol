@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
 import { useTranslation } from 'react-i18next';
 import { Label, MoneyBlock } from '../components/ui';
 import { Logo } from '../components/Logo';
@@ -15,6 +16,10 @@ import { useWalletBalance } from '../hooks/useWalletBalance';
 import BetaBanner from '../components/BetaBanner';
 import { getPendingSignatureRequests, SignatureRequest } from '../services/signRequestService';
 import { STELLAR_NETWORK_LABEL } from '../utils/stellarExplorer';
+import i18n from '../i18n';
+
+// Textos que no pasan por el hook: el arbol se vuelve a pintar al cambiar de idioma.
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 const EXPLORER = "https://stellar.expert/explorer/testnet/tx";
 
@@ -108,7 +113,7 @@ const Home = ({
   const [pendingSignRequests, setPendingSignRequests] = useState<SignatureRequest[]>([]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || IS_EXTERNAL_SIGNER) return;
     getPendingSignatureRequests(token)
       .then((requests) => setPendingSignRequests(requests))
       .catch(() => setPendingSignRequests([]));
@@ -208,7 +213,9 @@ const Home = ({
     <div className="bg-surface text-on-surface font-body min-h-screen flex flex-col">
       {/* TopAppBar */}
       <header className="border-b-2 border-tinta fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel">
-        <Logo />
+        {/* En PC la marca ya esta en la barra lateral. */}
+        {IS_EXTERNAL_SIGNER && <span className="hidden font-headline text-xl font-bold text-tinta md:block">{t('nav.home')}</span>}
+        <div className={IS_EXTERNAL_SIGNER ? 'md:hidden' : undefined}><Logo /></div>
         <div className="flex items-center gap-4">
           <button
             onClick={onNavigateInbox}
@@ -223,7 +230,7 @@ const Home = ({
               aria-hidden="true"
               className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center"
             >
-              notifications
+              inbox
             </span>
             {pendingCount > 0 && (
               /* §4.5: cuadro de 18 dp con radio 2 px y borde de tinta, en
@@ -299,9 +306,12 @@ const Home = ({
           </p>
         </section>
 
+        {/* En PC, dos columnas: lo que tengo y hago, y a un lado el detalle. */}
+        <div className={IS_EXTERNAL_SIGNER ? 'lg:grid lg:grid-cols-2 lg:items-start lg:gap-10' : undefined}>
+        <div>
         {showBalanceError && walletBalanceError ? (
           <ErrorBanner
-            message={walletBalanceError.message || "Error al cargar el balance"}
+            message={walletBalanceError.message || tr('homeText.s1')}
             action="retry"
             onRetry={loadBalance}
             onDismiss={() => setShowBalanceError(false)}
@@ -385,6 +395,8 @@ const Home = ({
             {t('home.findNearby')}
           </p>
         </div>
+        </div>
+        <div>
         <section className="mb-8">
           <h2 className="mb-4"><Label>
             {t('home.assets')}
@@ -575,6 +587,8 @@ const Home = ({
             </button>
           )}
         </section>
+        </div>
+        </div>
 
       </main>
     </div>

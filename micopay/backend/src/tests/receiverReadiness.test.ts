@@ -68,6 +68,28 @@ async function main() {
     strictEqual(evaluateReceiverAccount(account('1.7'), 'USDC').ready, true); // libre 0.7
   });
 
+  await test('WP6: USDC de otro emisor no cuenta como la trustline del escrow', () => {
+    const ESCROW_USDC = 'GADK7SUSESCROWTESTISSUER';
+    const CIRCLE = 'GBBD47IFCIRCLETESTISSUER';
+    const withCircle = {
+      balances: [
+        { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: CIRCLE, balance: '0' },
+        { asset_type: 'native', balance: '1.7', selling_liabilities: '0' },
+      ],
+      subentry_count: 1,
+    };
+    // reserva (2 + 1) * 0.5 = 1.5; libre 0.2: alcanza para liberar, no para otra trustline.
+    const r = evaluateReceiverAccount(withCircle, 'USDC', ESCROW_USDC);
+    strictEqual(r.ready, false);
+    strictEqual(!r.ready && r.requiredXlm, RELEASE_FEE_BUFFER_XLM + 0.5);
+    // Con el emisor correcto, la misma cuenta esta lista.
+    withCircle.balances[0].asset_issuer = ESCROW_USDC;
+    strictEqual(evaluateReceiverAccount(withCircle, 'USDC', ESCROW_USDC).ready, true);
+    // Sin emisor configurado se compara solo por codigo, como antes.
+    withCircle.balances[0].asset_issuer = CIRCLE;
+    strictEqual(evaluateReceiverAccount(withCircle, 'USDC').ready, true);
+  });
+
   await test('los selling liabilities no cuentan como XLM disponible', () => {
     strictEqual(evaluateReceiverAccount(account('2', { liabilities: '0.95' }), 'XLM').ready, false);
   });

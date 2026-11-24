@@ -54,7 +54,7 @@ async function assertAuthError(
 async function testValidSignatureIsAccepted() {
   const kp = Keypair.random();
   const addr = kp.publicKey();
-  const { challenge } = issueChallenge(addr);
+  const { challenge } = await issueChallenge(addr);
   const signature = kp.sign(Buffer.from(challenge, "utf8")).toString("base64");
 
   await verifyAndConsumeChallenge(addr, challenge, signature);
@@ -66,7 +66,7 @@ async function testSignatureFromAnotherKeyIsRejected() {
   // de otra persona y lo firma con SU propia llave.
   const victim = Keypair.random();
   const attacker = Keypair.random();
-  const { challenge } = issueChallenge(victim.publicKey());
+  const { challenge } = await issueChallenge(victim.publicKey());
   const forged = attacker
     .sign(Buffer.from(challenge, "utf8"))
     .toString("base64");
@@ -81,7 +81,7 @@ async function testSignatureFromAnotherKeyIsRejected() {
 
 async function testMalformedSignatureIsRejected() {
   const kp = Keypair.random();
-  const { challenge } = issueChallenge(kp.publicKey());
+  const { challenge } = await issueChallenge(kp.publicKey());
 
   await assertAuthError(
     () => verifyAndConsumeChallenge(kp.publicKey(), challenge, "no-es-base64"),
@@ -95,7 +95,7 @@ async function testSignatureForADifferentChallengeIsRejected() {
   // Firma válida en sí misma, pero de otro reto: no debe servir.
   const kp = Keypair.random();
   const addr = kp.publicKey();
-  const { challenge } = issueChallenge(addr);
+  const { challenge } = await issueChallenge(addr);
   const otherSig = kp
     .sign(Buffer.from("micopay-auth-otro-reto-cualquiera", "utf8"))
     .toString("base64");

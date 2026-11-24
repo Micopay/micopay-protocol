@@ -23,6 +23,7 @@
  */
 
 import { useEffect, useRef, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface OnboardingStep {
   /** Identificador estable para tests y telemetria; no se muestra. */
@@ -62,9 +63,10 @@ export default function OnboardingFlow({
   onIndexChange,
   onFinish,
   onExit,
-  exitLabel = 'Ahora no',
+  exitLabel,
   busy = false,
 }: Props) {
+  const { t } = useTranslation();
   const step = steps[index];
   const headingRef = useRef<HTMLHeadingElement>(null);
   const isLast = index === steps.length - 1;
@@ -91,7 +93,7 @@ export default function OnboardingFlow({
               onClick={onExit}
               className="min-h-12 px-3 text-sm font-bold text-verde underline underline-offset-4"
             >
-              {exitLabel}
+              {exitLabel ?? t('onboarding.notNow')}
             </button>
           )}
         </div>
@@ -132,7 +134,7 @@ export default function OnboardingFlow({
               disabled={busy}
               className="min-h-12 px-5 border-2 border-tinta text-tinta font-bold rounded-sm disabled:opacity-50"
             >
-              Atrás
+              {t('onboarding.back')}
             </button>
           )}
           <button
@@ -140,7 +142,7 @@ export default function OnboardingFlow({
             disabled={busy || blocked}
             className="min-h-12 flex-1 bg-verde text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-50 disabled:active:translate-x-0 disabled:active:translate-y-0"
           >
-            {busy ? 'Procesando…' : (step.nextLabel ?? 'Continuar')}
+            {busy ? t('onboarding.processing') : (step.nextLabel ?? t('onboarding.continue'))}
           </button>
         </div>
       </footer>

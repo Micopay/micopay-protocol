@@ -5,6 +5,10 @@ import { resolveErrorMessage } from '../constants/errorMap';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
 import { useGeolocation } from '../hooks/useGeolocation';
 import MapReal from '../components/MapReal';
+import i18n from '../i18n';
+
+// Textos que no pasan por el hook: el arbol se vuelve a pintar al cambiar de idioma.
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 interface MerchantSettingsProps {
   token: string | null;
@@ -165,7 +169,7 @@ export default function MerchantSettings({
         next === "paused" ? "Operaciones pausadas" : "Operaciones reanudadas",
       );
     } catch (err: any) {
-      setMessage("No se pudo cambiar el estado");
+      setMessage(tr('merchantSettingsText.s1'));
     } finally {
       setSaving(false);
     }
@@ -173,6 +177,11 @@ export default function MerchantSettings({
 
   const save = async () => {
     if (!token) return;
+    if (![form.rate_percent, form.min_trade_mxn, form.max_trade_mxn, form.daily_cap_mxn].every(Number.isFinite)) {
+      setMessage(tr('merchantSettingsText.s2'));
+      setMessageType('error');
+      return;
+    }
     setSaving(true);
     setMessage(null);
     setMessageType(null);
@@ -189,14 +198,21 @@ export default function MerchantSettings({
       );
       
       if (result.queued) {
-        setMessage('⏳ Cambios guardados localmente. Se sincronizarán cuando la conexión se restaure.');
+        setMessage(tr('merchantSettingsText.s3'));
         setMessageType('warning');
       } else {
-        setMessage('✅ Configuración guardada exitosamente. El límite diario se reinicia a las 00:00 UTC.');
+        setMessage(tr('merchantSettingsText.s4'));
         setMessageType('success');
       }
     } catch (err: any) {
-      setMessage(resolveErrorMessage(err).message);
+      // #13: un 400 de validacion caia en "La operacion no pudo terminarse." y
+      // ocultaba la causa (p. ej. tasa fuera de rango). Si el servidor dice
+      // por que, eso es lo que se muestra.
+      const serverMessage = err?.response?.data?.message;
+      setMessage(typeof serverMessage === 'string' && serverMessage
+        ? serverMessage
+        : resolveErrorMessage(err).message);
+      setMessageType('error');
     } finally {
       setSaving(false);
     }
@@ -204,9 +220,9 @@ export default function MerchantSettings({
 
   return (
     <div className="bg-surface text-on-surface min-h-screen px-6 pt-10 pb-32 max-w-xl mx-auto">
-      <button className="mb-6 text-sm font-semibold text-verde" onClick={onBack}>← Volver</button>
-      <h1 className="text-2xl font-bold mb-2">Ajustes del comerciante</h1>
-      <p className="text-sm text-on-surface-variant mb-8">Configura tu tasa y límites de operación.</p>
+      <button className="mb-6 text-sm font-semibold text-verde" onClick={onBack}>{tr('merchantSettingsText.s5')}</button>
+      <h1 className="text-2xl font-bold mb-2">{tr('merchantSettingsText.s6')}</h1>
+      <p className="text-sm text-on-surface-variant mb-8">{tr('merchantSettingsText.s7')}</p>
 
       {loading ? (
         <p>Cargando…</p>
@@ -215,13 +231,12 @@ export default function MerchantSettings({
           <section className="bg-papel rounded-sm p-5 border border-slate-100 mb-8">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="font-bold text-on-surface">
-                  Estado de operaciones
+                <p className="font-bold text-on-surface">{tr('merchantSettingsText.s8')}
                 </p>
                 <p className="text-xs text-on-surface-variant">
                   {availability === "paused"
-                    ? "Tu negocio está pausado"
-                    : "Estás recibiendo solicitudes"}
+                    ? tr('merchantSettingsText.s9')
+                    : tr('merchantSettingsText.s10')}
                 </p>
               </div>
               <button
@@ -245,28 +260,28 @@ export default function MerchantSettings({
             min={0}
             max={maxProviderFeePercent}
             onChange={(v) =>
-              setForm((f) => ({ ...f, rate_percent: Number(v) }))
+              setForm((f) => ({ ...f, rate_percent: toFieldNumber(v) }))
             }
           />
           <Field
-            label="Monto mínimo (MXN)"
+            label={tr('merchantSettingsText.s11')}
             value={form.min_trade_mxn}
             onChange={(v) =>
-              setForm((f) => ({ ...f, min_trade_mxn: Number(v) }))
+              setForm((f) => ({ ...f, min_trade_mxn: toFieldNumber(v) }))
             }
           />
           <Field
-            label="Monto máximo (MXN)"
+            label={tr('merchantSettingsText.s12')}
             value={form.max_trade_mxn}
             onChange={(v) =>
-              setForm((f) => ({ ...f, max_trade_mxn: Number(v) }))
+              setForm((f) => ({ ...f, max_trade_mxn: toFieldNumber(v) }))
             }
           />
           <Field
             label="Tope diario (MXN)"
             value={form.daily_cap_mxn}
             onChange={(v) =>
-              setForm((f) => ({ ...f, daily_cap_mxn: Number(v) }))
+              setForm((f) => ({ ...f, daily_cap_mxn: toFieldNumber(v) }))
             }
           />
 
@@ -332,11 +347,7 @@ export default function MerchantSettings({
                       />
                       {/* RED-3: decir con claridad qué es público y qué no.
                           El criterio del issue pide exactamente esto. */}
-                      <p className="mt-2 text-xs text-gris leading-relaxed">
-                        Esto es tu <strong>punto de encuentro</strong> y es privado: solo lo ve
-                        la persona con la que ya tienes una operación aceptada. En el mapa
-                        público únicamente aparece tu ubicación aproximada, redondeada a unos
-                        100 metros.
+                      <p className="mt-2 text-xs text-gris leading-relaxed">{tr('merchantSettingsText.s13')}{' '}<strong>{tr('merchantSettingsText.s14')}</strong>{tr('merchantSettingsText.s15')}
                       </p>
                     </label>
 
@@ -350,10 +361,7 @@ export default function MerchantSettings({
                         className="mt-0.5 h-5 w-5 flex-shrink-0"
                       />
                       <span className="text-xs text-tinta leading-relaxed">
-                        <strong>Publicar mi dirección en el mapa.</strong> Márcalo solo si
-                        atiendes en un local comercial y quieres que cualquiera pueda verla
-                        sin haber iniciado una operación. Si operas desde tu casa, déjalo sin
-                        marcar.
+                        <strong>{tr('merchantSettingsText.s16')}</strong>{tr('merchantSettingsText.s17')}
                       </span>
                     </label>
 
@@ -405,6 +413,11 @@ export default function MerchantSettings({
   );
 }
 
+/** #13: un campo vacio queda vacio (NaN), no se vuelve 0 con el cursor detras. */
+function toFieldNumber(v: string): number {
+  return v.trim() === '' ? NaN : Number(v);
+}
+
 function Field({
   label,
   value,
@@ -429,7 +442,7 @@ function Field({
         step={step}
         min={min}
         max={max}
-        value={Number.isFinite(value) ? value : 0}
+        value={Number.isFinite(value) ? value : ''}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-sm border border-slate-200 px-4 py-3"
       />

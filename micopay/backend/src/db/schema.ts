@@ -109,6 +109,14 @@ function evalCondition(row: any, clause: string, params: any[]): boolean {
     return Array.isArray(list) && list.some((v) => v === row[col]);
   }
 
+  // Comparacion contra un parametro: `expires_at > $6`
+  const cmpMatch = trimmed.match(/^([\w.]+)\s*([<>])\s*(\$\d+)$/);
+  if (cmpMatch) {
+    const value = row[colName(cmpMatch[1])];
+    const param = resolveVal(cmpMatch[3], params);
+    return cmpMatch[2] === ">" ? value > param : value < param;
+  }
+
   // Equality
   const eqMatch = trimmed.match(/^([\w.]+)\s*=\s*(.+)$/i);
   if (eqMatch) {
@@ -234,7 +242,8 @@ function memQuery(sql: string, params: any[] = []): any[] {
       throw new Error("Updates and deletions are not allowed on this table (append-only compliance data).");
     }
     const setStr = tableMatch[2];
-    const whereStr = tableMatch[3];
+    const returning = tableMatch[3].match(/\s+RETURNING\s+.+$/i);
+    const whereStr = returning ? tableMatch[3].slice(0, returning.index) : tableMatch[3];
 
     const updates: Record<string, any> = {};
     const setPairs = setStr.split(/,\s*(?=\w+\s*=)/);
@@ -247,7 +256,7 @@ function memQuery(sql: string, params: any[] = []): any[] {
       evalCondition(row, whereStr, params),
     );
     rows.forEach((row) => Object.assign(row, updates));
-    return [];
+    return returning ? rows : [];
   }
 
   // ── DELETE ───────────────────────────────────────────────────────────────

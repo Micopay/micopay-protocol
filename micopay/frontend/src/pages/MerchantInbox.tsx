@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useQRScanner } from '../hooks/useQRScanner';
 import { useCountdown } from '../hooks/useCountdown';
@@ -321,11 +322,18 @@ function ScanErrorCard({
 interface MerchantInboxProps {
   token: string | null;
   onBack: () => void;
+  /** #4: abre el detalle, donde estan las acciones (bloquear, liberar, chat). */
+  onOpenTrade?: (tradeId: string) => void;
+  /**
+   * WP1: llegar desde el detalle de un retiro abre el escaner de una vez, para
+   * que el agente escanee en el momento en que entrega el efectivo.
+   */
+  autoScan?: boolean;
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
+const MerchantInbox = ({ token, onBack, onOpenTrade, autoScan = false }: MerchantInboxProps) => {
   const { t } = useTranslation();
   const [trades, setTrades] = useState<MerchantTrade[]>([]);
   const [loading, setLoading] = useState(true);
@@ -374,6 +382,8 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
       setScanView({ type: 'parse_error', message: error });
       return;
     }
+    // La persona cerro el escaner de la web: no es un error.
+    if (IS_EXTERNAL_SIGNER && !value) return;
 
     // Parse the scanned QR into a typed MicoPay payload.
     const parsed = parseQRPayload(value);
@@ -420,6 +430,13 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
       setScanView({ type: 'api_error', message, tradeId });
     }
   }, [token, scan, activeFilter, fetchTrades, t]);
+
+  const autoScanned = useRef(false);
+  useEffect(() => {
+    if (!autoScan || !token || autoScanned.current) return;
+    autoScanned.current = true;
+    void handleScan();
+  }, [autoScan, token, handleScan]);
 
   // Main effect: fetch trades on filter change
   useEffect(() => {
@@ -474,7 +491,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
 
       <main className="pt-[calc(6rem+env(safe-area-inset-top))] px-6 pb-32">
         {/* Sin permiso de avisos: el agente no se entera con la app cerrada */}
-        {(pushPermission === 'prompt' || pushPermission === 'denied') && token && (
+        {!IS_EXTERNAL_SIGNER && (pushPermission === 'prompt' || pushPermission === 'denied') && token && (
           <div className="mb-4 rounded-sm p-4 bg-amber-50 border border-amber-200">
             <div className="flex items-start gap-3">
               <span className="material-symbols-outlined text-amber-600">notifications_off</span>
@@ -605,7 +622,13 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
         ) : (
           <div className="space-y-4">
             {trades.map((trade) => (
-              <div key={trade.id} className="bg-papel rounded-sm p-4 ">
+              <button
+                type="button"
+                key={trade.id}
+                onClick={() => onOpenTrade?.(trade.id)}
+                disabled={!onOpenTrade}
+                className="block w-full text-left bg-papel rounded-sm p-4 border-2 border-transparent hover:border-tinta focus-visible:border-tinta disabled:hover:border-transparent"
+              >
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <p className="font-medium text-on-surface">{trade.client_handle}</p>
@@ -641,7 +664,7 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
                     <span className="font-medium">{t('inbox.pending')}</span>
                   </div>
                 )}
-              </div>
+              </button>
             ))}
           </div>
         )}

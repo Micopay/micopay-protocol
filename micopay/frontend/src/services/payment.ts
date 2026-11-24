@@ -1,3 +1,4 @@
+import { NO_KEY_MESSAGE } from '../lib/signer/mode';
 import { Keypair, Transaction, TransactionBuilder, Operation, Memo, Networks, Asset, Horizon } from '@stellar/stellar-sdk';
 import { getPublicKey, signTransactionXdr } from '../lib/keystore';
 import { getAsset } from '../constants/assets';
@@ -50,7 +51,7 @@ export async function hasTrustline(assetCode: string): Promise<boolean> {
   // solo para derivarla, lo que ademas obligaria a pedir huella para mirar un
   // saldo si la compuerta estuviera aqui.
   const publicKey = await getPublicKey();
-  if (!publicKey) throw new PaymentError('NO_KEY', 'No se encontró la llave de tu dispositivo.');
+  if (!publicKey) throw new PaymentError('NO_KEY', NO_KEY_MESSAGE);
 
   let account;
   try {
@@ -74,7 +75,7 @@ export async function ensureTrustline(assetCode: string): Promise<SendResult | n
   if (await hasTrustline(assetCode)) return null;
 
   const publicKey = await getPublicKey();
-  if (!publicKey) throw new PaymentError('NO_KEY', 'No se encontró la llave de tu dispositivo.');
+  if (!publicKey) throw new PaymentError('NO_KEY', NO_KEY_MESSAGE);
   const asset = toAsset(assetCode);
 
   let account;
@@ -130,7 +131,7 @@ export async function sendPayment(params: {
   }
 
   const publicKey = await getPublicKey();
-  if (!publicKey) throw new PaymentError('NO_KEY', 'No se encontró la llave de tu dispositivo.');
+  if (!publicKey) throw new PaymentError('NO_KEY', NO_KEY_MESSAGE);
 
   if (destination === publicKey) {
     throw new PaymentError('SELF', 'No puedes enviarte fondos a ti mismo.');

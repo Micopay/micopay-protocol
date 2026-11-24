@@ -123,7 +123,7 @@ describe('TradeDetail', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Pendiente')).toBeInTheDocument();
-        expect(screen.getByText(/esperando al vendedor/i)).toBeInTheDocument();
+        expect(screen.getByText(/esperando el bloqueo de fondos/i)).toBeInTheDocument();
         expect(screen.getByText(/cancelar operación/i)).toBeInTheDocument();
       });
     });
@@ -136,7 +136,7 @@ describe('TradeDetail', () => {
       await waitFor(() => {
         expect(screen.getByText('Bloqueado')).toBeInTheDocument();
         expect(screen.getByText(/fondos bloqueados/i)).toBeInTheDocument();
-        expect(screen.getByText(/abrir chat con el vendedor/i)).toBeInTheDocument();
+        expect(screen.getByText(/abrir chat con el agente/i)).toBeInTheDocument();
       });
     });
 
@@ -194,16 +194,17 @@ describe('TradeDetail', () => {
     // bloqueado dejaba los fondos atrapados sin ruta de recuperación. Ahora esa
     // combinación (lock sin release) ofrece el refund a cualquiera de los dos
     // participantes.
-    it('should offer refund for a cancelled trade with funds still locked', async () => {
+    // WP5 #15: sin la elegibilidad del servidor no se promete recuperarlos ya.
+    it('should explain pending refund for a cancelled trade with funds still locked', async () => {
       mockGetTrade.mockResolvedValue(createMockTrade('cancelled'));
 
       renderWithRouter();
 
       await waitFor(() => {
         expect(screen.getByText(/reembolso pendiente/i)).toBeInTheDocument();
-        expect(screen.getByText(/recuperarlos ahora/i)).toBeInTheDocument();
-        expect(screen.getByText(/recuperar fondos/i)).toBeInTheDocument();
+        expect(screen.getByText(/regresan solos a quien los bloqueó/i)).toBeInTheDocument();
       });
+      expect(screen.queryByText(/recuperarlos ahora/i)).toBeNull();
     });
 
     it('should render expired state', async () => {
@@ -395,7 +396,7 @@ describe('TradeDetail', () => {
 
         await waitFor(() => {
           expect(screen.getByText(/¿necesitas ayuda\?/i)).toBeInTheDocument();
-          expect(screen.getByText(/contactar soporte/i)).toBeInTheDocument();
+          expect(screen.getByRole('button', { name: /copiar soporte@/i })).toBeInTheDocument();
         });
       });
     });
@@ -419,7 +420,7 @@ describe('TradeDetail', () => {
       renderWithRouter();
 
       await waitFor(() => {
-        expect(screen.getByText(/contactar soporte/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /copiar soporte@/i })).toBeInTheDocument();
       });
     });
 
@@ -431,7 +432,7 @@ describe('TradeDetail', () => {
       renderWithRouter();
 
       await waitFor(() => {
-        expect(screen.getByText(/contactar soporte/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /copiar soporte@/i })).toBeInTheDocument();
       });
     });
   });

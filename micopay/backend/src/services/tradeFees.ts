@@ -109,6 +109,16 @@ export function isEffectiveFeeAllowed(
   return totalFeeMxn * 100 <= fees.amountMxn * MAX_EFFECTIVE_FEE_PERCENT;
 }
 
+// El producto en coma flotante deja residuos (`x.0000000001`) que un `ceil`
+// convertiria en un peso de mas. Se redondea a centavos antes.
+function ceilMxn(value: number): number {
+  return Math.ceil(Math.round(value * 100) / 100);
+}
+
+function floorMxn(value: number): number {
+  return Math.floor(Math.round(value * 100) / 100);
+}
+
 /**
  * @param amountMxn efectivo que cambia de mano
  * @param providerRatePercent tarifa del agente (`merchant_configs.rate_percent`)
@@ -121,8 +131,14 @@ export function computeTradeFees(
 ): TradeFeeBreakdown {
   const rate = Number.isFinite(providerRatePercent) ? Math.max(0, providerRatePercent) : 0;
 
-  let providerFeeMxn = Math.ceil((amountMxn * rate) / 100);
-  let platformFeeMxn = Math.ceil((amountMxn * PLATFORM_FEE_PERCENT) / 100);
+  let providerFeeMxn = ceilMxn((amountMxn * rate) / 100);
+  let platformFeeMxn = ceilMxn((amountMxn * PLATFORM_FEE_PERCENT) / 100);
+
+  // #6: con dos `ceil`, un agente en el tope nominal (5.2% + 0.8%) pasaba del
+  // tope efectivo en casi todos los montos y desaparecia del mapa. Se recorta
+  // la comision del agente al tope en pesos; la de plataforma no cambia.
+  const capMxn = floorMxn((amountMxn * MAX_EFFECTIVE_FEE_PERCENT) / 100);
+  providerFeeMxn = Math.max(0, Math.min(providerFeeMxn, capMxn - platformFeeMxn));
 
   if (flow === 'deposit') {
     // En deposito las comisiones salen del monto, y con montos minusculos los
