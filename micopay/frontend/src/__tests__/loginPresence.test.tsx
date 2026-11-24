@@ -35,6 +35,8 @@ const mockWriteJSON = vi.fn();
 const mockKeypairExists = vi.fn();
 const mockGenerate = vi.fn();
 const mockImport = vi.fn();
+// true = Android: la boveda nativa ya pide huella al firmar el reto.
+const mockSigningAsks = vi.fn();
 
 vi.mock('../lib/userPresence', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/userPresence')>()),
@@ -53,6 +55,7 @@ vi.mock('../lib/keystore', () => ({
   keypairExists: (...a: unknown[]) => mockKeypairExists(...a),
   generateAndStoreKeypair: (...a: unknown[]) => mockGenerate(...a),
   importKeypair: (...a: unknown[]) => mockImport(...a),
+  signingAsksForPresence: () => mockSigningAsks(),
   getPublicKey: vi.fn().mockResolvedValue('GPUB'),
   revealSecretKey: vi.fn().mockResolvedValue('SSECRET'),
 }));
@@ -63,6 +66,7 @@ beforeEach(async () => {
   await i18n.changeLanguage('es');
   vi.clearAllMocks();
   mockPresence.mockResolvedValue(undefined);
+  mockSigningAsks.mockReturnValue(false);
   mockKeypairExists.mockResolvedValue(true);
   mockGetAuthToken.mockResolvedValue('tok');
   mockGetCurrentUser.mockResolvedValue({ id: 'u1', username: 'ana' });
@@ -121,6 +125,43 @@ describe('Login', () => {
     expect(onLoginSuccess).not.toHaveBeenCalled();
   });
 
+  it('pide el token con el motivo de entrar', async () => {
+    const onLoginSuccess = renderLogin();
+    fireEvent.click(entrar());
+    await waitFor(() => expect(onLoginSuccess).toHaveBeenCalled());
+    expect(mockGetAuthToken).toHaveBeenCalledWith('login');
+  });
+
+  // Android: la boveda nativa pide huella al firmar el reto. Antes se pedia
+  // ademas `requireUserPresence`: dos huellas seguidas por un toque, y al
+  // cancelar la de la boveda salia "Error: No se autorizó la operación." en
+  // lugar del mensaje de entrar (visto en APK, 2026-11-23).
+  it('en Android pide una sola huella: la de la bóveda al firmar el reto', async () => {
+    mockSigningAsks.mockReturnValue(true);
+    const onLoginSuccess = renderLogin();
+    fireEvent.click(entrar());
+
+    await waitFor(() => expect(onLoginSuccess).toHaveBeenCalled());
+    expect(mockPresence).not.toHaveBeenCalled();
+    expect(mockGetAuthToken).toHaveBeenCalledWith('login');
+  });
+
+  it('en Android, cancelar la huella de la bóveda deja en Login con el mensaje y se puede reintentar', async () => {
+    mockSigningAsks.mockReturnValue(true);
+    mockGetAuthToken.mockRejectedValueOnce(new PresenceDeniedError());
+    const onLoginSuccess = renderLogin();
+    fireEvent.click(entrar());
+
+    expect(await screen.findByText(DENIED)).toBeInTheDocument();
+    expect(screen.queryByText(/No se autorizó/)).not.toBeInTheDocument();
+    expect(mockWriteJSON).not.toHaveBeenCalled();
+    expect(onLoginSuccess).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(entrar()).not.toBeDisabled());
+    fireEvent.click(entrar());
+    await waitFor(() => expect(onLoginSuccess).toHaveBeenCalled());
+  });
+
   it('restaurar con llave secreta no pregunta', async () => {
     const onLoginSuccess = renderLogin();
     fireEvent.click(screen.getByRole('button', { name: /llave secreta/i }));
@@ -156,6 +197,19 @@ describe('Register · Entrar a mi cuenta', () => {
     expect(mockPresence).toHaveBeenCalledWith('login', true);
     expect(mockPresence.mock.invocationCallOrder[0])
       .toBeLessThan(mockGetAuthToken.mock.invocationCallOrder[0]);
+  });
+
+  it('en Android pide una sola huella y, si se cancela, no entra', async () => {
+    mockSigningAsks.mockReturnValue(true);
+    mockGetAuthToken.mockRejectedValueOnce(new PresenceDeniedError());
+    const { onLoginSuccess, button } = await renderWithExistingAccount();
+    fireEvent.click(button);
+
+    expect(await screen.findByText(DENIED)).toBeInTheDocument();
+    expect(mockPresence).not.toHaveBeenCalled();
+    expect(mockGetAuthToken).toHaveBeenCalledWith('login');
+    expect(mockWriteJSON).not.toHaveBeenCalled();
+    expect(onLoginSuccess).not.toHaveBeenCalled();
   });
 
   it('si la persona cancela, no entra', async () => {

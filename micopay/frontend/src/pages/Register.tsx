@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { registerUser, getAuthToken, getCurrentUser, UserData } from '../services/api';
-import { generateAndStoreKeypair, getPublicKey, revealSecretKey, keypairExists } from '../lib/keystore';
+import { generateAndStoreKeypair, getPublicKey, revealSecretKey, keypairExists, signingAsksForPresence } from '../lib/keystore';
 import { requireUserPresence, PresenceDeniedError } from '../lib/userPresence';
 import { setBackupConfirmed, writeJSON } from '../services/secureStorage';
 import { ApiError } from '../utils/apiError';
@@ -96,8 +96,9 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
     setError(null);
     setLoading(true);
     try {
-      await requireUserPresence('login', true);
-      const token = await getAuthToken();
+      // Igual que Login: en Android pregunta la boveda al firmar el reto.
+      if (!signingAsksForPresence()) await requireUserPresence('login', true);
+      const token = await getAuthToken('login');
       const profile = await getCurrentUser(token);
       const user: UserData = { id: profile.id, username: profile.username, token };
       await writeJSON('micopay_user', user);
