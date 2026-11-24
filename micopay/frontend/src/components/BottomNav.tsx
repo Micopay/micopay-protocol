@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
 
 /* Barra de navegación — F2 del rediseño "Mercado / Rótulo".
 
@@ -57,7 +58,7 @@ const BottomNav = ({ currentPage, onNavigate, showProviderTab = false }: BottomN
   };
 
   return (
-    <nav className="fixed bottom-0 left-0 z-50 flex w-full items-stretch gap-1 border-t-2 border-tinta bg-papel px-2 pt-2 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+    <nav className={`fixed bottom-0 left-0 z-50 flex w-full items-stretch gap-1 border-t-2 border-tinta bg-papel px-2 pt-2 pb-[max(1.5rem,env(safe-area-inset-bottom))] ${IS_EXTERNAL_SIGNER ? 'md:hidden' : ''}`}>
       {btn('home', 'home', t('nav.home'))}
       {btn('pay', 'swap_horiz', t('nav.pay'))}
       {showProviderTab

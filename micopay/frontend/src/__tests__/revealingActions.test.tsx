@@ -94,18 +94,18 @@ describe('CASH-5B · cash-out', () => {
   it('el cliente NO ve la acción del proveedor', async () => {
     renderAs(CLIENT, 'cashout');
     await waitFor(() => expect(screen.getByText(/muestra tu código/i)).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /escanear/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /escanear|escáner/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /entregaste el efectivo|confirmar/i })).toBeNull();
   });
 
   it('el proveedor va a escanear, no a liberar a ciegas', async () => {
     renderAs(PROVIDER, 'cashout');
-    await waitFor(() => expect(screen.getByText(/escanea el código del cliente/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/primero el código, luego el efectivo/i)).toBeInTheDocument());
 
     // CASH-4 exige la constancia de entrega antes de liberar: ofrecerle
     // "liberar" aquí produciría un 409. La acción honesta es el escáner.
     expect(screen.queryByRole('button', { name: /ya recibí|ya entregué/i })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /ir a escanear/i }));
+    fireEvent.click(screen.getByRole('button', { name: /abrir escáner/i }));
     await waitFor(() => expect(screen.getByText('RUTA_INBOX')).toBeInTheDocument());
     expect(mockCompleteTrade).not.toHaveBeenCalled();
   });
@@ -124,7 +124,7 @@ describe('CASH-5B · depósito', () => {
     renderAs(PROVIDER, 'deposit');
     await waitFor(() => expect(screen.getByText(/esperando al cliente/i)).toBeInTheDocument());
 
-    expect(screen.queryByRole('button', { name: /ya entregué|confirmar|escanear/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /ya entregué|confirmar|escanear|escáner/i })).toBeNull();
     expect(mockCompleteTrade).not.toHaveBeenCalled();
   });
 });

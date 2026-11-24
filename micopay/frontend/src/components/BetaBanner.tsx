@@ -18,10 +18,13 @@
    Se oculta sola en mainnet: si algún día VITE_STELLAR_NETWORK deja de ser
    TESTNET, la franja desaparece sin tener que acordarse de quitarla. */
 
+import { useTranslation } from 'react-i18next';
+
 const ES_PRUEBA =
   (import.meta.env.VITE_STELLAR_NETWORK ?? 'TESTNET').toUpperCase() !== 'PUBLIC';
 
 export default function BetaBanner({ className = '' }: { className?: string }) {
+  const { t } = useTranslation();
   if (!ES_PRUEBA) return null;
   return (
     <div
@@ -32,8 +35,8 @@ export default function BetaBanner({ className = '' }: { className?: string }) {
         science
       </span>
       <p className="text-[13px] leading-snug text-aviso-texto">
-        <strong className="font-extrabold">Beta técnica en red de prueba.</strong>{' '}
-        No se mueve dinero real: los saldos son simulados y los tokens no tienen valor.
+        <strong className="font-extrabold">{t('betaBanner.s1')}</strong>{' '}
+        {t('betaBanner.s2')}
       </p>
     </div>
   );

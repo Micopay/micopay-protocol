@@ -1,6 +1,10 @@
+import { SUPPORT_EMAIL } from '../constants/contact';
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, Link } from 'react-router-dom';
+import SharedSupportLink from '../components/SupportLink';
+import i18n from '../i18n';
 
 import {
   fetchTradeDetail,
@@ -70,8 +74,11 @@ async function isCurrentUserSeller(tradeSellerId: string): Promise<boolean> {
   return stored?.id === tradeSellerId;
 }
 
+// Las vistas de estado se dibujan dentro de TradeDetailContent, que usa el hook:
+// al cambiar de idioma se vuelven a pintar y leen el texto nuevo.
+const t = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
+
 const TRADE_POLL_INTERVAL = 5000;
-const SUPPORT_EMAIL = 'support@micopay.io';
 
 /**
  * CASH-5A: la píldora compacta del detalle. La presentación puede diferir de
@@ -80,16 +87,16 @@ const SUPPORT_EMAIL = 'support@micopay.io';
  * Antes incluía `revealed`, que ningún backend emite.
  */
 const STATUS_CONFIG: Record<TradeState, { label: string; color: string; icon: string }> = {
-  pending: { label: 'Pendiente', color: '#f59e0b', icon: 'hourglass_top' },
-  locked: { label: 'Bloqueado', color: '#3b82f6', icon: 'lock' },
-  revealing: { label: 'Revelando', color: '#8b5cf6', icon: 'qr_code' },
-  completed: { label: 'Completado', color: '#22c55e', icon: 'check_circle' },
-  cancelled: { label: 'Cancelado', color: '#ef4444', icon: 'cancel' },
-  expired: { label: 'Expirado', color: '#6b7280', icon: 'schedule' },
-  refunded: { label: 'Reembolsado', color: '#8b5cf6', icon: 'undo' },
+  pending: { get label() { return t('tradeDetail.status.pending'); }, color: '#f59e0b', icon: 'hourglass_top' },
+  locked: { get label() { return t('tradeDetail.status.locked'); }, color: '#3b82f6', icon: 'lock' },
+  revealing: { get label() { return t('tradeDetail.status.revealing'); }, color: '#8b5cf6', icon: 'qr_code' },
+  completed: { get label() { return t('tradeDetail.status.completed'); }, color: '#22c55e', icon: 'check_circle' },
+  cancelled: { get label() { return t('tradeDetail.status.cancelled'); }, color: '#ef4444', icon: 'cancel' },
+  expired: { get label() { return t('tradeDetail.status.expired'); }, color: '#6b7280', icon: 'schedule' },
+  refunded: { get label() { return t('tradeDetail.status.refunded'); }, color: '#8b5cf6', icon: 'undo' },
 };
 
-const UNKNOWN_STATUS_CONFIG = { label: 'Estado desconocido', color: '#6b7280', icon: 'help' };
+const UNKNOWN_STATUS_CONFIG = { get label() { return t('tradeDetail.status.unknown'); }, color: '#6b7280', icon: 'help' };
 
 function TradeStatusPill({ status }: { status: string }) {
   // CASH-5A: antes hacía `STATUS_CONFIG[status] || STATUS_CONFIG.pending`, así
@@ -116,15 +123,12 @@ function TradeStatusPill({ status }: { status: string }) {
   );
 }
 
+/** #11: el mismo enlace que el resto de la app (en PC copia el correo en vez de abrir `mailto:`). */
 function SupportLink() {
+  const { id } = useParams<{ id: string }>();
   return (
-    <div className="mt-8 text-center">
-      <p className="text-sm text-on-surface-variant">
-        ¿Necesitas ayuda?{' '}
-        <a href={`mailto:${SUPPORT_EMAIL}`} className="text-primary font-semibold hover:underline">
-          Contactar soporte
-        </a>
-      </p>
+    <div className="mt-8 flex justify-center">
+      <SharedSupportLink tradeId={id} state="TRADE_DETAIL" />
     </div>
   );
 }
@@ -138,6 +142,7 @@ function PendingView({
   onLock,
   locking,
   lockError,
+  cancelError = null,
 }: {
   trade: TradeDetailData;
   onCancel: () => void;
@@ -145,9 +150,11 @@ function PendingView({
   onLock: () => void;
   locking: boolean;
   lockError: string | null;
+  /** WP3: antes un fallo al cancelar solo iba a la consola. */
+  cancelError?: string | null;
 }) {
   const { label: countdownLabel, expired: countdownExpired } = useCountdown(trade.expires_at ?? null);
-  const countdown = countdownExpired ? 'Expirado' : countdownLabel;
+  const countdown = countdownExpired ? t('tradeDetail.status.expired') : countdownLabel;
 
   return (
     <div className="flex flex-col items-center text-center">
@@ -157,25 +164,25 @@ function PendingView({
         </span>
       </div>
       <h2 className="text-2xl font-bold text-on-surface mb-2">
-        {isSeller ? 'Bloquea los fondos para iniciar' : 'Esperando al vendedor'}
+        {isSeller ? t('tradeDetail.s1') : t('tradeDetail.s2')}
       </h2>
       <p className="text-on-surface-variant mb-6">
         {isSeller
-          ? 'Firma con tu llave para bloquear los fondos en el contrato de garantía.'
-          : 'El vendedor aún no ha bloqueado los fondos. Tu operación está segura en garantía.'}
+          ? t(IS_EXTERNAL_SIGNER ? 'tradeDetail.signToLockWallet' : 'tradeDetail.signToLockKey')
+          : t('tradeDetail.s3')}
       </p>
 
       <div className="bg-surface-container-low rounded-sm p-4 w-full mb-6">
         <div className="flex justify-between items-center mb-2">
-          <span className="text-sm text-on-surface-variant">Monto</span>
+          <span className="text-sm text-on-surface-variant">{t('tradeDetail.s4')}</span>
           <span className="num font-bold text-on-surface">${trade.amount_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center mb-2">
-          <span className="text-sm text-on-surface-variant">Comisión</span>
+          <span className="text-sm text-on-surface-variant">{t('tradeDetail.s5')}</span>
           <span className="num text-sm text-on-surface">${trade.platform_fee_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-sm text-on-surface-variant">Expira en</span>
+          <span className="text-sm text-on-surface-variant">{t('tradeDetail.expiresIn')}</span>
           <span className="text-sm font-semibold text-primary">{countdown}</span>
         </div>
       </div>
@@ -195,23 +202,26 @@ function PendingView({
           {locking ? (
             <>
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              Bloqueando…
+              {t('tradeDetail.locking')}
             </>
           ) : (
             <>
-              <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>lock</span>
-              Bloquear fondos
+              <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>lock</span>{t('tradeDetail.s6')}
             </>
           )}
         </button>
       )}
 
+      {cancelError && (
+        <p role="alert" className="w-full mb-3 p-3 bg-red-50 border border-red-200 rounded-sm text-red-700 text-sm font-medium">
+          {cancelError}
+        </p>
+      )}
       <button
         onClick={onCancel}
         disabled={locking}
         className="w-full py-3 rounded-sm border border-error text-error font-semibold hover:bg-error/5 transition-colors disabled:opacity-50"
-      >
-        Cancelar operación
+      >{t('tradeDetail.s7')}
       </button>
     </div>
   );
@@ -225,7 +235,33 @@ interface CashConfirmProps {
   onConfirm: () => void;
 }
 
-function LockedView({ trade, cashConfirm }: { trade: TradeDetailData; cashConfirm?: CashConfirmProps }) {
+interface LockedCancelProps {
+  /** El backend lo permite: cliente, o agente en pausa. */
+  allowed: boolean;
+  /** Agente disponible: el backend le pide pausarse antes. */
+  mustPauseFirst: boolean;
+  cancelling: boolean;
+  error: string | null;
+  onCancel: () => void;
+}
+
+function LockedView({
+  trade,
+  cashConfirm,
+  actor,
+  onOpenChat,
+  onShowQR,
+  onGoToScanner,
+  cancel,
+}: {
+  trade: TradeDetailData;
+  cashConfirm?: CashConfirmProps;
+  actor?: TradeActor;
+  onOpenChat?: () => void;
+  onShowQR?: () => void;
+  onGoToScanner?: () => void;
+  cancel?: LockedCancelProps;
+}) {
   // Segundo paso antes de confirmar: al confirmar, el cliente puede liberar la
   // cripto del agente, así que un toque accidental le costaría sus fondos.
   const [askingCash, setAskingCash] = useState(false);
@@ -238,9 +274,8 @@ function LockedView({ trade, cashConfirm }: { trade: TradeDetailData; cashConfir
             lock
           </span>
         </div>
-        <h2 className="text-2xl font-bold text-on-surface mb-2">Tus fondos están en garantía</h2>
-        <p className="text-on-surface-variant mb-6">
-          Cuando el cliente te entregue el efectivo, escanea su código desde tu bandeja o confírmalo aquí.
+        <h2 className="text-2xl font-bold text-on-surface mb-2">{t('tradeDetail.s8')}</h2>
+        <p className="text-on-surface-variant mb-6">{t('tradeDetail.s9')}
         </p>
 
         {trade.lock_tx_hash && (
@@ -249,8 +284,7 @@ function LockedView({ trade, cashConfirm }: { trade: TradeDetailData; cashConfir
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary text-sm font-semibold hover:underline mb-6 flex items-center gap-1"
-          >
-            Ver transacción en Stellar
+          >{t('tradeDetail.s10')}
             <span className="material-symbols-outlined text-sm">open_in_new</span>
           </a>
         )}
@@ -266,29 +300,26 @@ function LockedView({ trade, cashConfirm }: { trade: TradeDetailData; cashConfir
             onClick={() => setAskingCash(true)}
             disabled={cashConfirm.confirming}
             className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
-          >
-            Recibí el efectivo
+          >{t('tradeDetail.s11')}
           </button>
         ) : (
           <div className="w-full border-2 border-tinta rounded-sm p-4 text-left">
-            <p className="font-bold text-on-surface mb-1">¿Ya tienes el efectivo en la mano?</p>
-            <p className="text-sm text-on-surface-variant mb-4">
-              Al confirmar, el cliente podrá recibir los activos que bloqueaste. No se puede deshacer.
+            <p className="font-bold text-on-surface mb-1">{t('tradeDetail.s12')}</p>
+            <p className="text-sm text-on-surface-variant mb-4">{t('tradeDetail.s13')}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setAskingCash(false)}
                 disabled={cashConfirm.confirming}
                 className="flex-1 py-3 rounded-sm border-2 border-tinta font-semibold disabled:opacity-40"
-              >
-                Todavía no
+              >{t('tradeDetail.s14')}
               </button>
               <button
                 onClick={cashConfirm.onConfirm}
                 disabled={cashConfirm.confirming}
                 className="flex-1 py-3 rounded-sm bg-primary text-papel font-semibold disabled:opacity-40"
               >
-                {cashConfirm.confirming ? 'Confirmando…' : 'Sí, lo recibí'}
+                {cashConfirm.confirming ? t('tradeDetail.confirming') : t('tradeDetail.s15')}
               </button>
             </div>
           </div>
@@ -304,10 +335,8 @@ function LockedView({ trade, cashConfirm }: { trade: TradeDetailData; cashConfir
           lock
         </span>
       </div>
-      <h2 className="text-2xl font-bold text-on-surface mb-2">Fondos bloqueados</h2>
-      <p className="text-on-surface-variant mb-6">
-        Los fondos están seguros en el contrato inteligente. Esperando confirmación del vendedor.
-      </p>
+      <h2 className="text-2xl font-bold text-on-surface mb-2">{lockedTitle(actor)}</h2>
+      <p className="text-on-surface-variant mb-6">{lockedBody(actor)}</p>
 
       {trade.lock_tx_hash && (
         <a
@@ -315,14 +344,139 @@ function LockedView({ trade, cashConfirm }: { trade: TradeDetailData; cashConfir
           target="_blank"
           rel="noopener noreferrer"
           className="text-primary text-sm font-semibold hover:underline mb-6 flex items-center gap-1"
-        >
-          Ver transacción en Stellar
+        >{t('tradeDetail.s10')}
           <span className="material-symbols-outlined text-sm">open_in_new</span>
         </a>
       )}
 
-      <button className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity">
-        Abrir chat con el vendedor
+      {actor?.party === 'client' && onShowQR && (
+        <button
+          onClick={onShowQR}
+          className="w-full min-h-12 py-3 mb-3 rounded-sm bg-naranja text-papel border-2 border-tinta shadow-solida font-bold"
+        >{t('tradeDetail.s16')}
+        </button>
+      )}
+      {actor?.flow === 'cashout' && actor.party === 'provider' && onGoToScanner && (
+        <button
+          onClick={onGoToScanner}
+          className="w-full min-h-12 py-3 mb-3 rounded-sm bg-naranja text-papel border-2 border-tinta shadow-solida font-bold"
+        >{t('tradeDetail.s17')}
+        </button>
+      )}
+
+      <button
+        onClick={onOpenChat}
+        disabled={!onOpenChat}
+        className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
+      >
+        {actor?.party === 'provider' ? t('tradeDetail.s18') : t('tradeDetail.s19')}
+      </button>
+
+      {cancel && <LockedCancel {...cancel} />}
+    </div>
+  );
+}
+
+function lockedTitle(actor?: TradeActor): string {
+  if (actor?.flow === 'cashout' && actor.party === 'client') return t('tradeDetail.s20');
+  if (actor?.flow === 'cashout' && actor.party === 'provider') return t('tradeDetail.s21');
+  return t('tradeDetail.s22');
+}
+
+function lockedBody(actor?: TradeActor): string {
+  if (actor?.flow === 'cashout' && actor.party === 'client') {
+    return t('tradeDetail.s23');
+  }
+  if (actor?.flow === 'cashout' && actor.party === 'provider') {
+    return t('tradeDetail.s24');
+  }
+  if (actor?.flow === 'deposit' && actor.party === 'client') {
+    return t('tradeDetail.s25');
+  }
+  return t('tradeDetail.s26');
+}
+
+/** #5: con fondos bloqueados, cancelar detiene el flujo; no devuelve fondos. */
+function LockedCancel({ allowed, mustPauseFirst, cancelling, error, onCancel }: LockedCancelProps) {
+  return (
+    <div className="w-full mt-4">
+      {error && (
+        <p role="alert" className="w-full mb-3 p-3 bg-red-50 border border-red-200 rounded-sm text-red-700 text-sm font-medium">
+          {error}
+        </p>
+      )}
+      {allowed ? (
+        <button
+          onClick={onCancel}
+          disabled={cancelling}
+          className="w-full min-h-12 py-3 rounded-sm border-2 border-tinta text-tinta font-bold disabled:opacity-40"
+        >
+          {cancelling ? t('tradeDetail.cancelling') : t('tradeDetail.s7')}
+        </button>
+      ) : mustPauseFirst ? (
+        <p className="text-sm text-gris">{t('tradeDetail.s27')}
+        </p>
+      ) : null}
+      {allowed && (
+        <p className="text-xs text-gris mt-2">{t('tradeDetail.s28')}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * #2: el agente ya escaneo y la entrega quedo registrada; falta liberar.
+ * Reintentar retoma la misma entrega: no hay que volver a escanear.
+ */
+function ReleaseAfterHandoffView({ trade, token, onComplete, onOpenChat }: { trade: TradeDetailData; token: string | null; onComplete: () => void; onOpenChat: () => void }) {
+  const [releasing, setReleasing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const liberar = async () => {
+    const effectiveToken = token ?? (await getStoredToken());
+    if (!effectiveToken || releasing) return;
+    setReleasing(true);
+    setError(null);
+    try {
+      const { release_tx_hash } = await completeTrade(trade.id, effectiveToken);
+      if (!release_tx_hash) {
+        setError(t('tradeDetail.s29'));
+        return;
+      }
+      onComplete();
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : t('tradeDetail.s30'));
+    } finally {
+      setReleasing(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center text-center">
+      <div className="w-16 h-16 rounded-sm bg-verde-suave border-2 border-tinta flex items-center justify-center mb-6">
+        <span aria-hidden="true" className="material-symbols-outlined text-verde text-3xl" style={{ fontVariationSettings: '"FILL" 1' }}>
+          check_circle
+        </span>
+      </div>
+      <h2 className="text-2xl font-bold text-on-surface mb-2">Entrega registrada</h2>
+      <p className="text-on-surface-variant mb-6">{t('tradeDetail.s31')}</p>
+      {error && (
+        <p role="alert" className="w-full mb-4 p-3 bg-red-50 border border-red-200 rounded-sm text-red-700 text-sm font-medium">
+          {error}
+        </p>
+      )}
+      <button
+        onClick={liberar}
+        disabled={releasing}
+        className="w-full min-h-12 py-3 rounded-sm bg-naranja text-papel border-2 border-tinta shadow-solida font-bold mb-4 disabled:opacity-60"
+      >
+        {releasing ? t('tradeDetail.releasing') : t('tradeDetail.s32')}
+      </button>
+      <button
+        onClick={onOpenChat}
+        className="w-full min-h-12 py-3 rounded-sm border-2 border-tinta text-tinta font-bold"
+      >{t('tradeDetail.s33')}
       </button>
     </div>
   );
@@ -349,9 +503,11 @@ function RevealingView({
   onShowQR,
   onOpenChat,
   onGoToScanner,
+  cashHandoffConfirmed = false,
 }: {
   trade: TradeDetailData;
   actor: TradeActor;
+  cashHandoffConfirmed?: boolean;
   onComplete: () => void;
   token: string | null;
   onShowQR: () => void;
@@ -364,16 +520,19 @@ function RevealingView({
     // del cliente: CASH-4 exige la constancia durable de la entrega. Mandarlo
     // al escaner es la accion honesta; ofrecerle "liberar" aqui produciria un
     // 409 CASH_HANDOFF_REQUIRED.
+    if (actor.flow === 'cashout' && cashHandoffConfirmed) {
+      return <ReleaseAfterHandoffView trade={trade} token={token} onComplete={onComplete} onOpenChat={onOpenChat} />;
+    }
     if (actor.flow === 'cashout') {
       return (
         <ActionView
           icon="qr_code_scanner"
           tone="bg-naranja-suave"
           iconTone="text-naranja"
-          title="Escanea el código del cliente"
-          body="Entrega el efectivo y escanea el código que te muestra. Los fondos se liberan a tu cuenta al confirmar la entrega."
-          primary={{ label: 'Ir a escanear', onClick: onGoToScanner }}
-          secondary={{ label: 'Abrir chat', onClick: onOpenChat }}
+          title={t('tradeDetail.s34')}
+          body="Pide al cliente que te muestre su código y ten el escáner abierto. Escanéalo en el mismo momento en que le entregas el efectivo; no sueltes el efectivo sin haberlo escaneado. Los fondos se liberan a tu cuenta al confirmar la entrega."
+          primary={{ label: t('tradeDetail.s17'), onClick: onGoToScanner }}
+          secondary={{ label: t('tradeDetail.s33'), onClick: onOpenChat }}
         />
       );
     }
@@ -391,10 +550,10 @@ function RevealingView({
         icon="qr_code_2"
         tone="bg-verde-suave"
         iconTone="text-verde"
-        title="Muestra tu código"
+        title={t('tradeDetail.s35')}
         body="Tu cripto está en garantía. Muestra el código al agente; cuando te entregue el efectivo y lo escanee, la operación se cierra."
-        primary={{ label: 'Ver mi código', onClick: onShowQR }}
-        secondary={{ label: 'Abrir chat', onClick: onOpenChat }}
+        primary={{ label: t('tradeDetail.s16'), onClick: onShowQR }}
+        secondary={{ label: t('tradeDetail.s33'), onClick: onOpenChat }}
       />
     );
   }
@@ -404,9 +563,9 @@ function RevealingView({
       icon="hourglass_top"
       tone="bg-fondo"
       iconTone="text-gris"
-      title="Esperando al cliente"
+      title={t('tradeDetail.s36')}
       body="Tu cripto está en garantía. El cliente confirmará cuando te haya entregado el efectivo; entonces los fondos pasan a su cuenta."
-      secondary={{ label: 'Abrir chat', onClick: onOpenChat }}
+      secondary={{ label: t('tradeDetail.s33'), onClick: onOpenChat }}
     />
   );
 }
@@ -489,9 +648,9 @@ function ConfirmReleaseView({ trade, onComplete, token, onOpenChat }: { trade: T
       // único que se añade es dónde quedó el dinero, que UX_MANIFESTO exige
       // decir en todo estado de error.
       const reason = e instanceof Error && e.message === 'NO_TOKEN'
-        ? 'Tu sesión expiró. Vuelve a entrar para confirmar.'
+        ? t('tradeDetail.s37')
         : mapApiError(e).message;
-      setConfirmError(`${reason} El dinero sigue retenido en la garantía.`);
+      setConfirmError(t('tradeDetail.stillInEscrow', { reason }));
     }
   };
 
@@ -502,18 +661,16 @@ function ConfirmReleaseView({ trade, onComplete, token, onOpenChat }: { trade: T
           visibility
         </span>
       </div>
-      <h2 className="text-2xl font-bold text-on-surface mb-2">Confirmar la entrega</h2>
+      <h2 className="text-2xl font-bold text-on-surface mb-2">{t('tradeDetail.s38')}</h2>
       <p className="text-on-surface-variant mb-6">
         {/* CASH-5B: el texto anterior decia "confirma para liberar los fondos
             al vendedor", y es al reves: liberar entrega la cripto a quien
-            confirma, porque el contrato exige la firma del comprador. */}
-        ¿Ya entregaste el efectivo al agente? Al confirmar, la cripto en garantía
-        pasa a tu cuenta.
+            confirma, porque el contrato exige la firma del comprador. */}{t('tradeDetail.s39')}
       </p>
 
       {confirmError && (
         <div className="w-full mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-left">
-          <p className="text-sm font-semibold text-red-800">No se pudo confirmar</p>
+          <p className="text-sm font-semibold text-red-800">{t('tradeDetail.s40')}</p>
           <p className="mt-1 text-sm text-red-700">{confirmError}</p>
         </div>
       )}
@@ -526,7 +683,7 @@ function ConfirmReleaseView({ trade, onComplete, token, onOpenChat }: { trade: T
           <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>
             {confirmError ? 'refresh' : 'check_circle'}
           </span>
-          {confirmError ? 'Reintentar' : 'Ya entregué el efectivo'}
+          {confirmError ? 'Reintentar' : t('tradeDetail.s41')}
         </button>
       ) : (
         <div className="flex flex-col items-center gap-3 py-4">
@@ -534,7 +691,7 @@ function ConfirmReleaseView({ trade, onComplete, token, onOpenChat }: { trade: T
             <div className="absolute inset-0 border-4 border-surface-container-high rounded-full"></div>
             <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
           </div>
-          <p className="text-sm font-medium text-gris">Confirmando intercambio…</p>
+          <p className="text-sm font-medium text-gris">{t('tradeDetail.confirmingExchange')}</p>
         </div>
       )}
 
@@ -543,8 +700,7 @@ function ConfirmReleaseView({ trade, onComplete, token, onOpenChat }: { trade: T
       <button
         onClick={onOpenChat}
         className="mt-4 w-full min-h-12 py-3 rounded-sm border-2 border-tinta text-tinta font-bold hover:bg-surface-container-low transition-colors"
-      >
-        Abrir chat
+      >{t('tradeDetail.s33')}
       </button>
     </div>
   );
@@ -559,18 +715,18 @@ function CompletedView({ trade }: { trade: TradeDetailData }) {
           check_circle
         </span>
       </div>
-      <h2 className="text-2xl font-bold text-on-surface mb-2">¡Operación completada!</h2>
-      <p className="text-on-surface-variant mb-6">Tu intercambio fue exitoso.</p>
+      <h2 className="text-2xl font-bold text-on-surface mb-2">{t('tradeDetail.s42')}</h2>
+      <p className="text-on-surface-variant mb-6">{t('tradeDetail.s43')}</p>
 
       <div className="bg-surface-container-low rounded-sm p-4 w-full mb-6">
         <div className="flex justify-between items-center mb-2">
-          <span className="text-sm text-on-surface-variant">Monto</span>
+          <span className="text-sm text-on-surface-variant">{t('tradeDetail.s4')}</span>
           <span className="num font-bold text-on-surface">${trade.amount_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-sm text-on-surface-variant">Fecha</span>
           <span className="text-sm text-on-surface">
-            {trade.completed_at ? new Date(trade.completed_at).toLocaleString('es-MX') : '-'}
+            {trade.completed_at ? new Date(trade.completed_at).toLocaleString(i18n.language === 'en' ? 'en-US' : 'es-MX') : '-'}
           </span>
         </div>
       </div>
@@ -581,8 +737,7 @@ function CompletedView({ trade }: { trade: TradeDetailData }) {
           target="_blank"
           rel="noopener noreferrer"
           className="text-primary text-sm font-semibold hover:underline mb-6 flex items-center gap-1"
-        >
-          Ver transacción en Stellar
+        >{t('tradeDetail.s10')}
           <span className="material-symbols-outlined text-sm">open_in_new</span>
         </a>
       )}
@@ -590,8 +745,7 @@ function CompletedView({ trade }: { trade: TradeDetailData }) {
       <Link
         to="/"
         className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity text-center"
-      >
-        Volver al inicio
+      >{t('tradeDetail.s44')}
       </Link>
     </div>
   );
@@ -605,16 +759,14 @@ function CancelledView() {
           cancel
         </span>
       </div>
-      <h2 className="text-2xl font-bold text-on-surface mb-2">Operación cancelada</h2>
-      <p className="text-on-surface-variant mb-6">
-        Esta operación fue cancelada. Tus fondos están seguros.
+      <h2 className="text-2xl font-bold text-on-surface mb-2">{t('tradeDetail.s45')}</h2>
+      <p className="text-on-surface-variant mb-6">{t('tradeDetail.s46')}
       </p>
 
       <Link
         to="/"
         className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity text-center"
-      >
-        Volver al inicio
+      >{t('tradeDetail.s44')}
       </Link>
     </div>
   );
@@ -653,11 +805,11 @@ function ExpiredView({ canRefund, onRefund, refunding, trade, title, description
 
       <div className="bg-surface-container-low rounded-sm p-4 w-full mb-6">
         <div className="flex justify-between items-center mb-2">
-          <span className="text-sm text-on-surface-variant">Monto</span>
+          <span className="text-sm text-on-surface-variant">{t('tradeDetail.s4')}</span>
           <span className="num font-bold text-on-surface">${trade.amount_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-sm text-on-surface-variant">Comisión</span>
+          <span className="text-sm text-on-surface-variant">{t('tradeDetail.s5')}</span>
           <span className="num text-sm text-on-surface">${trade.platform_fee_mxn} MXN</span>
         </div>
       </div>
@@ -673,12 +825,11 @@ function ExpiredView({ canRefund, onRefund, refunding, trade, title, description
           {refunding ? (
             <>
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              Procesando reembolso…
+              {t('tradeDetail.processingRefund')}
             </>
           ) : (
             <>
-              <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>undo</span>
-              Recuperar fondos
+              <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>undo</span>{t('tradeDetail.s47')}
             </>
           )}
         </button>
@@ -686,15 +837,29 @@ function ExpiredView({ canRefund, onRefund, refunding, trade, title, description
         <Link
           to="/"
           className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity text-center"
-        >
-          Volver al inicio
+        >{t('tradeDetail.s44')}
         </Link>
       )}
     </div>
   );
 }
 
-function RefundedView({ trade }: { trade: TradeDetailData }) {
+/** #15: lo que se le dice a quien mira una operacion cancelada con fondos. */
+function cancelledRefundCopy(eligibility: RefundEligibility | null): string {
+  if (eligibility?.eligible) {
+    return t('tradeDetail.s48');
+  }
+  if (eligibility?.reason === 'cash_handoff_confirmed' || eligibility?.reason === 'cash_claim_open') {
+    return t('tradeDetail.s49');
+  }
+  if (eligibility?.refund_available_at) {
+    const at = new Date(eligibility.refund_available_at).toLocaleString(i18n.language === 'en' ? 'en-US' : 'es-MX', { dateStyle: 'medium', timeStyle: 'short' });
+    return t('tradeDetail.cancelledReturnsAt', { at });
+  }
+  return t('tradeDetail.s50');
+}
+
+function RefundedView({ trade, refundKind = null }: { trade: TradeDetailData; refundKind?: 'decline' | 'timeout' | null }) {
   const refundTxHash = trade.release_tx_hash;
 
   return (
@@ -704,18 +869,23 @@ function RefundedView({ trade }: { trade: TradeDetailData }) {
           undo
         </span>
       </div>
-      <h2 className="text-2xl font-bold text-on-surface mb-2">Fondos reembolsados</h2>
+      <h2 className="text-2xl font-bold text-on-surface mb-2">{t('tradeDetail.s51')}</h2>
+      {/* #16: el decline no es un vencimiento. */}
       <p className="text-on-surface-variant mb-6">
-        Los fondos fueron devueltos exitosamente. El tiempo para completar la operación había expirado.
+        {refundKind === 'decline'
+          ? t('tradeDetail.s52')
+          : refundKind === 'timeout'
+            ? t('tradeDetail.s53')
+            : t('tradeDetail.s54')}
       </p>
 
       <div className="bg-surface-container-low rounded-sm p-4 w-full mb-6">
         <div className="flex justify-between items-center mb-2">
-          <span className="text-sm text-on-surface-variant">Monto</span>
+          <span className="text-sm text-on-surface-variant">{t('tradeDetail.s4')}</span>
           <span className="num font-bold text-on-surface">${trade.amount_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-sm text-on-surface-variant">Comisión</span>
+          <span className="text-sm text-on-surface-variant">{t('tradeDetail.s5')}</span>
           <span className="num text-sm text-on-surface">${trade.platform_fee_mxn} MXN</span>
         </div>
       </div>
@@ -726,8 +896,7 @@ function RefundedView({ trade }: { trade: TradeDetailData }) {
           target="_blank"
           rel="noopener noreferrer"
           className="text-primary text-sm font-semibold hover:underline mb-6 flex items-center gap-1"
-        >
-          Ver transacción de reembolso en Stellar
+        >{t('tradeDetail.s55')}
           <span className="material-symbols-outlined text-sm">open_in_new</span>
         </a>
       )}
@@ -735,8 +904,7 @@ function RefundedView({ trade }: { trade: TradeDetailData }) {
       <Link
         to="/"
         className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity text-center"
-      >
-        Volver al inicio
+      >{t('tradeDetail.s44')}
       </Link>
     </div>
   );
@@ -753,14 +921,13 @@ function NotFoundError() {
         </span>
       </div>
       <h2 className="text-2xl font-bold text-on-surface mb-2">{errorMessages.generic.fallback.title}</h2>
-      <p className="text-on-surface-variant mb-2">La operación que buscas no existe o fue eliminada.</p>
+      <p className="text-on-surface-variant mb-2">{t('tradeDetail.s56')}</p>
       <p className="text-sm text-on-surface-variant mb-6">{errorMessages.generic.fallback.action}</p>
 
       <Link
         to="/"
         className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity text-center"
-      >
-        Volver al inicio
+      >{t('tradeDetail.s44')}
       </Link>
 
       <SupportLink />
@@ -777,14 +944,13 @@ function ForbiddenError() {
         </span>
       </div>
       <h2 className="text-2xl font-bold text-on-surface mb-2">{errorMessages.auth.unauthorized.title}</h2>
-      <p className="text-on-surface-variant mb-2">No tienes permiso para ver esta operación. Solo los participantes pueden acceder.</p>
+      <p className="text-on-surface-variant mb-2">{t('tradeDetail.s57')}</p>
       <p className="text-sm text-on-surface-variant mb-6">{errorMessages.auth.unauthorized.action}</p>
 
       <Link
         to="/"
         className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity text-center"
-      >
-        Volver al inicio
+      >{t('tradeDetail.s44')}
       </Link>
 
       <SupportLink />
@@ -801,14 +967,13 @@ function NetworkError({ onRetry }: { onRetry: () => void }) {
         </span>
       </div>
       <h2 className="text-2xl font-bold text-on-surface mb-2">{errorMessages.network.offline.title}</h2>
-      <p className="text-on-surface-variant mb-2">No se pudo conectar al servidor. Verifica tu conexión e intenta de nuevo.</p>
+      <p className="text-on-surface-variant mb-2">{t('tradeDetail.s58')}</p>
       <p className="text-sm text-on-surface-variant mb-6">{errorMessages.network.offline.action}</p>
 
       <button
         onClick={onRetry}
         className="w-full py-3 rounded-sm bg-primary text-papel font-semibold hover:opacity-90 transition-opacity mb-4"
-      >
-        Reintentar
+      >{t('tradeDetail.s59')}
       </button>
 
       <SupportLink />
@@ -845,30 +1010,25 @@ function RefundConfirmDialog({
       aria-labelledby="refund-title"
     >
       <div className="w-full max-w-md rounded-sm bg-surface p-6 border-2 border-tinta">
-        <h2 id="refund-title" className="font-headline text-lg font-bold text-on-surface">
-          Recuperar fondos
+        <h2 id="refund-title" className="font-headline text-lg font-bold text-on-surface">{t('tradeDetail.s47')}
         </h2>
-        <p className="mt-3 text-sm text-on-surface-variant leading-relaxed">
-          El intercambio expiró. Al recuperar los fondos se ejecutará el reembolso en la
-          blockchain de Stellar. Esta operación tiene un costo de gas fee en XLM.
+        <p className="mt-3 text-sm text-on-surface-variant leading-relaxed">{t('tradeDetail.s60')}
         </p>
 
         <div className="mt-4 bg-surface-container-low rounded-sm p-4">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-on-surface-variant">Monto a recuperar</span>
+            <span className="text-sm text-on-surface-variant">{t('tradeDetail.s61')}</span>
             <span className="num font-bold text-on-surface">${amount} MXN</span>
           </div>
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-on-surface-variant">Comisión de la operación</span>
+            <span className="text-sm text-on-surface-variant">{t('tradeDetail.s62')}</span>
             <span className="num text-sm text-on-surface">${fee} MXN</span>
           </div>
           <div className="flex justify-between items-center pt-2 border-t border-linea">
             <span className="text-sm font-semibold text-on-surface-variant">Total devuelto</span>
             <span className="num font-bold text-primary">${amount} MXN</span>
           </div>
-          <p className="mt-3 text-xs text-on-surface-variant">
-            * Se aplicará un gas fee en XLM por la transacción en Stellar. Los fondos en MXN
-            serán devueltos a tu cuenta.
+          <p className="mt-3 text-xs text-on-surface-variant">{t('tradeDetail.s63')}
           </p>
         </div>
 
@@ -876,9 +1036,9 @@ function RefundConfirmDialog({
           <div className="mt-4 rounded-sm border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
             <p>{error}</p>
             <p className="mt-2 text-xs">
-              <a href="mailto:soporte@micopay.app" className="font-semibold underline">
-                Contactar soporte
-              </a>
+              <a href={`mailto:${SUPPORT_EMAIL}`} className="font-semibold underline">{t('tradeDetail.s64')}
+              </a>{' '}
+              ({SUPPORT_EMAIL})
             </p>
           </div>
         )}
@@ -889,8 +1049,7 @@ function RefundConfirmDialog({
             className="rounded-sm px-4 py-2 text-sm font-semibold text-primary hover:bg-surface-container-low"
             onClick={onClose}
             disabled={submitting}
-          >
-            Cancelar
+          >{t('tradeDetail.s65')}
           </button>
           <button
             type="button"
@@ -898,7 +1057,7 @@ function RefundConfirmDialog({
             className="rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-papel disabled:opacity-50"
             onClick={onConfirm}
           >
-            {submitting ? 'Procesando…' : 'Sí, recuperar fondos'}
+            {submitting ? 'Procesando…' : t('tradeDetail.s66')}
           </button>
         </div>
       </div>
@@ -909,7 +1068,8 @@ function RefundConfirmDialog({
 // ── Main component ──────────────────────────────────────────────────────────
 
 function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
-  const { t } = useTranslation();
+  // Solo para volver a pintar al cambiar de idioma; los textos usan el `t` del modulo.
+  useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [trade, setTrade] = useState<TradeDetailData | null>(null);
@@ -929,6 +1089,11 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
   // `locked` o `revealing` vencida quedaba sin salida visible.
   const [refundEligibility, setRefundEligibility] = useState<RefundEligibility | null>(null);
   const [declineAvailable, setDeclineAvailable] = useState(false);
+  const [refundKind, setRefundKind] = useState<'decline' | 'timeout' | null>(null);
+  const [cashHandoffConfirmed, setCashHandoffConfirmed] = useState(false);
+  const [merchantUnavailable, setMerchantUnavailable] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   // Se consulta al cargar y tras cada cambio de estado, para que el CTA
   // aparezca en cuanto venza sin depender del reloj del dispositivo.
@@ -973,6 +1138,9 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       const data = await fetchTradeDetail(id, effectiveToken);
       setTrade(data.trade as TradeDetailData);
       setDeclineAvailable(Boolean(data.decline_available));
+      setRefundKind(data.refund_kind ?? null);
+      setCashHandoffConfirmed(Boolean(data.cash_handoff_confirmed));
+      setMerchantUnavailable(Boolean(data.merchant_unavailable));
       setError(null);
     } catch (e: any) {
       const status = e?.response?.status;
@@ -1011,11 +1179,17 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
     const effectiveToken = token ?? (await getStoredToken());
     if (!effectiveToken) return;
 
+    if (isCancelling) return;
+    setIsCancelling(true);
+    setCancelError(null);
     try {
       await cancelTradeRequest(trade.id, effectiveToken);
       fetchTrade(); // Refresh trade state
     } catch (e) {
-      console.error('Failed to cancel trade', e);
+      // El backend explica por que no (espera, pausa, QR vigente...).
+      setCancelError(e instanceof Error && e.message ? e.message : t('tradeDetail.s67'));
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -1039,7 +1213,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       await lockTrade(trade.id, effectiveToken);
       fetchTrade(); // Refresh to get locked state
     } catch (e: any) {
-      setLockError(e?.response?.data?.message || e?.message || 'No se pudo bloquear los fondos. Intenta de nuevo.');
+      setLockError(e?.response?.data?.message || e?.message || t('tradeDetail.s68'));
     } finally {
       setIsLocking(false);
     }
@@ -1050,7 +1224,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
     if (!trade || isConfirmingCash) return;
     const effectiveToken = token ?? (await getStoredToken());
     if (!effectiveToken) {
-      setCashError('Tu sesión expiró. Vuelve a entrar para confirmar el efectivo.');
+      setCashError(t('tradeDetail.s69'));
       return;
     }
     setIsConfirmingCash(true);
@@ -1078,7 +1252,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
     // se abandonaba en silencio aunque hubiera token guardado.
     const effectiveToken = token ?? (await getStoredToken());
     if (!effectiveToken) {
-      setRefundError('Tu sesión expiró. Vuelve a entrar para recuperar tus fondos.');
+      setRefundError(t('tradeDetail.s70'));
       return;
     }
 
@@ -1089,7 +1263,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       setShowRefundConfirm(false);
       fetchTrade();
     } catch (e: any) {
-      setRefundError(e.message || 'Error al procesar el reembolso. Intenta de nuevo.');
+      setRefundError(e.message || t('tradeDetail.s71'));
     } finally {
       setIsRefunding(false);
     }
@@ -1099,7 +1273,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
     if (!trade || isRefunding) return;
     const effectiveToken = token ?? (await getStoredToken());
     if (!effectiveToken) {
-      setRefundError('Tu sesión expiró. Vuelve a entrar para devolver los fondos.');
+      setRefundError(t('tradeDetail.s72'));
       return;
     }
 
@@ -1109,7 +1283,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       await declineTradeRequest(trade.id, effectiveToken);
       await fetchTrade();
     } catch (e: any) {
-      setRefundError(e?.message || 'No se pudieron devolver los fondos. Intenta de nuevo.');
+      setRefundError(e?.message || t('tradeDetail.s73'));
     } finally {
       setIsRefunding(false);
     }
@@ -1133,7 +1307,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       <div className="min-h-screen bg-surface-container-lowest flex items-center justify-center">
         <div className="text-center">
           <div className="w-10 h-10 border-4 border-surface-container-high border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-on-surface-variant text-sm">Cargando operación…</p>
+          <p className="text-on-surface-variant text-sm">{t('tradeDetail.s74')}</p>
         </div>
       </div>
     );
@@ -1183,6 +1357,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
             onLock={handleLock}
             locking={isLocking}
             lockError={lockError}
+            cancelError={cancelError}
           />
         );
       case 'locked':
@@ -1196,21 +1371,39 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
               onRefund={handleRefundClick}
               refunding={isRefunding}
               trade={trade}
-              title="Se agotó el tiempo"
+              title={t('tradeDetail.s75')}
               description="Nadie completó la entrega a tiempo. Tus fondos siguen en el contrato y puedes recuperarlos ahora."
             />
           );
         }
         return (
-          <LockedView
-            trade={trade}
-            cashConfirm={{
-              canConfirm: canConfirmCashReceived(actor, trade.status),
-              confirming: isConfirmingCash,
-              error: cashError,
-              onConfirm: handleConfirmCash,
-            }}
-          />
+          <>
+            {/* D4: el agente debe saber que hay un reclamo antes de esperar el vencimiento. */}
+            {actor.party === 'provider' && refundEligibility?.reason === 'cash_claim_open' && (
+              <p role="status" className="w-full mb-4 p-3 border-2 border-naranja bg-naranja-suave text-tinta text-sm font-bold rounded-sm">{t('tradeDetail.s76')}
+              </p>
+            )}
+            <LockedView
+              trade={trade}
+              actor={actor}
+              onOpenChat={() => navigate(`/chat/${trade.id}`)}
+              onShowQR={() => navigate(trade.flow === 'deposit' ? `/qr-deposit/${trade.id}` : '/qr-reveal')}
+              onGoToScanner={() => navigate('/inbox', { state: { autoScan: true } })}
+              cancel={{
+                allowed: actor.party === 'client' || (actor.party === 'provider' && merchantUnavailable),
+                mustPauseFirst: actor.party === 'provider' && !merchantUnavailable,
+                cancelling: isCancelling,
+                error: cancelError,
+                onCancel: handleCancel,
+              }}
+              cashConfirm={{
+                canConfirm: canConfirmCashReceived(actor, trade.status),
+                confirming: isConfirmingCash,
+                error: cashError,
+                onConfirm: handleConfirmCash,
+              }}
+            />
+          </>
         );
       case 'revealing':
         // CASH-6: igual que en `locked` — vencida con fondos dentro, la salida
@@ -1222,7 +1415,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
               onRefund={handleRefundClick}
               refunding={isRefunding}
               trade={trade}
-              title="Se agotó el tiempo"
+              title={t('tradeDetail.s75')}
               description="Nadie completó la entrega a tiempo. Tus fondos siguen en el contrato y puedes recuperarlos ahora."
             />
           );
@@ -1231,15 +1424,30 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
         // emite. CASH-5B trae aquí la acción real, repartida por flujo y
         // actor: la vista de confirmación ya no queda inalcanzable.
         return (
-          <RevealingView
-            trade={trade}
-            actor={actor}
-            onComplete={handleComplete}
-            token={token}
-            onShowQR={() => navigate('/qr-reveal')}
-            onOpenChat={() => navigate('/chat')}
-            onGoToScanner={() => navigate('/inbox')}
-          />
+          <>
+            <RevealingView
+              trade={trade}
+              actor={actor}
+              onComplete={handleComplete}
+              token={token}
+              onShowQR={() => navigate('/qr-reveal')}
+              onOpenChat={() => navigate(`/chat/${trade.id}`)}
+              onGoToScanner={() => navigate('/inbox', { state: { autoScan: true } })}
+              cashHandoffConfirmed={cashHandoffConfirmed}
+            />
+            {/* En un retiro, `revealing` es cuando el cliente ya genero su QR.
+                Cancelar sigue siendo posible hasta la entrega; el backend
+                decide (p. ej. lo rechaza mientras el QR siga vigente). */}
+            {actor.flow === 'cashout' && !cashHandoffConfirmed && (
+              <LockedCancel
+                allowed={actor.party === 'client' || (actor.party === 'provider' && merchantUnavailable)}
+                mustPauseFirst={actor.party === 'provider' && !merchantUnavailable}
+                cancelling={isCancelling}
+                error={cancelError}
+                onCancel={handleCancel}
+              />
+            )}
+          </>
         );
       case 'completed':
         return <CompletedView trade={trade} />;
@@ -1258,20 +1466,22 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
                 onRefund={handleDeclineNow}
                 refunding={isRefunding}
                 trade={trade}
-                title="Devolución pendiente"
+                title={t('tradeDetail.s77')}
                 description="La operación fue cancelada. Autoriza ahora la devolución inmediata al dueño de los fondos, sin esperar el vencimiento."
                 error={refundError}
               />
             );
           }
+          // #15: el boton y el texto salen de la elegibilidad del servidor. Antes
+          // decia "puedes recuperarlos ahora" horas antes del plazo.
           return (
             <ExpiredView
-              canRefund={isBuyer || isSeller}
+              canRefund={Boolean(refundEligibility?.eligible)}
               onRefund={handleRefundClick}
               refunding={isRefunding}
               trade={trade}
               title="Reembolso pendiente"
-              description="Esta operación fue cancelada. Tus fondos siguen en el contrato y se liberan automáticamente — también puedes recuperarlos ahora."
+              description={cancelledRefundCopy(refundEligibility)}
             />
           );
         }
@@ -1283,12 +1493,12 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
             onRefund={handleRefundClick}
             refunding={isRefunding}
             trade={trade}
-            title="Operación expirada"
+            title={t('tradeDetail.s78')}
             description="El tiempo para completar esta operación ha expirado."
           />
         );
       case 'refunded':
-        return <RefundedView trade={trade} />;
+        return <RefundedView trade={trade} refundKind={refundKind} />;
       default:
         return (
           <PendingView
@@ -1298,6 +1508,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
             onLock={handleLock}
             locking={isLocking}
             lockError={lockError}
+            cancelError={cancelError}
           />
         );
     }
@@ -1316,7 +1527,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
             <div>
-              <h1 className="font-headline font-bold text-lg text-on-surface">Detalle de operación</h1>
+              <h1 className="font-headline font-bold text-lg text-on-surface">{t('tradeDetail.s79')}</h1>
               <p className="text-xs text-on-surface-variant font-mono truncate max-w-[200px]">
                 ID: {trade.id.substring(0, 12)}…
               </p>
@@ -1332,8 +1543,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
             servidor. Sin metadatos de activo no se pinta. */}
         <TradeEscrowSummary trade={trade} viewerId={userId} className="mb-4" />
         {trade.chain_review_reason && (
-          <p role="status" className="mb-4 border-2 border-tinta bg-naranja-suave p-3 text-sm font-bold">
-            Confirmación pendiente: estamos verificando esta operación en la red.
+          <p role="status" className="mb-4 border-2 border-tinta bg-naranja-suave p-3 text-sm font-bold">{t('tradeDetail.s80')}
           </p>
         )}
         {renderStateView()}

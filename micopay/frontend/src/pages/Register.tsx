@@ -76,6 +76,8 @@ export default function Register({ onLoginSuccess }: RegisterProps) {
         setError(null);
       } else if (code === 'USERNAME_TAKEN') {
         setError('Ese nombre de usuario ya está ocupado. Elige otro.');
+      } else if (code === 'PHONE_ALREADY_REGISTERED') {
+        setError('Ese teléfono ya tiene una cuenta de MicoPay. Deja el teléfono vacío o usa otro.');
       } else if (msg.includes('Network') || msg.includes('fetch')) {
         setError('Sin conexión al servidor. Intenta en unos segundos.');
       } else {

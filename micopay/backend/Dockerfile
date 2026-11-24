@@ -34,6 +34,10 @@ RUN npm ci --omit=dev
 # ── Etapa 3: imagen final ─────────────────────────────────────────────────
 FROM node:22.23.4-bookworm-slim AS runtime
 ENV NODE_ENV=production
+# Commit del que sale la imagen; /health lo devuelve en `version`.
+#     docker build --build-arg GIT_COMMIT=$(git rev-parse HEAD) ...
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT=$GIT_COMMIT
 WORKDIR /app/backend
 
 COPY --from=deps  /app/backend/node_modules ./node_modules

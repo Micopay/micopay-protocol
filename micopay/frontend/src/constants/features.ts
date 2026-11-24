@@ -23,5 +23,8 @@ export const BANK_WITHDRAW_ENABLED = import.meta.env.VITE_ENABLE_BANK_WITHDRAW =
 
 /** CETES abre si hay algo que hacer ahi: comprar desde la billetera o por SPEI. */
 export const CETES_AVAILABLE = DEFI_TRADING_ENABLED || SPEI_RAMP_ENABLED;
-/** Blend hoy es solo simulacion: abre unicamente con DeFi encendido. */
-export const BLEND_AVAILABLE = DEFI_TRADING_ENABLED;
+/**
+ * Blend hoy es solo simulacion (pools fijos, hashes `mock_blend_*`). Tiene su
+ * propia bandera, separada de CETES: `VITE_ENABLE_BLEND=true`. Apagada en web.
+ */
+export const BLEND_AVAILABLE = import.meta.env.VITE_ENABLE_BLEND === 'true';

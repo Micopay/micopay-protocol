@@ -223,6 +223,7 @@ app.get('/health', async (_request, reply) => {
   return {
     status: ready ? 'ok' : 'unavailable',
     timestamp: new Date().toISOString(),
+    version: config.gitCommit,
     mockStellar: config.mockStellar,
     dbConnected,
     eventListenerHealthy: eventListeners.length > 0 && eventListeners.every((listener) => listener.isHealthy()),

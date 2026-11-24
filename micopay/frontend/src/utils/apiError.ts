@@ -59,9 +59,11 @@ export function extractApiErrorPayload(err: unknown): ApiErrorPayload {
       },
       message: err.message,
     });
+    // Un 409 de reglas de la operacion trae su propio texto para el usuario
+    // (p. ej. RELEASE_QR_ACTIVE dice cuanto esperar): el generico lo tapaba.
     const message =
-      typeof data?.message === 'string' && data.message.length > 0
-        ? resolved.message
+      err.response?.status === 409 && typeof data?.message === 'string' && data.message.length > 0
+        ? data.message
         : resolved.message;
     // Backend's global error handler sends `code` (see index.ts setErrorHandler),
     // not `error` — `error` is kept as a fallback for any endpoint that still
@@ -106,6 +108,21 @@ export function mapApiError(err: unknown): MappedApiError {
         message: serverMessage,
         error,
         action: 'choose_agent',
+        status,
+      };
+    }
+
+    // WP6: el servidor ya explica que falta (linea de confianza o saldo del
+    // USDC que usa el escrow); el mapa generico lo cambiaba por "No pudimos
+    // terminar esta accion".
+    if (error === 'LOCK_TRUSTLINE_MISSING' || error === 'LOCK_INSUFFICIENT_BALANCE') {
+      const serverMessage = typeof (err.response?.data as { message?: unknown } | undefined)?.message === 'string'
+        ? (err.response?.data as { message: string }).message
+        : message;
+      return {
+        message: serverMessage,
+        error,
+        action: 'retry',
         status,
       };
     }

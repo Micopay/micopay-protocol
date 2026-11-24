@@ -83,6 +83,8 @@ export interface OfferConfirmData {
 
 interface ExploreMapProps {
   onBack: () => void;
+  /** #14: quien mira. Si es agente, no se ofrece a si mismo. */
+  viewerId?: string | null;
   onSelectOffer: (offerId: string) => void;
   onProceedToConfirm?: (offer: OfferConfirmData) => void;
   amount?: number;
@@ -142,6 +144,7 @@ function EffectiveFeeNote({
 
 const ExploreMap = ({
   onBack,
+  viewerId = null,
   onSelectOffer,
   onProceedToConfirm,
   amount = 500,
@@ -178,7 +181,7 @@ const ExploreMap = ({
     return <FetchError onBack={onBack} onRetry={refetch} detail={state.error} />;
   }
 
-  const merchants = state.status === 'success' ? state.merchants : [];
+  const merchants = (state.status === 'success' ? state.merchants : []).filter((m) => !viewerId || m.seller_id !== viewerId);
   const offers: Offer[] = merchants.map((m, i) => merchantToOffer(m, i));
 
   return (

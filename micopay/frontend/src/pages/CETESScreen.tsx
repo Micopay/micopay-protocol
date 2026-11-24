@@ -1,3 +1,4 @@
+import { SUPPORT_EMAIL } from '../constants/contact';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
@@ -150,8 +151,8 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
     try {
       const result =
         tab === 'buy'
-          ? await buyCETES(amount, sourceAsset)
-          : await sellCETES(amount, sourceAsset);
+          ? await buyCETES(amount, sourceAsset, userToken ?? '')
+          : await sellCETES(amount, sourceAsset, userToken ?? '');
       setTxResult(result);
       setAmount('');
     } catch (err: unknown) {
@@ -606,7 +607,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
                         <p className="text-sm text-on-surface-variant">{t('cetes.depositErrorDetail')}</p>
                       </div>
                       <a
-                        href="mailto:soporte@micopay.mx"
+                        href={`mailto:${SUPPORT_EMAIL}`}
                         className="w-full flex items-center justify-center gap-2 border border-error text-error font-bold py-3 rounded-sm transition-all active:translate-x-[2px] active:translate-y-[2px]"
                       >
                         <span className="material-symbols-outlined text-base">mail</span>

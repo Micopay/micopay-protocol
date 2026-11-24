@@ -1,3 +1,6 @@
+import { Trans, useTranslation } from 'react-i18next';
+import i18n from '../i18n';
+
 /**
  * CASH-5A · Los estados canónicos, y solo esos.
  *
@@ -48,10 +51,10 @@ type TradeStateCopy = {
  */
 export const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
   locked: {
-    label: 'Operación bloqueada',
-    happened: 'La operación ya se abrió y los fondos quedaron en garantía.',
-    next: 'Comparte o presenta el código para continuar con la entrega de efectivo.',
-    safe: 'Tu saldo sigue protegido en contrato hasta que el proceso termine.',
+    get label() { return i18n.t('tradeState.locked.label'); },
+    get happened() { return i18n.t('tradeState.locked.happened'); },
+    get next() { return i18n.t('tradeState.locked.next'); },
+    get safe() { return i18n.t('tradeState.locked.safe'); },
     tone: {
       container: 'bg-verde-suave border-tinta',
       iconBg: 'bg-verde',
@@ -60,10 +63,10 @@ export const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     icon: 'lock',
   },
   pending: {
-    label: 'Operación creada',
-    happened: 'La solicitud se registró, pero los fondos todavía no entran en garantía.',
-    next: 'Confirma la operación para bloquear los fondos en el contrato.',
-    safe: 'Aún no se movió tu saldo: nada queda comprometido hasta el bloqueo.',
+    get label() { return i18n.t('tradeState.pending.label'); },
+    get happened() { return i18n.t('tradeState.pending.happened'); },
+    get next() { return i18n.t('tradeState.pending.next'); },
+    get safe() { return i18n.t('tradeState.pending.safe'); },
     tone: {
       container: 'bg-fondo border-tinta',
       iconBg: 'bg-gris',
@@ -72,10 +75,10 @@ export const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     icon: 'hourglass_top',
   },
   revealing: {
-    label: 'Esperando la entrega',
-    happened: 'El código ya se reveló y la entrega de efectivo puede ocurrir.',
-    next: 'Muestra el código al agente; los fondos se liberan al confirmarse la entrega.',
-    safe: 'Tu saldo sigue en garantía hasta que la entrega quede confirmada.',
+    get label() { return i18n.t('tradeState.revealing.label'); },
+    get happened() { return i18n.t('tradeState.revealing.happened'); },
+    get next() { return i18n.t('tradeState.revealing.next'); },
+    get safe() { return i18n.t('tradeState.revealing.safe'); },
     tone: {
       container: 'bg-naranja-suave border-tinta',
       iconBg: 'bg-naranja',
@@ -84,10 +87,10 @@ export const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     icon: 'qr_code_2',
   },
   completed: {
-    label: 'Operación completada',
-    happened: 'La operación se confirmó y el movimiento quedó cerrado.',
-    next: 'Puedes volver al inicio o revisar el historial de actividad.',
-    safe: 'Tus fondos ya se movieron al destino final de esta operación.',
+    get label() { return i18n.t('tradeState.completed.label'); },
+    get happened() { return i18n.t('tradeState.completed.happened'); },
+    get next() { return i18n.t('tradeState.completed.next'); },
+    get safe() { return i18n.t('tradeState.completed.safe'); },
     tone: {
       container: 'bg-verde-suave border-tinta',
       iconBg: 'bg-verde-claro',
@@ -96,43 +99,43 @@ export const TRADE_STATE_COPY: Record<TradeState, TradeStateCopy> = {
     icon: 'check_circle',
   },
   cancelled: {
-    label: 'Operación cancelada',
-    happened: 'La operación se detuvo antes de completarse.',
-    next: 'Inicia una nueva solicitud cuando quieras intentarlo de nuevo.',
-    safe: 'Tus fondos no se pierden: quedan asegurados para devolución o reintento.',
+    get label() { return i18n.t('tradeState.cancelled.label'); },
+    get happened() { return i18n.t('tradeState.cancelled.happened'); },
+    get next() { return i18n.t('tradeState.cancelled.next'); },
+    get safe() { return i18n.t('tradeState.cancelled.safe'); },
     tone: {
       container: 'bg-fondo border-tinta',
       iconBg: 'bg-gris',
       icon: 'text-papel',
     },
     icon: 'cancel',
-    recoveryLabel: 'Crear nueva solicitud',
+    get recoveryLabel() { return i18n.t('tradeState.cancelled.recovery'); },
   },
   expired: {
-    label: 'Tiempo agotado',
-    happened: 'La operación venció por tiempo sin confirmarse.',
-    next: 'Puedes iniciar otra operación para continuar.',
-    safe: 'El sistema protege tu saldo y procede a liberar o reembolsar.',
+    get label() { return i18n.t('tradeState.expired.label'); },
+    get happened() { return i18n.t('tradeState.expired.happened'); },
+    get next() { return i18n.t('tradeState.expired.next'); },
+    get safe() { return i18n.t('tradeState.expired.safe'); },
     tone: {
       container: 'bg-fondo border-tinta',
       iconBg: 'bg-gris',
       icon: 'text-papel',
     },
     icon: 'schedule',
-    recoveryLabel: 'Intentar de nuevo',
+    get recoveryLabel() { return i18n.t('tradeState.expired.recovery'); },
   },
   refunded: {
-    label: 'Fondos reembolsados',
-    happened: 'La operación se cerró y el saldo regresó a tu cuenta.',
-    next: 'Puedes crear una nueva solicitud cuando te convenga.',
-    safe: 'Tus fondos ya están de vuelta y disponibles.',
+    get label() { return i18n.t('tradeState.refunded.label'); },
+    get happened() { return i18n.t('tradeState.refunded.happened'); },
+    get next() { return i18n.t('tradeState.refunded.next'); },
+    get safe() { return i18n.t('tradeState.refunded.safe'); },
     tone: {
       container: 'bg-verde-suave border-tinta',
       iconBg: 'bg-verde',
       icon: 'text-papel',
     },
     icon: 'undo',
-    recoveryLabel: 'Hacer otra solicitud',
+    get recoveryLabel() { return i18n.t('tradeState.refunded.recovery'); },
   },
 };
 
@@ -179,6 +182,8 @@ interface TradeStateBadgeProps {
 const RECOVERY_STATES: TradeState[] = ['expired', 'cancelled', 'refunded'];
 
 const TradeStateBadge = ({ state, onRecover, recoverLabel, className = '' }: TradeStateBadgeProps) => {
+  // Los textos se leen al dibujar: con el hook, cambiar de idioma vuelve a pintar.
+  const { t } = useTranslation();
   const canonical = parseTradeState(state);
 
   // Estado fuera del contrato: se dice, no se disfraza. Sin acción de
@@ -194,14 +199,16 @@ const TradeStateBadge = ({ state, onRecover, recoverLabel, className = '' }: Tra
             <span aria-hidden="true" className="material-symbols-outlined text-base text-papel">help</span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-sm text-tinta">Estado no reconocido</p>
+            <p className="font-bold text-sm text-tinta">{t('tradeState.unknown.title')}</p>
             <p className="mt-2 text-[13px] leading-relaxed text-gris">
-              La app no reconoce el estado <span className="font-mono">{String(state)}</span> que
-              reportó el servidor.
+              <Trans
+                i18nKey="tradeState.unknown.body"
+                values={{ state: String(state) }}
+                components={{ code: <span className="font-mono" /> }}
+              />
             </p>
             <p className="mt-1.5 text-[13px] leading-relaxed font-medium text-on-surface">
-              Tus fondos siguen protegidos por el contrato. Actualiza la app o escribe a soporte
-              antes de intentar cualquier acción.
+              {t('tradeState.unknown.safe')}
             </p>
           </div>
         </div>
@@ -211,7 +218,7 @@ const TradeStateBadge = ({ state, onRecover, recoverLabel, className = '' }: Tra
 
   const copy = TRADE_STATE_COPY[canonical];
   const showRecovery = RECOVERY_STATES.includes(canonical);
-  const buttonLabel = recoverLabel ?? copy.recoveryLabel ?? 'Volver a intentar';
+  const buttonLabel = recoverLabel ?? copy.recoveryLabel ?? t('tradeState.retry');
 
   return (
     <section className={`rounded-sm border-2 p-4 ${copy.tone.container} ${className}`}>

@@ -1,6 +1,7 @@
 # Node.js
 node_modules/
 dist/
+dist-web/
 npm-debug.log*
 
 # Build/typecheck scratch output (should never be committed)

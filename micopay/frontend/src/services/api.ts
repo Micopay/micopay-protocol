@@ -1,6 +1,9 @@
 import axios from 'axios';
+import { Networks } from '@stellar/stellar-sdk';
 import { extractApiErrorPayload, toApiError } from '../utils/apiError';
 import { signChallenge, getPublicKey, signTransactionXdr } from '../lib/keystore';
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
+import { assertWebAuthChallenge } from '../lib/signer/webAuthChallenge';
 import { validatePreparedEscrowTx } from './escrowTxValidation';
 // CASH-5A: el conjunto canónico de estados vive en TradeStateBadge, que es su
 // dueño según el issue. Import de solo tipo: se borra al compilar, así que no
@@ -155,6 +158,9 @@ export interface TradeData {
   /** Roles del escrow. GET /trades/:id y POST /trades los devuelven. */
   seller_id?: string;
   buyer_id?: string;
+  /** CASH-1: flujo de producto y agente, columnas de `trades`. */
+  flow?: TradeFlow;
+  provider_id?: string;
   seller_stellar_address?: string | null;
   buyer_stellar_address?: string | null;
   escrow_contract_id?: string | null;
@@ -209,6 +215,10 @@ export interface TradeDetailResponse {
   };
   /** Buyer may sign decline() for this exact contract and trade state. */
   decline_available: boolean;
+  /** #16: en `refunded`, si fue decline o vencimiento. */
+  refund_kind?: 'decline' | 'timeout' | null;
+  /** Cash-out: el agente ya escaneó el QR y registró la entrega. */
+  cash_handoff_confirmed?: boolean;
   merchant_unavailable: boolean;
   seller_username: string | null;
   buyer_username: string | null;
@@ -264,6 +274,15 @@ export async function cancelTradeRequest(tradeId: string, buyerToken: string): P
   }
 }
 
+/** D4: el cliente de un depósito reporta que pagó y el agente no confirmó. */
+export async function openCashClaim(tradeId: string, token: string, note?: string): Promise<void> {
+  try {
+    await http.post(`/trades/${tradeId}/cash-claim`, note ? { note } : {}, authHeaders(token));
+  } catch (e: unknown) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
 export async function patchMerchantAvailability(
     token: string,
     merchant_available: boolean,
@@ -305,6 +324,19 @@ export async function updateMerchantLocation(
   return res.data.location;
 }
 
+/** Lo que dice la billetera llega tal cual; solo se traducen las respuestas del backend. */
+function webAuthError(e: unknown): unknown {
+  return axios.isAxiosError(e) ? toApiError(extractApiErrorPayload(e)) : e;
+}
+
+/** Reto SEP-10 firmado por la billetera. Se revisa antes de pedir la firma. */
+async function signedWebChallenge(account: string): Promise<string> {
+  const passphrase = import.meta.env.VITE_NETWORK_PASSPHRASE || Networks.TESTNET;
+  const res = await http.get('/auth/sep10', { params: { account } });
+  assertWebAuthChallenge(res.data.transaction, account, passphrase);
+  return signTransactionXdr(res.data.transaction, passphrase, 'web_auth');
+}
+
 /**
  * Registers a new user. The backend requires proof that this device holds
  * stellar_address's private key (same challenge/response dance as login) —
@@ -321,6 +353,21 @@ export async function registerUser(username: string, phoneHash?: string): Promis
   const stellar_address = await getPublicKey();
   if (!stellar_address) {
     throw new Error('No device keypair found — generateAndStoreKeypair() must run before registerUser()');
+  }
+
+  if (IS_EXTERNAL_SIGNER) {
+    try {
+      const body: Record<string, string> = {
+        username,
+        stellar_address,
+        transaction: await signedWebChallenge(stellar_address),
+      };
+      if (phoneHash) body.phone_hash = phoneHash;
+      const res = await http.post('/users/register', body);
+      return { ...res.data.user, token: res.data.token };
+    } catch (e: unknown) {
+      throw webAuthError(e);
+    }
   }
 
   const challengeRes = await fetch(`${BASE_URL}/auth/challenge`, {
@@ -362,6 +409,16 @@ export async function getAuthToken(reason: 'sign_request' | 'login' = 'sign_requ
   const stellar_address = await getPublicKey();
   if (!stellar_address) {
     throw new Error('No device keypair found — generateAndStoreKeypair() must run before getAuthToken()');
+  }
+
+  if (IS_EXTERNAL_SIGNER) {
+    try {
+      const transaction = await signedWebChallenge(stellar_address);
+      const res = await http.post('/auth/sep10', { transaction });
+      return res.data.token;
+    } catch (e: unknown) {
+      throw webAuthError(e);
+    }
   }
 
   // Step 1: request a one-time challenge from the server
@@ -417,6 +474,12 @@ export async function createTrade(
   } catch (e: unknown) {
     throw toApiError(extractApiErrorPayload(e));
   }
+}
+
+/** Operaciones abiertas de esta cuenta, para ubicar una firma pedida desde la web. */
+export async function getActiveTrades(token: string): Promise<TradeData[]> {
+  const res = await http.get('/trades/active', authHeaders(token));
+  return res.data.trades;
 }
 
 export async function getTrade(
@@ -745,19 +808,23 @@ export async function getCETESRate(amount = "100"): Promise<CETESRate> {
   return res.data;
 }
 
+// #12: estas rutas exigen sesion. Sin el token el backend respondia 401 y el
+// interceptor global cerraba la sesion: el sitio "se reiniciaba".
 export async function buyCETES(
     amount: string,
     sourceAsset: "XLM" | "USDC",
+    token: string,
 ): Promise<CETESTxResult> {
-  const res = await http.post("/defi/cetes/buy", { amount, sourceAsset });
+  const res = await http.post("/defi/cetes/buy", { amount, sourceAsset }, authHeaders(token));
   return res.data;
 }
 
 export async function sellCETES(
     amount: string,
     destAsset: "XLM" | "USDC",
+    token: string,
 ): Promise<CETESTxResult> {
-  const res = await http.post("/defi/cetes/sell", { amount, destAsset });
+  const res = await http.post("/defi/cetes/sell", { amount, destAsset }, authHeaders(token));
   return res.data;
 }
 
@@ -801,21 +868,23 @@ export async function getBlendPools(): Promise<BlendPoolsResponse> {
 export async function blendSupply(
     amount: string,
     asset: string,
-    collateral = false,
+    collateral: boolean,
+    token: string,
 ): Promise<BlendTxResult> {
   const res = await http.post("/defi/blend/supply", {
     amount,
     asset,
     collateral,
-  });
+  }, authHeaders(token));
   return res.data;
 }
 
 export async function blendBorrow(
     amount: string,
     asset: string,
+    token: string,
 ): Promise<BlendTxResult> {
-  const res = await http.post("/defi/blend/borrow", { amount, asset });
+  const res = await http.post("/defi/blend/borrow", { amount, asset }, authHeaders(token));
   return res.data;
 }
 
@@ -1175,6 +1244,8 @@ export interface RefundEligibility {
     | 'already_settled'
     /** Ya hubo entrega de efectivo: el reembolso lo revisa soporte (D2). */
     | 'cash_handoff_confirmed'
+    /** D4: el cliente reportó que pagó; lo revisa soporte. */
+    | 'cash_claim_open'
     /** No se pudo leer el plazo en cadena; se reintenta, nunca se da por vencido. */
     | 'unverifiable';
   /** Caducidad de la solicitud. */

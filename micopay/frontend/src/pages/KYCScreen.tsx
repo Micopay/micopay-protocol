@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
 import { useTranslation } from 'react-i18next';
 import { App as CapApp } from '@capacitor/app';
 
@@ -145,6 +146,11 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse', l
     setReason(null);
     setLoading(true);
 
+    // En la web la pestana se abre aqui, dentro del clic, o el navegador la
+    // bloquea. MicoPay queda abierta consultando el estado: los proveedores no
+    // regresan a la app por si solos.
+    const webTab = IS_EXTERNAL_SIGNER ? window.open('', '_blank') : null;
+
     try {
       const { onboardingUrl } = await startKYC(token, provider, emailOverride, level);
       setNeedsEmail(false);
@@ -152,6 +158,12 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse', l
       startedAtRef.current = Date.now();
       setStartingToken(onboardingUrl);
       setStatus('pending');
+
+      if (webTab) {
+        webTab.opener = null;
+        webTab.location.href = onboardingUrl;
+        return;
+      }
 
       // Open in system browser (preferred: Capacitor Browser plugin).
       // We lazy-load to avoid hard dependency on TS typings.
@@ -168,6 +180,7 @@ export default function KYCScreen({ onApproved, token, provider = 'etherfuse', l
         window.open(onboardingUrl, '_blank', 'noopener,noreferrer');
       }
     } catch (err) {
+      webTab?.close();
       // Previously uncaught: a failed startKYC() (e.g. Etherfuse rejecting the
       // request) silently opened nothing and left no trace for the user.
       const payload = extractApiErrorPayload(err);

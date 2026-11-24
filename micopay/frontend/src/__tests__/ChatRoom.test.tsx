@@ -94,3 +94,36 @@ describe('ChatRoom — role-specific cash-out banners', () => {
     });
   });
 });
+
+describe('ChatRoom — prueba local 2.7', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetTrade.mockResolvedValue({ status: 'locked', amount_mxn: 500, lock_tx_hash: 'tx' });
+  });
+
+  it('el agente no ve "Ver mi QR" y su botón de escanear abre el escáner', async () => {
+    mockUseChatMessages.mockReturnValue(defaultChatMessages);
+    const onScan = vi.fn();
+    const onViewQR = vi.fn();
+    renderChatRoom({ isProvider: true, onScan, onViewQR });
+    await waitFor(() => expect(mockGetTrade).toHaveBeenCalled());
+    expect(screen.queryByText(/Ver mi QR/)).toBeNull();
+    const scanButtons = await screen.findAllByRole('button', { name: /escanear/i });
+    scanButtons[scanButtons.length - 1].click();
+    expect(onScan).toHaveBeenCalled();
+    expect(onViewQR).not.toHaveBeenCalled();
+  });
+
+  it('cada mensaje dice quién lo escribió', async () => {
+    mockUseChatMessages.mockReturnValue({
+      ...defaultChatMessages,
+      messages: [
+        { id: 'm1', body: 'hola', isOwn: false, createdAt: '2026-11-01T10:00:00Z' },
+        { id: 'm2', body: 'ya voy', isOwn: true, createdAt: '2026-11-01T10:01:00Z' },
+      ],
+    });
+    renderChatRoom({ isProvider: false });
+    expect(await screen.findByText('Tú')).toBeInTheDocument();
+    expect(screen.getAllByText('Farmacia Guadalupe').length).toBeGreaterThan(1);
+  });
+});

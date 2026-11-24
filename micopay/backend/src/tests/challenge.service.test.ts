@@ -39,13 +39,13 @@ async function assertAuthError(fn: () => Promise<unknown>, expectedCode: string,
 }
 
 async function testValidChallengeSucceeds() {
-  const { challenge } = issueChallenge(ADDR_A);
+  const { challenge } = await issueChallenge(ADDR_A);
   await verifyAndConsumeChallenge(ADDR_A, challenge, "any-signature-mock-mode");
   console.log("  ✓ a freshly issued challenge for the right address is accepted");
 }
 
 async function testChallengeCannotBeReusedForADifferentAddress() {
-  const { challenge } = issueChallenge(ADDR_A);
+  const { challenge } = await issueChallenge(ADDR_A);
   // Someone tries to register/login as ADDR_B using a challenge that was
   // issued for ADDR_A — this is exactly the address-squatting gap: without
   // this check, whoever controls a device can claim ANY public address by
@@ -59,7 +59,7 @@ async function testChallengeCannotBeReusedForADifferentAddress() {
 }
 
 async function testChallengeIsSingleUse() {
-  const { challenge } = issueChallenge(ADDR_A);
+  const { challenge } = await issueChallenge(ADDR_A);
   await verifyAndConsumeChallenge(ADDR_A, challenge, "sig-1");
 
   await assertAuthError(
@@ -80,7 +80,7 @@ async function testUnknownChallengeIsRejected() {
 }
 
 async function testWrongChallengeStringIsRejected() {
-  issueChallenge(ADDR_A);
+  await issueChallenge(ADDR_A);
   await assertAuthError(
     () => verifyAndConsumeChallenge(ADDR_A, "wrong-challenge-string", "sig"),
     "AUTH_INVALID_CHALLENGE",
@@ -90,6 +90,23 @@ async function testWrongChallengeStringIsRejected() {
 }
 
 
+async function testSeveralChallengesPerAddress() {
+  const first = await issueChallenge(ADDR_A);
+  const second = await issueChallenge(ADDR_A);
+  await verifyAndConsumeChallenge(ADDR_A, first.challenge, "sig");
+  await verifyAndConsumeChallenge(ADDR_A, second.challenge, "sig");
+  console.log("  ✓ una dirección puede tener varios retos abiertos");
+}
+
+async function testConcurrentAttemptsOnlyOneWins() {
+  const { challenge } = await issueChallenge(ADDR_A);
+  const results = await Promise.allSettled(
+    Array.from({ length: 5 }, () => verifyAndConsumeChallenge(ADDR_A, challenge, "sig")),
+  );
+  strictEqual(results.filter((r) => r.status === "fulfilled").length, 1);
+  console.log("  ✓ de varios intentos simultáneos solo uno gana");
+}
+
 async function main() {
   console.log("\nChallenge/response registration security tests\n");
   await testValidChallengeSucceeds();
@@ -97,6 +114,8 @@ async function main() {
   await testChallengeIsSingleUse();
   await testUnknownChallengeIsRejected();
   await testWrongChallengeStringIsRejected();
+  await testSeveralChallengesPerAddress();
+  await testConcurrentAttemptsOnlyOneWins();
   console.log("\nAll challenge.service tests passed.\n");
 }
 

@@ -5,6 +5,10 @@ import ErrorBanner from '../components/ErrorBanner';
 import { getTradeHistory, getPaymentHistory, TradeHistoryItem, type PaymentHistoryItem } from '../services/api';
 import { mapApiError, type MappedApiError } from '../utils/apiError';
 import { buildTxUrl } from '../utils/stellarExplorer';
+import i18n from '../i18n';
+
+// Textos que no pasan por el hook: el arbol se vuelve a pintar al cambiar de idioma.
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 /** Renglon del historial: una operacion de efectivo o una transferencia de la red. */
 type Row =
@@ -104,7 +108,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
         <button aria-label={t('a11y.back')} onClick={onBack} className="min-h-12 min-w-12 min-h-12 min-w-12 flex items-center justify-center rounded-sm transition-colors">
           <span className="material-symbols-outlined text-on-surface">arrow_back</span>
         </button>
-        <h1 className="flex-1 text-center font-headline font-bold text-lg mr-10">Historial de Transacciones</h1>
+        <h1 className="flex-1 text-center font-headline font-bold text-lg mr-10">{tr('historyText.s1')}</h1>
       </header>
 
       <main className="flex-1 mt-[calc(5rem+env(safe-area-inset-top))] px-6 pb-24">
@@ -133,8 +137,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
         ) : null}
 
         {!loading && paymentsFailed ? (
-          <p className="text-xs text-gris mb-4">
-            No pudimos cargar tus transferencias de la red. Aparecerán al volver a abrir el historial.
+          <p className="text-xs text-gris mb-4">{tr('historyText.s2')}
           </p>
         ) : null}
 
@@ -149,9 +152,8 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
             <div className="w-16 h-16 bg-surface-container-low rounded-sm flex items-center justify-center mx-auto mb-4">
               <span className="material-symbols-outlined text-gris text-3xl">history_toggle_off</span>
             </div>
-            <h3 className="font-headline font-bold text-on-surface mb-2">Sin transacciones</h3>
-            <p className="text-sm text-gris leading-relaxed max-w-[200px] mx-auto">
-              No encontramos transacciones que coincidan con tu filtro actual.
+            <h3 className="font-headline font-bold text-on-surface mb-2">{tr('historyText.s3')}</h3>
+            <p className="text-sm text-gris leading-relaxed max-w-[200px] mx-auto">{tr('historyText.s4')}
             </p>
           </div>
         ) : (
@@ -213,7 +215,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
               <span aria-hidden="true" className="material-symbols-outlined text-sm">chevron_left</span>
               Anterior
             </button>
-            <span className="text-xs font-bold text-gris">Página {page}</span>
+            <span className="text-xs font-bold text-gris">{tr('historyText.s5')}{' '}{page}</span>
             <button
               disabled={rows.length < 10}
               onClick={() => setPage(p => p + 1)}

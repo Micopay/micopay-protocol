@@ -1,3 +1,4 @@
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
 import MapReal from '../components/MapReal';
 import { useTranslation } from 'react-i18next';
 import { useMerchantsAvailable } from '../hooks/useMerchantsAvailable';
@@ -23,6 +24,8 @@ function formatDistance(km: number): string {
 
 interface DepositMapProps {
   onBack: () => void;
+  /** #14: quien mira. Si es agente, no se ofrece a si mismo. */
+  viewerId?: string | null;
   onSelectOffer: (offerId: string) => void;
   /**
    * Paso de confirmacion, igual que en cash-out. El deposito saltaba directo al
@@ -157,7 +160,7 @@ function LocationDenied({ onBack }: { onBack: () => void }) {
         <span className="material-symbols-outlined text-5xl text-gris">location_off</span>
         <h2 className="font-headline font-bold text-xl text-on-surface">{t('depositMap.locationNeeded')}</h2>
         <p className="text-sm text-gris font-medium max-w-xs leading-snug">
-          {t('depositMap.locationDescription')}
+          {t(IS_EXTERNAL_SIGNER ? 'depositMap.locationDescriptionWeb' : 'depositMap.locationDescription')}
         </p>
         <button
           onClick={onBack}
@@ -238,6 +241,7 @@ function EmptyState({ onBack, amount }: { onBack: () => void; amount: number }) 
 
 const DepositMap = ({
   onBack,
+  viewerId = null,
   onSelectOffer,
   onProceedToConfirm,
   loading = false,
@@ -268,7 +272,7 @@ const DepositMap = ({
     return <FetchError onBack={onBack} onRetry={refetch} />;
   }
 
-  const merchants = state.status === 'success' ? state.merchants : [];
+  const merchants = (state.status === 'success' ? state.merchants : []).filter((m) => !viewerId || m.seller_id !== viewerId);
 
   return (
     <div className="bg-surface text-on-surface min-h-screen pb-24">

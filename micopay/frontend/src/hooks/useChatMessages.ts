@@ -97,6 +97,7 @@ export function useChatMessages({
    */
   const fetchMessages = useCallback(
     async (beforeTimestamp?: string) => {
+      if (!tradeId) return;
       try {
         const url = new URL(`${apiBaseUrl}/trades/${tradeId}/messages`);
         if (beforeTimestamp) {
@@ -139,7 +140,7 @@ export function useChatMessages({
    */
   const pollNewMessages = useCallback(async () => {
     // Don't poll if tab is hidden
-    if (document.hidden) {
+    if (document.hidden || !tradeId) {
       return;
     }
 
