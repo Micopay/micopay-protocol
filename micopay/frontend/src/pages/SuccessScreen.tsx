@@ -5,6 +5,11 @@ import { buildTxUrl, truncateHash, STELLAR_NETWORK_LABEL } from '../utils/stella
 import { formatStroops } from '../utils/escrowAmounts';
 import SupportLink from '../components/SupportLink';
 import TradeEscrowSummary from '../components/TradeEscrowSummary';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
+// Fechas del recibo en el idioma activo, no siempre en es-MX.
+const displayLocale = () => (i18n.language === 'en' ? 'en-US' : 'es-MX');
 
 /**
  * WP-D: el recibo, con datos del servidor. Lo que no llega es `null` y la
@@ -100,7 +105,7 @@ const SuccessScreen = ({ type, trade, viewerId, agentName, onHome }: SuccessScre
         if (!isoString) return '—';
         const date = new Date(isoString);
         const day = date.getDate();
-        const month = date.toLocaleString('es-MX', { month: 'short' });
+        const month = date.toLocaleString(displayLocale(), { month: 'short' });
         const hours = date.getHours();
         const minutes = date.getMinutes().toString().padStart(2, '0');
         const ampm = hours >= 12 ? 'pm' : 'am';
@@ -118,10 +123,10 @@ const SuccessScreen = ({ type, trade, viewerId, agentName, onHome }: SuccessScre
         const receiptType = type === 'cashout' ? t('success.receiptWithdrawal') : t('success.receiptDeposit');
         return [
             `${t('success.receiptTextTitle', { type: receiptType })}${isSimulated ? ` (${t('success.testnetSimulated')})` : ''}`,
-            `Red: Stellar ${STELLAR_NETWORK_LABEL.toUpperCase()}`,
-            receiptDate ? `Fecha: ${new Date(receiptDate).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}` : '',
+            `${tr('success.receiptNetwork')}: Stellar ${STELLAR_NETWORK_LABEL.toUpperCase()}`,
+            receiptDate ? `${tr('success.receiptDate')}: ${new Date(receiptDate).toLocaleString(displayLocale(), { dateStyle: 'medium', timeStyle: 'short' })}` : '',
             `${t('success.receiptAmount')}: $${amount} MXN`,
-            cryptoAmount ? `Cripto: ${cryptoAmount}` : '',
+            cryptoAmount ? `${tr('success.receiptCrypto')}: ${cryptoAmount}` : '',
             received !== null ? `${t('success.receiptReceived')}: $${received} MXN` : '',
             commission !== null ? `${t('success.receiptCommission')}: $${commission} MXN` : '',
             `${t('success.receiptAgent')}: ${agentLabel}`,

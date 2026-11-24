@@ -225,7 +225,7 @@ export default function MerchantSettings({
       <p className="text-sm text-on-surface-variant mb-8">{tr('merchantSettingsText.s7')}</p>
 
       {loading ? (
-        <p>Cargando…</p>
+        <p>{tr('merchantSettingsText.loading')}</p>
       ) : (
         <div className="space-y-5">
           <section className="bg-papel rounded-sm p-5 border border-slate-100 mb-8">
@@ -254,7 +254,7 @@ export default function MerchantSettings({
           </section>
 
           <Field
-            label={`Tasa del agente (%) · máximo ${maxProviderFeePercent}`}
+            label={tr('merchantSettingsText.agentFee', { max: maxProviderFeePercent })}
             value={form.rate_percent}
             step="0.1"
             min={0}
@@ -278,7 +278,7 @@ export default function MerchantSettings({
             }
           />
           <Field
-            label="Tope diario (MXN)"
+            label={tr('merchantSettingsText.dailyCap')}
             value={form.daily_cap_mxn}
             onChange={(v) =>
               setForm((f) => ({ ...f, daily_cap_mxn: toFieldNumber(v) }))
