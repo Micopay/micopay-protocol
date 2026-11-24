@@ -1,4 +1,10 @@
 {
+  "appLock": {
+    "title": "MicoPay is locked",
+    "unlock": "Unlock",
+    "logout": "Log out",
+    "retryHint": "Not confirmed. Tap Unlock to try again."
+  },
   "nav": {
     "home": "Home",
     "pay": "Pay",

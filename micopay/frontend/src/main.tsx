@@ -15,7 +15,13 @@ if (Capacitor.isNativePlatform()) {
   // el telefono cambia de manos.
   CapApp.addListener('appStateChange', ({ isActive }) => {
     if (!isActive) {
-      void import('./lib/userPresence').then(({ resetPresence }) => resetPresence())
+      // Ademas se anota cuando salio: si vuelve tras mas de un minuto, App
+      // bloquea la cuenta hasta que la persona confirme (AUTH-2).
+      const leftAt = Date.now()
+      void import('./lib/userPresence').then(({ resetPresence, markBackgrounded }) => {
+        resetPresence()
+        markBackgrounded(leftAt)
+      })
     }
   })
 

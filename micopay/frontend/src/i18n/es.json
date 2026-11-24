@@ -1,4 +1,10 @@
 {
+  "appLock": {
+    "title": "MicoPay está bloqueada",
+    "unlock": "Desbloquear",
+    "logout": "Cerrar sesión",
+    "retryHint": "No se confirmó. Toca Desbloquear para intentarlo de nuevo."
+  },
   "nav": {
     "home": "Inicio",
     "pay": "Pagar",

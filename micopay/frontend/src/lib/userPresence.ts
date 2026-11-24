@@ -38,7 +38,8 @@ export type PresenceReason =
   | 'reveal_key'
   | 'sign_request'
   | 'web_auth'
-  | 'login';
+  | 'login'
+  | 'unlock';
 
 const PROMPTS: Record<PresenceReason, string> = {
   lock: 'Confirma para bloquear tu dinero en garantía',
@@ -49,6 +50,7 @@ const PROMPTS: Record<PresenceReason, string> = {
   sign_request: 'Confirma para autorizar esta operación',
   web_auth: 'Confirma para iniciar sesión en la web',
   login: 'Confirma que eres tú para entrar',
+  unlock: 'Confirma que eres tú para abrir MicoPay',
 };
 
 export class PresenceDeniedError extends Error {
@@ -75,6 +77,57 @@ export function resetPresence(): void {
 }
 
 /**
+ * Bloqueo de la app al volver de segundo plano (AUTH-2).
+ *
+ * EL HUECO
+ * --------
+ * Con la sesion abierta, cualquiera que tomara el telefono desbloqueado y
+ * abriera MicoPay veia saldo, historial, chats y perfil. Las firmas ya pedian
+ * huella; mirar la cuenta, no.
+ *
+ * LO QUE ESTO ES, Y LO QUE NO
+ * ---------------------------
+ * Es una compuerta para VER la cuenta, del mismo tipo que la de las firmas: no
+ * cifra nada ni cierra la sesion. Un minuto fuera no bloquea, para que salir a
+ * copiar una direccion no cueste una huella.
+ */
+export const LOCK_AFTER_MS = 60_000;
+let backgroundedAt = 0;
+// El PIN del sistema abre otra actividad y Android manda la app a segundo
+// plano mientras se escribe. Sin esto, un PIN lento volvia a bloquear la app
+// justo al desbloquearla.
+let promptInFlight = false;
+
+/** La app paso a segundo plano. Lo llama `main.tsx`. */
+export function markBackgrounded(now: number = Date.now()): void {
+  if (promptInFlight) return;
+  backgroundedAt = now;
+}
+
+/**
+ * Al volver a primer plano: ¿estuvo fuera mas de `LOCK_AFTER_MS`? Consume la
+ * marca, asi que cada salida cuenta una sola vez.
+ */
+export function shouldLockOnResume(now: number = Date.now()): boolean {
+  const since = backgroundedAt;
+  backgroundedAt = 0;
+  return since > 0 && now - since > LOCK_AFTER_MS;
+}
+
+/**
+ * ¿Tiene sentido bloquear la app en este dispositivo? Mismas reglas que
+ * `requireUserPresence`, pero sin mostrar nada: en web, o sin huella ni bloqueo
+ * de pantalla, no hay con que desbloquear, y dejar a alguien fuera de su propio
+ * dinero es peor.
+ */
+export async function canLockDevice(): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return false;
+  const { BiometricAuth } = await import('@aparajita/capacitor-biometric-auth');
+  const info = await BiometricAuth.checkBiometry().catch(() => null);
+  return Boolean(info?.isAvailable || info?.deviceIsSecure);
+}
+
+/**
  * Pide confirmacion. Lanza `PresenceDeniedError` si la persona cancela.
  *
  * @param reason que se va a hacer, para que el dialogo lo diga
@@ -98,6 +151,7 @@ export async function requireUserPresence(
   // encabezado — dejar a alguien fuera de su propio dinero es peor.
   if (!info?.isAvailable && !info?.deviceIsSecure) return;
 
+  promptInFlight = true;
   try {
     await BiometricAuth.authenticate({
       reason: PROMPTS[reason],
@@ -114,5 +168,7 @@ export async function requireUserPresence(
     // Cualquier fallo se trata como negativa. Interpretar un error del sistema
     // como "adelante" convertiria la compuerta en decorativa.
     throw new PresenceDeniedError();
+  } finally {
+    promptInFlight = false;
   }
 }
