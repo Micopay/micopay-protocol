@@ -1260,5 +1260,30 @@
     "s6Body": "You can delete your account at any time from the Profile section. We reserve the right to suspend accounts that violate these terms.",
     "s7Title": "7. Contact",
     "s7Body": "For questions about these terms, write to us at {{email}}."
+  },
+  "blend": {
+    "simulated": "Simulated test!",
+    "sent": "Operation sent!",
+    "demoNote": "Demo — no real funds were moved on-chain.",
+    "viewExplorer": "View in the Stellar explorer",
+    "subtitle": "Financial protocol on Stellar",
+    "tabLoan": "Loan",
+    "tabYield": "Yield",
+    "collateralTitle": "Deposit collateral",
+    "collateralHint": "Use XLM as collateral",
+    "amountXlm": "XLM amount",
+    "borrowCapacity": "Borrowing capacity",
+    "processing": "Processing…",
+    "depositCollateral": "Deposit XLM as collateral",
+    "borrowTitle": "Borrow",
+    "maxBorrow": "Max ~{{amount}} {{asset}}",
+    "collateralFirst": "Deposit collateral first",
+    "borrowApy": "Borrow:",
+    "liquidity": "Liquidity:",
+    "noPools": "No pools available",
+    "supplyTitle": "Deposit to earn",
+    "earnPerYear": "You'll earn ~{{amount}} {{asset}} / year",
+    "supplyButton": "Deposit and earn",
+    "footer": "Blend Capital · Stellar Testnet · Rates are indicative"
   }
 }

@@ -1260,5 +1260,30 @@
     "s6Body": "Puedes eliminar tu cuenta en cualquier momento desde la sección de Perfil. Nos reservamos el derecho de suspender cuentas que violen estos términos.",
     "s7Title": "7. Contacto",
     "s7Body": "Para dudas sobre estos términos escríbenos a {{email}}."
+  },
+  "blend": {
+    "simulated": "¡Prueba simulada!",
+    "sent": "¡Operación enviada!",
+    "demoNote": "Demostración — no se movieron fondos reales on-chain.",
+    "viewExplorer": "Ver en el explorador Stellar",
+    "subtitle": "Protocolo financiero en Stellar",
+    "tabLoan": "Préstamo",
+    "tabYield": "Rendimiento",
+    "collateralTitle": "Depositar garantía",
+    "collateralHint": "Usa XLM como colateral",
+    "amountXlm": "Cantidad XLM",
+    "borrowCapacity": "Capacidad de préstamo",
+    "processing": "Procesando…",
+    "depositCollateral": "Depositar XLM como garantía",
+    "borrowTitle": "Pedir prestado",
+    "maxBorrow": "Máx ~{{amount}} {{asset}}",
+    "collateralFirst": "Deposita garantía primero",
+    "borrowApy": "Préstamo:",
+    "liquidity": "Liquidez:",
+    "noPools": "No hay fondos disponibles",
+    "supplyTitle": "Depositar para ganar",
+    "earnPerYear": "Ganarás ~{{amount}} {{asset}} / año",
+    "supplyButton": "Depositar y ganar",
+    "footer": "Blend Capital · Stellar Testnet · Las tasas son orientativas"
   }
 }
