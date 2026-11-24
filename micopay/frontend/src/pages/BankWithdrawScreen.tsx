@@ -24,6 +24,9 @@ import {
   WithdrawTxMismatchError,
   type ExpectedBankWithdraw,
 } from '../services/stellarRamp';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 interface BankWithdrawScreenProps {
   onBack: () => void;
@@ -82,7 +85,7 @@ export default function BankWithdrawScreen({ onBack, onVerifyIdentity, userToken
       const s = await fetchBankWithdrawStatus(userToken, { detail });
       setStatus(s);
     } catch (e) {
-      setError(extractApiErrorPayload(e).message ?? 'No pudimos cargar tu estado');
+      setError(extractApiErrorPayload(e).message ?? tr('bankWithdraw.loadError'));
     } finally {
       setLoading(false);
     }
@@ -108,21 +111,21 @@ export default function BankWithdrawScreen({ onBack, onVerifyIdentity, userToken
   return (
     <div className="min-h-screen bg-crema text-tinta flex flex-col">
       <header className="flex items-center gap-3 p-4 border-b-2 border-tinta">
-        <button onClick={onBack} className="font-bold" aria-label="Atras">←</button>
-        <h1 className="font-bold text-lg">Retirar a banco</h1>
+        <button onClick={onBack} className="font-bold" aria-label={tr('bankWithdraw.back')}>←</button>
+        <h1 className="font-bold text-lg">{tr('bankWithdraw.title')}</h1>
       </header>
 
       <main className="flex-1 p-4 flex flex-col gap-4">
         {STELLAR_NETWORK_LABEL === 'Testnet' && (
           <p className="p-3 border-2 border-naranja bg-naranja-suave text-tinta text-sm font-bold rounded-sm">
-            Entorno de pruebas: no se envía dinero a ningún banco. No escribas tu RFC, CURP ni domicilio reales.
+            {tr('bankWithdraw.testnetWarning')}
           </p>
         )}
-        {loading && <p>Cargando…</p>}
+        {loading && <p>{tr('bankWithdraw.loading')}</p>}
         {!loading && error && (
           <div className="p-4 border-2 border-naranja bg-naranja-suave">
             <p className="font-bold">{error}</p>
-            <button onClick={() => refresh(true)} className="mt-2 underline">Reintentar</button>
+            <button onClick={() => refresh(true)} className="mt-2 underline">{tr('bankWithdraw.retry')}</button>
           </div>
         )}
         {!loading && !error && status && (
@@ -150,19 +153,16 @@ function StageView({
     case 'needs_didit':
       return (
         <section className="p-4 border-2 border-tinta bg-crema flex flex-col gap-3">
-          <h2 className="font-bold mb-2">Verifica tu identidad</h2>
-          <p>
-            Antes de retirar a tu banco necesitas verificar tu identidad. Es el
-            mismo proceso de Didit que usamos para pagar entre personas.
-          </p>
+          <h2 className="font-bold mb-2">{tr('bankWithdraw.diditTitle')}</h2>
+          <p>{tr('bankWithdraw.diditBody')}</p>
           <button
             type="button"
             onClick={onVerifyIdentity}
             className="min-h-12 bg-verde text-papel font-bold rounded-sm"
           >
-            Verificar mi identidad
+            {tr('bankWithdraw.diditButton')}
           </button>
-          <p className="text-sm opacity-70">Al terminar regresarás aquí.</p>
+          <p className="text-sm opacity-70">{tr('bankWithdraw.diditReturn')}</p>
         </section>
       );
     case 'kyc_action':
@@ -172,9 +172,9 @@ function StageView({
     case 'kyc_review':
       return (
         <section className="p-4 border-2 border-naranja bg-naranja-suave">
-          <h2 className="font-bold mb-2">En revisión</h2>
+          <h2 className="font-bold mb-2">{tr('bankWithdraw.reviewTitle')}</h2>
           <p>
-            Etherfuse esta revisando tus datos. Esto suele tomar minutos.
+            {tr('bankWithdraw.reviewBody')}
             {status.kycMessage ? ` ${status.kycMessage}` : ''}
           </p>
         </section>
@@ -209,7 +209,7 @@ function BankAccountForm({ userToken, onDone }: { userToken: string; onDone: () 
       });
       onDone();
     } catch (e) {
-      setError(extractApiErrorPayload(e).message ?? 'No pudimos registrar la cuenta');
+      setError(extractApiErrorPayload(e).message ?? tr('bankWithdraw.registerError'));
     } finally {
       setSubmitting(false);
     }
@@ -217,10 +217,10 @@ function BankAccountForm({ userToken, onDone }: { userToken: string; onDone: () 
 
   return (
     <form onSubmit={submit} className="p-4 border-2 border-tinta bg-crema flex flex-col gap-4">
-      <h2 className="font-bold">Tu cuenta de banco</h2>
+      <h2 className="font-bold">{tr('bankWithdraw.accountTitle')}</h2>
 
       <label className="flex flex-col gap-1">
-        <span className="font-bold">CLABE (18 dígitos)</span>
+        <span className="font-bold">{tr('bankWithdraw.clabeLabel')}</span>
         <input
           type="text"
           inputMode="numeric"
@@ -235,14 +235,14 @@ function BankAccountForm({ userToken, onDone }: { userToken: string; onDone: () 
             {clabe.length < 18
               ? `${clabe.length}/18`
               : clabeOk
-                ? `✓ ${banco ?? 'banco desconocido'}`
-                : '✗ el dígito de control no coincide'}
+                ? `✓ ${banco ?? tr('bankWithdraw.unknownBank')}`
+                : tr('bankWithdraw.clabeCheckFailed')}
           </span>
         )}
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="font-bold">Nombre del titular</span>
+        <span className="font-bold">{tr('bankWithdraw.holderName')}</span>
         <input
           type="text"
           value={holder}
@@ -254,7 +254,7 @@ function BankAccountForm({ userToken, onDone }: { userToken: string; onDone: () 
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="font-bold">RFC del titular</span>
+        <span className="font-bold">{tr('bankWithdraw.holderRfc')}</span>
         <input
           type="text"
           value={rfc}
@@ -272,7 +272,7 @@ function BankAccountForm({ userToken, onDone }: { userToken: string; onDone: () 
         disabled={!clabeOk || !holder.trim() || !rfc.trim() || submitting}
         className="min-h-12 bg-tinta text-crema font-bold disabled:opacity-50"
       >
-        {submitting ? 'Guardando…' : 'Guardar cuenta'}
+        {submitting ? tr('bankWithdraw.saving') : tr('bankWithdraw.saveAccount')}
       </button>
     </form>
   );
@@ -315,7 +315,7 @@ function KycActionView({ userToken, message }: { userToken: string; message: str
       submitLaunchForm(await relaunchBankKyc(userToken));
       setOpened(true);
     } catch (e) {
-      setError(extractApiErrorPayload(e).message ?? 'No pudimos abrir Etherfuse');
+      setError(extractApiErrorPayload(e).message ?? tr('bankWithdraw.openError'));
     } finally {
       setOpening(false);
     }
@@ -323,13 +323,13 @@ function KycActionView({ userToken, message }: { userToken: string; message: str
 
   return (
     <section className="p-4 border-2 border-tinta bg-naranja-suave flex flex-col gap-3">
-      <h2 className="font-bold">Te falta un paso en Etherfuse</h2>
+      <h2 className="font-bold">{tr('bankWithdraw.actionTitle')}</h2>
       <p>
         {message
-          ?? 'Etherfuse necesita que termines o corrijas tu verificacion. Abre su pagina y revisa lo que te marca.'}
+          ?? tr('bankWithdraw.actionDefault')}
       </p>
       {opened && (
-        <p className="text-sm">Cuando termines, regresa aqui: la pantalla se actualiza sola.</p>
+        <p className="text-sm">{tr('bankWithdraw.actionReturn')}</p>
       )}
       {error && <p className="text-red-600 font-bold">{error}</p>}
       <button
@@ -338,7 +338,7 @@ function KycActionView({ userToken, message }: { userToken: string; message: str
         disabled={opening}
         className="min-h-12 bg-tinta text-crema font-bold disabled:opacity-50"
       >
-        {opening ? 'Abriendo…' : opened ? 'Abrir de nuevo' : 'Continuar en Etherfuse'}
+        {opening ? tr('bankWithdraw.opening') : opened ? tr('bankWithdraw.openAgain') : tr('bankWithdraw.continueEtherfuse')}
       </button>
     </section>
   );
@@ -402,7 +402,7 @@ function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void 
       // onDone trae needs_kyc -> kyc_review y empieza el polling de 10 s.
       setTimeout(onDone, 1500);
     } catch (e) {
-      setError(extractApiErrorPayload(e).message ?? 'No pudimos iniciar el KYC');
+      setError(extractApiErrorPayload(e).message ?? tr('bankWithdraw.kycStartError'));
     } finally {
       setSubmitting(false);
     }
@@ -411,27 +411,19 @@ function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void 
   if (launched) {
     return (
       <section className="p-4 border-2 border-tinta bg-naranja-suave flex flex-col gap-3">
-        <h2 className="font-bold">Abrimos el verificador</h2>
-        <p>
-          Haz la selfie y acepta el contrato en la pestana que se abrio.
-          Cuando termines, regresa aqui: en unos segundos esta pantalla
-          cambia sola.
-        </p>
+        <h2 className="font-bold">{tr('bankWithdraw.launchedTitle')}</h2>
+        <p>{tr('bankWithdraw.launchedBody')}</p>
       </section>
     );
   }
 
   return (
     <form onSubmit={submit} className="p-4 border-2 border-tinta bg-crema flex flex-col gap-3">
-      <h2 className="font-bold">Un paso para habilitar el retiro</h2>
-      <p className="text-sm">
-        Etherfuse pide estos datos la primera vez. Despues de guardarlos
-        abriremos su pagina para que te tomes una selfie y aceptes su
-        contrato.
-      </p>
+      <h2 className="font-bold">{tr('bankWithdraw.kycTitle')}</h2>
+      <p className="text-sm">{tr('bankWithdraw.kycIntro')}</p>
 
       <label className="flex flex-col gap-1">
-        <span className="font-bold">Nombre completo (como en tu INE)</span>
+        <span className="font-bold">{tr('bankWithdraw.fullName')}</span>
         <input
           type="text"
           value={fullName}
@@ -443,7 +435,7 @@ function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void 
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="font-bold">Fecha de nacimiento</span>
+        <span className="font-bold">{tr('bankWithdraw.birthDate')}</span>
         <input
           type="date"
           value={dob}
@@ -454,7 +446,7 @@ function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void 
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="font-bold">RFC con homoclave</span>
+        <span className="font-bold">{tr('bankWithdraw.rfcLabel')}</span>
         <input
           type="text"
           value={rfc}
@@ -464,12 +456,12 @@ function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void 
           placeholder="HEGL900101AB1"
         />
         {rfc.length > 0 && !RFC_RE.test(rfc.trim().toUpperCase()) && (
-          <span className="text-sm">El RFC debe tener 12 o 13 caracteres (4 letras, 6 numeros, 3 alfanumericos).</span>
+          <span className="text-sm">{tr('bankWithdraw.rfcInvalid')}</span>
         )}
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="font-bold">Correo</span>
+        <span className="font-bold">{tr('bankWithdraw.email')}</span>
         <input
           type="email"
           value={email}
@@ -491,12 +483,12 @@ function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void 
           placeholder="HEGL900101MDFRNT00"
         />
         {curp.length > 0 && !CURP_RE.test(curp.trim().toUpperCase()) && (
-          <span className="text-sm">La CURP debe tener 18 caracteres.</span>
+          <span className="text-sm">{tr('bankWithdraw.curpInvalid')}</span>
         )}
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="font-bold">Calle y numero</span>
+        <span className="font-bold">{tr('bankWithdraw.street')}</span>
         <input
           type="text"
           value={street}
@@ -509,7 +501,7 @@ function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void 
 
       <div className="grid grid-cols-2 gap-2">
         <label className="flex flex-col gap-1">
-          <span className="font-bold">Ciudad</span>
+          <span className="font-bold">{tr('bankWithdraw.city')}</span>
           <input
             type="text"
             value={city}
@@ -520,7 +512,7 @@ function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void 
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="font-bold">CP (opcional)</span>
+          <span className="font-bold">{tr('bankWithdraw.postalCode')}</span>
           <input
             type="text"
             inputMode="numeric"
@@ -540,13 +532,10 @@ function KycForm({ userToken, onDone }: { userToken: string; onDone: () => void 
         disabled={!canSubmit || submitting}
         className="min-h-12 bg-tinta text-crema font-bold disabled:opacity-50"
       >
-        {submitting ? 'Enviando…' : 'Continuar con la selfie'}
+        {submitting ? tr('bankWithdraw.sending') : tr('bankWithdraw.continueSelfie')}
       </button>
 
-      <p className="text-xs opacity-70">
-        Los datos van directo a Etherfuse. La CURP sustituye la constancia
-        fiscal; su pagina pedira solo los pasos visuales pendientes.
-      </p>
+      <p className="text-xs opacity-70">{tr('bankWithdraw.kycFootnote')}</p>
     </form>
   );
 }
@@ -589,7 +578,7 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
       const q = await createBankWithdrawQuote(userToken, { asset: 'USDC', amount });
       setStage({ kind: 'quoted', quote: q });
     } catch (e) {
-      setError(extractApiErrorPayload(e).message ?? 'No pudimos cotizar');
+      setError(extractApiErrorPayload(e).message ?? tr('bankWithdraw.quoteError'));
     } finally { setBusy(false); }
   };
 
@@ -603,7 +592,7 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
       const [sourceCode, sourceIssuer] = q.sourceAsset.split(':');
       const sourceBalance = await getStellarAssetBalance(pub, { code: sourceCode, issuer: sourceIssuer });
       if (Number(sourceBalance) < Number(q.sourceAmount)) {
-        throw new Error(`Saldo insuficiente del USDC compatible con Etherfuse. Tienes ${Number(sourceBalance).toFixed(2)} y necesitas hasta ${q.sourceAmount}.`);
+        throw new Error(tr('bankWithdraw.insufficientBalance', { balance: Number(sourceBalance).toFixed(2), needed: q.sourceAmount }));
       }
 
       const order = await confirmBankWithdrawOrder(userToken, q.quoteId);
@@ -611,7 +600,7 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
 
       const dest = order.fundingInstructions?.destination;
       if (!order.preparedTransaction || !dest?.address) {
-        throw new Error('Etherfuse no devolvio una transaccion para firmar');
+        throw new Error(tr('bankWithdraw.noTransaction'));
       }
 
       const expected: ExpectedBankWithdraw = {
@@ -632,7 +621,7 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
       });
     } catch (e) {
       if (e instanceof WithdrawTxMismatchError) {
-        setError(`La transaccion no coincide con la orden (${e.reason}). No se firmo.`);
+        setError(tr('bankWithdraw.txMismatch', { reason: e.reason }));
       } else {
         setError(extractApiErrorPayload(e).message ?? (e as Error).message);
       }
@@ -660,13 +649,13 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
 
   if (stage.kind === 'tracking') {
     const title = stage.status === 'completed'
-      ? 'Tu retiro llegó'
+      ? tr('bankWithdraw.arrived')
       : stage.status === 'failed' || stage.status === 'refunded' || stage.status === 'canceled'
-        ? 'El retiro no se completo'
-        : 'Procesando tu retiro';
+        ? tr('bankWithdraw.failed')
+        : tr('bankWithdraw.processing');
     const detail = stage.status === 'completed'
-      ? `$${stage.destinationMxn ?? '--'} MXN a tu cuenta ${clabeMasked ?? ''}`
-      : `Estado: ${stage.status}`;
+      ? tr('bankWithdraw.arrivedDetail', { amount: stage.destinationMxn ?? '--', account: clabeMasked ?? '' })
+      : tr('bankWithdraw.statusDetail', { status: stage.status });
     return (
       <section className="p-4 border-2 border-naranja bg-naranja-suave">
         <h2 className="font-bold mb-2">{title}</h2>
@@ -677,10 +666,10 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
 
   return (
     <section className="p-4 border-2 border-tinta bg-crema flex flex-col gap-4">
-      <h2 className="font-bold">Retirar a {clabeMasked ?? 'tu cuenta'}</h2>
+      <h2 className="font-bold">{tr('bankWithdraw.withdrawTo', { account: clabeMasked ?? tr('bankWithdraw.yourAccount') })}</h2>
 
       <label className="flex flex-col gap-1">
-        <span className="font-bold">Monto en USDC</span>
+        <span className="font-bold">{tr('bankWithdraw.amountUsdc')}</span>
         <input
           type="text"
           inputMode="decimal"
@@ -699,19 +688,19 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
           disabled={!amountOk || busy}
           className="min-h-12 bg-tinta text-crema font-bold disabled:opacity-50"
         >
-          {busy ? 'Cotizando…' : 'Cotizar'}
+          {busy ? tr('bankWithdraw.quoting') : tr('bankWithdraw.quote')}
         </button>
       )}
 
       {stage.kind === 'quoted' && (
         <div className="flex flex-col gap-3 border-2 border-tinta p-3 bg-naranja-suave">
-          <p>Te llegan <strong>${stage.quote.destinationAmount} MXN</strong></p>
-          <p className="text-sm">Conversión: hasta {stage.quote.sourceAmount} USDC → {stage.quote.fundingAmount} CETES</p>
-          <p className="text-sm">Comisión de Etherfuse: {stage.quote.feeAmount} {stage.quote.feeAsset.split(':')[0]} ({stage.quote.feeBps / 100}%)</p>
+          <p>{tr('bankWithdraw.youReceive')} <strong>${stage.quote.destinationAmount} MXN</strong></p>
+          <p className="text-sm">{tr('bankWithdraw.conversion', { source: stage.quote.sourceAmount, funding: stage.quote.fundingAmount })}</p>
+          <p className="text-sm">{tr('bankWithdraw.fee', { amount: stage.quote.feeAmount, asset: stage.quote.feeAsset.split(':')[0], percent: stage.quote.feeBps / 100 })}</p>
           <p className="text-sm">
             {expired
-              ? 'La cotización vencio; pide una nueva.'
-              : `La cotizacion vence en ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}.`}
+              ? tr('bankWithdraw.quoteExpired')
+              : tr('bankWithdraw.quoteExpiresIn', { time: `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}` })}
           </p>
           <div className="flex gap-2">
             <button
@@ -719,7 +708,7 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
               onClick={() => setStage({ kind: 'idle' })}
               className="flex-1 min-h-12 border-2 border-tinta font-bold"
             >
-              Cancelar
+              {tr('bankWithdraw.cancel')}
             </button>
             {expired ? (
               <button
@@ -728,7 +717,7 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
                 disabled={busy}
                 className="flex-1 min-h-12 bg-tinta text-crema font-bold disabled:opacity-50"
               >
-                Nueva cotización
+                {tr('bankWithdraw.newQuote')}
               </button>
             ) : (
               <button
@@ -737,7 +726,7 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
                 disabled={busy}
                 className="flex-1 min-h-12 bg-tinta text-crema font-bold disabled:opacity-50"
               >
-                {busy ? 'Firmando…' : 'Confirmar y firmar'}
+                {busy ? tr('bankWithdraw.signing') : tr('bankWithdraw.confirmSign')}
               </button>
             )}
           </div>
@@ -745,7 +734,7 @@ function WithdrawForm({ userToken, clabeMasked }: { userToken: string; clabeMask
       )}
 
       {stage.kind === 'signing' && (
-        <p className="text-sm">Firmando y enviando a la red…</p>
+        <p className="text-sm">{tr('bankWithdraw.signingNetwork')}</p>
       )}
 
       {error && <p className="text-red-600 font-bold">{error}</p>}
