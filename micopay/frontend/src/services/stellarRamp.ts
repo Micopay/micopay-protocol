@@ -4,6 +4,9 @@ import { getPublicKey, signTransactionXdr } from '../lib/keystore';
 import { Buffer } from 'buffer';
 import { buildTxUrl } from '../utils/stellarExplorer';
 import { decodeTransactionXdr } from './transactionDecoder';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 const HORIZON_URL = import.meta.env.VITE_HORIZON_URL || 'https://horizon-testnet.stellar.org';
 const NETWORK_PASSPHRASE = import.meta.env.VITE_NETWORK_PASSPHRASE || Networks.TESTNET;
@@ -57,7 +60,7 @@ export async function sendCETESToEtherfuse(
     await signTransactionXdr(unsignedTx.toXDR(), NETWORK_PASSPHRASE, 'payment'),
     NETWORK_PASSPHRASE,
   );
-  if (!(signedTx instanceof Transaction)) throw new Error('La transacción firmada no es válida.');
+  if (!(signedTx instanceof Transaction)) throw new Error(tr('rampErrors.invalidSigned'));
 
   try {
     const response = await server.submitTransaction(signedTx);
@@ -105,7 +108,7 @@ export interface BankWithdrawSwapPlan {
 
 export class WithdrawTxMismatchError extends Error {
   constructor(public reason: string, public detail?: Record<string, string | undefined>) {
-    super(`La transaccion no coincide con la orden: ${reason}`);
+    super(tr('rampErrors.mismatch', { reason }));
     this.name = 'WithdrawTxMismatchError';
   }
 }
@@ -130,7 +133,7 @@ export function validatePreparedWithdrawTx(
 ): void {
   const decoded = decodeTransactionXdr(xdr, networkPassphrase);
   if (decoded.type !== 'payment') {
-    throw new WithdrawTxMismatchError('la transaccion no es un pago simple', {
+    throw new WithdrawTxMismatchError(tr('rampErrors.notSimplePayment'), {
       type: decoded.type,
     });
   }
@@ -153,7 +156,7 @@ export function validatePreparedWithdrawTx(
     });
   }
   if (decoded.assetIssuer !== expected.assetIssuer) {
-    throw new WithdrawTxMismatchError('emisor del activo incorrecto', {
+    throw new WithdrawTxMismatchError(tr('rampErrors.wrongIssuer'), {
       got: decoded.assetIssuer,
       expected: expected.assetIssuer,
     });
@@ -196,7 +199,7 @@ export async function signAndSubmitPreparedWithdrawTx(
     NETWORK_PASSPHRASE,
   );
   if (!(parsed instanceof Transaction)) {
-    throw new WithdrawTxMismatchError('la tx es un fee-bump; no se soporta');
+    throw new WithdrawTxMismatchError(tr('rampErrors.feeBump'));
   }
 
   try {
@@ -212,25 +215,25 @@ export async function signAndSubmitPreparedWithdrawTx(
 
 function stellarAsset(ref: { code: string; issuer?: string }): Asset {
   if (ref.code === 'XLM') return Asset.native();
-  if (!ref.issuer) throw new WithdrawTxMismatchError(`falta el emisor de ${ref.code}`);
+  if (!ref.issuer) throw new WithdrawTxMismatchError(tr('rampErrors.missingIssuer', { code: ref.code }));
   return new Asset(ref.code, ref.issuer);
 }
 
 function assertSwapPlan(expected: ExpectedBankWithdraw, swap: BankWithdrawSwapPlan): void {
   if (swap.sendAsset.code !== 'USDC' || !swap.sendAsset.issuer) {
-    throw new WithdrawTxMismatchError('el activo de entrada del swap no es USDC');
+    throw new WithdrawTxMismatchError(tr('rampErrors.sourceNotUsdc'));
   }
   if (swap.destinationAsset.code !== expected.assetCode || swap.destinationAsset.issuer !== expected.assetIssuer) {
-    throw new WithdrawTxMismatchError('el activo destino del swap no coincide con la orden');
+    throw new WithdrawTxMismatchError(tr('rampErrors.destAsset'));
   }
   if (normalizeAmount(swap.destinationAmount) !== normalizeAmount(expected.amount)) {
-    throw new WithdrawTxMismatchError('el monto destino del swap no coincide con la orden');
+    throw new WithdrawTxMismatchError(tr('rampErrors.destAmount'));
   }
   if (normalizeAmount(swap.sendMax) === 'invalid') {
-    throw new WithdrawTxMismatchError('el maximo de USDC del swap no es valido');
+    throw new WithdrawTxMismatchError(tr('rampErrors.maxUsdc'));
   }
   if (swap.path.length > 5) {
-    throw new WithdrawTxMismatchError('la ruta del swap tiene demasiados saltos');
+    throw new WithdrawTxMismatchError(tr('rampErrors.tooManyHops'));
   }
 }
 
@@ -257,7 +260,7 @@ export async function signAndSubmitBankWithdrawPathPayment(
     await signTransactionXdr(unsignedXdr, NETWORK_PASSPHRASE, 'payment'),
     NETWORK_PASSPHRASE,
   );
-  if (!(signed instanceof Transaction)) throw new WithdrawTxMismatchError('la firma devolvio una tx no soportada');
+  if (!(signed instanceof Transaction)) throw new WithdrawTxMismatchError(tr('rampErrors.unsupportedSigned'));
 
   try {
     const response = await server.submitTransaction(signed);
@@ -268,7 +271,7 @@ export async function signAndSubmitBankWithdrawPathPayment(
     if (txCode === 'tx_bad_seq') throw new Error('tx_bad_seq');
     if (txCode === 'tx_too_late') throw new Error('tx_too_late');
     if (['op_over_sendmax', 'op_too_few_offers', 'op_src_no_trust', 'op_src_not_authorized', 'op_underfunded'].includes(opCode)) {
-      throw new Error('No se pudo completar el swap USDC→CETES; solicita una cotización nueva y revisa tu saldo.');
+      throw new Error(tr('rampErrors.swapFailed'));
     }
     throw error;
   }
@@ -285,10 +288,10 @@ export function buildBankWithdrawPathPaymentXdr(
   validatePreparedWithdrawTx(preparedXdr, expectedFunding, networkPassphrase);
   assertSwapPlan(expectedFunding, swap);
   if (account.accountId() !== expectedFunding.fromAddress) {
-    throw new WithdrawTxMismatchError('la cuenta cargada no coincide con el retiro');
+    throw new WithdrawTxMismatchError(tr('rampErrors.accountMismatch'));
   }
   const prepared = TransactionBuilder.fromXDR(preparedXdr, networkPassphrase);
-  if (!(prepared instanceof Transaction)) throw new WithdrawTxMismatchError('la tx es un fee-bump; no se soporta');
+  if (!(prepared instanceof Transaction)) throw new WithdrawTxMismatchError(tr('rampErrors.feeBump'));
   const builder = new TransactionBuilder(account, {
     fee: '10000',
     networkPassphrase,
