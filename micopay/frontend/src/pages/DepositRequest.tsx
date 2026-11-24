@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AmountField } from '../components/ui';
 import AssetSelector from '../components/AssetSelector';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 export interface DepositRequestProps {
   onBack: () => void;
@@ -86,7 +89,7 @@ const DepositRequest = ({ onBack, onSearch, assetKey, onAssetChange }: DepositRe
           <div className="pt-8">
             <button
               onClick={() => onSearch(amount)}
-              aria-label="Buscar agentes"
+              aria-label={tr('depositRequestText.searchAgents')}
               className="w-full bg-naranja text-papel border-2 border-tinta shadow-solida h-[56px] rounded-sm font-headline font-bold text-lg active:translate-x-[2px] active:translate-y-[2px] transition-all duration-200 flex items-center justify-center space-x-2 focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <span>{t('deposit.search')}</span>

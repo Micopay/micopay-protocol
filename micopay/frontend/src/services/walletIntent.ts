@@ -3,6 +3,9 @@ import { Buffer } from 'buffer';
 import type { TradeData } from './api';
 import { validatePreparedEscrowTx } from './escrowTxValidation';
 import { WalletRequestRejected, type EscrowRequestSummary } from './walletRequest';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 export interface EscrowIntent extends EscrowRequestSummary {
   tradeId: string;
@@ -39,11 +42,11 @@ export async function resolveEscrowIntent(
 ): Promise<EscrowIntent> {
   const active = await deps.listActive(token);
   const found = active.find((trade) => matches(trade, summary));
-  if (!found) throw new WalletRequestRejected('no hay una operación abierta que coincida');
+  if (!found) throw new WalletRequestRejected(tr('walletRequestErrors.noOpenTrade'));
 
   const trade = await deps.getTrade(found.id, token);
   if (trade.escrow_contract_id !== summary.contractId) {
-    throw new WalletRequestRejected('el contrato no corresponde a la operación');
+    throw new WalletRequestRejected(tr('walletRequestErrors.contractMismatch'));
   }
   await (deps.validate ?? validatePreparedEscrowTx)(xdr, networkPassphrase, trade, summary.action);
 

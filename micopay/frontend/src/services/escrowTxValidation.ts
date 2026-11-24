@@ -11,6 +11,9 @@ import {
 import { Buffer } from 'buffer';
 import { getPublicKey } from '../lib/keystore';
 import type { TradeData } from './api';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 export type EscrowAction = 'lock' | 'release' | 'decline';
 
@@ -19,7 +22,7 @@ const MAX_ESCROW_FEE_STROOPS = BigInt(import.meta.env.VITE_MAX_ESCROW_FEE_STROOP
 
 export class EscrowTxMismatchError extends Error {
   constructor(detail: string) {
-    super(`La transacción preparada no coincide con la operación: ${detail}`);
+    super(tr('txValidation.escrowMismatch', { detail }));
     this.name = 'EscrowTxMismatchError';
   }
 }
@@ -36,7 +39,7 @@ function bytesEqual(actual: unknown, expected: Uint8Array): boolean {
 }
 
 function requiredTradeField(value: string | null | undefined, name: string): string {
-  if (!value) throw new EscrowTxMismatchError(`falta ${name} en los datos autenticados del intercambio`);
+  if (!value) throw new EscrowTxMismatchError(tr('txValidation.missingField', { field: name }));
   return value;
 }
 
@@ -47,36 +50,36 @@ function assertCommonShape(
   contractId: string,
 ): { tx: Transaction; invocation: ReturnType<Operation.InvokeHostFunction['func']['invokeContract']> } {
   if (networkPassphrase !== configuredNetworkPassphrase()) {
-    throw new EscrowTxMismatchError('la red no corresponde a esta versión de la app');
+    throw new EscrowTxMismatchError(tr('txValidation.wrongNetwork'));
   }
 
   const parsed = TransactionBuilder.fromXDR(xdr, networkPassphrase);
   if (parsed instanceof FeeBumpTransaction || !(parsed instanceof Transaction)) {
-    throw new EscrowTxMismatchError('no se admiten transacciones fee-bump');
+    throw new EscrowTxMismatchError(tr('txValidation.noFeeBump'));
   }
-  if (parsed.source !== sourceAccount) throw new EscrowTxMismatchError('la cuenta source fue cambiada');
-  if (parsed.signatures.length !== 0) throw new EscrowTxMismatchError('la transacción ya contiene firmas');
+  if (parsed.source !== sourceAccount) throw new EscrowTxMismatchError(tr('txValidation.sourceChanged'));
+  if (parsed.signatures.length !== 0) throw new EscrowTxMismatchError(tr('txValidation.alreadySigned'));
   if (parsed.operations.length !== 1 || parsed.operations[0].type !== 'invokeHostFunction') {
-    throw new EscrowTxMismatchError('se esperaba una sola invocación de contrato');
+    throw new EscrowTxMismatchError(tr('txValidation.singleInvocation'));
   }
-  if (parsed.memo.type !== 'none') throw new EscrowTxMismatchError('el escrow no admite memo');
-  if (BigInt(parsed.fee) > MAX_ESCROW_FEE_STROOPS) throw new EscrowTxMismatchError('la comisión de red supera el límite local');
+  if (parsed.memo.type !== 'none') throw new EscrowTxMismatchError(tr('txValidation.noMemo'));
+  if (BigInt(parsed.fee) > MAX_ESCROW_FEE_STROOPS) throw new EscrowTxMismatchError(tr('txValidation.feeTooHigh'));
 
   const now = Math.floor(Date.now() / 1000);
   if (!parsed.timeBounds || Number(parsed.timeBounds.maxTime) <= now || Number(parsed.timeBounds.minTime) > now) {
-    throw new EscrowTxMismatchError('la vigencia de la transacción no es válida');
+    throw new EscrowTxMismatchError(tr('txValidation.badTimebounds'));
   }
 
   const operation = parsed.operations[0] as Operation.InvokeHostFunction;
   if (operation.source && operation.source !== sourceAccount) {
-    throw new EscrowTxMismatchError('la operación usa otra cuenta source');
+    throw new EscrowTxMismatchError(tr('txValidation.opOtherSource'));
   }
   if (operation.func.switch().name !== 'hostFunctionTypeInvokeContract') {
-    throw new EscrowTxMismatchError('la operación no invoca un contrato');
+    throw new EscrowTxMismatchError(tr('txValidation.notContractCall'));
   }
   const invocation = operation.func.invokeContract();
   const actualContract = Address.fromScAddress(invocation.contractAddress()).toString();
-  if (actualContract !== contractId) throw new EscrowTxMismatchError('el contrato fue cambiado');
+  if (actualContract !== contractId) throw new EscrowTxMismatchError(tr('txValidation.contractChanged'));
   return { tx: parsed, invocation };
 }
 
@@ -86,11 +89,11 @@ export async function validatePreparedEscrowTx(
   trade: TradeData,
   action: EscrowAction,
 ): Promise<void> {
-  const sourceAccount = requiredTradeField(await getPublicKey(), 'wallet local');
-  const contractId = requiredTradeField(trade.escrow_contract_id, 'contrato de escrow');
+  const sourceAccount = requiredTradeField(await getPublicKey(), tr('txValidation.fieldLocalWallet'));
+  const contractId = requiredTradeField(trade.escrow_contract_id, tr('txValidation.fieldContract'));
   const { invocation } = assertCommonShape(xdr, networkPassphrase, sourceAccount, contractId);
   if (invocation.functionName().toString() !== action) {
-    throw new EscrowTxMismatchError(`se esperaba ${action} y llegó ${invocation.functionName().toString()}`);
+    throw new EscrowTxMismatchError(tr('txValidation.unexpectedFunction', { expected: action, got: invocation.functionName().toString() }));
   }
 
   const args = invocation.args().map((arg) => scValToNative(arg));
@@ -99,25 +102,25 @@ export async function validatePreparedEscrowTx(
 
   if (action === 'decline') {
     if (args.length !== 1 || !bytesEqual(args[0], tradeId)) {
-      throw new EscrowTxMismatchError('el identificador del intercambio fue cambiado');
+      throw new EscrowTxMismatchError(tr('txValidation.tradeIdChanged'));
     }
     return;
   }
 
   if (action === 'release') {
     if (args.length !== 2 || !bytesEqual(args[0], tradeId)) {
-      throw new EscrowTxMismatchError('el identificador del intercambio fue cambiado');
+      throw new EscrowTxMismatchError(tr('txValidation.tradeIdChanged'));
     }
     if (!bytesEqual(hash(Buffer.from(args[1] as Uint8Array)), secretHash)) {
-      throw new EscrowTxMismatchError('el secreto no corresponde al hash del intercambio');
+      throw new EscrowTxMismatchError(tr('txValidation.secretMismatch'));
     }
     return;
   }
 
-  const seller = requiredTradeField(trade.seller_stellar_address, 'dirección del vendedor');
-  const buyer = requiredTradeField(trade.buyer_stellar_address, 'dirección del comprador');
-  const amount = BigInt(requiredTradeField(trade.amount_stroops, 'monto del escrow'));
-  const platformFee = BigInt(requiredTradeField(trade.platform_fee_stroops, 'comisión de plataforma'));
+  const seller = requiredTradeField(trade.seller_stellar_address, tr('txValidation.fieldSeller'));
+  const buyer = requiredTradeField(trade.buyer_stellar_address, tr('txValidation.fieldBuyer'));
+  const amount = BigInt(requiredTradeField(trade.amount_stroops, tr('txValidation.fieldAmount')));
+  const platformFee = BigInt(requiredTradeField(trade.platform_fee_stroops, tr('txValidation.fieldPlatformFee')));
   const matches = args.length === 6
     && String(args[0]) === seller
     && String(args[1]) === buyer
@@ -125,5 +128,5 @@ export async function validatePreparedEscrowTx(
     && BigInt(String(args[3])) === platformFee
     && bytesEqual(args[4], secretHash)
     && Number(args[5]) === LOCK_TIMEOUT_MINUTES;
-  if (!matches) throw new EscrowTxMismatchError('los participantes, montos o plazo fueron cambiados');
+  if (!matches) throw new EscrowTxMismatchError(tr('txValidation.argsChanged'));
 }

@@ -1,4 +1,7 @@
 import { WebAuth } from '@stellar/stellar-sdk';
+import i18n from '../../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 const SIGNING_KEY = import.meta.env.VITE_SEP10_SIGNING_KEY as string | undefined;
 const HOME_DOMAIN = new URL(
@@ -13,7 +16,7 @@ export function assertWebAuthChallenge(
   networkPassphrase: string,
   signingKey = SIGNING_KEY,
 ): void {
-  if (!signingKey) throw new Error('El inicio de sesión web no está configurado.');
+  if (!signingKey) throw new Error(tr('signerErrors.webAuthNotConfigured'));
   const { clientAccountID } = WebAuth.readChallengeTx(xdr, signingKey, networkPassphrase, HOME_DOMAIN, WEB_AUTH_DOMAIN);
-  if (clientAccountID !== account) throw new Error('El reto de inicio de sesión es de otra cuenta.');
+  if (clientAccountID !== account) throw new Error(tr('signerErrors.challengeOtherAccount'));
 }

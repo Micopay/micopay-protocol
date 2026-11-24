@@ -14,6 +14,9 @@ import {
   parseSep10Request,
   type WalletPolicy,
 } from './walletRequest';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 /**
  * La APK como billetera: una web pide firmas por WalletConnect y la llave nunca
@@ -74,7 +77,7 @@ async function networkPassphrase(): Promise<string> {
 
 async function policy(): Promise<WalletPolicy> {
   const account = await getPublicKey();
-  if (!account) throw new WalletRequestRejected('no hay cuenta en este teléfono');
+  if (!account) throw new WalletRequestRejected(tr('walletRequestErrors.noAccount'));
   return {
     officialOrigin: OFFICIAL_ORIGIN,
     chainId: chainIdForPassphrase(IS_PUBLIC),
@@ -117,7 +120,7 @@ async function onRequest(event: WalletKitTypes.SessionRequest): Promise<void> {
   const request = params.request as { method: string; params?: { xdr?: unknown }; expiryTimestamp?: number };
   const expiry = request.expiryTimestamp ?? Math.floor(Date.now() / 1000) + 300;
   try {
-    if (!authToken) throw new WalletRequestRejected('abre MicoPay e inicia sesión');
+    if (!authToken) throw new WalletRequestRejected(tr('walletRequestErrors.openApp'));
     const current = await policy();
     const xdr = request.params?.xdr;
     assertWalletRequestOrigin({
@@ -162,7 +165,7 @@ export async function startWalletConnect(token: string): Promise<void> {
         core: new Core({ projectId: PROJECT_ID as string }),
         metadata: {
           name: 'MicoPay',
-          description: 'Firma tus operaciones de MicoPay',
+          description: tr('walletRequestErrors.wcDescription'),
           url: 'https://micopay.com.mx',
           icons: [],
         },
@@ -186,11 +189,11 @@ export function stopWalletRequests(): void {
 async function requireKit(): Promise<IWalletKit> {
   if (kit) return kit;
   if (starting) return starting;
-  throw new WalletRequestRejected('la conexión no está disponible');
+  throw new WalletRequestRejected(tr('walletRequestErrors.unavailable'));
 }
 
 export async function pairWallet(uri: string): Promise<void> {
-  if (!uri.startsWith('wc:')) throw new WalletRequestRejected('el QR no es de una conexión');
+  if (!uri.startsWith('wc:')) throw new WalletRequestRejected(tr('walletRequestErrors.notWcQr'));
   await (await requireKit()).pair({ uri });
 }
 
@@ -247,6 +250,6 @@ export async function rejectPending(): Promise<void> {
   if (!item) return;
   const client = await requireKit();
   if (item.kind === 'proposal') await client.rejectSession({ id: item.id, reason: USER_REJECTED });
-  else await respondError(item.topic, item.id, 'Rechazado por el usuario');
+  else await respondError(item.topic, item.id, tr('walletRequestErrors.userRejected'));
   setPending(null);
 }

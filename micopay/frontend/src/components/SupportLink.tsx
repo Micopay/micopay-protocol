@@ -72,7 +72,7 @@ export default function SupportLink({ tradeId, state }: Props) {
         {label}
       </a>
       <button type="button" onClick={copy} className="min-h-12 text-sm text-gris underline">
-        {copied ? 'Copiado' : `Copiar ${SUPPORT_EMAIL}`}
+        {copied ? tr('supportLink.copied') : tr('supportLink.copyEmail', { email: SUPPORT_EMAIL })}
       </button>
     </span>
   );

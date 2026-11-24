@@ -561,7 +561,9 @@
     "receiptRelease": "Liberación",
     "receiptNetwork": "Red",
     "receiptDate": "Fecha",
-    "receiptCrypto": "Cripto"
+    "receiptCrypto": "Cripto",
+    "copyReceipt": "Copiar recibo",
+    "receiptCopiedShort": "Recibo copiado"
   },
   "kyc": {
     "verifyingIdentity": "Verificando identidad…",
@@ -1009,7 +1011,10 @@
     "signToLockWallet": "Firma con tu billetera para bloquear los fondos en el contrato de garantía.",
     "signToLockKey": "Firma con tu llave para bloquear los fondos en el contrato de garantía.",
     "stillInEscrow": "{{reason}} El dinero sigue retenido en la garantía.",
-    "cancelledReturnsAt": "La operación fue cancelada. Los fondos siguen en el contrato y regresan solos a quien los bloqueó a partir del {{at}}."
+    "cancelledReturnsAt": "La operación fue cancelada. Los fondos siguen en el contrato y regresan solos a quien los bloqueó a partir del {{at}}.",
+    "handoffRecorded": "Entrega registrada",
+    "totalReturned": "Total devuelto",
+    "refundPending": "Reembolso pendiente"
   },
   "profileText": {
     "s1": "Tu sesión expiró. Vuelve a iniciar sesión.",
@@ -1031,7 +1036,15 @@
     "s17": "Estás en pausa: sigues siendo agente, pero no apareces en el mapa.",
     "s18": "Tasa, límites y ubicación",
     "s19": "Tu cuenta de agente está suspendida. Escríbenos para revisarlo.",
-    "s20": "Llave importada"
+    "s20": "Llave importada",
+    "webConnections": "Conexiones web",
+    "identityVerified": "Identidad verificada",
+    "level": "Nivel {{level}}",
+    "verifyIdentity": "Verificar mi identidad",
+    "halfSignup": "Alta a medias",
+    "continueSignup": "Continuar mi alta",
+    "pauseMe": "Ponerme en pausa",
+    "makeAvailable": "Ponerme disponible"
   },
   "walletRequest": {
     "s1": "Bloquear fondos en garantía",
@@ -1085,7 +1098,8 @@
     "s2": "No pudimos cargar tus transferencias de la red. Aparecerán al volver a abrir el historial.",
     "s3": "Sin transacciones",
     "s4": "No encontramos transacciones que coincidan con tu filtro actual.",
-    "s5": "Página"
+    "s5": "Página",
+    "loading": "Cargando historial..."
   },
   "qrRevealText": {
     "s1": "Abrir chat con el agente",
@@ -1113,7 +1127,12 @@
     "s17": "Márcalo solo si atiendes en un local comercial y quieres que cualquiera pueda verla sin haber iniciado una operación. Si operas desde tu casa, déjalo sin marcar.",
     "agentFee": "Tasa del agente (%) · máximo {{max}}",
     "dailyCap": "Tope diario (MXN)",
-    "loading": "Cargando…"
+    "loading": "Cargando…",
+    "paused": "Operaciones pausadas",
+    "resumed": "Operaciones reanudadas",
+    "saving": "Guardando…",
+    "syncing": "Sincronizando...",
+    "saveChanges": "Guardar cambios"
   },
   "walletConnections": {
     "s1": "No se pudo conectar",
@@ -1121,7 +1140,8 @@
     "s3": "Usa esta cuenta en tu computadora. La llave se queda en este teléfono y aquí apruebas cada firma.",
     "s4": "Las conexiones web todavía no están disponibles.",
     "s5": "Escanear QR de la web",
-    "s6": "No tienes conexiones activas."
+    "s6": "No tienes conexiones activas.",
+    "title": "Conexiones web"
   },
   "supportLink": {
     "s1": "¿Necesitas ayuda?",
@@ -1131,7 +1151,9 @@
     "mailSubjectTrade": "Operación {{id}}…",
     "mailSubjectNoTrade": "operación sin ID",
     "mailBody": "Hola,\n\nNecesito ayuda.\n\nEstado: {{state}}\nOperación ID: {{id}}\n\nGracias.",
-    "mailNoId": "N/D"
+    "mailNoId": "N/D",
+    "copied": "Copiado",
+    "copyEmail": "Copiar {{email}}"
   },
   "betaBanner": {
     "s1": "Beta técnica en red de prueba.",
@@ -1363,7 +1385,8 @@
     "sendFailed": "No se pudo enviar el pago.",
     "back": "Volver",
     "scanQr": "Escanear QR",
-    "viewExplorer": "Ver en el explorador"
+    "viewExplorer": "Ver en el explorador",
+    "unknownError": "Error desconocido"
   },
   "tradeConfirmText": {
     "backToMap": "Volver al mapa",
@@ -1379,5 +1402,210 @@
   },
   "cetesText": {
     "noWithdrawInstructions": "El agente no devolvió instrucciones de retiro válidas."
+  },
+  "depositRequestText": {
+    "searchAgents": "Buscar agentes"
+  },
+  "errorBanner": {
+    "verifyIdentity": "Verificar mi identidad"
+  },
+  "paymentErrors": {
+    "assetUnknown": "Activo no soportado: {{code}}",
+    "assetNoIssuer": "Falta el emisor configurado para {{code}}.",
+    "accountNotActivatedXlm": "Tu cuenta aún no está activada en la red (necesita XLM).",
+    "invalidTx": "La transacción firmada no es válida.",
+    "trustlineReserve": "Saldo insuficiente para la reserva de la línea de confianza (~0.5 XLM).",
+    "trustlineFailed": "No se pudo crear la línea de confianza para {{code}}.",
+    "badDestination": "La dirección de destino no es válida.",
+    "badAmount": "Ingresa un monto mayor a 0.",
+    "self": "No puedes enviarte fondos a ti mismo.",
+    "accountNotActivated": "Tu cuenta aún no está activada en la red.",
+    "noTrust": "El destinatario no acepta {{code}} todavía (falta su línea de confianza).",
+    "noDest": "La cuenta destino no existe o no está activada en la red.",
+    "underfunded": "Saldo insuficiente para este envío (recuerda la reserva de red).",
+    "submitFailed": "No se pudo enviar el pago. Revisa tu conexión e intenta de nuevo."
+  },
+  "escrowLockErrors": {
+    "notLockable": "Esta operación usa un activo que la app todavía no puede bloquear."
+  },
+  "cashConfirmErrors": {
+    "forbidden": "Esta operación no es tuya o no te toca confirmar el efectivo.",
+    "notFound": "No encontramos esta operación.",
+    "notWaiting": "Esta operación ya no está esperando la confirmación del efectivo."
+  },
+  "signerErrors": {
+    "noKeyWeb": "Conecta tu billetera para continuar.",
+    "noKeyDevice": "No se encontró la llave de tu dispositivo.",
+    "mismatchWeb": "la billetera conectada no coincide con la cuenta del retiro",
+    "mismatchDevice": "la llave del dispositivo no coincide con la cuenta del retiro",
+    "disconnected": "Tu billetera se desconectó.",
+    "accountChanged": "Cambiaste de cuenta en tu billetera.",
+    "networkChanged": "Cambiaste de red en tu billetera.",
+    "wrongNetwork": "Tu billetera está en otra red. Cámbiala a {{network}}.",
+    "connectWallet": "Conecta tu billetera para continuar.",
+    "accountChangedLogin": "Cambiaste de cuenta en tu billetera. Inicia sesión de nuevo.",
+    "differentTx": "La billetera devolvió una transacción distinta.",
+    "notSignedByAccount": "La billetera no firmó con la cuenta conectada.",
+    "webAuthNotConfigured": "El inicio de sesión web no está configurado.",
+    "challengeOtherAccount": "El reto de inicio de sesión es de otra cuenta.",
+    "walletDescription": "Efectivo y cripto, firmado desde tu billetera"
+  },
+  "qrErrors": {
+    "empty": "El código QR está vacío",
+    "noTradeId": "El QR no contiene un ID de trade válido",
+    "badUuid": "El ID de trade no tiene un formato UUID válido",
+    "noCode": "El QR no contiene el código de cobro",
+    "badCode": "El código de cobro debe ser una cadena hexadecimal de 64 caracteres",
+    "unknownAction": "Acción QR no reconocida: \"{{action}}\"",
+    "badLink": "No se pudo analizar el enlace del QR",
+    "legacy": "El formato legacy MICOPAY ya no es compatible. Usa un QR micopay:// válido.",
+    "unrecognized": "Código QR no reconocido. Se espera un QR de MicoPay válido.",
+    "scannerUnavailable": "Scanner no disponible en este device"
+  },
+  "locationErrors": {
+    "unavailable": "No se pudo obtener ubicación",
+    "denied": "Permiso de ubicación denegado. Actívalo en Ajustes para ver agentes cercanos.",
+    "retry": "No se pudo obtener tu ubicación. Intenta de nuevo.",
+    "cantLocate": "No pudimos ubicarte. Sal un momento al exterior o revisa que la ubicación esté activada.",
+    "offersServer": "No se pudo contactar al servidor de ofertas. Revisa tu conexión."
+  },
+  "apiErrorText": {
+    "offline": "Sin conexión al servidor. Revisa tu internet e inténtalo de nuevo.",
+    "session": "Tu sesión expiró o no tienes acceso. Vuelve a iniciar sesión o contacta soporte.",
+    "conflict": "Esta operación ya no está disponible o fue modificada. Contacta soporte si necesitas ayuda.",
+    "server": "El servidor no respondió correctamente. Inténtalo de nuevo en unos momentos.",
+    "unexpected": "Ocurrió un error inesperado. Inténtalo de nuevo."
+  },
+  "assets": {
+    "usdcNote": "Dólar digital",
+    "cetesLabel": "CETES tokenizados",
+    "cetesNote": "Bono del Gobierno de México",
+    "xlmNote": "Token de red (gas)"
+  },
+  "pushChannels": {
+    "tradesName": "Operaciones",
+    "tradesDescription": "Operaciones nuevas, cancelaciones y reembolsos",
+    "signName": "Solicitudes de firma",
+    "signDescription": "Firmas pedidas desde otro dispositivo"
+  },
+  "apiErrors": {
+    "ACCOUNT_NOT_FOUND": "Tu cuenta no está disponible. Inicia sesión de nuevo.",
+    "ACCOUNT_SUSPENDED": "Tu cuenta está suspendida o bloqueada. Contacta a soporte si crees que es un error.",
+    "ADDRESS_ALREADY_REGISTERED": "Este dispositivo ya tiene una cuenta de Micopay. Inicia sesión para entrar.",
+    "AMOUNT_BELOW_FEES": "El monto no alcanza para cubrir las comisiones.",
+    "ASSET_ESCROW_MISMATCH": "Esta operacion no se puede bloquear con el escrow disponible.",
+    "AUTH_CHALLENGE_EXPIRED": "El código de verificación ha expirado. Por favor, solicita uno nuevo.",
+    "AUTH_INVALID_CHALLENGE": "El código de verificación no es válido o ha expirado. Por favor, intenta de nuevo.",
+    "AUTH_INVALID_CREDENTIALS": "La firma no es válida. Por favor, intenta de nuevo.",
+    "CASH_CLAIM_CLOSED": "Soporte ya revisó el reclamo de esta operación.",
+    "CASH_CLAIM_OPEN": "El cliente reportó que ya pagó. Este intercambio lo revisa soporte.",
+    "CASH_HANDOFF_REQUIRED": "Escanea el código del cliente antes de liberar los fondos",
+    "CLAIM_TOKEN_EXPIRED": "Este código QR expiró. Pide al usuario que genere uno nuevo",
+    "CLAIM_TOKEN_USED": "Este código QR ya fue usado",
+    "DECLINE_NOT_SUPPORTED": "Esta operación usa una versión anterior del contrato. El reembolso estará disponible al vencer el plazo.",
+    "DEVICE_DAILY_LIMIT": "Este dispositivo alcanzó el límite diario de operaciones. Intenta mañana o usa otro dispositivo.",
+    "DISPUTE_ALREADY_OPEN": "Ya hay una disputa abierta para esta operación.",
+    "DISPUTE_NOT_ALLOWED": "Solo puedes abrir una disputa cuando la operación está en curso o completada.",
+    "HANDOFF_NOT_RECORDED": "No se pudo registrar la entrega. Intenta de nuevo.",
+    "INVALID_AMOUNT": "El monto debe ser entre 100 y 50,000 MXN",
+    "INVALID_CLAIM_TOKEN": "Este código QR no es válido para esta operación",
+    "INVALID_FLOW": "Tipo de operacion invalido",
+    "INVALID_PARTICIPANTS": "No puedes crear un intercambio contigo mismo",
+    "INVALID_REASON": "Se requiere una razón para la disputa",
+    "IP_DAILY_LIMIT": "Se alcanzó el límite diario de operaciones desde esta red. Intenta más tarde.",
+    "LOCK_ALREADY_ON_CHAIN": "Este bloqueo ya está en la red. Lo estamos revisando; no lo vuelvas a firmar.",
+    "MERCHANT_NOT_ENROLLED": "Esta persona no es agente de Red MicoPay.",
+    "MERCHANT_SUSPENDED": "Este comercio no puede recibir operaciones en este momento.",
+    "MERCHANT_UNAVAILABLE": "El comercio no está disponible para nuevas operaciones.",
+    "NOT_TRADE_PROVIDER": "No eres el proveedor de este intercambio",
+    "ONLY_BUYER_CAN_DECLINE": "Solo quien recibiría los fondos puede autorizar la devolución inmediata.",
+    "PHONE_ALREADY_REGISTERED": "Ese teléfono ya tiene una cuenta de MicoPay. Entra con la billetera de esa cuenta o deja el teléfono vacío.",
+    "PROVIDER_MUST_PAUSE_FIRST": "Pausa tu disponibilidad si necesitas dejar de atender esta operación.",
+    "PROVIDER_NOT_ACTIVE": "Solo los agentes activos de Red MicoPay pueden cambiar su disponibilidad.",
+    "PROVIDER_NOT_ENROLLED": "Primero unete a Red MicoPay.",
+    "PROVIDER_NOT_READY": "Te faltan pasos para activarte como agente.",
+    "PROVIDER_SUSPENDED": "Tu cuenta no puede unirse a Red MicoPay en este momento.",
+    "RELATED_ACCOUNTS": "No puedes operar con una cuenta vinculada a la tuya.",
+    "SEP10_NOT_CONFIGURED": "El inicio de sesión web no está disponible por ahora.",
+    "SIGNED_XDR_REQUIRED": "Falta la transacción firmada.",
+    "TRADE_ALREADY_COMPLETED": "Este intercambio ya fue completado",
+    "TRADE_ALREADY_SETTLED": "La operación ya fue liquidada.",
+    "TRADE_CANCELLED": "Este intercambio fue cancelado",
+    "TRADE_ID_TAKEN": "No se puede bloquear esta operación. Crea una nueva.",
+    "TRADE_NOT_COLLECTABLE": "Este intercambio ya no se puede cobrar. No entregues efectivo.",
+    "TRADE_NOT_EXPIRED": "El intercambio aún no ha expirado. Espera a que venza el tiempo.",
+    "TRADE_NOT_LOCKED": "La operación todavía no tiene fondos bloqueados.",
+    "UNAUTHORIZED_ACCESS": "No tienes permiso para ver este intercambio",
+    "UNAUTHORIZED_ACTION": "Solo el vendedor puede ver el secreto",
+    "USERNAME_TAKEN": "Ese nombre de usuario ya está ocupado. Elige otro."
+  },
+  "txValidation": {
+    "escrowMismatch": "La transacción preparada no coincide con la operación: {{detail}}",
+    "missingField": "falta {{field}} en los datos autenticados del intercambio",
+    "wrongNetwork": "la red no corresponde a esta versión de la app",
+    "noFeeBump": "no se admiten transacciones fee-bump",
+    "sourceChanged": "la cuenta source fue cambiada",
+    "alreadySigned": "la transacción ya contiene firmas",
+    "singleInvocation": "se esperaba una sola invocación de contrato",
+    "noMemo": "el escrow no admite memo",
+    "feeTooHigh": "la comisión de red supera el límite local",
+    "badTimebounds": "la vigencia de la transacción no es válida",
+    "opOtherSource": "la operación usa otra cuenta source",
+    "notContractCall": "la operación no invoca un contrato",
+    "contractChanged": "el contrato fue cambiado",
+    "fieldLocalWallet": "wallet local",
+    "fieldContract": "contrato de escrow",
+    "unexpectedFunction": "se esperaba {{expected}} y llegó {{got}}",
+    "tradeIdChanged": "el identificador del intercambio fue cambiado",
+    "secretMismatch": "el secreto no corresponde al hash del intercambio",
+    "fieldSeller": "dirección del vendedor",
+    "fieldBuyer": "dirección del comprador",
+    "fieldAmount": "monto del escrow",
+    "fieldPlatformFee": "comisión de plataforma",
+    "argsChanged": "los participantes, montos o plazo fueron cambiados"
+  },
+  "walletRequestErrors": {
+    "rejected": "Solicitud rechazada: {{detail}}",
+    "domain": "dominio no autorizado",
+    "method": "método no permitido",
+    "network": "red distinta a la de esta app",
+    "webAuthOff": "inicio de sesión web sin configurar",
+    "badChallenge": "reto de inicio de sesión inválido",
+    "challengeOtherAccount": "el reto es de otra cuenta",
+    "emptyTx": "transacción vacía",
+    "undecodable": "no se pudo decodificar la transacción",
+    "noFeeBump": "no se admiten fee-bump",
+    "txOtherAccount": "la transacción es de otra cuenta",
+    "alreadySigned": "la transacción ya contiene firmas",
+    "singleCall": "se esperaba una sola llamada de contrato",
+    "opOtherAccount": "la operación usa otra cuenta",
+    "notContractCall": "la operación no llama un contrato",
+    "contract": "contrato no autorizado",
+    "function": "función no permitida",
+    "tradeId": "identificador de operación inválido",
+    "noOpenTrade": "no hay una operación abierta que coincida",
+    "contractMismatch": "el contrato no corresponde a la operación",
+    "noAccount": "no hay cuenta en este teléfono",
+    "openApp": "abre MicoPay e inicia sesión",
+    "wcDescription": "Firma tus operaciones de MicoPay",
+    "unavailable": "la conexión no está disponible",
+    "notWcQr": "el QR no es de una conexión",
+    "userRejected": "Rechazado por el usuario"
+  },
+  "rampErrors": {
+    "invalidSigned": "La transacción firmada no es válida.",
+    "mismatch": "La transaccion no coincide con la orden: {{reason}}",
+    "notSimplePayment": "la transaccion no es un pago simple",
+    "wrongIssuer": "emisor del activo incorrecto",
+    "feeBump": "la tx es un fee-bump; no se soporta",
+    "missingIssuer": "falta el emisor de {{code}}",
+    "sourceNotUsdc": "el activo de entrada del swap no es USDC",
+    "destAsset": "el activo destino del swap no coincide con la orden",
+    "destAmount": "el monto destino del swap no coincide con la orden",
+    "maxUsdc": "el maximo de USDC del swap no es valido",
+    "tooManyHops": "la ruta del swap tiene demasiados saltos",
+    "unsupportedSigned": "la firma devolvio una tx no soportada",
+    "swapFailed": "No se pudo completar el swap USDC→CETES; solicita una cotización nueva y revisa tu saldo.",
+    "accountMismatch": "la cuenta cargada no coincide con el retiro"
   }
 }
