@@ -5,6 +5,9 @@ import { useWalletBalance } from '../hooks/useWalletBalance';
 import { useQRScanner } from '../hooks/useQRScanner';
 import { sendPayment, isValidStellarAddress, PaymentError, type SendResult } from '../services/payment';
 import { STELLAR_NETWORK_LABEL } from '../utils/stellarExplorer';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 interface SendPaymentProps {
   onBack: () => void;
@@ -70,7 +73,7 @@ const SendPayment = ({ onBack, onDone, onSent }: SendPaymentProps) => {
       setStep('done');
       onSent?.(r);
     } catch (e) {
-      setError(e instanceof PaymentError ? e.message : 'No se pudo enviar el pago.');
+      setError(e instanceof PaymentError ? e.message : tr('sendPaymentText.sendFailed'));
       setStep('error');
     }
   };
@@ -114,7 +117,7 @@ const SendPayment = ({ onBack, onDone, onSent }: SendPaymentProps) => {
       <header className="fixed top-0 left-0 w-full z-50 flex items-center gap-4 px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
         <button
           onClick={step === 'review' ? () => setStep('form') : onBack}
-          aria-label="Volver"
+          aria-label={tr('sendPaymentText.back')}
           className="min-h-12 min-w-12 flex items-center justify-center rounded-sm hover:bg-surface-container-low transition-colors"
         >
           <span className="material-symbols-outlined text-verde">arrow_back</span>
@@ -159,7 +162,7 @@ const SendPayment = ({ onBack, onDone, onSent }: SendPaymentProps) => {
                   autoCapitalize="none"
                   className="flex-1 min-w-0 bg-surface-container-low border-2 border-tinta rounded-sm px-4 py-3 text-sm font-mono focus:outline-none focus:border-primary transition-colors"
                 />
-                <button onClick={handleScan} aria-label="Escanear QR" className="w-12 flex-shrink-0 bg-primary/10 text-primary rounded-sm flex items-center justify-center active:translate-x-[2px] active:translate-y-[2px] transition-all">
+                <button onClick={handleScan} aria-label={tr('sendPaymentText.scanQr')} className="w-12 flex-shrink-0 bg-primary/10 text-primary rounded-sm flex items-center justify-center active:translate-x-[2px] active:translate-y-[2px] transition-all">
                   <span className="material-symbols-outlined">qr_code_scanner</span>
                 </button>
               </div>
@@ -294,7 +297,7 @@ function ResultScreen({
       <p className="text-on-surface-variant mb-8">{subtitle}</p>
       {hashUrl && (
         <a href={hashUrl} target="_blank" rel="noopener noreferrer" className="text-primary font-bold text-sm flex items-center gap-1 mb-8">
-          {explorerLabel ?? 'Ver en el explorador'} <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+          {explorerLabel ?? tr('sendPaymentText.viewExplorer')} <span className="material-symbols-outlined text-[18px]">open_in_new</span>
         </a>
       )}
       <button onClick={onPrimary} className="w-full max-w-xs h-[52px] bg-primary text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all">

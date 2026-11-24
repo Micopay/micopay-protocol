@@ -1107,7 +1107,10 @@
     "s14": "meeting point",
     "s15": "and it's private: only the person you already have an accepted trade with can see it. The public map only shows your approximate location, rounded to about 100 meters.",
     "s16": "Publish my address on the map.",
-    "s17": "Check it only if you serve from a shop and want anyone to see it without starting a trade. If you operate from home, leave it unchecked."
+    "s17": "Check it only if you serve from a shop and want anyone to see it without starting a trade. If you operate from home, leave it unchecked.",
+    "agentFee": "Agent fee (%) · maximum {{max}}",
+    "dailyCap": "Daily cap (MXN)",
+    "loading": "Loading…"
   },
   "walletConnections": {
     "s1": "Couldn't connect",
@@ -1120,7 +1123,12 @@
   "supportLink": {
     "s1": "Need help?",
     "s2": "Write to us at",
-    "s3": "and include the trade code"
+    "s3": "and include the trade code",
+    "mailSubject": "Support — {{trade}} — {{state}}",
+    "mailSubjectTrade": "Operation {{id}}…",
+    "mailSubjectNoTrade": "operation without ID",
+    "mailBody": "Hi,\n\nI need help.\n\nStatus: {{state}}\nOperation ID: {{id}}\n\nThanks.",
+    "mailNoId": "N/A"
   },
   "betaBanner": {
     "s1": "Technical beta on a test network.",
@@ -1347,5 +1355,26 @@
   "networkBanner": {
     "mainnet": "Mainnet: this network moves real money",
     "testnet": "Testnet: test network, no real money"
+  },
+  "sendPaymentText": {
+    "sendFailed": "The payment couldn't be sent.",
+    "back": "Back",
+    "scanQr": "Scan QR",
+    "viewExplorer": "View in the explorer"
+  },
+  "tradeConfirmText": {
+    "backToMap": "Back to the map",
+    "createAnother": "Create another operation",
+    "verifyIdentity": "Verify my identity"
+  },
+  "cashoutRequestText": {
+    "back": "Back",
+    "searchOffers": "Search for cash offers"
+  },
+  "exploreText": {
+    "userProfile": "User profile"
+  },
+  "cetesText": {
+    "noWithdrawInstructions": "The agent didn't return valid withdrawal instructions."
   }
 }

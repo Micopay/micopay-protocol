@@ -1107,7 +1107,10 @@
     "s14": "punto de encuentro",
     "s15": "y es privado: solo lo ve la persona con la que ya tienes una operación aceptada. En el mapa público únicamente aparece tu ubicación aproximada, redondeada a unos 100 metros.",
     "s16": "Publicar mi dirección en el mapa.",
-    "s17": "Márcalo solo si atiendes en un local comercial y quieres que cualquiera pueda verla sin haber iniciado una operación. Si operas desde tu casa, déjalo sin marcar."
+    "s17": "Márcalo solo si atiendes en un local comercial y quieres que cualquiera pueda verla sin haber iniciado una operación. Si operas desde tu casa, déjalo sin marcar.",
+    "agentFee": "Tasa del agente (%) · máximo {{max}}",
+    "dailyCap": "Tope diario (MXN)",
+    "loading": "Cargando…"
   },
   "walletConnections": {
     "s1": "No se pudo conectar",
@@ -1120,7 +1123,12 @@
   "supportLink": {
     "s1": "¿Necesitas ayuda?",
     "s2": "Escríbenos a",
-    "s3": "e incluye el código de operación"
+    "s3": "e incluye el código de operación",
+    "mailSubject": "Soporte — {{trade}} — {{state}}",
+    "mailSubjectTrade": "Operación {{id}}…",
+    "mailSubjectNoTrade": "operación sin ID",
+    "mailBody": "Hola,\n\nNecesito ayuda.\n\nEstado: {{state}}\nOperación ID: {{id}}\n\nGracias.",
+    "mailNoId": "N/D"
   },
   "betaBanner": {
     "s1": "Beta técnica en red de prueba.",
@@ -1347,5 +1355,26 @@
   "networkBanner": {
     "mainnet": "Mainnet: esta red mueve dinero real",
     "testnet": "Testnet: red de pruebas, sin dinero real"
+  },
+  "sendPaymentText": {
+    "sendFailed": "No se pudo enviar el pago.",
+    "back": "Volver",
+    "scanQr": "Escanear QR",
+    "viewExplorer": "Ver en el explorador"
+  },
+  "tradeConfirmText": {
+    "backToMap": "Volver al mapa",
+    "createAnother": "Crear otra operación",
+    "verifyIdentity": "Verificar mi identidad"
+  },
+  "cashoutRequestText": {
+    "back": "Volver",
+    "searchOffers": "Buscar ofertas de efectivo"
+  },
+  "exploreText": {
+    "userProfile": "Perfil de usuario"
+  },
+  "cetesText": {
+    "noWithdrawInstructions": "El agente no devolvió instrucciones de retiro válidas."
   }
 }
