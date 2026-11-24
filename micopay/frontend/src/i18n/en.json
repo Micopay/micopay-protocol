@@ -1285,5 +1285,31 @@
     "earnPerYear": "You'll earn ~{{amount}} {{asset}} / year",
     "supplyButton": "Deposit and earn",
     "footer": "Blend Capital · Stellar Testnet · Rates are indicative"
+  },
+  "backupModal": {
+    "defaultReason": "Write it on paper and keep it off your phone. It is the only way to recover your account. Whoever has it controls your funds.",
+    "mismatch": "It doesn't match. Check the last 4 characters of your key.",
+    "title": "Back up your secret key",
+    "yourKey": "Your secret key",
+    "screenshotsBlocked": "Screenshots blocked",
+    "showKeyLabel": "Show the secret key",
+    "showKey": "Show key",
+    "confirmPrompt": "To confirm you wrote it down, type its last {{count}} characters:",
+    "wroteIt": "I wrote it down",
+    "done": "Done",
+    "notNow": "Not now",
+    "close": "Close"
+  },
+  "deleteAccount": {
+    "closeLabel": "Close confirmation",
+    "required": "Confirmation required",
+    "title": "Are you sure you want to delete your account?",
+    "irreversible": "This action cannot be undone. Your account will be anonymized and you will not be able to recover it after confirming.",
+    "typePrefix": "Type",
+    "typeSuffix": "to enable the delete button.",
+    "confirmUser": "Confirm username",
+    "cancel": "Cancel",
+    "deleting": "Deleting…",
+    "confirm": "Yes, delete"
   }
 }

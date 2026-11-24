@@ -1285,5 +1285,31 @@
     "earnPerYear": "Ganarás ~{{amount}} {{asset}} / año",
     "supplyButton": "Depositar y ganar",
     "footer": "Blend Capital · Stellar Testnet · Las tasas son orientativas"
+  },
+  "backupModal": {
+    "defaultReason": "Anótala en papel y guárdala fuera del teléfono. Es la única forma de recuperar tu cuenta. Quien la tenga controla tus fondos.",
+    "mismatch": "No coincide. Revisa los últimos 4 caracteres de tu llave.",
+    "title": "Respalda tu llave secreta",
+    "yourKey": "Tu llave secreta",
+    "screenshotsBlocked": "Capturas bloqueadas",
+    "showKeyLabel": "Mostrar la llave secreta",
+    "showKey": "Mostrar llave",
+    "confirmPrompt": "Para confirmar que la anotaste, escribe sus últimos {{count}} caracteres:",
+    "wroteIt": "Ya la anoté",
+    "done": "Listo",
+    "notNow": "Ahora no",
+    "close": "Cerrar"
+  },
+  "deleteAccount": {
+    "closeLabel": "Cerrar confirmación",
+    "required": "Confirmación necesaria",
+    "title": "¿Seguro que quieres eliminar tu cuenta?",
+    "irreversible": "Esta acción es irreversible. Tu cuenta será anonimizada y no podrás recuperarla después de confirmar.",
+    "typePrefix": "Escribe",
+    "typeSuffix": "para habilitar el botón de eliminación.",
+    "confirmUser": "Confirmar usuario",
+    "cancel": "Cancelar",
+    "deleting": "Eliminando…",
+    "confirm": "Sí, eliminar"
   }
 }

@@ -1,3 +1,7 @@
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
+
 interface DeleteAccountModalProps {
   username: string;
   confirmation: string;
@@ -23,7 +27,7 @@ const DeleteAccountModal = ({
     <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
       <button
         type="button"
-        aria-label="Cerrar confirmación"
+        aria-label={tr('deleteAccount.closeLabel')}
         className="absolute inset-0 bg-slate-950/60 "
         onClick={onCancel}
       />
@@ -38,30 +42,29 @@ const DeleteAccountModal = ({
 
           <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-[0.15em] text-rojo mb-1">
-              Confirmación necesaria
+              {tr('deleteAccount.required')}
             </p>
             <h2 className="text-2xl font-extrabold text-tinta leading-tight">
-              ¿Seguro que quieres eliminar tu cuenta?
+              {tr('deleteAccount.title')}
             </h2>
           </div>
         </div>
 
         <div className="mt-4 space-y-3">
           <p className="text-sm text-gris leading-relaxed">
-            Esta acción es irreversible. Tu cuenta será anonimizada y no podrás
-            recuperarla después de confirmar.
+            {tr('deleteAccount.irreversible')}
           </p>
 
           <div className="rounded-sm bg-[#FFECEF] border-2 border-tinta p-4">
             <p className="text-sm text-rojo font-medium leading-relaxed">
-              Escribe <span className="font-bold font-mono">@{username}</span>{" "}
-              para habilitar el botón de eliminación.
+              {tr('deleteAccount.typePrefix')} <span className="font-bold font-mono">@{username}</span>{" "}
+              {tr('deleteAccount.typeSuffix')}
             </p>
           </div>
 
           <div>
             <label className="block text-xs font-bold text-gris mb-2 uppercase tracking-wide">
-              Confirmar usuario
+              {tr('deleteAccount.confirmUser')}
             </label>
             <input
               autoFocus
@@ -85,7 +88,7 @@ const DeleteAccountModal = ({
             onClick={onCancel}
             className="rounded-sm border-2 border-tinta bg-papel px-4 py-3 font-bold text-tinta transition-colors hover:bg-[#F7FBFD]"
           >
-            Cancelar
+            {tr('deleteAccount.cancel')}
           </button>
 
           <button
@@ -99,10 +102,10 @@ const DeleteAccountModal = ({
                 <span className="material-symbols-outlined animate-spin text-lg">
                   progress_activity
                 </span>
-                Eliminando…
+                {tr('deleteAccount.deleting')}
               </span>
             ) : (
-              "Sí, eliminar"
+              tr('deleteAccount.confirm')
             )}
           </button>
         </div>
