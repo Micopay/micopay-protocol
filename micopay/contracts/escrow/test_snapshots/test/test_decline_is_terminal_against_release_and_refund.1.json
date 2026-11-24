@@ -72,7 +72,7 @@
                   "bytes": "a77966868c4d8262f02c0508db31a5e02172b16d69d47557154536adb832de99"
                 },
                 {
-                  "u32": 0
+                  "u32": 1
                 }
               ]
             }
@@ -127,7 +127,7 @@
   ],
   "ledger": {
     "protocol_version": 25,
-    "sequence_number": 0,
+    "sequence_number": 20,
     "timestamp": 0,
     "network_id": "0000000000000000000000000000000000000000000000000000000000000000",
     "base_reserve": 0,
@@ -313,7 +313,7 @@
                       "symbol": "timeout_ledger"
                     },
                     "val": {
-                      "u32": 0
+                      "u32": 12
                     }
                   }
                 ]

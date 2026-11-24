@@ -12,6 +12,21 @@ use soroban_sdk::{contract, contractimpl, log, symbol_short, token, Address, Byt
 const TTL_MIN: u32 = 17_280; // ~1 day — extend if below this
 const TTL_EXTEND: u32 = 518_400; // ~30 days — extend to this
 
+// Limites del plazo de `lock`, en minutos.
+//
+// EL HUECO: el plazo lo elige quien bloquea y el contrato no lo acotaba. Con 0
+// el seller podia reembolsarse en el mismo ledger del bloqueo, y un valor
+// enorme desbordaba `timeout_minutes * 12` (u32) y abortaba la llamada. El
+// backend fija 120 minutos y verifica el XDR, pero `lock` es publico: el
+// contrato tiene que defenderse solo.
+//
+// LO QUE ESTO ES, Y LO QUE NO: acota el plazo a un rango sano. No decide cual
+// es el plazo correcto de una operacion; eso sigue siendo del backend.
+// El tope (1 dia) coincide con TTL_MIN, asi que una operacion viva no se
+// archiva antes de vencer.
+const MIN_TIMEOUT_MINUTES: u32 = 1;
+const MAX_TIMEOUT_MINUTES: u32 = 1_440;
+
 fn compute_trade_id(
     env: &Env,
     _seller: &Address,
@@ -57,6 +72,9 @@ impl EscrowFactory {
         if amount <= 0 || platform_fee < 0 {
             return Err(EscrowError::InsufficientAmount);
         }
+        if !(MIN_TIMEOUT_MINUTES..=MAX_TIMEOUT_MINUTES).contains(&timeout_minutes) {
+            return Err(EscrowError::InvalidTimeout);
+        }
 
         let token_id: Address = env
             .storage()
@@ -85,7 +103,13 @@ impl EscrowFactory {
 
         // Calculate timeout as absolute ledger number
         // ~12 ledgers per minute (5s per ledger)
-        let timeout_ledger = env.ledger().sequence() + (timeout_minutes * 12);
+        // Con el plazo acotado arriba la multiplicacion no desborda; la suma se
+        // comprueba igual para no depender de que el ledger sea pequeno.
+        let timeout_ledger = env
+            .ledger()
+            .sequence()
+            .checked_add(timeout_minutes * 12)
+            .ok_or(EscrowError::InvalidTimeout)?;
 
         let trade = TradeEscrow {
             seller: seller.clone(),

@@ -210,10 +210,14 @@ fn test_decline_is_terminal_against_release_and_refund() {
         &1_000_000_000i128,
         &0i128,
         &secret_hash,
-        &0u32,
+        &1u32,
     );
 
     escrow.decline(&trade_id);
+
+    // Plazo vencido: si `refund` fallara, tendria que ser por el estado y no
+    // por el plazo. (Antes se usaba plazo 0, que el contrato ya no acepta.)
+    env.ledger().with_mut(|l| l.sequence_number += 20);
 
     assert_eq!(
         escrow.try_release(&trade_id, &secret),
@@ -307,4 +311,40 @@ fn test_lock_rejects_reused_secret_hash() {
     escrow.release(&trade_id, &secret);
     assert_eq!(token_client.balance(&buyer), amount);
     assert_eq!(token_client.balance(&contract_id), 0);
+}
+
+/// Plazo fuera de rango: con 0 el seller podia reembolsarse en el mismo ledger
+/// del bloqueo, y con un valor enorme `timeout_minutes * 12` desbordaba.
+#[test]
+fn test_lock_rejects_out_of_range_timeout() {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+    let (_, secret_hash) = make_secret(&env);
+    let before = token_client.balance(&seller);
+
+    for minutes in [0u32, MAX_TIMEOUT_MINUTES + 1, u32::MAX] {
+        assert_eq!(
+            escrow.try_lock(&seller, &buyer, &1_000_000_000i128, &0i128, &secret_hash, &minutes),
+            Err(Ok(EscrowError::InvalidTimeout)),
+            "timeout {minutes} must be rejected",
+        );
+    }
+    // Rechazado antes de mover fondos.
+    assert_eq!(token_client.balance(&seller), before);
+}
+
+/// Los bordes del rango si se aceptan.
+#[test]
+fn test_lock_accepts_timeout_bounds() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+
+    let start = env.ledger().sequence();
+    for (i, minutes) in [MIN_TIMEOUT_MINUTES, MAX_TIMEOUT_MINUTES].into_iter().enumerate() {
+        let secret = Bytes::from_slice(&env, &[i as u8 + 1; 32]);
+        let hash: BytesN<32> = env.crypto().sha256(&secret).into();
+        let trade_id = escrow.lock(&seller, &buyer, &1_000_000i128, &0i128, &hash, &minutes);
+        assert_eq!(escrow.get_trade(&trade_id).timeout_ledger, start + minutes * 12);
+    }
 }
