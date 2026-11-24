@@ -1,3 +1,7 @@
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
+
 // Central registry of the assets the wallet can hold / send / receive.
 // Issuers come from env so testnet/mainnet swap without code changes.
 
@@ -22,10 +26,11 @@ export interface AssetDef {
 const USDC_ISSUER = import.meta.env.VITE_USDC_ISSUER as string | undefined;
 const CETES_ISSUER = import.meta.env.VITE_CETES_ISSUER as string | undefined;
 
+// Los textos son getters: se leen al pintar, asi siguen el idioma activo.
 export const ASSETS: AssetDef[] = [
-  { code: 'USDC', label: 'USD Coin', native: false, issuer: USDC_ISSUER, decimals: 2, note: 'Dólar digital' },
-  { code: 'CETES', label: 'CETES tokenizados', native: false, issuer: CETES_ISSUER, decimals: 2, note: 'Bono del Gobierno de México' },
-  { code: 'XLM', label: 'Stellar Lumens', native: true, decimals: 4, note: 'Token de red (gas)' },
+  { code: 'USDC', label: 'USD Coin', native: false, issuer: USDC_ISSUER, decimals: 2, get note() { return tr('assets.usdcNote'); } },
+  { code: 'CETES', get label() { return tr('assets.cetesLabel'); }, native: false, issuer: CETES_ISSUER, decimals: 2, get note() { return tr('assets.cetesNote'); } },
+  { code: 'XLM', label: 'Stellar Lumens', native: true, decimals: 4, get note() { return tr('assets.xlmNote'); } },
 ];
 
 export function getAsset(code: string): AssetDef | undefined {

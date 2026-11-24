@@ -1468,5 +1468,24 @@
     "retry": "Couldn't get your location. Try again.",
     "cantLocate": "We couldn't locate you. Step outside for a moment or check that location is on.",
     "offersServer": "Couldn't reach the offers server. Check your connection."
+  },
+  "apiErrorText": {
+    "offline": "No connection to the server. Check your internet and try again.",
+    "session": "Your session expired or you don't have access. Log in again or contact support.",
+    "conflict": "This operation is no longer available or was changed. Contact support if you need help.",
+    "server": "The server didn't respond correctly. Try again in a few moments.",
+    "unexpected": "An unexpected error occurred. Try again."
+  },
+  "assets": {
+    "usdcNote": "Digital dollar",
+    "cetesLabel": "Tokenized CETES",
+    "cetesNote": "Mexican Government bond",
+    "xlmNote": "Network token (gas)"
+  },
+  "pushChannels": {
+    "tradesName": "Operations",
+    "tradesDescription": "New operations, cancellations and refunds",
+    "signName": "Signature requests",
+    "signDescription": "Signatures requested from another device"
   }
 }

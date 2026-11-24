@@ -1,5 +1,8 @@
 import axios from 'axios';
 import { resolveErrorMessage } from '../constants/errorMap';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 export interface ApiErrorPayload {
   message: string;
@@ -129,7 +132,7 @@ export function mapApiError(err: unknown): MappedApiError {
 
     if (!err.response) {
       return {
-        message: 'Sin conexión al servidor. Revisa tu internet e inténtalo de nuevo.',
+        message: tr('apiErrorText.offline'),
         error,
         action: 'retry',
       };
@@ -149,7 +152,7 @@ export function mapApiError(err: unknown): MappedApiError {
     switch (status) {
       case 401:
         return {
-          message: 'Tu sesión expiró o no tienes acceso. Vuelve a iniciar sesión o contacta soporte.',
+          message: tr('apiErrorText.session'),
           error,
           action: 'support',
           status,
@@ -158,7 +161,7 @@ export function mapApiError(err: unknown): MappedApiError {
         return {
           message:
             message === 'Something went wrong. Please try again.'
-              ? 'Esta operación ya no está disponible o fue modificada. Contacta soporte si necesitas ayuda.'
+              ? tr('apiErrorText.conflict')
               : message,
           error,
           action: 'support',
@@ -168,7 +171,7 @@ export function mapApiError(err: unknown): MappedApiError {
       case 502:
       case 503:
         return {
-          message: 'El servidor no respondió correctamente. Inténtalo de nuevo en unos momentos.',
+          message: tr('apiErrorText.server'),
           error,
           action: 'retry',
           status,
@@ -177,7 +180,7 @@ export function mapApiError(err: unknown): MappedApiError {
         return {
           message:
             message === 'Something went wrong. Please try again.'
-              ? 'Ocurrió un error inesperado. Inténtalo de nuevo.'
+              ? tr('apiErrorText.unexpected')
               : message,
           error,
           action: status !== undefined && status >= 400 && status < 500 ? 'support' : 'retry',
@@ -201,7 +204,7 @@ export function mapApiError(err: unknown): MappedApiError {
   }
 
   return {
-    message: 'Ocurrió un error inesperado. Inténtalo de nuevo.',
+    message: tr('apiErrorText.unexpected'),
     action: 'retry',
   };
 }

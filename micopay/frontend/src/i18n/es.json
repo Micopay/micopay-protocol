@@ -1468,5 +1468,24 @@
     "retry": "No se pudo obtener tu ubicación. Intenta de nuevo.",
     "cantLocate": "No pudimos ubicarte. Sal un momento al exterior o revisa que la ubicación esté activada.",
     "offersServer": "No se pudo contactar al servidor de ofertas. Revisa tu conexión."
+  },
+  "apiErrorText": {
+    "offline": "Sin conexión al servidor. Revisa tu internet e inténtalo de nuevo.",
+    "session": "Tu sesión expiró o no tienes acceso. Vuelve a iniciar sesión o contacta soporte.",
+    "conflict": "Esta operación ya no está disponible o fue modificada. Contacta soporte si necesitas ayuda.",
+    "server": "El servidor no respondió correctamente. Inténtalo de nuevo en unos momentos.",
+    "unexpected": "Ocurrió un error inesperado. Inténtalo de nuevo."
+  },
+  "assets": {
+    "usdcNote": "Dólar digital",
+    "cetesLabel": "CETES tokenizados",
+    "cetesNote": "Bono del Gobierno de México",
+    "xlmNote": "Token de red (gas)"
+  },
+  "pushChannels": {
+    "tradesName": "Operaciones",
+    "tradesDescription": "Operaciones nuevas, cancelaciones y reembolsos",
+    "signName": "Solicitudes de firma",
+    "signDescription": "Firmas pedidas desde otro dispositivo"
   }
 }
