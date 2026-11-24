@@ -8,6 +8,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { updateMerchantAvailabilityWithOfflineSupport } from '../services/api';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 interface MerchantAvailabilityToggleProps {
   token: string | null;
@@ -85,7 +88,7 @@ export default function MerchantAvailabilityToggle({
           `}
         />
         <span className="sr-only">
-          {available ? 'Disponible' : 'No disponible'}
+          {available ? tr('merchantAvailability.available') : tr('merchantAvailability.unavailable')}
         </span>
       </button>
 
@@ -103,14 +106,14 @@ export default function MerchantAvailabilityToggle({
 
       {offlineQueue.hasPending && (
         <p className="text-xs text-amber-600">
-          ⏳ {available ? 'Cambio a disponible' : 'Cambio a no disponible'} pendiente de sincronizar
+          ⏳ {available ? tr('merchantAvailability.pendingAvailable') : tr('merchantAvailability.pendingUnavailable')}
         </p>
       )}
 
       {offlineQueue.isSyncing && (
         <p className="text-xs text-blue-600 flex items-center gap-1">
           <span className="material-symbols-outlined text-xs animate-spin">progress_activity</span>
-          Sincronizando cambio...
+          {tr('merchantAvailability.syncing')}
         </p>
       )}
     </div>

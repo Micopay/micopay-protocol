@@ -159,7 +159,9 @@
     "lockerReleased": "Se liberaron {{amount}} {{code}} y {{fee}} {{code}} de comisión.",
     "lockerRefunded": "Se te devolvieron {{total}} {{code}}.",
     "receiverWillReceive": "Vas a recibir {{amount}} {{code}}.",
-    "receiverReceived": "Recibiste {{amount}} {{code}}."
+    "receiverReceived": "Recibiste {{amount}} {{code}}.",
+    "testnetIssuerPrefix": "En pruebas MicoPay usa el {{code}} del emisor",
+    "testnetIssuerSuffix": ", no el de Circle. Agrega esa línea de confianza en tu billetera. No sale del faucet de Circle: pídelo al equipo de MicoPay."
   },
   "depositMap": {
     "title": "Ofertas de depósito",
@@ -1311,5 +1313,39 @@
     "cancel": "Cancelar",
     "deleting": "Eliminando…",
     "confirm": "Sí, eliminar"
+  },
+  "errorBoundary": {
+    "fundsSafe": "Tus fondos están seguros.",
+    "checkFunds": "Revisa el estado de tus fondos antes de seguir.",
+    "supportCode": "Código de soporte:",
+    "retry": "Reintentar"
+  },
+  "merchantAvailability": {
+    "available": "Disponible",
+    "unavailable": "No disponible",
+    "pendingAvailable": "Cambio a disponible pendiente de sincronizar",
+    "pendingUnavailable": "Cambio a no disponible pendiente de sincronizar",
+    "syncing": "Sincronizando cambio..."
+  },
+  "merchantUnavailable": {
+    "title": "Este comerciante no está disponible por ahora",
+    "body": "Puedes esperar a que vuelva o cancelar esta operación y elegir otro comerciante. Tu monto se mantiene igual cuando regreses a la lista.",
+    "wait": "Esperar",
+    "cancelling": "Cancelando…",
+    "cancelRematch": "Cancelar y buscar otro"
+  },
+  "permissionGate": {
+    "deniedTitle": "Permiso denegado",
+    "deniedBody": "Puedes intentarlo de nuevo o usar la alternativa.",
+    "blockedTitle": "Acceso bloqueado",
+    "blockedBody": "Abre los ajustes de la app y habilita el permiso manualmente.",
+    "settingsPath": "Ajustes → Aplicaciones → MicoPay → Permisos",
+    "openSettings": "Ir a Ajustes",
+    "allow": "Permitir acceso",
+    "retry": "Reintentar"
+  },
+  "networkBanner": {
+    "mainnet": "Mainnet: esta red mueve dinero real",
+    "testnet": "Testnet: red de pruebas, sin dinero real"
   }
 }

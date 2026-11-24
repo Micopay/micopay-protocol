@@ -159,7 +159,9 @@
     "lockerReleased": "{{amount}} {{code}} and a {{fee}} {{code}} fee were released.",
     "lockerRefunded": "{{total}} {{code}} were returned to you.",
     "receiverWillReceive": "You will receive {{amount}} {{code}}.",
-    "receiverReceived": "You received {{amount}} {{code}}."
+    "receiverReceived": "You received {{amount}} {{code}}.",
+    "testnetIssuerPrefix": "In testing, MicoPay uses the {{code}} from issuer",
+    "testnetIssuerSuffix": ", not Circle's. Add that trustline in your wallet. It doesn't come from Circle's faucet: ask the MicoPay team for it."
   },
   "depositMap": {
     "title": "Deposit offers",
@@ -1311,5 +1313,39 @@
     "cancel": "Cancel",
     "deleting": "Deleting…",
     "confirm": "Yes, delete"
+  },
+  "errorBoundary": {
+    "fundsSafe": "Your funds are safe.",
+    "checkFunds": "Check the status of your funds before continuing.",
+    "supportCode": "Support code:",
+    "retry": "Try again"
+  },
+  "merchantAvailability": {
+    "available": "Available",
+    "unavailable": "Unavailable",
+    "pendingAvailable": "Change to available waiting to sync",
+    "pendingUnavailable": "Change to unavailable waiting to sync",
+    "syncing": "Syncing change..."
+  },
+  "merchantUnavailable": {
+    "title": "This merchant is unavailable for now",
+    "body": "You can wait for them to come back or cancel this operation and choose another merchant. Your amount stays the same when you go back to the list.",
+    "wait": "Wait",
+    "cancelling": "Cancelling…",
+    "cancelRematch": "Cancel and find another"
+  },
+  "permissionGate": {
+    "deniedTitle": "Permission denied",
+    "deniedBody": "You can try again or use the alternative.",
+    "blockedTitle": "Access blocked",
+    "blockedBody": "Open the app's settings and enable the permission manually.",
+    "settingsPath": "Settings → Apps → MicoPay → Permissions",
+    "openSettings": "Go to Settings",
+    "allow": "Allow access",
+    "retry": "Try again"
+  },
+  "networkBanner": {
+    "mainnet": "Mainnet: this network moves real money",
+    "testnet": "Testnet: test network, no real money"
   }
 }
