@@ -49,7 +49,8 @@ function locked(overrides: Partial<NonNullable<OnChain>> = {}): NonNullable<OnCh
   };
 }
 
-const expected = { seller: SELLER, buyer: BUYER, amountStroops: 5_000_000_000n };
+// 80 MXN de comision a 20 MXN por unidad = 4 unidades = 40_000_000 stroops.
+const expected = { seller: SELLER, buyer: BUYER, amountStroops: 5_000_000_000n, platformFeeStroops: 40_000_000n };
 
 // ── evaluateEscrowCollectable ──────────────────────────────────────────────
 
@@ -88,6 +89,23 @@ function testMismatch() {
     strictEqual(!v.collectable && v.reason, "mismatch");
   }
   console.log("  ✓ otro seller, otro buyer u otro monto en cadena: no se cobra");
+}
+
+/**
+ * Comision: `lock` es publico y quien bloquea elige `platform_fee`. Un lock
+ * hecho fuera del backend con comision 0 (o cualquier otra) no debe pasar por
+ * cobrable, y sin comision esperada tampoco se adivina.
+ */
+function testFeeMismatch() {
+  for (const fee of [0n, 39_999_999n, 40_000_001n]) {
+    const v = evaluateEscrowCollectable({ onChain: locked({ platformFee: fee }), expected, latestLedger: 9_000, minMarginMinutes: 20 });
+    strictEqual(!v.collectable && v.reason, "mismatch", `fee ${fee} on-chain must not be collectable`);
+  }
+  const unknown = evaluateEscrowCollectable({
+    onChain: locked(), expected: { ...expected, platformFeeStroops: null }, latestLedger: 9_000, minMarginMinutes: 20,
+  });
+  strictEqual(!unknown.collectable && unknown.reason, "mismatch", "unknown expected fee is never collectable");
+  console.log("  ✓ otra comision en cadena, o comision esperada desconocida: no se cobra");
 }
 
 // ── readEscrowTrade con RPC simulado ───────────────────────────────────────
@@ -186,6 +204,8 @@ async function testAssertRejectsReleasedEscrow() {
     seller_id: sellerId,
     buyer_id: buyerId,
     amount_stroops: "5000000000",
+    platform_fee_mxn: 80,
+    rate_mxn: "20",
     secret_hash: "ab".repeat(32),
     escrow_contract_id: CONTRACT,
   };
@@ -198,7 +218,11 @@ async function testAssertRejectsReleasedEscrow() {
 
   useSimulation({ id: "1", latestLedger: 9_000, events: [], _parsed: true, transactionData: {}, result: { auth: [], retval: tradeScVal("Locked") } });
   await assertEscrowCollectable(trade);
-  console.log("  ✓ assertEscrowCollectable rechaza liberado o sin margen y deja pasar el caso sano");
+
+  // Mismo escrow sano, pero la fila dice otra comision (o no la tiene): no se cobra.
+  await expectCode(() => assertEscrowCollectable({ ...trade, platform_fee_mxn: 0 }), "ESCROW_MISMATCH", "fee differs from the trade");
+  await expectCode(() => assertEscrowCollectable({ ...trade, rate_mxn: null }), "ESCROW_MISMATCH", "fee cannot be reconstructed");
+  console.log("  ✓ assertEscrowCollectable rechaza liberado, sin margen o con otra comision y deja pasar el caso sano");
 }
 
 async function main() {
@@ -207,6 +231,7 @@ async function main() {
   testMarginBoundary();
   testNotLockedOrMissing();
   testMismatch();
+  testFeeMismatch();
   await testReadParsesTrade();
   await testReadNotFound();
   await testReadUnverifiable();

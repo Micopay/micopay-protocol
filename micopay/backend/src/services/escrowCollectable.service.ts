@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import { config } from '../config.js';
 import db from '../db/schema.js';
 import { ConflictError } from '../utils/errors.js';
+import { stroopsAtFrozenRate } from './assetRate.service.js';
 import { escrowContractForTrade } from './escrowContract.js';
 import { readEscrowTrade, type OnChainEscrowTrade } from './stellar.service.js';
 
@@ -32,7 +33,15 @@ export type CollectableVerdict =
 /** Decision pura, sin red: separada para poder probarla sola. */
 export function evaluateEscrowCollectable(input: {
   onChain: OnChainEscrowTrade | null;
-  expected: { seller: string; buyer: string; amountStroops: bigint };
+  /**
+   * EL HUECO: `lock` es publico y quien bloquea elige `platform_fee`. Un
+   * vendedor que llamara al contrato por su cuenta, sin el XDR que arma el
+   * backend, podia bloquear con comision 0 y pasar esta revision, que solo
+   * miraba seller, buyer y monto: el efectivo se entregaba y la plataforma no
+   * cobraba. `null` = no se pudo reconstruir la comision esperada; sin cifra
+   * no hay entrega.
+   */
+  expected: { seller: string; buyer: string; amountStroops: bigint; platformFeeStroops: bigint | null };
   latestLedger: number;
   minMarginMinutes: number;
 }): CollectableVerdict {
@@ -43,11 +52,18 @@ export function evaluateEscrowCollectable(input: {
   if (onChain.status !== 'Locked') {
     return { collectable: false, reason: 'not_locked', detail: `on-chain status is ${onChain.status}` };
   }
-  if (onChain.seller !== expected.seller || onChain.buyer !== expected.buyer || onChain.amount !== expected.amountStroops) {
+  if (
+    onChain.seller !== expected.seller
+    || onChain.buyer !== expected.buyer
+    || onChain.amount !== expected.amountStroops
+    || expected.platformFeeStroops === null
+    || onChain.platformFee !== expected.platformFeeStroops
+  ) {
     return {
       collectable: false,
       reason: 'mismatch',
-      detail: `on-chain escrow (${onChain.seller} -> ${onChain.buyer}, ${onChain.amount}) does not match the trade`,
+      detail: `on-chain escrow (${onChain.seller} -> ${onChain.buyer}, ${onChain.amount}, fee ${onChain.platformFee}) `
+        + `does not match the trade (fee ${expected.platformFeeStroops ?? 'unknown'})`,
     };
   }
 
@@ -61,6 +77,25 @@ export function evaluateEscrowCollectable(input: {
     };
   }
   return { collectable: true, secondsRemaining };
+}
+
+/**
+ * La comision que el backend puso en el XDR de `lock`: misma tasa congelada y
+ * misma funcion que `prepareLockTrade`/`submitLockTx`. Si faltan datos devuelve
+ * null en lugar de adivinar, y `evaluateEscrowCollectable` lo trata como
+ * discrepancia.
+ */
+function expectedPlatformFeeStroops(trade: {
+  platform_fee_mxn?: number | string | null;
+  rate_mxn?: string | number | null;
+}): bigint | null {
+  if (trade.platform_fee_mxn === null || trade.platform_fee_mxn === undefined) return null;
+  if (trade.rate_mxn === null || trade.rate_mxn === undefined) return null;
+  try {
+    return stroopsAtFrozenRate(Number(trade.platform_fee_mxn), String(trade.rate_mxn));
+  } catch {
+    return null;
+  }
 }
 
 const USER_MESSAGES: Record<CollectableRejection, string> = {
@@ -81,6 +116,8 @@ export async function assertEscrowCollectable(trade: {
   seller_id: string;
   buyer_id: string;
   amount_stroops: string | number;
+  platform_fee_mxn?: number | string | null;
+  rate_mxn?: string | number | null;
   secret_hash: string;
   escrow_contract_id?: string | null;
   asset_code?: string | null;
@@ -102,6 +139,7 @@ export async function assertEscrowCollectable(trade: {
       seller: seller?.stellar_address ?? '',
       buyer: buyer?.stellar_address ?? '',
       amountStroops: BigInt(trade.amount_stroops),
+      platformFeeStroops: expectedPlatformFeeStroops(trade),
     },
     latestLedger,
     minMarginMinutes: config.cashHandoffMinMarginMinutes,
