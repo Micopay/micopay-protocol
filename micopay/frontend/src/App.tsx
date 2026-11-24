@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import { useTranslation } from "react-i18next";
-import { generateAndStoreKeypair, keypairExists, getPublicKey, revealSecretKey } from './lib/keystore';
+import { generateAndStoreKeypair, keypairExists, getPublicKey, revealSecretKey, signingAsksForPresence } from './lib/keystore';
 import {
   HashRouter,
   Routes,
@@ -14,6 +14,8 @@ import {
 import { App as CapApp } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
 import ErrorBoundary from './components/ErrorBoundary';
+import AppLock from './components/AppLock';
+import { canLockDevice, shouldLockOnResume } from './lib/userPresence';
 
 import Home from "./pages/Home";
 import Welcome from "./pages/Welcome";
@@ -1001,6 +1003,23 @@ function PushNotificationsBridge() {
   return null;
 }
 
+// ── Bloqueo con sesion abierta (AUTH-2) ─────────────────────────────────────
+// Va dentro del router solo para poder llevar a /login al cerrar sesion.
+function AppLockRoute({ onUnlocked }: { onUnlocked: () => void }) {
+  const { handleAccountDeleted } = useAppCtx();
+  const navigate = useNavigate();
+  return (
+    <AppLock
+      onUnlocked={onUnlocked}
+      onLogout={() => {
+        handleAccountDeleted();
+        onUnlocked();
+        navigate('/login', { replace: true });
+      }}
+    />
+  );
+}
+
 // ── Connection banner host ───────────────────────────────────────────────────
 // Tracks browser/WebView online-offline state directly (navigator.onLine +
 // the online/offline events) — deliberately independent of the merchant
@@ -1078,6 +1097,9 @@ function App() {
   // CASH-1 (#372): the retried value is the product flow, not the escrow role.
   const [pendingFlow, setPendingFlow] = useState<TradeFlow>('deposit');
   const [authReady, setAuthReady] = useState(false);
+  // AUTH-2: con sesion abierta, ver la cuenta pide huella o PIN. Mientras esta
+  // en true no se pintan las rutas, solo AppLock.
+  const [locked, setLocked] = useState(false);
   const [devicePublicKey, setDevicePublicKey] = useState<string | null>(null);
 
   const [showBackupPrompt, setShowBackupPrompt] = useState(false);
@@ -1095,6 +1117,9 @@ function App() {
   const STRICT_STARTUP_MODES = new Set(['production', 'mainnet']);
 
   useEffect(() => {
+    // AUTH-2: true solo si la sesion vino del almacenamiento (arranque en frio
+    // con sesion abierta). Un usuario de demo recien creado no se bloquea.
+    let restoredSession = false;
     const initUsers = async () => {
       // 1. Validate VITE_API_URL existence
       const apiUrl = import.meta.env.VITE_API_URL;
@@ -1191,18 +1216,24 @@ function App() {
             // stored the username as `id` instead of the real backend user id).
             const fresh: UserData = { id: profile.id, username: profile.username, token: stored.token };
             if (fresh.id !== stored.id) await writeJSON(USERS_STORAGE_KEY, fresh);
+            restoredSession = true;
             setSessionUser(fresh);
             return;
           } catch (err: any) {
             const status = err?.response?.status;
             if (status !== 401 && status !== 403) {
               // Transient/network error — keep the cached session optimistically.
+              restoredSession = true;
               setSessionUser(stored);
               return;
             }
             try {
               const recovered = await recoverSession(stored.username);
               await writeJSON(USERS_STORAGE_KEY, recovered);
+              // Recuperar firma el reto con la llave. En Android esa firma ya
+              // pidio huella a la boveda: bloquear encima seria una segunda
+              // huella seguida al abrir. Donde firmar no pregunta, se bloquea.
+              restoredSession = !signingAsksForPresence();
               setSessionUser(recovered);
               return;
             } catch (re) {
@@ -1224,6 +1255,10 @@ function App() {
       } catch (e) {
         console.warn("Backend unavailable for registration, using local stub", e);
       } finally {
+        // El bloqueo se decide ANTES de `authReady`: mientras tanto solo se ve
+        // el spinner, asi que ninguna pantalla con datos llega a pintarse. Ambos
+        // `set` caen en el mismo render.
+        if (restoredSession && await canLockDevice().catch(() => false)) setLocked(true);
         setAuthReady(true);
       }
     };
@@ -1235,6 +1270,20 @@ function App() {
     setSessionUser(user);
     writeJSON(USERS_STORAGE_KEY, user);
   };
+
+  // AUTH-2: al volver de segundo plano tras mas de LOCK_AFTER_MS, bloquear.
+  // `main.tsx` anota cuando salio; aqui se decide al volver.
+  const hasSession = sessionUser !== null;
+  useEffect(() => {
+    if (!hasSession || !Capacitor.isNativePlatform()) return;
+    const sub = CapApp.addListener('appStateChange', ({ isActive }) => {
+      if (!isActive || !shouldLockOnResume()) return;
+      void canLockDevice()
+        .then((can) => { if (can) setLocked(true); })
+        .catch(() => {});
+    });
+    return () => { void sub.then((h) => h.remove()); };
+  }, [hasSession]);
 
   const handleAccountDeleted = () => {
     setSessionUser(null);
@@ -1477,11 +1526,17 @@ function App() {
       <ErrorBoundary>
         <AppContext.Provider value={ctx}>
           <HashRouter>
+            {/* Montado tambien con la app bloqueada: si se abre desde un aviso,
+                la ruta cambia debajo del bloqueo sin pintarse y, al desbloquear,
+                la persona cae directo en la pantalla del aviso (AUTH-2). */}
+            <PushNotificationsBridge />
+            {locked ? (
+              <AppLockRoute onUnlocked={() => setLocked(false)} />
+            ) : (
             <div className="flex flex-col min-h-screen bg-fondo">
               <ConnectionBannerHost />
               {/* Se oculta solo cuando hay conexión y no hay nada pendiente. */}
               <OfflineQueueStatus token={sessionUser?.token ?? null} />
-              <PushNotificationsBridge />
               <Routes>
                 <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
                 <Route path="/register" element={<Register onLoginSuccess={handleLoginSuccess} />} />
@@ -1535,6 +1590,7 @@ function App() {
                 />
               )}
             </div>
+            )}
           </HashRouter>
         </AppContext.Provider>
       </ErrorBoundary>
