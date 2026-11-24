@@ -2,7 +2,7 @@
 
 - **Issue:** #493
 - **Country / general region:** Nigeria (West Africa)
-- **Device, screen size and browser:** Desktop (Windows), 1920x1080 display, Google Chrome
+- **Device, screen size and browser:** Desktop (Windows), 1920x1080, Google Chrome
 - **App language you used:** English (tested `EN` / `ES` toggle)
 
 ## 1. First look — what do you think it is?
@@ -10,44 +10,43 @@
 *Open https://app.micopay.com.mx and write this before signing in or reading anything else.*
 
 - What does MicoPay do, in your own words?
-  > Looking strictly at the initial landing screen (`https://app.micopay.com.mx/#/login`), the page presents the title `MicoPay`, a subtitle `Connect your wallet`, security guidance stating `"Your key stays in your wallet. MicoPay will ask you to sign and will never see it."`, a warning box advising users to keep their recovery phrase safe, and a `Connect wallet` button. Based on this screen alone, MicoPay looks like a web3 decentralized application login portal on Stellar testnet (`Testnet: red de pruebas, sin dinero real`), but it does not specify what the app does, what financial services it provides, or why someone should connect their wallet.
+  > When I first opened `https://app.micopay.com.mx`, my honest reaction was that it looks like an unfinished login wall. All I saw was the name `MicoPay`, a short line saying `Connect your wallet`, a small security box about keeping my recovery phrase safe, and an orange `Connect wallet` button. There was nothing explaining what the app actually does, what services it offers, or why I should connect.
 - Who is it for?
-  > It looks like it is built for experienced crypto users who already have a compatible non-custodial wallet installed and know how to sign transactions.
+  > It felt like it was built only for people who already know about MicoPay from somewhere else and already have a wallet ready to connect. If I shared this link with a friend or colleague, they would have no idea what it is.
 - What problem does it solve?
-  > The first screen explains only self-custodial key safety without describing the real-world problem or service it provides.
+  > From that first screen, I could not tell what problem it solves. It only talks about security—telling me that my key stays in my wallet and that MicoPay never sees it. It does not mention cash, trading, or payments anywhere.
 
 ## 2. After trying it — what did you get wrong?
 
 - What did you misunderstand in step 1, or what surprised you?
-  > In step 1, I assumed MicoPay was either a standard online crypto payment gateway (like a merchant checkout button) or a decentralized token swap. I was surprised to discover after signing in and viewing the welcome tour that MicoPay is actually an in-person, escrow-protected cash-in/cash-out protocol that connects individuals with local physical cash agents.
+  > I was surprised to find out that MicoPay is actually an in-person, cash-in and cash-out network using local agents and escrow. In step 1, I assumed it was either an online crypto payment processor or a DeFi swap. Nothing on that front screen gave any hint about physical cash or meeting someone nearby.
 - What is still unclear?
-  > It remains unclear how agent liquidity is guaranteed in practice, how dispute resolution operates if an agent disputes cash receipt during an in-person meeting, and whether local fiat currencies outside Mexico (`.com.mx`) will be supported.
+  > How agents are found in practice, what the exchange rate is compared to the regular market rate, and whether there will ever be agents outside Mexico.
 
 ## 3. The task in your issue
 
 *Do the task described in your issue. For each step, say what you did and what happened.*
 
 - How far did you get? Where did you stop, and why?
-  > 1. Opened `https://app.micopay.com.mx`, which redirected to `#/login`. Evaluated the initial view and recorded my first impressions in Section 1 before connecting.
-  > 2. Tested the `ES` / `EN` toggle in the top-right corner; the card text translated between English and Spanish, while the top testnet bar remained in Spanish.
-  > 3. Clicked `Connect wallet`, selected Varial wallet on testnet, approved the connection, and created a test account by entering a username.
-  > 4. Explored the app for several minutes: navigated through the Welcome tour, the main dashboard (`Home`), the `Explore` map, the `Pay` / `Receive` screens, and the `Profile` tab.
-  > 5. Stopped after thoroughly reviewing the navigation, screens, and copy, as there are no live physical cash agents on testnet to complete a real-world cash exchange.
+  > 1. Opened `https://app.micopay.com.mx` and wrote down my thoughts for Section 1 while looking at the login card.
+  > 2. Tested the `ES` / `EN` toggle at the top of the card. The card text switched cleanly between English and Spanish, but the black banner at the top (`Testnet: red de pruebas, sin dinero real`) stayed in Spanish.
+  > 3. Clicked `Connect wallet`, connected my Varial wallet on testnet, and signed in.
+  > 4. Read through the Welcome guide slides, which explained how cash agents, escrow, and meeting someone work.
+  > 5. Looked around the rest of the app: checked the Home balance screen, Explore map, and Profile.
+  > I stopped after exploring the screens because this is on testnet and there are no real cash agents near me to do an actual trade with.
 - Where did you get stuck, even for a moment?
-  > When first opening the site, I tried to access other routes (such as `#/cashout` or `#/explore`) to inspect the app features before connecting a wallet, but the app forcibly redirected every route back to `#/login`. Without connecting a wallet first, the entire product is invisible.
+  > Before connecting, I tried typing other paths like `#/explore` and `#/cashout` in the browser bar to see if I could preview the app without a wallet, but it kept bouncing me straight back to `#/login`. You cannot see anything about the product until you connect.
 
 ## 4. Questions for your issue
 
 *Copy the questions from your issue here and answer them.*
 
 - **What did the first screen tell you, and what did it leave out?**
-  > - **What it told me:** It stated the platform name (`MicoPay`), showed that authentication is wallet-based (`Connect your wallet`), explained that keys remain on the user device (`"Your key stays in your wallet. MicoPay will ask you to sign and will never see it."`), and warned that lost recovery phrases cannot be restored by MicoPay.
-  > - **What it left out:** It completely omitted what MicoPay actually does: no mention of cashing out crypto, buying crypto with physical cash, finding local cash agents, escrow protection, or supported fiat currencies.
+  > It told me the name MicoPay, that I need to connect a wallet, that my key stays on my device, and that I need to guard my recovery phrase because MicoPay cannot restore it. It left out everything that matters to a user: that it is for turning crypto into physical cash, that local agents exist, what currencies it supports, and how it works.
 - **What word or sentence made the product click for you, if any?**
-  > The sentence in the Welcome guide under *How you exchange cash*: `"In MicoPay, the one who gives or takes your cash is another person: a MicoPay Network agent. It can be a shop, a stall or an individual near you."` alongside `"Cash out: you hand over crypto and the agent gives you bills."` That immediately made the entire concept click as a decentralized local cash-ramp.
+  > In the welcome guide, under "How you exchange cash", the sentence: *"In MicoPay, the one who gives or takes your cash is another person: a MicoPay Network agent. It can be a shop, a stall or an individual near you."* followed by *"Cash out: you hand over crypto and the agent gives you bills."* That was the exact moment the whole concept made sense to me.
 - **What would you put on the first screen to explain MicoPay in five seconds?**
-  > A clear hero heading and sub-headline:
-  > **"Turn crypto into physical cash with trusted local agents."**
+  > Headline: *"Turn your crypto into physical cash with trusted local agents."*
   > Sub-headline: *"Cash out USDC or buy crypto in minutes. Non-custodial, protected by escrow."*
 
 ## 5. Your country
@@ -55,38 +54,36 @@
 - Your country / general region (no city or address needed).
   > Nigeria (West Africa)
 - Do you see potential for MicoPay in your country? Why or why not?
-  > Yes, substantial potential. Nigeria has one of the highest peer-to-peer crypto trading volumes globally, with freelancers, software developers, and remote workers earning in stablecoins (USDC/USDT). Cash remains essential for daily living expenses, groceries, and local transport. A trustless, escrow-backed cash ramp connecting users with neighborhood agents would address a major daily need.
+  > Yes, I do. Almost all of the money I earn online from bounties, development work, and freelance tasks comes in as USDC or USDT. Getting that money out into physical cash to pay for daily things like groceries, transport, or bills is something I deal with every week.
 - Who would use it there? (freelancers paid in crypto, people receiving remittances, shops, people without a bank account…)
-  > Remote workers and freelancers paid in crypto, individuals receiving family remittances from abroad, and existing agency banking/POS shop operators who already provide cash deposit and withdrawal services throughout neighborhoods.
+  > People like me who work online and get paid in stablecoins, people receiving money from family members abroad, and the local POS (Point of Sale) shop operators on almost every street corner who already do cash deposits and withdrawals for everyone.
 - What exists today to swap crypto for cash where you live, and what is wrong with it? A fee percentage is fine; no amounts of money.
-  > People currently use centralized P2P exchange platforms (e.g. Binance, Bybit) and local crypto fintech apps. Total spreads and fees typically range from 1% to 3.5%. The major risks include commercial bank accounts being frozen or restricted due to P2P bank transfers, counterparty delays, and peer-to-peer payment fraud.
+  > What I use today is Binance P2P or local exchange apps to sell my crypto for Naira. Between the exchange spread and withdrawal fees, it costs me about 2% to 3% every time I cash out. What really bothers me is the stress: local bank accounts here frequently get flagged or frozen if a bank suspects a transfer is from crypto P2P. On top of that, sometimes you get stuck waiting 20 to 30 minutes for a buyer to actually send the money.
 - What would MicoPay need to change to work there?
-  > 1. Support Nigerian Naira (NGN) and integrate with local cash agent networks (such as POS operators).
-  > 2. Support multi-chain or popular Stellar wallets (such as Lobstr) in addition to Varial.
-  > 3. Provide a clear, public-facing landing page explaining the cash-out mechanism before requiring wallet connection.
+  > It needs to support Nigerian Naira (NGN), have verified cash agents in local neighborhoods, and allow normal wallets that people already have instead of requiring Varial.
 
 ## 6. Value
 
 - **How useful does it look to you?** 1 (not at all) – 5 (very). Why?
-  > **4 / 5.** The core concept of an escrow-protected, peer-to-peer crypto-to-cash ramp is extremely valuable in cash-heavy emerging markets. It is not a 5 yet because the entry screen provides no explanation of the service and wallet choices are currently restricted to Varial.
+  > **4 / 5.** The idea of being able to swap my crypto directly for cash through an escrow system is very useful to me. I only took off one point because the first screen does not explain anything and I had to install a new wallet just to see it.
 - What is the most valuable part?
-  > The escrow mechanism: smart contracts holding funds until both parties verify physical cash exchange via QR scan, with an automatic timeout refund protecting users if an agent fails to meet.
+  > The escrow protection: knowing that the crypto is held safely until cash changes hands in person, and that if the person doesn't show up, the funds can be refunded.
 - What is missing?
-  > A public landing preview explaining the service before login, support for multiple fiat currencies (including NGN), and support for mainstream wallets.
+  > An explainer on the homepage before connecting, support for my local currency, and support for more wallets.
 - What would stop you from using it?
-  > An absence of verified, nearby cash agents in my area, or excessive agent fees compared to standard exchange rates.
+  > If there are no active agents near where I live, or if the fees turn out to be much higher than regular P2P.
 
 ## 7. What confused you
 
 - Which screen, button, step or term confused you, and what did you expect instead?
-  > - **The landing screen (`#/login`):** It resembles an internal login modal rather than a consumer homepage. I expected a introductory banner or 3-step graphic explaining how MicoPay works before the "Connect wallet" button.
-  > - **The top testnet banner:** The black top banner (`Testnet: red de pruebas, sin dinero real`) remains in Spanish even when the language is switched to English (`EN`).
-  > - **Wallet modal:** Clicking "Connect wallet" opens a modal showing only "Varial" (`Install ↗`), without having informed the user beforehand that Varial is the only supported wallet.
+  > - **The login screen:** It felt like an internal tool login rather than a consumer product. I expected a short 1-2-3 explanation of the app before being asked to connect a wallet.
+  > - **The top banner:** Even when I clicked the English toggle (`EN`), the top banner (`Testnet: red de pruebas, sin dinero real`) stayed in Spanish.
+  > - **The wallet choice:** Clicking "Connect wallet" only gave me Varial with an external link arrow. I expected either multiple wallets or a note beforehand telling me Varial was required.
 
 ## 8. Ideas
 
 Up to 3. For each one: the problem it solves, then the idea.
 
-1. **Problem:** First-time visitors arrive at `#/login` and cannot tell what MicoPay does, causing high bounce rates. · **Idea:** Add a concise 3-step visual summary on the login screen: *"1. Connect wallet -> 2. Meet local agent -> 3. Receive physical cash protected by escrow."*
-2. **Problem:** Users who do not have Varial installed cannot see how the app looks or operates. · **Idea:** Add a "Explore demo / view agent map" link on `#/login` allowing read-only access to the map and interface without requiring an immediate wallet connection.
-3. **Problem:** English-speaking users see untranslated Spanish in the top banner and parts of the interface. · **Idea:** Fully localize the top testnet banner and any alert messages when toggling between `EN` and `ES`.
+1. **Problem:** People opening the site for the first time don't know what it is and will just close the tab. · **Idea:** Put a simple 3-step visual guide on the login screen showing how MicoPay works before the connect button.
+2. **Problem:** You can't see the app or the agent map without connecting a wallet first. · **Idea:** Add a "Browse without wallet" button so visitors can view the map and see how cash-out works before installing anything.
+3. **Problem:** The top testnet banner stays in Spanish in English mode. · **Idea:** Translate that banner when switching to English so the page feels fully finished.
