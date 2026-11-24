@@ -103,7 +103,7 @@ const SendPayment = ({ onBack, onDone, onSent }: SendPaymentProps) => {
       <ResultScreen
         ok={false}
         title={t('send.errorTitle')}
-        subtitle={error ?? 'Error desconocido'}
+        subtitle={error ?? tr('sendPaymentText.unknownError')}
         onPrimary={reset}
         primaryLabel={t('send.retry')}
         onSecondary={onBack}

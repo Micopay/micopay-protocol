@@ -561,7 +561,9 @@
     "receiptRelease": "Release",
     "receiptNetwork": "Network",
     "receiptDate": "Date",
-    "receiptCrypto": "Crypto"
+    "receiptCrypto": "Crypto",
+    "copyReceipt": "Copy receipt",
+    "receiptCopiedShort": "Receipt copied"
   },
   "kyc": {
     "verifyingIdentity": "Verifying identity…",
@@ -1009,7 +1011,10 @@
     "signToLockWallet": "Sign with your wallet to lock the funds in the escrow contract.",
     "signToLockKey": "Sign with your key to lock the funds in the escrow contract.",
     "stillInEscrow": "{{reason}} The money is still held in escrow.",
-    "cancelledReturnsAt": "The trade was cancelled. The funds are still in the contract and go back on their own to whoever locked them from {{at}}."
+    "cancelledReturnsAt": "The trade was cancelled. The funds are still in the contract and go back on their own to whoever locked them from {{at}}.",
+    "handoffRecorded": "Handoff recorded",
+    "totalReturned": "Total returned",
+    "refundPending": "Refund pending"
   },
   "profileText": {
     "s1": "Your session expired. Sign in again.",
@@ -1031,7 +1036,15 @@
     "s17": "You're paused: you're still an agent, but you don't show up on the map.",
     "s18": "Rate, limits and location",
     "s19": "Your agent account is suspended. Write to us to review it.",
-    "s20": "Key imported"
+    "s20": "Key imported",
+    "webConnections": "Web connections",
+    "identityVerified": "Identity verified",
+    "level": "Level {{level}}",
+    "verifyIdentity": "Verify my identity",
+    "halfSignup": "Sign-up half done",
+    "continueSignup": "Continue my sign-up",
+    "pauseMe": "Pause me",
+    "makeAvailable": "Make me available"
   },
   "walletRequest": {
     "s1": "Lock funds in escrow",
@@ -1085,7 +1098,8 @@
     "s2": "We couldn't load your transfers from the network. They'll show up when you open the history again.",
     "s3": "No transactions",
     "s4": "We didn't find transactions matching your current filter.",
-    "s5": "Page"
+    "s5": "Page",
+    "loading": "Loading history..."
   },
   "qrRevealText": {
     "s1": "Open chat with the agent",
@@ -1113,7 +1127,12 @@
     "s17": "Check it only if you serve from a shop and want anyone to see it without starting a trade. If you operate from home, leave it unchecked.",
     "agentFee": "Agent fee (%) · maximum {{max}}",
     "dailyCap": "Daily cap (MXN)",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "paused": "Operations paused",
+    "resumed": "Operations resumed",
+    "saving": "Saving…",
+    "syncing": "Syncing...",
+    "saveChanges": "Save changes"
   },
   "walletConnections": {
     "s1": "Couldn't connect",
@@ -1121,7 +1140,8 @@
     "s3": "Use this account on your computer. The key stays on this phone and you approve every signature here.",
     "s4": "Web connections aren't available yet.",
     "s5": "Scan the web QR",
-    "s6": "You have no active connections."
+    "s6": "You have no active connections.",
+    "title": "Web connections"
   },
   "supportLink": {
     "s1": "Need help?",
@@ -1131,7 +1151,9 @@
     "mailSubjectTrade": "Operation {{id}}…",
     "mailSubjectNoTrade": "operation without ID",
     "mailBody": "Hi,\n\nI need help.\n\nStatus: {{state}}\nOperation ID: {{id}}\n\nThanks.",
-    "mailNoId": "N/A"
+    "mailNoId": "N/A",
+    "copied": "Copied",
+    "copyEmail": "Copy {{email}}"
   },
   "betaBanner": {
     "s1": "Technical beta on a test network.",
@@ -1363,7 +1385,8 @@
     "sendFailed": "The payment couldn't be sent.",
     "back": "Back",
     "scanQr": "Scan QR",
-    "viewExplorer": "View in the explorer"
+    "viewExplorer": "View in the explorer",
+    "unknownError": "Unknown error"
   },
   "tradeConfirmText": {
     "backToMap": "Back to the map",
@@ -1379,5 +1402,11 @@
   },
   "cetesText": {
     "noWithdrawInstructions": "The agent didn't return valid withdrawal instructions."
+  },
+  "depositRequestText": {
+    "searchAgents": "Search agents"
+  },
+  "errorBanner": {
+    "verifyIdentity": "Verify my identity"
   }
 }

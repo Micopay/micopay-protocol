@@ -349,7 +349,7 @@ const SuccessScreen = ({ type, trade, viewerId, agentName, onHome }: SuccessScre
                             onClick={handleCopy}
                             className="text-primary font-bold text-sm hover:opacity-80 transition-opacity flex items-center justify-center gap-2 bg-primary/10 px-4 py-2 rounded-sm"
                         >
-                            {copied ? 'Recibo copiado' : 'Copiar recibo'}
+                            {copied ? tr('success.receiptCopiedShort') : tr('success.copyReceipt')}
                             <span className="material-symbols-outlined text-[18px]">content_copy</span>
                         </button>
                         <button

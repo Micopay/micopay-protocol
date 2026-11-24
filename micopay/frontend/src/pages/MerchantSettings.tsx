@@ -166,7 +166,7 @@ export default function MerchantSettings({
       await setAvailability(next, token);
       setAvailabilityState(next);
       setMessage(
-        next === "paused" ? "Operaciones pausadas" : "Operaciones reanudadas",
+        next === "paused" ? tr('merchantSettingsText.paused') : tr('merchantSettingsText.resumed'),
       );
     } catch (err: any) {
       setMessage(tr('merchantSettingsText.s1'));
@@ -395,7 +395,7 @@ export default function MerchantSettings({
             disabled={saving || !token || offlineQueue.isSyncing}
             onClick={save}
           >
-            {saving ? 'Guardando…' : offlineQueue.isSyncing ? 'Sincronizando...' : 'Guardar cambios'}
+            {saving ? tr('merchantSettingsText.saving') : offlineQueue.isSyncing ? tr('merchantSettingsText.syncing') : tr('merchantSettingsText.saveChanges')}
           </button>
 
           {message && (

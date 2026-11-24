@@ -29,6 +29,8 @@ import { parseTradeState, type TradeState } from '../components/TradeStateBadge'
 import { resolveTradeActor, type TradeActor } from '../utils/tradeActor';
 import { canConfirmCashReceived, confirmCashReceived, cashConfirmErrorMessage } from '../utils/cashConfirm';
 
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
+
 type TradeDetailData = TradeDetailResponse['trade'] & {
   platform_fee_mxn?: number;
   release_tx_hash?: string | null;
@@ -459,7 +461,7 @@ function ReleaseAfterHandoffView({ trade, token, onComplete, onOpenChat }: { tra
           check_circle
         </span>
       </div>
-      <h2 className="text-2xl font-bold text-on-surface mb-2">Entrega registrada</h2>
+      <h2 className="text-2xl font-bold text-on-surface mb-2">{tr('tradeDetail.handoffRecorded')}</h2>
       <p className="text-on-surface-variant mb-6">{t('tradeDetail.s31')}</p>
       {error && (
         <p role="alert" className="w-full mb-4 p-3 bg-red-50 border border-red-200 rounded-sm text-red-700 text-sm font-medium">
@@ -1025,7 +1027,7 @@ function RefundConfirmDialog({
             <span className="num text-sm text-on-surface">${fee} MXN</span>
           </div>
           <div className="flex justify-between items-center pt-2 border-t border-linea">
-            <span className="text-sm font-semibold text-on-surface-variant">Total devuelto</span>
+            <span className="text-sm font-semibold text-on-surface-variant">{tr('tradeDetail.totalReturned')}</span>
             <span className="num font-bold text-primary">${amount} MXN</span>
           </div>
           <p className="mt-3 text-xs text-on-surface-variant">{t('tradeDetail.s63')}
@@ -1480,7 +1482,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
               onRefund={handleRefundClick}
               refunding={isRefunding}
               trade={trade}
-              title="Reembolso pendiente"
+              title={tr('tradeDetail.refundPending')}
               description={cancelledRefundCopy(refundEligibility)}
             />
           );

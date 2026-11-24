@@ -1,6 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import type { ApiErrorAction } from '../utils/apiError';
 import SupportLink from './SupportLink';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 interface ErrorBannerProps {
   message: string;
@@ -60,7 +63,7 @@ export default function ErrorBanner({
           onClick={onVerifyIdentity}
           className="rounded-sm bg-verde px-4 py-2 text-xs font-bold text-papel"
         >
-          Verificar mi identidad
+          {tr('errorBanner.verifyIdentity')}
         </button>
       ) : null}
       {showSupport ? (

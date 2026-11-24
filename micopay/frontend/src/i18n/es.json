@@ -561,7 +561,9 @@
     "receiptRelease": "Liberación",
     "receiptNetwork": "Red",
     "receiptDate": "Fecha",
-    "receiptCrypto": "Cripto"
+    "receiptCrypto": "Cripto",
+    "copyReceipt": "Copiar recibo",
+    "receiptCopiedShort": "Recibo copiado"
   },
   "kyc": {
     "verifyingIdentity": "Verificando identidad…",
@@ -1009,7 +1011,10 @@
     "signToLockWallet": "Firma con tu billetera para bloquear los fondos en el contrato de garantía.",
     "signToLockKey": "Firma con tu llave para bloquear los fondos en el contrato de garantía.",
     "stillInEscrow": "{{reason}} El dinero sigue retenido en la garantía.",
-    "cancelledReturnsAt": "La operación fue cancelada. Los fondos siguen en el contrato y regresan solos a quien los bloqueó a partir del {{at}}."
+    "cancelledReturnsAt": "La operación fue cancelada. Los fondos siguen en el contrato y regresan solos a quien los bloqueó a partir del {{at}}.",
+    "handoffRecorded": "Entrega registrada",
+    "totalReturned": "Total devuelto",
+    "refundPending": "Reembolso pendiente"
   },
   "profileText": {
     "s1": "Tu sesión expiró. Vuelve a iniciar sesión.",
@@ -1031,7 +1036,15 @@
     "s17": "Estás en pausa: sigues siendo agente, pero no apareces en el mapa.",
     "s18": "Tasa, límites y ubicación",
     "s19": "Tu cuenta de agente está suspendida. Escríbenos para revisarlo.",
-    "s20": "Llave importada"
+    "s20": "Llave importada",
+    "webConnections": "Conexiones web",
+    "identityVerified": "Identidad verificada",
+    "level": "Nivel {{level}}",
+    "verifyIdentity": "Verificar mi identidad",
+    "halfSignup": "Alta a medias",
+    "continueSignup": "Continuar mi alta",
+    "pauseMe": "Ponerme en pausa",
+    "makeAvailable": "Ponerme disponible"
   },
   "walletRequest": {
     "s1": "Bloquear fondos en garantía",
@@ -1085,7 +1098,8 @@
     "s2": "No pudimos cargar tus transferencias de la red. Aparecerán al volver a abrir el historial.",
     "s3": "Sin transacciones",
     "s4": "No encontramos transacciones que coincidan con tu filtro actual.",
-    "s5": "Página"
+    "s5": "Página",
+    "loading": "Cargando historial..."
   },
   "qrRevealText": {
     "s1": "Abrir chat con el agente",
@@ -1113,7 +1127,12 @@
     "s17": "Márcalo solo si atiendes en un local comercial y quieres que cualquiera pueda verla sin haber iniciado una operación. Si operas desde tu casa, déjalo sin marcar.",
     "agentFee": "Tasa del agente (%) · máximo {{max}}",
     "dailyCap": "Tope diario (MXN)",
-    "loading": "Cargando…"
+    "loading": "Cargando…",
+    "paused": "Operaciones pausadas",
+    "resumed": "Operaciones reanudadas",
+    "saving": "Guardando…",
+    "syncing": "Sincronizando...",
+    "saveChanges": "Guardar cambios"
   },
   "walletConnections": {
     "s1": "No se pudo conectar",
@@ -1121,7 +1140,8 @@
     "s3": "Usa esta cuenta en tu computadora. La llave se queda en este teléfono y aquí apruebas cada firma.",
     "s4": "Las conexiones web todavía no están disponibles.",
     "s5": "Escanear QR de la web",
-    "s6": "No tienes conexiones activas."
+    "s6": "No tienes conexiones activas.",
+    "title": "Conexiones web"
   },
   "supportLink": {
     "s1": "¿Necesitas ayuda?",
@@ -1131,7 +1151,9 @@
     "mailSubjectTrade": "Operación {{id}}…",
     "mailSubjectNoTrade": "operación sin ID",
     "mailBody": "Hola,\n\nNecesito ayuda.\n\nEstado: {{state}}\nOperación ID: {{id}}\n\nGracias.",
-    "mailNoId": "N/D"
+    "mailNoId": "N/D",
+    "copied": "Copiado",
+    "copyEmail": "Copiar {{email}}"
   },
   "betaBanner": {
     "s1": "Beta técnica en red de prueba.",
@@ -1363,7 +1385,8 @@
     "sendFailed": "No se pudo enviar el pago.",
     "back": "Volver",
     "scanQr": "Escanear QR",
-    "viewExplorer": "Ver en el explorador"
+    "viewExplorer": "Ver en el explorador",
+    "unknownError": "Error desconocido"
   },
   "tradeConfirmText": {
     "backToMap": "Volver al mapa",
@@ -1379,5 +1402,11 @@
   },
   "cetesText": {
     "noWithdrawInstructions": "El agente no devolvió instrucciones de retiro válidas."
+  },
+  "depositRequestText": {
+    "searchAgents": "Buscar agentes"
+  },
+  "errorBanner": {
+    "verifyIdentity": "Verificar mi identidad"
   }
 }
