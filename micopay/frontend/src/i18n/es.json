@@ -558,7 +558,10 @@
     "receiptAgent": "Agente",
     "receiptTradeId": "Operación ID",
     "receiptLock": "Bloqueo",
-    "receiptRelease": "Liberación"
+    "receiptRelease": "Liberación",
+    "receiptNetwork": "Red",
+    "receiptDate": "Fecha",
+    "receiptCrypto": "Cripto"
   },
   "kyc": {
     "verifyingIdentity": "Verificando identidad…",
