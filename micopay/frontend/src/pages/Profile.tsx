@@ -12,9 +12,16 @@ import {
 } from "../services/api";
 import { setLanguage } from "../i18n";
 import i18n from '../i18n';
+import { localizeServerMessage } from '../utils/apiError';
 
 // Textos que no pasan por el hook: el arbol se vuelve a pintar al cambiar de idioma.
 const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
+
+/** Mensaje del servidor, en el idioma activo si su codigo tiene clave (#512). */
+function serverMessage(err: any): string | undefined {
+  const data = err?.response?.data;
+  return typeof data?.message === 'string' ? localizeServerMessage(data.code, data.message) : undefined;
+}
 
 /** Deterministic avatar gradient seeded by the Stellar address (no external images). */
 const TIER_STYLE: Record<string, { bg: string; text: string; icon: string }> = {
@@ -93,7 +100,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
             if (!cancelled) setError(tr('profileText.s1'));
           }
         } else {
-          setError(err?.response?.data?.message ?? tr('profileText.s2'));
+          setError(serverMessage(err) ?? tr('profileText.s2'));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -155,7 +162,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
         onDeleted();
       }, 800);
     } catch (err: any) {
-      setError(err?.response?.data?.message ?? tr('profileText.s3'));
+      setError(serverMessage(err) ?? tr('profileText.s3'));
     } finally {
       setDeleting(false);
     }

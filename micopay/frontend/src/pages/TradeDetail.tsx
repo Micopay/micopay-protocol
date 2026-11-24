@@ -24,7 +24,7 @@ import { errorMessages } from '../constants/errorMessages';
 import { readJSON } from '../services/secureStorage';
 import { useCountdown } from '../hooks/useCountdown';
 import { buildTxUrl } from '../utils/stellarExplorer';
-import { mapApiError } from '../utils/apiError';
+import { localizeServerMessage, mapApiError } from '../utils/apiError';
 import { parseTradeState, type TradeState } from '../components/TradeStateBadge';
 import { resolveTradeActor, type TradeActor } from '../utils/tradeActor';
 import { canConfirmCashReceived, confirmCashReceived, cashConfirmErrorMessage } from '../utils/cashConfirm';
@@ -1215,7 +1215,10 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       await lockTrade(trade.id, effectiveToken);
       fetchTrade(); // Refresh to get locked state
     } catch (e: any) {
-      setLockError(e?.response?.data?.message || e?.message || t('tradeDetail.s68'));
+      setLockError(
+        (e?.response?.data?.message && localizeServerMessage(e.response.data.code, e.response.data.message))
+        || e?.message || t('tradeDetail.s68'),
+      );
     } finally {
       setIsLocking(false);
     }

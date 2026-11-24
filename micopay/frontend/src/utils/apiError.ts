@@ -44,6 +44,26 @@ export function toApiError(payload: ApiErrorPayload): ApiError {
 }
 
 /**
+ * Mensaje del servidor en el idioma activo (#512).
+ *
+ * EL HUECO: el servidor manda el texto de su error en español y la app lo mostraba tal
+ * cual, tambien con la app en ingles.
+ *
+ * LO QUE ESTO ES, Y LO QUE NO: si el codigo tiene clave en `apiErrors.*`, se
+ * muestra ese texto; si no, el mensaje del servidor como hasta ahora. Solo
+ * tienen clave los codigos con un unico mensaje fijo en el backend: los que
+ * traen datos (limites, minutos, montos) o cambian de texto segun el caso
+ * siguen con el del servidor, para no perder lo que dicen. El texto en
+ * español de cada clave es el del backend (`apiErrorsI18n.test.ts` lo vigila).
+ * No cambia el backend ni la decision de cuando se muestra un mensaje.
+ */
+export function localizeServerMessage(code: string | undefined, serverMessage: string): string {
+  if (!code) return serverMessage;
+  const key = `apiErrors.${code}`;
+  return i18n.exists(key) ? i18n.t(key) : serverMessage;
+}
+
+/**
  * Normalizes Fastify `setErrorHandler` payloads (`{ error, message }`) and Axios failures
  * so UI can show a safe string + optional machine-readable `error` key (#20 error path).
  *
@@ -62,16 +82,16 @@ export function extractApiErrorPayload(err: unknown): ApiErrorPayload {
       },
       message: err.message,
     });
-    // Un 409 de reglas de la operacion trae su propio texto para el usuario
-    // (p. ej. RELEASE_QR_ACTIVE dice cuanto esperar): el generico lo tapaba.
-    const message =
-      err.response?.status === 409 && typeof data?.message === 'string' && data.message.length > 0
-        ? data.message
-        : resolved.message;
     // Backend's global error handler sends `code` (see index.ts setErrorHandler),
     // not `error` — `error` is kept as a fallback for any endpoint that still
     // uses the older shape.
     const error = typeof data?.code === 'string' ? data.code : typeof data?.error === 'string' ? data.error : undefined;
+    // Un 409 de reglas de la operacion trae su propio texto para el usuario
+    // (p. ej. RELEASE_QR_ACTIVE dice cuanto esperar): el generico lo tapaba.
+    const message =
+      err.response?.status === 409 && typeof data?.message === 'string' && data.message.length > 0
+        ? localizeServerMessage(error, data.message)
+        : resolved.message;
     const request_id = typeof data?.request_id === 'string' ? data.request_id : undefined;
     const support_code = typeof data?.support_code === 'string' ? data.support_code : undefined;
     const required_level = data?.required_level === 1 || data?.required_level === 2 ? data.required_level : undefined;
