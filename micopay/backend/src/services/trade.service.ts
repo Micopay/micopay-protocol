@@ -1027,12 +1027,21 @@ export async function revealTrade(request: FastifyRequest, tradeId: string, user
     if (trade.seller_id !== userId) throw new ForbiddenError('Only the seller can reveal');
     if (trade.status !== 'locked') throw new ConflictError(`Trade is ${trade.status}, expected locked`);
 
+    // EL HUECO: entre el SELECT de arriba y este UPDATE otra peticion puede
+    // mover la fila (reembolso, cancelacion, expiracion). Sin la condicion de
+    // estado, `revealing` pisaba un `refunded` ya escrito y la base volvia a
+    // decir que el escrow se podia cobrar. Mismo patron que
+    // `recordLockSubmission`: UPDATE condicional y relectura.
     await db.execute(
       `UPDATE trades
        SET status = 'revealing', reveal_requested_at = NOW()
-       WHERE id = $1`,
+       WHERE id = $1 AND status = 'locked'`,
       [tradeId],
     );
+    const after = await db.getOne<{ status: string }>('SELECT status FROM trades WHERE id = $1', [tradeId]);
+    if (after?.status !== 'revealing') {
+      throw new ConflictError(`Trade is ${after?.status ?? 'missing'}, expected locked`);
+    }
 
     await insertTradeAuditEvent({
       tradeId,
