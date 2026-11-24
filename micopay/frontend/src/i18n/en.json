@@ -1408,5 +1408,29 @@
   },
   "errorBanner": {
     "verifyIdentity": "Verify my identity"
+  },
+  "paymentErrors": {
+    "assetUnknown": "Unsupported asset: {{code}}",
+    "assetNoIssuer": "The configured issuer for {{code}} is missing.",
+    "accountNotActivatedXlm": "Your account isn't activated on the network yet (it needs XLM).",
+    "invalidTx": "The signed transaction isn't valid.",
+    "trustlineReserve": "Insufficient balance for the trustline reserve (~0.5 XLM).",
+    "trustlineFailed": "Couldn't create the trustline for {{code}}.",
+    "badDestination": "The destination address isn't valid.",
+    "badAmount": "Enter an amount greater than 0.",
+    "self": "You can't send funds to yourself.",
+    "accountNotActivated": "Your account isn't activated on the network yet.",
+    "noTrust": "The recipient doesn't accept {{code}} yet (their trustline is missing).",
+    "noDest": "The destination account doesn't exist or isn't activated on the network.",
+    "underfunded": "Insufficient balance for this transfer (remember the network reserve).",
+    "submitFailed": "The payment couldn't be sent. Check your connection and try again."
+  },
+  "escrowLockErrors": {
+    "notLockable": "This operation uses an asset the app can't lock yet."
+  },
+  "cashConfirmErrors": {
+    "forbidden": "This operation isn't yours, or it isn't your turn to confirm the cash.",
+    "notFound": "We couldn't find this operation.",
+    "notWaiting": "This operation is no longer waiting for the cash confirmation."
   }
 }

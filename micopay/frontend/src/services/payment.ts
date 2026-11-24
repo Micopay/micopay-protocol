@@ -3,6 +3,9 @@ import { Keypair, Transaction, TransactionBuilder, Operation, Memo, Networks, As
 import { getPublicKey, signTransactionXdr } from '../lib/keystore';
 import { getAsset } from '../constants/assets';
 import { buildTxUrl } from '../utils/stellarExplorer';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 const HORIZON_URL = import.meta.env.VITE_HORIZON_URL || 'https://horizon-testnet.stellar.org';
 const NETWORK_PASSPHRASE = import.meta.env.VITE_NETWORK_PASSPHRASE || Networks.TESTNET;
@@ -35,9 +38,9 @@ export function isValidStellarAddress(addr: string): boolean {
 
 function toAsset(code: string): Asset {
   const def = getAsset(code);
-  if (!def) throw new PaymentError('ASSET_UNKNOWN', `Activo no soportado: ${code}`);
+  if (!def) throw new PaymentError('ASSET_UNKNOWN', tr('paymentErrors.assetUnknown', { code }));
   if (def.native) return Asset.native();
-  if (!def.issuer) throw new PaymentError('ASSET_NO_ISSUER', `Falta el emisor configurado para ${code}.`);
+  if (!def.issuer) throw new PaymentError('ASSET_NO_ISSUER', tr('paymentErrors.assetNoIssuer', { code }));
   return new Asset(def.code, def.issuer);
 }
 
@@ -82,7 +85,7 @@ export async function ensureTrustline(assetCode: string): Promise<SendResult | n
   try {
     account = await server.loadAccount(publicKey);
   } catch {
-    throw new PaymentError('ACCOUNT_NOT_FOUND', 'Tu cuenta aún no está activada en la red (necesita XLM).');
+    throw new PaymentError('ACCOUNT_NOT_FOUND', tr('paymentErrors.accountNotActivatedXlm'));
   }
 
   const unsignedTx = new TransactionBuilder(account, {
@@ -96,7 +99,7 @@ export async function ensureTrustline(assetCode: string): Promise<SendResult | n
     await signTransactionXdr(unsignedTx.toXDR(), NETWORK_PASSPHRASE, 'payment'),
     NETWORK_PASSPHRASE,
   );
-  if (!(signedTx instanceof Transaction)) throw new PaymentError('INVALID_TX', 'La transacción firmada no es válida.');
+  if (!(signedTx instanceof Transaction)) throw new PaymentError('INVALID_TX', tr('paymentErrors.invalidTx'));
 
   try {
     const res = await server.submitTransaction(signedTx);
@@ -104,9 +107,9 @@ export async function ensureTrustline(assetCode: string): Promise<SendResult | n
   } catch (e: any) {
     const codes = e?.response?.data?.extras?.result_codes;
     if (codes?.transaction === 'tx_insufficient_balance') {
-      throw new PaymentError('UNDERFUNDED', 'Saldo insuficiente para la reserva de la línea de confianza (~0.5 XLM).');
+      throw new PaymentError('UNDERFUNDED', tr('paymentErrors.trustlineReserve'));
     }
-    throw new PaymentError('TRUSTLINE_FAILED', `No se pudo crear la línea de confianza para ${assetCode}.`);
+    throw new PaymentError('TRUSTLINE_FAILED', tr('paymentErrors.trustlineFailed', { code: assetCode }));
   }
 }
 
@@ -122,19 +125,19 @@ export async function sendPayment(params: {
 }): Promise<SendResult> {
   const destination = params.destination.trim();
   if (!isValidStellarAddress(destination)) {
-    throw new PaymentError('BAD_DESTINATION', 'La dirección de destino no es válida.');
+    throw new PaymentError('BAD_DESTINATION', tr('paymentErrors.badDestination'));
   }
 
   const amountNum = parseFloat(params.amount);
   if (!Number.isFinite(amountNum) || amountNum <= 0) {
-    throw new PaymentError('BAD_AMOUNT', 'Ingresa un monto mayor a 0.');
+    throw new PaymentError('BAD_AMOUNT', tr('paymentErrors.badAmount'));
   }
 
   const publicKey = await getPublicKey();
   if (!publicKey) throw new PaymentError('NO_KEY', NO_KEY_MESSAGE);
 
   if (destination === publicKey) {
-    throw new PaymentError('SELF', 'No puedes enviarte fondos a ti mismo.');
+    throw new PaymentError('SELF', tr('paymentErrors.self'));
   }
 
   const asset = toAsset(params.assetCode);
@@ -143,7 +146,7 @@ export async function sendPayment(params: {
   try {
     account = await server.loadAccount(publicKey);
   } catch {
-    throw new PaymentError('ACCOUNT_NOT_FOUND', 'Tu cuenta aún no está activada en la red.');
+    throw new PaymentError('ACCOUNT_NOT_FOUND', tr('paymentErrors.accountNotActivated'));
   }
 
   const builder = new TransactionBuilder(account, {
@@ -164,7 +167,7 @@ export async function sendPayment(params: {
     await signTransactionXdr(unsignedTx.toXDR(), NETWORK_PASSPHRASE, 'payment'),
     NETWORK_PASSPHRASE,
   );
-  if (!(signedTx instanceof Transaction)) throw new PaymentError('INVALID_TX', 'La transacción firmada no es válida.');
+  if (!(signedTx instanceof Transaction)) throw new PaymentError('INVALID_TX', tr('paymentErrors.invalidTx'));
 
   try {
     const res = await server.submitTransaction(signedTx);
@@ -176,14 +179,14 @@ export async function sendPayment(params: {
     const codes = e?.response?.data?.extras?.result_codes;
     const op = codes?.operations?.[0];
     if (op === 'op_no_trust') {
-      throw new PaymentError('NO_TRUST', `El destinatario no acepta ${params.assetCode} todavía (falta su línea de confianza).`);
+      throw new PaymentError('NO_TRUST', tr('paymentErrors.noTrust', { code: params.assetCode }));
     }
     if (op === 'op_no_destination') {
-      throw new PaymentError('NO_DEST', 'La cuenta destino no existe o no está activada en la red.');
+      throw new PaymentError('NO_DEST', tr('paymentErrors.noDest'));
     }
     if (op === 'op_underfunded' || codes?.transaction === 'tx_insufficient_balance') {
-      throw new PaymentError('UNDERFUNDED', 'Saldo insuficiente para este envío (recuerda la reserva de red).');
+      throw new PaymentError('UNDERFUNDED', tr('paymentErrors.underfunded'));
     }
-    throw new PaymentError('SUBMIT_FAILED', 'No se pudo enviar el pago. Revisa tu conexión e intenta de nuevo.');
+    throw new PaymentError('SUBMIT_FAILED', tr('paymentErrors.submitFailed'));
   }
 }

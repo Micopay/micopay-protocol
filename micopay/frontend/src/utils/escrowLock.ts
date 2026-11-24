@@ -1,4 +1,7 @@
 import { getEscrowAssetOption } from '../constants/escrowAssets';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 /**
  * H3 (docs/AUDITORIA_IMPLEMENTACION_SELECTOR_ACTIVO_2026-09-14.md) · que puede
@@ -23,7 +26,7 @@ import { getEscrowAssetOption } from '../constants/escrowAssets';
 
 export class EscrowAssetNotLockableError extends Error {
   constructor(public readonly assetCode: string) {
-    super('Esta operación usa un activo que la app todavía no puede bloquear.');
+    super(tr('escrowLockErrors.notLockable'));
     this.name = 'EscrowAssetNotLockableError';
   }
 }
