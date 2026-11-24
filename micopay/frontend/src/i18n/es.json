@@ -1237,5 +1237,28 @@
     "s5Contact": "Para dudas sobre el proceso o para ejercer otros derechos ARCO, contáctanos en",
     "s6Title": "6. Cambios a esta política",
     "s6Body": "Notificaremos cambios relevantes a través de la app. El uso continuo del servicio implica aceptación de la política vigente."
+  },
+  "terms": {
+    "back": "Regresar",
+    "title": "Términos de Servicio",
+    "updated": "Última actualización: mayo 2026",
+    "draft": "BORRADOR — Pendiente de revisión legal. No constituye asesoramiento jurídico.",
+    "s1Title": "1. Aceptación de términos",
+    "s1Body": "Al usar Micopay aceptas estos términos. Si no estás de acuerdo, no uses el servicio. El uso de la app implica que eres mayor de edad y tienes capacidad legal para celebrar transacciones financieras en tu país de residencia.",
+    "s2Title": "2. Descripción del servicio",
+    "s2Body": "Micopay es una plataforma P2P que facilita el intercambio de efectivo físico contra activos digitales (XLM/USDC) usando contratos inteligentes en la red Stellar. Micopay actúa como intermediario técnico, no como banco ni institución financiera.",
+    "s3Title": "3. Responsabilidades del usuario",
+    "s3Item1": "Usar el servicio solo para transacciones legítimas",
+    "s3Item2": "Mantener seguras tus credenciales de acceso",
+    "s3Item3": "No usar la plataforma para lavado de dinero u otras actividades ilícitas",
+    "s3Item4": "Verificar los datos de la operación antes de confirmar",
+    "s4Title": "4. Comisiones",
+    "s4Body": "Micopay cobra una comisión de plataforma visible antes de confirmar cada operación. Las comisiones de la red Stellar son mínimas y también corren por cuenta del usuario.",
+    "s5Title": "5. Limitación de responsabilidad",
+    "s5Body": "Micopay no es responsable por pérdidas derivadas de volatilidad de precios, errores del usuario, fallas de la red Stellar, o incumplimiento de la contraparte en una transacción P2P. Usas el servicio bajo tu propio riesgo.",
+    "s6Title": "6. Cancelación de cuenta",
+    "s6Body": "Puedes eliminar tu cuenta en cualquier momento desde la sección de Perfil. Nos reservamos el derecho de suspender cuentas que violen estos términos.",
+    "s7Title": "7. Contacto",
+    "s7Body": "Para dudas sobre estos términos escríbenos a {{email}}."
   }
 }

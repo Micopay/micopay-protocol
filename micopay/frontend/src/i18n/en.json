@@ -1237,5 +1237,28 @@
     "s5Contact": "For questions about the process or to exercise other ARCO rights, contact us at",
     "s6Title": "6. Changes to this policy",
     "s6Body": "We will notify relevant changes through the app. Continued use of the service means you accept the current policy."
+  },
+  "terms": {
+    "back": "Back",
+    "title": "Terms of Service",
+    "updated": "Last updated: May 2026",
+    "draft": "DRAFT — Pending legal review. This is not legal advice.",
+    "s1Title": "1. Acceptance of terms",
+    "s1Body": "By using Micopay you accept these terms. If you do not agree, do not use the service. Using the app means you are of legal age and have the legal capacity to carry out financial transactions in your country of residence.",
+    "s2Title": "2. Description of the service",
+    "s2Body": "Micopay is a P2P platform that makes it easier to exchange physical cash for digital assets (XLM/USDC) using smart contracts on the Stellar network. Micopay acts as a technical intermediary, not as a bank or financial institution.",
+    "s3Title": "3. User responsibilities",
+    "s3Item1": "Use the service only for legitimate transactions",
+    "s3Item2": "Keep your access credentials safe",
+    "s3Item3": "Do not use the platform for money laundering or other illegal activities",
+    "s3Item4": "Check the operation details before confirming",
+    "s4Title": "4. Fees",
+    "s4Body": "Micopay charges a platform fee shown before you confirm each operation. Stellar network fees are minimal and are also paid by the user.",
+    "s5Title": "5. Limitation of liability",
+    "s5Body": "Micopay is not liable for losses from price volatility, user errors, Stellar network failures, or a counterparty failing to perform in a P2P transaction. You use the service at your own risk.",
+    "s6Title": "6. Account cancellation",
+    "s6Body": "You can delete your account at any time from the Profile section. We reserve the right to suspend accounts that violate these terms.",
+    "s7Title": "7. Contact",
+    "s7Body": "For questions about these terms, write to us at {{email}}."
   }
 }
