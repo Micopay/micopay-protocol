@@ -1,6 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { useLocationPermission, type PermState } from './usePermission';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 export interface GeoState {
   lat: number | null;
@@ -40,7 +43,7 @@ export function useGeolocation(enabled = true): GeoState & {
         lat: null,
         lng: null,
         loading: false,
-        error: e instanceof Error ? e.message : 'No se pudo obtener ubicación',
+        error: e instanceof Error ? e.message : tr('locationErrors.unavailable'),
       });
     }
   }, []);

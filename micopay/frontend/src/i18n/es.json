@@ -1449,5 +1449,24 @@
     "webAuthNotConfigured": "El inicio de sesión web no está configurado.",
     "challengeOtherAccount": "El reto de inicio de sesión es de otra cuenta.",
     "walletDescription": "Efectivo y cripto, firmado desde tu billetera"
+  },
+  "qrErrors": {
+    "empty": "El código QR está vacío",
+    "noTradeId": "El QR no contiene un ID de trade válido",
+    "badUuid": "El ID de trade no tiene un formato UUID válido",
+    "noCode": "El QR no contiene el código de cobro",
+    "badCode": "El código de cobro debe ser una cadena hexadecimal de 64 caracteres",
+    "unknownAction": "Acción QR no reconocida: \"{{action}}\"",
+    "badLink": "No se pudo analizar el enlace del QR",
+    "legacy": "El formato legacy MICOPAY ya no es compatible. Usa un QR micopay:// válido.",
+    "unrecognized": "Código QR no reconocido. Se espera un QR de MicoPay válido.",
+    "scannerUnavailable": "Scanner no disponible en este device"
+  },
+  "locationErrors": {
+    "unavailable": "No se pudo obtener ubicación",
+    "denied": "Permiso de ubicación denegado. Actívalo en Ajustes para ver agentes cercanos.",
+    "retry": "No se pudo obtener tu ubicación. Intenta de nuevo.",
+    "cantLocate": "No pudimos ubicarte. Sal un momento al exterior o revisa que la ubicación esté activada.",
+    "offersServer": "No se pudo contactar al servidor de ofertas. Revisa tu conexión."
   }
 }

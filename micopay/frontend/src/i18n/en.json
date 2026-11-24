@@ -1449,5 +1449,24 @@
     "webAuthNotConfigured": "Web login isn't configured.",
     "challengeOtherAccount": "The login challenge belongs to another account.",
     "walletDescription": "Cash and crypto, signed from your wallet"
+  },
+  "qrErrors": {
+    "empty": "The QR code is empty",
+    "noTradeId": "The QR doesn't contain a valid trade ID",
+    "badUuid": "The trade ID isn't a valid UUID",
+    "noCode": "The QR doesn't contain the collection code",
+    "badCode": "The collection code must be a 64-character hexadecimal string",
+    "unknownAction": "Unrecognized QR action: \"{{action}}\"",
+    "badLink": "The QR link couldn't be parsed",
+    "legacy": "The legacy MICOPAY format is no longer supported. Use a valid micopay:// QR.",
+    "unrecognized": "QR code not recognized. A valid MicoPay QR is expected.",
+    "scannerUnavailable": "Scanner not available on this device"
+  },
+  "locationErrors": {
+    "unavailable": "Couldn't get location",
+    "denied": "Location permission denied. Turn it on in Settings to see nearby agents.",
+    "retry": "Couldn't get your location. Try again.",
+    "cantLocate": "We couldn't locate you. Step outside for a moment or check that location is on.",
+    "offersServer": "Couldn't reach the offers server. Check your connection."
   }
 }
