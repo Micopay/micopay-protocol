@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import { useTranslation } from "react-i18next";
-import { generateAndStoreKeypair, keypairExists, getPublicKey, revealSecretKey } from './lib/keystore';
+import { generateAndStoreKeypair, keypairExists, getPublicKey, revealSecretKey, signingAsksForPresence } from './lib/keystore';
 import {
   HashRouter,
   Routes,
@@ -1230,7 +1230,10 @@ function App() {
             try {
               const recovered = await recoverSession(stored.username);
               await writeJSON(USERS_STORAGE_KEY, recovered);
-              restoredSession = true;
+              // Recuperar firma el reto con la llave. En Android esa firma ya
+              // pidio huella a la boveda: bloquear encima seria una segunda
+              // huella seguida al abrir. Donde firmar no pregunta, se bloquea.
+              restoredSession = !signingAsksForPresence();
               setSessionUser(recovered);
               return;
             } catch (re) {

@@ -79,6 +79,8 @@ vi.mock('../lib/push', () => ({
 const SESSION = { id: 'u1', username: 'ana', token: 'tok' };
 let storedSession: typeof SESSION | null = SESSION;
 const mockRemoveKey = vi.fn();
+const mockGetCurrentUser = vi.fn();
+const mockRegisterUser = vi.fn();
 
 vi.mock('../services/secureStorage', () => ({
   readJSON: vi.fn((key: string) => Promise.resolve(
@@ -99,6 +101,8 @@ vi.mock('../lib/keystore', () => ({
   getPublicKey: vi.fn().mockResolvedValue('GPUB'),
   revealSecretKey: vi.fn().mockResolvedValue('SSECRET'),
   signTransactionXdr: vi.fn(),
+  // Android: la boveda nativa pide huella en cada firma.
+  signingAsksForPresence: () => isNative,
 }));
 vi.mock('../services/api', async (importOriginal) => {
   const real = await importOriginal<Record<string, unknown>>();
@@ -106,7 +110,8 @@ vi.mock('../services/api', async (importOriginal) => {
   for (const [k, v] of Object.entries(real)) {
     stubbed[k] = typeof v === 'function' ? vi.fn().mockResolvedValue(null) : v;
   }
-  stubbed.getCurrentUser = vi.fn().mockResolvedValue({ id: 'u1', username: 'ana' });
+  stubbed.getCurrentUser = mockGetCurrentUser;
+  stubbed.registerUser = mockRegisterUser;
   stubbed.registerPushToken = vi.fn().mockResolvedValue(undefined);
   return stubbed;
 });
@@ -123,6 +128,8 @@ beforeEach(() => {
   appStateListeners.length = 0;
   mockCheckBiometry.mockResolvedValue({ isAvailable: true, deviceIsSecure: true });
   mockAuthenticate.mockResolvedValue(undefined);
+  mockGetCurrentUser.mockResolvedValue({ id: 'u1', username: 'ana' });
+  mockRegisterUser.mockResolvedValue(null);
   vi.stubEnv('VITE_API_URL', 'http://api.test');
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
     ok: true,
@@ -206,6 +213,22 @@ describe('AUTH-2 · arranque en frío con sesión abierta', () => {
     expect(lockTitle()).not.toBeInTheDocument();
   });
 
+  // En Android recuperar una sesion vencida firma el reto con la boveda, que
+  // ya pidio huella durante el arranque. Bloquear encima eran dos huellas
+  // seguidas al abrir la app.
+  it('si la sesión se recuperó firmando con la bóveda, no pide otra huella', async () => {
+    mockGetCurrentUser
+      .mockRejectedValueOnce({ response: { status: 401 } })
+      .mockResolvedValue({ id: 'u1', username: 'ana' });
+    mockRegisterUser.mockResolvedValue({ id: 'u1', username: 'ana', token: 'tok2' });
+    await renderApp();
+
+    expect(await screen.findByText(HOME)).toBeInTheDocument();
+    expect(mockRegisterUser).toHaveBeenCalled();
+    expect(lockTitle()).not.toBeInTheDocument();
+    expect(mockAuthenticate).not.toHaveBeenCalled();
+  });
+
   it('sin sesión guardada no hay bloqueo: va directo al login', async () => {
     storedSession = null;
     await renderApp();
@@ -275,7 +298,12 @@ describe('AUTH-2 · abrir desde un aviso', () => {
 });
 
 describe('AUTH-2 · la compuerta de presencia', () => {
-  it('tras desbloquear, firmar dentro de 60 s no vuelve a preguntar', async () => {
+  // Alcance real del criterio "tras desbloquear, una firma dentro de 60 s no
+  // vuelve a preguntar": vale para la compuerta de la interfaz
+  // (`requireUserPresence`). En Android las firmas pasan por la boveda nativa,
+  // que pregunta en cada firma por diseño (clave del Keystore con
+  // autenticacion del sistema); eso no se relaja aqui.
+  it('tras desbloquear, la compuerta de la interfaz no vuelve a preguntar en 60 s', async () => {
     const presence = await renderApp();
     expect(await screen.findByText(HOME)).toBeInTheDocument();
     expect(mockAuthenticate).toHaveBeenCalledTimes(1);
