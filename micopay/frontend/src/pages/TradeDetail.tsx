@@ -416,6 +416,22 @@ export function CashClaimCountdown({ expiresAt, deadline }: { expiresAt: string 
   );
 }
 
+/**
+ * #514: el agente de un depósito vencido, dentro del margen. Sin esto veía la
+ * operación bloqueada sin saber por qué no le salía "Recuperar fondos". La hora
+ * la manda el servidor (`refund_available_at` ya trae el margen).
+ */
+export function AgentCashClaimWindow({ eligibility, isProvider }: { eligibility: RefundEligibility | null; isProvider: boolean }) {
+  const inWindow = isProvider && eligibility?.reason === 'cash_claim_window';
+  const { label, expired } = useCountdown(inWindow ? eligibility?.refund_available_at ?? null : null);
+  if (!inWindow || expired || !label) return null;
+  return (
+    <p role="status" className="w-full mb-4 p-3 border-2 border-tinta bg-naranja-suave text-tinta text-sm font-bold rounded-sm">
+      {tr('tradeDetail.agentClaimWindow', { time: label })}
+    </p>
+  );
+}
+
 /** #5: con fondos bloqueados, cancelar detiene el flujo; no devuelve fondos. */
 function LockedCancel({ allowed, mustPauseFirst, cancelling, error, onCancel }: LockedCancelProps) {
   return (
@@ -1126,14 +1142,22 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       if (!effectiveToken) return;
       try {
         const eligibility = await fetchRefundEligibility(trade.id, effectiveToken);
-        if (!cancelled) setRefundEligibility(eligibility);
+        if (cancelled) return;
+        setRefundEligibility(eligibility);
+        // #514: el estado no cambia cuando vence el plazo (sigue `locked`), así
+        // que sin esto el botón no salía hasta recargar la pantalla.
+        if (!eligibility.eligible && eligibility.seconds_remaining > 0) {
+          retry = setTimeout(load, (eligibility.seconds_remaining + 2) * 1000);
+        }
       } catch {
         // Sin elegibilidad no se inventa un CTA: se deja como estaba.
       }
     };
+    let retry: ReturnType<typeof setTimeout> | undefined;
     load();
     return () => {
       cancelled = true;
+      clearTimeout(retry);
     };
   }, [trade?.id, trade?.status, token]);
 
@@ -1572,6 +1596,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
           </p>
         )}
         <CashClaimCountdown expiresAt={trade.expires_at ?? null} deadline={cashClaimDeadline} />
+        <AgentCashClaimWindow eligibility={refundEligibility} isProvider={actor.party === 'provider'} />
         {renderStateView()}
 
         {/* Support link visible in all states */}

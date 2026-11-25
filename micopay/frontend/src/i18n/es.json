@@ -1018,7 +1018,8 @@
     "handoffRecorded": "Entrega registrada",
     "totalReturned": "Total devuelto",
     "refundPending": "Reembolso pendiente",
-    "cashClaimCountdown": "Si ya entregaste el efectivo y no te lo confirmaron, te quedan {{time}} para avisar con “Pagué y no me confirmaron”. Después, la garantía regresa al agente."
+    "cashClaimCountdown": "Si ya entregaste el efectivo y no te lo confirmaron, te quedan {{time}} para avisar con “Pagué y no me confirmaron”. Después, la garantía regresa al agente.",
+    "agentClaimWindow": "El cliente todavía puede reportar que ya pagó. Si nadie lo reporta, podrás recuperar tus fondos en {{time}}."
   },
   "profileText": {
     "s1": "Tu sesión expiró. Vuelve a iniciar sesión.",

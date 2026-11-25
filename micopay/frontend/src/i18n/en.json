@@ -1018,7 +1018,8 @@
     "handoffRecorded": "Handoff recorded",
     "totalReturned": "Total returned",
     "refundPending": "Refund pending",
-    "cashClaimCountdown": "If you already handed over the cash and it wasn't confirmed, you have {{time}} left to report it with “I paid and they didn't confirm”. After that, the escrow goes back to the agent."
+    "cashClaimCountdown": "If you already handed over the cash and it wasn't confirmed, you have {{time}} left to report it with “I paid and they didn't confirm”. After that, the escrow goes back to the agent.",
+    "agentClaimWindow": "The client can still report that they already paid. If nobody reports it, you can recover your funds in {{time}}."
   },
   "profileText": {
     "s1": "Your session expired. Sign in again.",
