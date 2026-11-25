@@ -1072,7 +1072,13 @@
     "s9": "Podrá pedirte firmas. Cada firma te pedirá confirmación y tu llave nunca sale de este teléfono.",
     "s10": "Esta firma solo abre tu sesión. No mueve dinero.",
     "s11": "Envía",
-    "s12": "Iniciar sesión"
+    "s12": "Iniciar sesión",
+    "site": "Sitio",
+    "account": "Cuenta",
+    "amount": "Monto",
+    "asset": "Activo",
+    "receives": "Recibe",
+    "contract": "Contrato"
   },
   "webScan": {
     "s1": "El navegador no dio permiso para usar la cámara. Actívalo junto a la dirección de la página.",

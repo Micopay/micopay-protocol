@@ -17,6 +17,7 @@ import i18n from '../i18n';
 import TradeDetail from '../pages/TradeDetail';
 import WebShell from '../components/WebShell';
 import { ConnectionBanner } from '../components/ConnectionBanner';
+import WalletRequestSheet from '../components/WalletRequestSheet';
 
 const mockGetTrade = vi.fn();
 
@@ -33,6 +34,14 @@ vi.mock('../services/api', () => ({
 }));
 
 vi.mock('../services/payment', () => ({ ensureTrustline: vi.fn() }));
+
+let pendingWalletItem: unknown = null;
+vi.mock('../services/walletConnect', () => ({
+  approvePending: vi.fn(),
+  rejectPending: vi.fn(),
+  getPendingWalletItem: () => pendingWalletItem,
+  subscribeWallet: () => () => {},
+}));
 
 vi.mock('../services/secureStorage', () => ({
   readJSON: vi.fn(async () => ({ id: 'client-1', token: 'mock-token' })),
@@ -105,5 +114,32 @@ describe('navegación en inglés (#510)', () => {
   it('el aviso de reconexión por defecto sale en inglés', () => {
     render(<ConnectionBanner isVisible />);
     expect(screen.getByRole('alert')).toHaveTextContent('Reconnecting…');
+  });
+});
+
+describe('billetera web en inglés (#510)', () => {
+  const G = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUV';
+
+  it('la firma de inicio de sesión etiqueta sitio y cuenta en inglés', () => {
+    pendingWalletItem = { kind: 'webAuth', origin: 'https://app.micopay.com.mx', homeDomain: 'app.micopay.com.mx', account: G };
+    render(<WalletRequestSheet />);
+    expect(screen.getByText('Site')).toBeInTheDocument();
+    expect(screen.getByText('Account')).toBeInTheDocument();
+    expect(screen.queryByText('Sitio')).toBeNull();
+  });
+
+  it('el bloqueo en garantía dice la acción y sus datos en inglés', () => {
+    pendingWalletItem = {
+      kind: 'request',
+      origin: 'https://app.micopay.com.mx',
+      intent: { action: 'lock', amountMxn: 500, assetCode: 'USDC', seller: G, buyer: G, contractId: G },
+    };
+    render(<WalletRequestSheet />);
+    // La accion era una constante de modulo: quedaba en el idioma de arranque.
+    expect(screen.getByRole('heading', { name: 'Lock funds in escrow' })).toBeInTheDocument();
+    for (const label of ['Amount', 'Asset', 'Receives', 'Contract']) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    expect(screen.queryByText('Monto')).toBeNull();
   });
 });
