@@ -1017,7 +1017,8 @@
     "cancelledReturnsAt": "The trade was cancelled. The funds are still in the contract and go back on their own to whoever locked them from {{at}}.",
     "handoffRecorded": "Handoff recorded",
     "totalReturned": "Total returned",
-    "refundPending": "Refund pending"
+    "refundPending": "Refund pending",
+    "cashClaimCountdown": "If you already handed over the cash and it wasn't confirmed, you have {{time}} left to report it with “I paid and they didn't confirm”. After that, the escrow goes back to the agent."
   },
   "profileText": {
     "s1": "Your session expired. Sign in again.",
