@@ -1612,5 +1612,8 @@
     "unsupportedSigned": "signing returned an unsupported tx",
     "swapFailed": "The USDC→CETES swap couldn't be completed; request a new quote and check your balance.",
     "accountMismatch": "the loaded account doesn't match the withdrawal"
+  },
+  "incomingAlert": {
+    "title": "New request"
   }
 }

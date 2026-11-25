@@ -53,6 +53,7 @@ import Terms from "./pages/Terms";
 import Profile from "./pages/Profile";
 import WalletConnections from "./pages/WalletConnections";
 import WalletRequestSheet from "./components/WalletRequestSheet";
+import IncomingTradeAlert from "./hooks/useIncomingTradeAlert";
 import { startWalletConnect, stopWalletRequests } from "./services/walletConnect";
 import { SignatureApproval } from "./pages/SignatureApproval";
 import Login from "./pages/Login";
@@ -1687,6 +1688,10 @@ function App() {
               {/* Se oculta solo cuando hay conexión y no hay nada pendiente. */}
               <OfflineQueueStatus token={sessionUser?.token ?? null} />
               <PushNotificationsBridge />
+              {/* WP8: en la PC no hay push; el agente se entera por sonido y por el titulo. */}
+              {IS_EXTERNAL_SIGNER && sessionUser && providerStatus === 'active' && (
+                <IncomingTradeAlert token={sessionUser.token} />
+              )}
               <Routes>
                 <Route path="/login" element={IS_EXTERNAL_SIGNER ? <WalletLogin onLoginSuccess={handleLoginSuccess} /> : <Login onLoginSuccess={handleLoginSuccess} />} />
                 <Route path="/register" element={IS_EXTERNAL_SIGNER ? <Navigate to="/login" replace /> : <Register onLoginSuccess={handleLoginSuccess} />} />
