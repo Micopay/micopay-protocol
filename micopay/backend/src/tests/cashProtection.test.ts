@@ -379,6 +379,29 @@ async function testClaimAndSweepRaceLeavesOnlyOne() {
   console.log(`  ✓ #514 reclamo y barrido a la vez: queda una sola (reclamo ${claimsWon}, reembolso ${refundsWon}, barrido ~${sweepMs.toFixed(1)} ms)`);
 }
 
+async function testDetailTellsClientTheClaimDeadline() {
+  // #514 · casilla 5: el servidor dice hasta cuando reclamar; la app no
+  // repite el margen.
+  const client = await createUser("cli");
+  const provider = await createUser("prov");
+  const deposit = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "locked", expired: true });
+  await setExpiredMinutesAgo(deposit, 5);
+  const row = await db.getOne<{ expires_at: string }>("SELECT expires_at FROM trades WHERE id = $1", [deposit]);
+  const expected = new Date(new Date(row!.expires_at).getTime() + 15 * 60_000).toISOString();
+
+  const forClient = await getTradeDetailForParticipant(deposit, client);
+  strictEqual(forClient.cash_claim_deadline, expected, "cliente: vencimiento + 15 min");
+  const forProvider = await getTradeDetailForParticipant(deposit, provider);
+  strictEqual(forProvider.cash_claim_deadline, null, "el agente no reclama");
+
+  const cashout = await insertTrade({ flow: "cashout", clientId: client, providerId: provider, status: "locked", expired: true });
+  strictEqual((await getTradeDetailForParticipant(cashout, client)).cash_claim_deadline, null, "cash-out: no hay margen");
+
+  await openCashClaim(fakeRequest, deposit, client);
+  strictEqual((await getTradeDetailForParticipant(deposit, client)).cash_claim_deadline, null, "ya reclamo: no hay cuenta regresiva");
+  console.log("  ✓ #514 el detalle da al cliente del deposito su plazo para reclamar");
+}
+
 async function main() {
   console.log("\n  WP1 proteger el efectivo:\n");
   await testCashoutClientCannotCancelWithLiveQr();
@@ -394,6 +417,7 @@ async function main() {
   await testClaimWithinGraceBlocksSweepForever();
   await testClaimRejectedOnceSweepStartedRefund();
   await testClaimAndSweepRaceLeavesOnlyOne();
+  await testDetailTellsClientTheClaimDeadline();
   console.log("\nAll WP1 cash protection tests passed.\n");
 }
 

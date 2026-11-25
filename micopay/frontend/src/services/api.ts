@@ -219,6 +219,11 @@ export interface TradeDetailResponse {
   refund_kind?: 'decline' | 'timeout' | null;
   /** Cash-out: el agente ya escaneó el QR y registró la entrega. */
   cash_handoff_confirmed?: boolean;
+  /**
+   * #514: depósito, solo para el cliente. Hasta cuándo puede avisar "Pagué y
+   * no me confirmaron" antes de que el barrido reembolse. `null` si no aplica.
+   */
+  cash_claim_deadline?: string | null;
   merchant_unavailable: boolean;
   seller_username: string | null;
   buyer_username: string | null;

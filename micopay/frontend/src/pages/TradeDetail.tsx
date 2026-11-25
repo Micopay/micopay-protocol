@@ -398,6 +398,24 @@ function lockedBody(actor?: TradeActor): string {
   return t('tradeDetail.s26');
 }
 
+/**
+ * #514: en un depósito vencido, cuánto le queda al cliente para avisar "Pagué
+ * y no me confirmaron" antes de que el barrido le devuelva la cripto al
+ * agente. El plazo lo manda el servidor (`cash_claim_deadline`); aquí no se
+ * repite el margen. Solo se pinta ya vencida la operación y mientras quede
+ * tiempo.
+ */
+export function CashClaimCountdown({ expiresAt, deadline }: { expiresAt: string | null; deadline: string | null }) {
+  const { expired: requestExpired } = useCountdown(deadline ? expiresAt : null);
+  const { label, expired: deadlineExpired } = useCountdown(deadline);
+  if (!deadline || !requestExpired || deadlineExpired || !label) return null;
+  return (
+    <p role="status" className="w-full mb-4 p-3 border-2 border-naranja bg-naranja-suave text-tinta text-sm font-bold rounded-sm">
+      {tr('tradeDetail.cashClaimCountdown', { time: label })}
+    </p>
+  );
+}
+
 /** #5: con fondos bloqueados, cancelar detiene el flujo; no devuelve fondos. */
 function LockedCancel({ allowed, mustPauseFirst, cancelling, error, onCancel }: LockedCancelProps) {
   return (
@@ -1093,6 +1111,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
   const [declineAvailable, setDeclineAvailable] = useState(false);
   const [refundKind, setRefundKind] = useState<'decline' | 'timeout' | null>(null);
   const [cashHandoffConfirmed, setCashHandoffConfirmed] = useState(false);
+  const [cashClaimDeadline, setCashClaimDeadline] = useState<string | null>(null);
   const [merchantUnavailable, setMerchantUnavailable] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -1142,6 +1161,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       setDeclineAvailable(Boolean(data.decline_available));
       setRefundKind(data.refund_kind ?? null);
       setCashHandoffConfirmed(Boolean(data.cash_handoff_confirmed));
+      setCashClaimDeadline(data.cash_claim_deadline ?? null);
       setMerchantUnavailable(Boolean(data.merchant_unavailable));
       setError(null);
     } catch (e: any) {
@@ -1551,6 +1571,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
           <p role="status" className="mb-4 border-2 border-tinta bg-naranja-suave p-3 text-sm font-bold">{t('tradeDetail.s80')}
           </p>
         )}
+        <CashClaimCountdown expiresAt={trade.expires_at ?? null} deadline={cashClaimDeadline} />
         {renderStateView()}
 
         {/* Support link visible in all states */}

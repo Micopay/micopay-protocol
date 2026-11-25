@@ -1014,7 +1014,8 @@
     "cancelledReturnsAt": "La operación fue cancelada. Los fondos siguen en el contrato y regresan solos a quien los bloqueó a partir del {{at}}.",
     "handoffRecorded": "Entrega registrada",
     "totalReturned": "Total devuelto",
-    "refundPending": "Reembolso pendiente"
+    "refundPending": "Reembolso pendiente",
+    "cashClaimCountdown": "Si ya entregaste el efectivo y no te lo confirmaron, te quedan {{time}} para avisar con “Pagué y no me confirmaron”. Después, la garantía regresa al agente."
   },
   "profileText": {
     "s1": "Tu sesión expiró. Vuelve a iniciar sesión.",

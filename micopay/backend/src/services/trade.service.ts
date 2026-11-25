@@ -682,10 +682,32 @@ export async function getTradeDetailForParticipant(tradeId: string, userId: stri
     refund_kind = settlement ? 'decline' : 'timeout';
   }
 
+  // #514: hasta cuando puede el cliente de un deposito apretar "Pague y no me
+  // confirmaron" antes de que el barrido le devuelva la cripto al agente. Lo
+  // calcula el servidor para que la app no repita el margen. `null` cuando no
+  // aplica: no es el cliente, no hay fondos, ya hay constancia o reclamo, la
+  // revisa soporte o el reembolso ya empezo.
+  let cash_claim_deadline: string | null = null;
+  const graceEndsAt = depositGraceEndsAt(trade);
+  if (
+    graceEndsAt
+    && trade.buyer_id === userId
+    && trade.lock_tx_hash
+    && !trade.release_tx_hash
+    && ['locked', 'revealing', 'cancelled'].includes(trade.status)
+    && !cashConfirmed
+    && !trade.chain_review_reason
+    && !trade.refund_started_at
+    && !(await getOpenCashClaim(trade.id))
+  ) {
+    cash_claim_deadline = graceEndsAt.toISOString();
+  }
+
   return {
     trade,
     decline_available,
     refund_kind,
+    cash_claim_deadline,
     // #2/#17: la entrega ya quedo registrada (cash-out). La pantalla del agente
     // ofrece liberar y la del cliente deja de pedir otro QR.
     cash_handoff_confirmed: Boolean(cashConfirmed),
