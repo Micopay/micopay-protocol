@@ -15,6 +15,8 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import i18n from '../i18n';
 import TradeDetail from '../pages/TradeDetail';
+import WebShell from '../components/WebShell';
+import { ConnectionBanner } from '../components/ConnectionBanner';
 
 const mockGetTrade = vi.fn();
 
@@ -76,5 +78,32 @@ describe('TradeDetail en inglés (#510)', () => {
       await screen.findByText(/Your crypto is held in escrow\. Show the code to the agent/),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Tu cripto está en garantía/)).toBeNull();
+  });
+});
+
+describe('navegación en inglés (#510)', () => {
+  it('la barra lateral web titula sus grupos en inglés', () => {
+    render(
+      <MemoryRouter>
+        <WebShell
+          showSidebar
+          operation={[{ page: 'home', label: 'Home', icon: 'home' }]}
+          account={[{ page: 'profile', label: 'Profile', icon: 'person' }]}
+          currentPage="home"
+          onNavigate={() => {}}
+        >
+          <p>contenido</p>
+        </WebShell>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Operations')).toBeInTheDocument();
+    expect(screen.getByText('Account')).toBeInTheDocument();
+    expect(screen.queryByText('Operación')).toBeNull();
+    expect(screen.queryByText('Cuenta')).toBeNull();
+  });
+
+  it('el aviso de reconexión por defecto sale en inglés', () => {
+    render(<ConnectionBanner isVisible />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Reconnecting…');
   });
 });

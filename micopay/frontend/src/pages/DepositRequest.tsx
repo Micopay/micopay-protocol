@@ -25,7 +25,7 @@ const DepositRequest = ({ onBack, onSearch, assetKey, onAssetChange }: DepositRe
           <div className="flex items-center gap-4">
             <button
               onClick={onBack}
-              aria-label="Volver"
+              aria-label={tr('a11y.back')}
               className="min-h-12 min-w-12 text-verde hover:opacity-80 transition-opacity active:translate-x-[2px] active:translate-y-[2px] duration-200 focus:outline-none focus:ring-2 focus:ring-primary rounded-sm p-1"
             >
               <span aria-hidden="true" className="material-symbols-outlined">arrow_back</span>

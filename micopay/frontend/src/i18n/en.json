@@ -1625,5 +1625,12 @@
   },
   "incomingAlert": {
     "title": "New request"
+  },
+  "webShell": {
+    "groupOperation": "Operations",
+    "groupAccount": "Account"
+  },
+  "connection": {
+    "reconnecting": "Reconnecting…"
   }
 }

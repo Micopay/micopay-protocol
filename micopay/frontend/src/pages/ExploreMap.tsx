@@ -11,6 +11,9 @@ import { PLATFORM_FEE_PERCENT } from '../constants/trade';
 import ErrorBanner from '../components/ErrorBanner';
 import MerchantOfferCard from '../components/MerchantOfferCard';
 import type { ApiErrorAction } from '../utils/apiError';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -191,7 +194,7 @@ const ExploreMap = ({
         <button
           onClick={onBack}
           className="min-h-12 min-w-12 flex items-center justify-center p-2 rounded-sm hover:bg-surface-container-low transition-colors duration-200"
-          aria-label="Volver"
+          aria-label={tr('a11y.back')}
         >
           <span className="material-symbols-outlined text-verde">arrow_back</span>
         </button>
@@ -300,7 +303,7 @@ function StateHeader({ onBack }: { onBack: () => void }) {
       <button
         onClick={onBack}
         className="min-h-12 min-w-12 flex items-center justify-center p-2 rounded-sm hover:bg-surface-container-low transition-colors duration-200"
-        aria-label="Volver"
+        aria-label={tr('a11y.back')}
       >
         <span className="material-symbols-outlined text-verde">arrow_back</span>
       </button>
