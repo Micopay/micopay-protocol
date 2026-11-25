@@ -73,7 +73,8 @@
     "viewExplorer": "View on explorer",
     "done": "Done",
     "retry": "Retry",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "max": "MAX"
   },
   "receive": {
     "title": "Receive",
@@ -124,7 +125,8 @@
     "importConfirm": "Import",
     "importCancel": "Cancel",
     "accountDeleted": "Account deleted successfully.",
-    "noKeyGenerated": "No key generated"
+    "noKeyGenerated": "No key generated",
+    "networkTitle": "MicoPay Network"
   },
   "cashout": {
     "title": "Convert to cash",
@@ -499,7 +501,10 @@
     "depositWaitingLockTitle": "Waiting for the agent to lock the funds",
     "depositWaitingLockDesc": "There is no escrow yet. Do NOT hand over the cash until this notice turns green.",
     "stateFallbackLabel": "Trade in progress",
-    "stateFallbackNext": "We're checking the status with the server."
+    "stateFallbackNext": "We're checking the status with the server.",
+    "you": "You",
+    "client": "Client",
+    "agent": "Agent"
   },
   "qrReveal": {
     "verified": "Verified",
@@ -740,7 +745,9 @@
       "gettingLocation": "Getting your location…",
       "locationError": "Couldn't get your location. Check your GPS permissions.",
       "noLocationWarning": "Without a location set you won't appear on the map. Go to Settings to set it."
-    }
+    },
+    "resume": "Resume",
+    "pause": "Pause"
   },
   "signatureApproval": {
     "title": "Signature Approval",

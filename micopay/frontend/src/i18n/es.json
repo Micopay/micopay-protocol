@@ -73,7 +73,8 @@
     "viewExplorer": "Ver en el explorador",
     "done": "Listo",
     "retry": "Reintentar",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "max": "MÁX"
   },
   "receive": {
     "title": "Recibir",
@@ -124,7 +125,8 @@
     "importConfirm": "Importar",
     "importCancel": "Cancelar",
     "accountDeleted": "Cuenta eliminada correctamente.",
-    "noKeyGenerated": "Sin clave generada"
+    "noKeyGenerated": "Sin clave generada",
+    "networkTitle": "Red MicoPay"
   },
   "cashout": {
     "title": "Convertir a efectivo",
@@ -499,7 +501,10 @@
     "depositWaitingLockTitle": "Esperando que el agente bloquee los fondos",
     "depositWaitingLockDesc": "Todavía no hay garantía. NO entregues el efectivo hasta que este aviso cambie a verde.",
     "stateFallbackLabel": "Operación en curso",
-    "stateFallbackNext": "Estamos verificando el estado con el servidor."
+    "stateFallbackNext": "Estamos verificando el estado con el servidor.",
+    "you": "Tú",
+    "client": "Cliente",
+    "agent": "Agente"
   },
   "qrReveal": {
     "verified": "Verificado",
@@ -740,7 +745,9 @@
       "gettingLocation": "Obteniendo tu ubicación…",
       "locationError": "No se pudo obtener tu ubicación. Verifica los permisos de GPS.",
       "noLocationWarning": "Sin ubicación fijada no apareces en el mapa. Ve a Ajustes para fijarla."
-    }
+    },
+    "resume": "Reanudar",
+    "pause": "Pausar"
   },
   "signatureApproval": {
     "title": "Aprobación de Firma",

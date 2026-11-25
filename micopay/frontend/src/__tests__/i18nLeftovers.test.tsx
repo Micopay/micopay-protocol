@@ -18,6 +18,7 @@ import TradeDetail from '../pages/TradeDetail';
 import WebShell from '../components/WebShell';
 import { ConnectionBanner } from '../components/ConnectionBanner';
 import WalletRequestSheet from '../components/WalletRequestSheet';
+import SendPayment from '../pages/SendPayment';
 
 const mockGetTrade = vi.fn();
 
@@ -33,7 +34,18 @@ vi.mock('../services/api', () => ({
   lockTrade: vi.fn(),
 }));
 
-vi.mock('../services/payment', () => ({ ensureTrustline: vi.fn() }));
+vi.mock('../services/payment', () => ({
+  ensureTrustline: vi.fn(),
+  sendPayment: vi.fn(),
+  isValidStellarAddress: () => false,
+  PaymentError: class extends Error {},
+}));
+
+vi.mock('../hooks/useWalletBalance', () => ({
+  useWalletBalance: () => ({ tokens: [{ code: 'XLM', balance: 25 }], loading: false }),
+}));
+
+vi.mock('../hooks/useQRScanner', () => ({ useQRScanner: () => ({ scan: vi.fn(), scanning: false }) }));
 
 let pendingWalletItem: unknown = null;
 vi.mock('../services/walletConnect', () => ({
@@ -141,5 +153,13 @@ describe('billetera web en inglés (#510)', () => {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     expect(screen.queryByText('Monto')).toBeNull();
+  });
+});
+
+describe('enviar pago en inglés (#510)', () => {
+  it('el botón para usar todo el saldo dice MAX', () => {
+    render(<SendPayment onBack={() => {}} onDone={() => {}} />);
+    expect(screen.getByRole('button', { name: 'MAX' })).toBeInTheDocument();
+    expect(screen.queryByText('MÁX')).toBeNull();
   });
 });
