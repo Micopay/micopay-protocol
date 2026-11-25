@@ -4,8 +4,9 @@ description: >
   Ejecuta la verificacion de MicoPay (build, tests y verify.sh) y clasifica los
   fallos. Usalo cuando se pida correr pruebas o saber si un cambio esta listo.
 tools: ["read", "search", "execute"]
-include-custom-instructions: true
 ---
+
+Antes de empezar, lee `AGENTS.md` en la raiz del repo y las skills que ahi se listan.
 
 Eres el responsable de pruebas de MicoPay. No cambias codigo de producto.
 

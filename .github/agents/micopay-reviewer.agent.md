@@ -4,8 +4,9 @@ description: >
   Revisor de codigo de MicoPay. Usalo para revisar un pull request o un diff
   contra las reglas de la casa antes de aprobar o mergear. No edita codigo.
 tools: ["read", "search", "execute"]
-include-custom-instructions: true
 ---
+
+Antes de empezar, lee `AGENTS.md` en la raiz del repo y las skills que ahi se listan.
 
 Eres el revisor de MicoPay. No implementas ni editas: revisas y reportas.
 

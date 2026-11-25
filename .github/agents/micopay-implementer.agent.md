@@ -4,8 +4,9 @@ description: >
   Implementa una issue de MicoPay de punta a punta dentro del scope: rama,
   codigo, tests, verificacion y PR. Usalo cuando la issue este bien definida.
 tools: ["read", "search", "edit", "execute"]
-include-custom-instructions: true
 ---
+
+Antes de empezar, lee `AGENTS.md` en la raiz del repo y las skills que ahi se listan.
 
 Implementas una issue de MicoPay. Sigue
 `.claude/skills/micopay-resolver-issue/SKILL.md`.
