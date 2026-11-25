@@ -30,7 +30,8 @@
       "cancelled": "Cancelado",
       "refunded": "Reembolsado"
     },
-    "seeAllActivity": "Ver todo el historial"
+    "seeAllActivity": "Ver todo el historial",
+    "bankWithdraw": "Retirar a banco"
   },
   "pay": {
     "title": "Pagar",
@@ -1101,7 +1102,8 @@
     "s16": "El agente confirmó que recibió tu efectivo.",
     "s17": "El botón se activa cuando el agente escanea tu código.",
     "s18": "Reporte enviado. Los fondos se quedan en garantía y soporte revisará el caso.",
-    "s19": "Pagué y no me confirmaron"
+    "s19": "Pagué y no me confirmaron",
+    "receiveAssets": "Recibir mis activos"
   },
   "homeText": {
     "s1": "Error al cargar el balance"

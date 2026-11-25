@@ -30,7 +30,8 @@
       "cancelled": "Cancelled",
       "refunded": "Refunded"
     },
-    "seeAllActivity": "See all activity"
+    "seeAllActivity": "See all activity",
+    "bankWithdraw": "Withdraw to bank"
   },
   "pay": {
     "title": "Pay",
@@ -1101,7 +1102,8 @@
     "s16": "The agent confirmed they received your cash.",
     "s17": "The button turns on when the agent scans your code.",
     "s18": "Report sent. The funds stay in escrow and support will review the case.",
-    "s19": "I paid and they didn't confirm"
+    "s19": "I paid and they didn't confirm",
+    "receiveAssets": "Receive my assets"
   },
   "homeText": {
     "s1": "Error loading the balance"
