@@ -1126,14 +1126,22 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       if (!effectiveToken) return;
       try {
         const eligibility = await fetchRefundEligibility(trade.id, effectiveToken);
-        if (!cancelled) setRefundEligibility(eligibility);
+        if (cancelled) return;
+        setRefundEligibility(eligibility);
+        // #514: el estado no cambia cuando vence el plazo (sigue `locked`), así
+        // que sin esto el botón no salía hasta recargar la pantalla.
+        if (!eligibility.eligible && eligibility.seconds_remaining > 0) {
+          retry = setTimeout(load, (eligibility.seconds_remaining + 2) * 1000);
+        }
       } catch {
         // Sin elegibilidad no se inventa un CTA: se deja como estaba.
       }
     };
+    let retry: ReturnType<typeof setTimeout> | undefined;
     load();
     return () => {
       cancelled = true;
+      clearTimeout(retry);
     };
   }, [trade?.id, trade?.status, token]);
 
