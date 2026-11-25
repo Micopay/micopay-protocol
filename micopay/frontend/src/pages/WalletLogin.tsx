@@ -122,6 +122,12 @@ export default function WalletLogin({ onLoginSuccess }: WalletLoginProps) {
             <button type="button" onClick={handleConnect} disabled={loading} className={buttonClass}>
               {loading ? t('walletLogin.waiting') : t('walletLogin.connect')}
             </button>
+            {/* La APK firma para la web por WalletConnect; sin este aviso nadie
+                sabe que esa opcion de la lista es la app de MicoPay. */}
+            <div className="border-2 border-tinta rounded-sm px-3 py-2 space-y-1">
+              <p className="text-sm font-bold text-tinta">{t('walletLogin.apkTitle')}</p>
+              <p className="text-sm text-tinta">{t('walletLogin.apkSteps')}</p>
+            </div>
           </>
         )}
 
