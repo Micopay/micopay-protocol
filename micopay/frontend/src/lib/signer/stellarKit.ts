@@ -51,7 +51,18 @@ export async function createKitBackend(): Promise<WalletBackend> {
       await waitForModule(walletConnectModule);
       return (await StellarWalletsKit.authModal()).address;
     },
-    currentAddress: () => StellarWalletsKit.fetchAddress().then(({ address }) => address).catch(() => null),
+    // Con WalletConnect, `fetchAddress` abre una conexion nueva (otro QR) en
+    // vez de leer la actual, y la firma se quedaba esperando. La sesion ya
+    // esta atada a una cuenta y `assertSameTransaction` comprueba que firmo
+    // esa cuenta, asi que aqui no se pregunta.
+    currentAddress: async () => {
+      try {
+        if (walletConnectModule && StellarWalletsKit.selectedModule === walletConnectModule) return null;
+        return (await StellarWalletsKit.fetchAddress()).address;
+      } catch {
+        return null;
+      }
+    },
     networkPassphrase: () => StellarWalletsKit.getNetwork()
       .then(({ networkPassphrase }) => networkPassphrase)
       .catch(() => null),
