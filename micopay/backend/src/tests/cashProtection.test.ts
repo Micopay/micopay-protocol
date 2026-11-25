@@ -7,6 +7,10 @@
  *     constancia. Con ella no se cancela, no hay decline y no se reembolsa.
  *   · D4: el reclamo "Pagué y no me confirmaron" bloquea el reembolso por la
  *     app y por el barrido.
+ *   · #514: reclamo y barrido deciden con la fila del trade bloqueada; si
+ *     llegan juntos queda uno solo. Correr tambien contra PostgreSQL real
+ *     (DATABASE_URL=... npm run test:cash-protection, con `npm run migrate`
+ *     antes): en memoria no hay `FOR UPDATE`, solo el lock del proceso.
  */
 
 import { strictEqual, ok } from "assert";
@@ -276,6 +280,105 @@ async function testSweepSkipsConfirmationAndClaim() {
   console.log("  ✓ el barrido deja a soporte las operaciones con constancia o reclamo");
 }
 
+// ── #514: margen y carrera entre reclamo y barrido ─────────────────────────
+
+async function setExpiredMinutesAgo(tradeId: string, minutes: number) {
+  await db.execute("UPDATE trades SET expires_at = $2 WHERE id = $1", [
+    tradeId,
+    new Date(Date.now() - minutes * 60_000).toISOString(),
+  ]);
+}
+
+async function testClaimWithinGraceBlocksSweepForever() {
+  // El cliente reclama a los 5 minutos del vencimiento, dentro del margen.
+  // Aunque despues pase el margen, el barrido no reembolsa: es de soporte.
+  const client = await createUser("cli");
+  const provider = await createUser("prov");
+  const tradeId = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "locked", expired: true });
+  await setExpiredMinutesAgo(tradeId, 5);
+  await openCashClaim(fakeRequest, tradeId, client);
+
+  await setExpiredMinutesAgo(tradeId, 60);
+  await sweepPendingRefunds(fakeRequest);
+
+  strictEqual(await statusOf(tradeId), "locked", "con reclamo hecho dentro del margen el barrido no reembolsa");
+  console.log("  ✓ #514 reclamo dentro del margen: el barrido no reembolsa nunca");
+}
+
+async function testClaimRejectedOnceSweepStartedRefund() {
+  // La marca del barrido es la decision de reembolsar: un reclamo que llega
+  // despues ya no la puede deshacer y lo dice, en vez de quedar como abierto.
+  const client = await createUser("cli");
+  const provider = await createUser("prov");
+  const tradeId = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "locked", expired: true });
+  await db.execute("UPDATE trades SET refund_started_at = $2 WHERE id = $1", [tradeId, new Date().toISOString()]);
+
+  await expectRejected(
+    () => openCashClaim(fakeRequest, tradeId, client),
+    "CASH_CLAIM_NOT_ALLOWED",
+    "reclamo con el reembolso del barrido ya en marcha",
+  );
+  const rows = await db.getMany("SELECT trade_id FROM trade_cash_claims WHERE trade_id = $1", [tradeId]);
+  strictEqual(rows.length, 0, "no queda un reclamo abierto sobre fondos que ya se devuelven");
+  console.log("  ✓ #514 con el reembolso en marcha el reclamo se rechaza");
+}
+
+async function testClaimAndSweepRaceLeavesOnlyOne() {
+  // Reclamo y barrido al mismo tiempo, con distintos desfases para cubrir los
+  // huecos entre cada `await` del barrido. Nunca deben quedar las dos cosas.
+  const client = await createUser("cli");
+  const provider = await createUser("prov");
+  let claimsWon = 0;
+  let refundsWon = 0;
+  // Cuanto tarda un barrido aqui (memoria o PostgreSQL): los desfases del
+  // reclamo se reparten a lo largo de ese tiempo.
+  const probe = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "locked", expired: true });
+  await setExpiredMinutesAgo(probe, 30);
+  const t0 = performance.now();
+  await sweepPendingRefunds(fakeRequest);
+  let sweepMs = Math.max(performance.now() - t0, 1);
+  strictEqual(await statusOf(probe), "refunded", "sin reclamo, el barrido reembolsa");
+  const TRIES = 40;
+  for (let i = 0; i < TRIES; i++) {
+    const tradeId = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "locked", expired: true });
+    await setExpiredMinutesAgo(tradeId, 30);
+    const claim = (async () => {
+      if (i % 2 === 0) {
+        // Sin PostgreSQL todo el barrido corre en microtareas: el desfase se
+        // cuenta en `await`s, no en milisegundos.
+        for (let k = 0; k < i * 3; k++) await Promise.resolve();
+      } else {
+        await new Promise((r) => setTimeout(r, (3 * sweepMs * i) / TRIES));
+      }
+      try {
+        await openCashClaim(fakeRequest, tradeId, client);
+        return true;
+      } catch (err) {
+        if (err instanceof AppError && err.code === "CASH_CLAIM_NOT_ALLOWED") return false;
+        throw err;
+      }
+    })();
+    const startedAt = performance.now();
+    const sweep = sweepPendingRefunds(fakeRequest).then(() => {
+      sweepMs = Math.max(performance.now() - startedAt, 1);
+    });
+    const [claimed] = await Promise.all([claim, sweep]);
+
+    const status = await statusOf(tradeId);
+    const open = await db.getMany(
+      "SELECT trade_id FROM trade_cash_claims WHERE trade_id = $1 AND status = 'open'",
+      [tradeId],
+    );
+    const refunded = status === "refunded";
+    ok(!(refunded && open.length > 0), `intento ${i}: reclamo abierto Y fondos devueltos`);
+    strictEqual(claimed, open.length === 1, `intento ${i}: el reclamo dice lo que quedo en la base`);
+    ok(refunded || open.length === 1, `intento ${i}: alguna de las dos debe ganar`);
+    if (refunded) refundsWon++;
+    else claimsWon++;
+  }
+  console.log(`  ✓ #514 reclamo y barrido a la vez: queda una sola (reclamo ${claimsWon}, reembolso ${refundsWon}, barrido ~${sweepMs.toFixed(1)} ms)`);
+}
+
 async function main() {
   console.log("\n  WP1 proteger el efectivo:\n");
   await testCashoutClientCannotCancelWithLiveQr();
@@ -288,6 +391,9 @@ async function main() {
   await testClaimBlocksRefundAndIsIdempotent();
   await testConcurrentClaimsReturnTheSameClaim();
   await testSweepSkipsConfirmationAndClaim();
+  await testClaimWithinGraceBlocksSweepForever();
+  await testClaimRejectedOnceSweepStartedRefund();
+  await testClaimAndSweepRaceLeavesOnlyOne();
   console.log("\nAll WP1 cash protection tests passed.\n");
 }
 
