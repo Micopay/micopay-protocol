@@ -1019,7 +1019,15 @@
     "totalReturned": "Total returned",
     "refundPending": "Refund pending",
     "cashClaimCountdown": "If you already handed over the cash and it wasn't confirmed, you have {{time}} left to report it with “I paid and they didn't confirm”. After that, the escrow goes back to the agent.",
-    "agentClaimWindow": "The client can still report that they already paid. If nobody reports it, you can recover your funds in {{time}}."
+    "agentClaimWindow": "The client can still report that they already paid. If nobody reports it, you can recover your funds in {{time}}.",
+    "scanAtHandoffBody": "Ask the client to show you their code and keep the scanner open. Scan it at the very moment you hand over the cash; don't let go of the cash without scanning it. The funds are released to your account when the handoff is confirmed.",
+    "cashoutShowQrBody": "Your crypto is held in escrow. Show the code to the agent; once they hand you the cash and scan it, the trade closes.",
+    "depositWaitClientBody": "Your crypto is held in escrow. The client will confirm once they've handed you the cash; then the funds move to their account.",
+    "expiredRecoverBody": "Nobody completed the handoff in time. Your funds are still in the contract and you can recover them now.",
+    "cancelledAuthorizeRefundBody": "The trade was cancelled. Authorize the immediate return to the owner of the funds now, without waiting for the deadline.",
+    "expiredBody": "The time to complete this trade has expired.",
+    "dateLabel": "Date",
+    "processing": "Processing…"
   },
   "profileText": {
     "s1": "Your session expired. Sign in again.",

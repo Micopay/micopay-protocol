@@ -1019,7 +1019,15 @@
     "totalReturned": "Total devuelto",
     "refundPending": "Reembolso pendiente",
     "cashClaimCountdown": "Si ya entregaste el efectivo y no te lo confirmaron, te quedan {{time}} para avisar con “Pagué y no me confirmaron”. Después, la garantía regresa al agente.",
-    "agentClaimWindow": "El cliente todavía puede reportar que ya pagó. Si nadie lo reporta, podrás recuperar tus fondos en {{time}}."
+    "agentClaimWindow": "El cliente todavía puede reportar que ya pagó. Si nadie lo reporta, podrás recuperar tus fondos en {{time}}.",
+    "scanAtHandoffBody": "Pide al cliente que te muestre su código y ten el escáner abierto. Escanéalo en el mismo momento en que le entregas el efectivo; no sueltes el efectivo sin haberlo escaneado. Los fondos se liberan a tu cuenta al confirmar la entrega.",
+    "cashoutShowQrBody": "Tu cripto está en garantía. Muestra el código al agente; cuando te entregue el efectivo y lo escanee, la operación se cierra.",
+    "depositWaitClientBody": "Tu cripto está en garantía. El cliente confirmará cuando te haya entregado el efectivo; entonces los fondos pasan a su cuenta.",
+    "expiredRecoverBody": "Nadie completó la entrega a tiempo. Tus fondos siguen en el contrato y puedes recuperarlos ahora.",
+    "cancelledAuthorizeRefundBody": "La operación fue cancelada. Autoriza ahora la devolución inmediata al dueño de los fondos, sin esperar el vencimiento.",
+    "expiredBody": "El tiempo para completar esta operación ha expirado.",
+    "dateLabel": "Fecha",
+    "processing": "Procesando…"
   },
   "profileText": {
     "s1": "Tu sesión expiró. Vuelve a iniciar sesión.",
