@@ -39,6 +39,8 @@ async function insertTrade(opts: {
   status: string;
   expired: boolean;
   revealed?: boolean;
+  /** #514: cuantos minutos hace que vencio (por defecto 1). */
+  expiredMinutesAgo?: number;
 }): Promise<string> {
   seq++;
   const cashout = opts.flow === "cashout";
@@ -56,7 +58,7 @@ async function insertTrade(opts: {
       `wp5_${seq}_${Math.random()}`,
       opts.status,
       `mock_lock_${seq}`,
-      new Date(Date.now() + (opts.expired ? -60_000 : 2 * 60 * 60 * 1000)).toISOString(),
+      new Date(Date.now() + (opts.expired ? -(opts.expiredMinutesAgo ?? 1) * 60_000 : 2 * 60 * 60 * 1000)).toISOString(),
       opts.revealed ? new Date().toISOString() : null,
     ],
   );
@@ -101,10 +103,22 @@ async function main() {
     [cashoutHandoff, provider, "hash"],
   );
 
+  // #514 · casilla 2: el deposito espera el margen; el cash-out no.
+  const depositFiveMin = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "locked", expired: true, expiredMinutesAgo: 5 });
+  const depositSixteenMin = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "locked", expired: true, expiredMinutesAgo: 16 });
+  const depositCancelledFiveMin = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "cancelled", expired: true, expiredMinutesAgo: 5 });
+
   await sweepPendingRefunds(fakeRequest);
+
+  strictEqual(await statusOf(depositFiveMin), "locked", "deposito vencido hace 5 min: el cliente aun puede reclamar");
+  strictEqual(await statusOf(depositCancelledFiveMin), "cancelled", "deposito cancelado vencido hace 5 min: tambien espera");
+  console.log("  ✓ #514 deposito vencido hace 5 min: no se reembolsa");
+  strictEqual(await statusOf(depositSixteenMin), "refunded", "deposito vencido hace 16 min: ya paso el margen");
+  console.log("  ✓ #514 deposito vencido hace 16 min: se reembolsa");
 
   strictEqual(await statusOf(lockedExpired), "refunded", "locked vencida sin constancia regresa sola");
   console.log("  ✓ locked vencida sin constancia: regresa sola");
+  console.log("  ✓ #514 cash-out vencido hace 1 min: se reembolsa sin esperar el margen");
   strictEqual(await statusOf(revealingCashoutExpired), "refunded", "retiro con QR generado pero sin escaneo regresa solo");
   console.log("  ✓ revealing de retiro sin escaneo: regresa sola");
   strictEqual(await statusOf(lockedLive), "locked", "no vencida: no se toca");

@@ -2036,6 +2036,7 @@ export async function sweepPendingRefunds(
   // mock-mode 'cancelled' trades permanently stuck, unlike production.
   const candidates = await db.getMany<{
     id: string; status: string; secret_hash: string; seller_id: string; expires_at: string;
+    flow: string | null;
   }>(
     // `expires_at < NOW()` sigue siendo un filtro previo valido: el lock ocurre
     // despues de crear la solicitud y dura lo mismo que ella, asi que el plazo
@@ -2058,6 +2059,10 @@ export async function sweepPendingRefunds(
     // The contract itself would reject an early call (TimeoutNotReached),
     // but failing fast here avoids a wasted RPC round-trip either way.
     if (new Date(trade.expires_at) > new Date()) continue;
+    // #514: un deposito vencido espera el margen antes de reembolsarse, para que
+    // el cliente que ya pago alcance a reclamar. El cash-out no espera.
+    const graceEndsAt = depositGraceEndsAt(trade);
+    if (graceEndsAt && graceEndsAt > new Date()) continue;
     // D2/D4: con constancia de efectivo o reclamo abierto no se reembolsa sola;
     // la revisa soporte. WP5 (#10): sin ninguna de las dos, una operacion
     // `locked`/`revealing` vencida regresa a quien bloqueo igual que una
@@ -2247,6 +2252,31 @@ export async function hasCashConfirmation(trade: {
 }): Promise<boolean> {
   if (trade.flow === 'deposit' && trade.reveal_requested_at) return true;
   return Boolean(await getCashHandoff(trade.id));
+}
+
+/**
+ * #514 · Margen del efectivo en depositos.
+ *
+ * EL HUECO: en un deposito el cliente entrega el efectivo mientras la operacion
+ * esta `locked`. Si el agente no escanea su QR, la operacion vence y el barrido
+ * (cada 5 min) le devolvia la cripto al agente casi de inmediato: el agente se
+ * quedaba con el efectivo y con la cripto, y el cliente no alcanzaba a apretar
+ * "Pague y no me confirmaron".
+ *
+ * LO QUE ESTO ES, Y LO QUE NO: el momento desde el que el barrido puede
+ * reembolsar un deposito vencido, `expires_at + margen`. Solo RETRASA el
+ * barrido; no adelanta nada ni cambia `fundsRefundTiming` ni el contrato, que
+ * siguen decidiendo si la cadena ya admite `refund()`. Un retiro (cash-out)
+ * devuelve `null`: ahi el efectivo lo entrega el agente y no hay que esperar.
+ */
+export function depositGraceEndsAt(trade: {
+  flow?: string | null;
+  expires_at?: string | Date | null;
+}): Date | null {
+  if (trade.flow !== 'deposit' || !trade.expires_at) return null;
+  const expiresAt = new Date(trade.expires_at).getTime();
+  if (Number.isNaN(expiresAt)) return null;
+  return new Date(expiresAt + config.refundSweepDepositGraceMinutes * 60_000);
 }
 
 export interface CashClaim {
