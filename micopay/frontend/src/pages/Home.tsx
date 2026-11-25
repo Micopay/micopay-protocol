@@ -384,13 +384,13 @@ const Home = ({
           {onNavigateBankWithdraw && (
             <button
               onClick={onNavigateBankWithdraw}
-              aria-label={t('home.bankWithdraw', { defaultValue: 'Retirar a banco' })}
+              aria-label={tr('home.bankWithdraw')}
               className="w-full h-[56px] bg-papel text-tinta border-2 border-tinta shadow-solida font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <span aria-hidden="true" className="material-symbols-outlined">
                 account_balance
               </span>
-              {t('home.bankWithdraw', { defaultValue: 'Retirar a banco' })}
+              {tr('home.bankWithdraw')}
             </button>
           )}
           <p className="text-sm text-on-surface-variant font-medium opacity-60">

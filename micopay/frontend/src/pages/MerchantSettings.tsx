@@ -248,7 +248,7 @@ export default function MerchantSettings({
                     : "bg-error text-papel shadow-error/20"
                 }`}
               >
-                {availability === "paused" ? "Reanudar" : "Pausar"}
+                {availability === "paused" ? tr('merchantSettings.resume') : tr('merchantSettings.pause')}
               </button>
             </div>
           </section>

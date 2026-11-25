@@ -208,7 +208,7 @@ const DepositQR = ({ activeTrade, buyerToken, viewerId, onBack, onChat, onSucces
                             className="w-full h-[52px] bg-primary text-papel font-bold rounded-sm flex items-center justify-center gap-2 active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-40"
                         >
                             <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>check_circle</span>
-                            {cashConfirmed ? 'Recibir mis activos' : tr('depositQr.s14')}
+                            {cashConfirmed ? tr('depositQr.receiveAssets') : tr('depositQr.s14')}
                         </button>
                     ) : (
                         <div className="flex flex-col items-center gap-3 py-6">

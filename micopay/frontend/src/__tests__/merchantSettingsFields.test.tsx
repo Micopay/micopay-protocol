@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import MerchantSettings from '../pages/MerchantSettings';
+import i18n from '../i18n';
 import * as api from '../services/api';
 
 vi.mock('../services/api', () => ({
@@ -50,5 +51,19 @@ describe('#13 · configuración del agente', () => {
     await minField();
     fireEvent.click(screen.getByRole('button', { name: /guardar/i }));
     expect(await screen.findByText(/rate_percent must be between 0 and 5.2/)).toBeInTheDocument();
+  });
+});
+
+// #510: el botón de disponibilidad decía "Pausar"/"Reanudar" en inglés.
+describe('configuración del agente en inglés', () => {
+  it('el botón de disponibilidad dice Pause', async () => {
+    await i18n.changeLanguage('en');
+    try {
+      render(<MerchantSettings token="tok" onBack={() => {}} />);
+      expect(await screen.findByRole('button', { name: 'Pause' })).toBeInTheDocument();
+      expect(screen.queryByText('Pausar')).toBeNull();
+    } finally {
+      await i18n.changeLanguage('es');
+    }
   });
 });

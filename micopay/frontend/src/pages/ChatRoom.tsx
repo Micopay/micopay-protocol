@@ -7,6 +7,8 @@ import TradeEscrowSummary from '../components/TradeEscrowSummary';
 import { buildTxUrl } from '../utils/stellarExplorer';
 import { TRADE_STATE_COPY, parseTradeState } from '../components/TradeStateBadge';
 
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
+
 /**
  * Redaccion humana de un estado, del mismo diccionario que usa la insignia.
  * Si llegara un estado desconocido —un backend nuevo, una version vieja de la
@@ -298,7 +300,7 @@ const ChatRoom = ({
                             className={`flex flex-col max-w-[85%] ${msg.isOwn ? 'items-end self-end' : 'items-start'}`}
                         >
                             <span className="text-[11px] font-bold text-gris mb-1 px-1">
-                                {msg.isOwn ? 'Tú' : (counterpartyName ?? (isProvider ? 'Cliente' : 'Agente'))}
+                                {msg.isOwn ? tr('chatRoom.you') : (counterpartyName ?? (isProvider ? tr('chatRoom.client') : tr('chatRoom.agent')))}
                             </span>
                             <div className={`p-4 rounded-t-2xl relative ${
                                 msg.isOwn

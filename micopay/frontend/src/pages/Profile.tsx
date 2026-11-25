@@ -271,7 +271,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                               style={{ backgroundColor: s.bg, color: s.text }}
                             >
                               <span className="material-symbols-outlined text-[12px]" style={{ fontVariationSettings: '"FILL" 1' }}>{s.icon}</span>
-                              {tier}
+                              {tr(`tier.${tier}`, { defaultValue: tier })}
                             </span>
                           );
                         })()}
@@ -424,7 +424,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                     no segun haya sesion. Quien no es agente ve una invitacion;
                     quien lo es, su interruptor de disponibilidad. */}
                 <section className="bg-papel rounded-sm p-5 border-2 border-tinta/60">
-                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-gris mb-3">Red MicoPay</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-gris mb-3">{tr('profile.networkTitle')}</p>
 
                   {(providerStatus == null || providerStatus === 'not_enrolled') && (
                     <>

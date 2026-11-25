@@ -566,7 +566,7 @@ function RevealingView({
           tone="bg-naranja-suave"
           iconTone="text-naranja"
           title={t('tradeDetail.s34')}
-          body="Pide al cliente que te muestre su código y ten el escáner abierto. Escanéalo en el mismo momento en que le entregas el efectivo; no sueltes el efectivo sin haberlo escaneado. Los fondos se liberan a tu cuenta al confirmar la entrega."
+          body={tr('tradeDetail.scanAtHandoffBody')}
           primary={{ label: t('tradeDetail.s17'), onClick: onGoToScanner }}
           secondary={{ label: t('tradeDetail.s33'), onClick: onOpenChat }}
         />
@@ -587,7 +587,7 @@ function RevealingView({
         tone="bg-verde-suave"
         iconTone="text-verde"
         title={t('tradeDetail.s35')}
-        body="Tu cripto está en garantía. Muestra el código al agente; cuando te entregue el efectivo y lo escanee, la operación se cierra."
+        body={tr('tradeDetail.cashoutShowQrBody')}
         primary={{ label: t('tradeDetail.s16'), onClick: onShowQR }}
         secondary={{ label: t('tradeDetail.s33'), onClick: onOpenChat }}
       />
@@ -600,7 +600,7 @@ function RevealingView({
       tone="bg-fondo"
       iconTone="text-gris"
       title={t('tradeDetail.s36')}
-      body="Tu cripto está en garantía. El cliente confirmará cuando te haya entregado el efectivo; entonces los fondos pasan a su cuenta."
+      body={tr('tradeDetail.depositWaitClientBody')}
       secondary={{ label: t('tradeDetail.s33'), onClick: onOpenChat }}
     />
   );
@@ -719,7 +719,7 @@ function ConfirmReleaseView({ trade, onComplete, token, onOpenChat }: { trade: T
           <span className="material-symbols-outlined" style={{ fontVariationSettings: '"FILL" 1' }}>
             {confirmError ? 'refresh' : 'check_circle'}
           </span>
-          {confirmError ? 'Reintentar' : t('tradeDetail.s41')}
+          {confirmError ? t('tradeDetail.s59') : t('tradeDetail.s41')}
         </button>
       ) : (
         <div className="flex flex-col items-center gap-3 py-4">
@@ -760,7 +760,7 @@ function CompletedView({ trade }: { trade: TradeDetailData }) {
           <span className="num font-bold text-on-surface">${trade.amount_mxn} MXN</span>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-sm text-on-surface-variant">Fecha</span>
+          <span className="text-sm text-on-surface-variant">{tr('tradeDetail.dateLabel')}</span>
           <span className="text-sm text-on-surface">
             {trade.completed_at ? new Date(trade.completed_at).toLocaleString(i18n.language === 'en' ? 'en-US' : 'es-MX') : '-'}
           </span>
@@ -1093,7 +1093,7 @@ function RefundConfirmDialog({
             className="rounded-sm bg-primary px-4 py-2 text-sm font-semibold text-papel disabled:opacity-50"
             onClick={onConfirm}
           >
-            {submitting ? 'Procesando…' : t('tradeDetail.s66')}
+            {submitting ? tr('tradeDetail.processing') : t('tradeDetail.s66')}
           </button>
         </div>
       </div>
@@ -1421,7 +1421,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
               refunding={isRefunding}
               trade={trade}
               title={t('tradeDetail.s75')}
-              description="Nadie completó la entrega a tiempo. Tus fondos siguen en el contrato y puedes recuperarlos ahora."
+              description={tr('tradeDetail.expiredRecoverBody')}
             />
           );
         }
@@ -1465,7 +1465,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
               refunding={isRefunding}
               trade={trade}
               title={t('tradeDetail.s75')}
-              description="Nadie completó la entrega a tiempo. Tus fondos siguen en el contrato y puedes recuperarlos ahora."
+              description={tr('tradeDetail.expiredRecoverBody')}
             />
           );
         }
@@ -1516,7 +1516,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
                 refunding={isRefunding}
                 trade={trade}
                 title={t('tradeDetail.s77')}
-                description="La operación fue cancelada. Autoriza ahora la devolución inmediata al dueño de los fondos, sin esperar el vencimiento."
+                description={tr('tradeDetail.cancelledAuthorizeRefundBody')}
                 error={refundError}
               />
             );
@@ -1543,7 +1543,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
             refunding={isRefunding}
             trade={trade}
             title={t('tradeDetail.s78')}
-            description="El tiempo para completar esta operación ha expirado."
+            description={tr('tradeDetail.expiredBody')}
           />
         );
       case 'refunded':

@@ -119,6 +119,21 @@ describe('DepositQR reclamo D4', () => {
     await screen.findByText('Recibir mis activos');
     expect(screen.queryByText('Pagué y no me confirmaron')).toBeNull();
   });
+
+  // #510: el botón salía en español con la app en inglés.
+  it('shows "Receive my assets" in English', async () => {
+    await i18n.changeLanguage('en');
+    try {
+      getTrade.mockResolvedValue(depositTrade({ status: 'revealing' }));
+      render(
+        <DepositQR activeTrade={depositTrade({ status: 'revealing' }) as any} buyerToken="tok" viewerId={CLIENT} onBack={() => {}} onChat={() => {}} onSuccess={() => {}} />,
+      );
+      await screen.findByText('Receive my assets');
+      expect(screen.queryByText('Recibir mis activos')).toBeNull();
+    } finally {
+      await i18n.changeLanguage('es');
+    }
+  });
 });
 
 describe('ruta real del cliente de deposito', () => {
