@@ -29,6 +29,11 @@ async function walletModules(): Promise<ModuleInterface[]> {
         icons: [],
       },
       allowedChains: [IS_PUBLIC ? WalletConnectTargetChain.PUBLIC : WalletConnectTargetChain.TESTNET],
+      // Prefijo propio: sin el, el SignClient del Kit y el del modal de AppKit
+      // comparten el mismo Core global y el del modal se queda con la
+      // aprobacion de la billetera ("No matching key"), asi que la web nunca
+      // se entera de que la APK aprobo.
+      signClientOptions: { customStoragePrefix: 'micopay-kit' },
     });
     modules.push(walletConnectModule);
   }
