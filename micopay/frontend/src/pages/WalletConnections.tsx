@@ -51,7 +51,7 @@ export default function WalletConnections() {
   return (
     <div className="min-h-screen p-5 space-y-4">
       <button type="button" aria-label="Volver" onClick={() => navigate(-1)}>←</button>
-      <h1 className="text-xl font-bold">Conexiones web</h1>
+      <h1 className="text-xl font-bold">{tr('walletConnections.title')}</h1>
       <p className="text-sm">{tr('walletConnections.s3')}
       </p>
 

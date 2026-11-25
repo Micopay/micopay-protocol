@@ -12,6 +12,9 @@ import {
   MIN_TRADE_AMOUNT_MXN,
   useEscrowAssetEstimate,
 } from '../hooks/useEscrowAssetEstimate';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 /** Emisor del dolar digital del escrow (VITE_USDC_ISSUER). */
 const USDC_ISSUER = import.meta.env.VITE_USDC_ISSUER as string | undefined;
@@ -121,9 +124,8 @@ export default function AssetSelector({ flow, amountMxn, value, onChange, fetchR
           trustline equivocada y el bloqueo falla. */}
       {selected?.enabled && selected.code !== 'XLM' && STELLAR_NETWORK_LABEL === 'Testnet' && USDC_ISSUER ? (
         <p className="text-[12px] text-tinta border-2 border-tinta rounded-sm px-3 py-2" data-testid="usdc-testnet-note">
-          En pruebas MicoPay usa el {selected.code} del emisor{' '}
-          <span className="num font-bold break-all">{USDC_ISSUER}</span>, no el de Circle. Agrega esa línea de
-          confianza en tu billetera. No sale del faucet de Circle: pídelo al equipo de MicoPay.
+          {tr('escrowAsset.testnetIssuerPrefix', { code: selected.code })}{' '}
+          <span className="num font-bold break-all">{USDC_ISSUER}</span>{tr('escrowAsset.testnetIssuerSuffix')}
         </p>
       ) : null}
       {/* Con la tasa caida, `rateUnavailable` ya dice que se fija al crear. */}

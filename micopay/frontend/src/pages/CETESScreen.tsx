@@ -22,6 +22,9 @@ import { sendCETESToEtherfuse } from '../services/stellarRamp';
 import { buildTxUrl } from '../utils/stellarExplorer';
 import { extractApiErrorPayload } from '../utils/apiError';
 import BetaBanner from '../components/BetaBanner';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 interface CETESScreenProps {
   onBack: () => void;
@@ -192,7 +195,7 @@ const CETESScreen = ({ onBack, onBanco, userToken, showDefi = true, showSpeiRamp
 
       const executeTx = async (orderData: typeof order) => {
         if (!orderData.withdrawAnchorAccount || !orderData.withdrawMemo) {
-          throw new Error('El agente no devolvió instrucciones de retiro válidas.');
+          throw new Error(tr('cetesText.noWithdrawInstructions'));
         }
         return await sendCETESToEtherfuse(
           amount,

@@ -14,6 +14,9 @@ import axios from 'axios';
 import { getTrade, revealTrade } from '../services/api';
 import { mapApiError } from './apiError';
 import type { TradeActor } from './tradeActor';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 /** Si a quien mira esta operación le toca confirmar el efectivo ahora. */
 export function canConfirmCashReceived(actor: TradeActor, status: string | null | undefined): boolean {
@@ -47,11 +50,11 @@ export function cashConfirmErrorMessage(err: unknown): string {
   if (axios.isAxiosError(err) && err.response) {
     switch (err.response.status) {
       case 403:
-        return 'Esta operación no es tuya o no te toca confirmar el efectivo.';
+        return tr('cashConfirmErrors.forbidden');
       case 404:
-        return 'No encontramos esta operación.';
+        return tr('cashConfirmErrors.notFound');
       case 409:
-        return 'Esta operación ya no está esperando la confirmación del efectivo.';
+        return tr('cashConfirmErrors.notWaiting');
     }
   }
   return mapApiError(err).message;

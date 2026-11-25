@@ -49,7 +49,9 @@ export default function WalletRequestSheet() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/50" role="dialog" aria-modal="true">
-      <div className="w-full bg-papel text-tinta border-t-2 border-tinta p-5 space-y-3">
+      {/* El padding inferior deja libre la barra de gestos o botones de Android,
+          igual que BottomNav: sin el, Aprobar quedaba debajo de esa barra. */}
+      <div className="w-full max-h-[90vh] overflow-y-auto bg-papel text-tinta border-t-2 border-tinta p-5 pb-[max(3rem,calc(env(safe-area-inset-bottom)+1.5rem))] space-y-3">
         <h2 className="text-lg font-bold">
           {item.kind === 'proposal' && tr('walletRequest.s6')}
           {item.kind === 'webAuth' && tr('walletRequest.s7')}

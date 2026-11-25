@@ -145,7 +145,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 opacity-50">
             <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p className="text-sm font-medium">Cargando historial...</p>
+            <p className="text-sm font-medium">{tr('historyText.loading')}</p>
           </div>
         ) : loadError ? null : rows.length === 0 ? (
           <div className="bg-papel rounded-sm border-2 border-tinta p-12 text-center mt-10">

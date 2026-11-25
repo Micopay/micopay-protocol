@@ -1,4 +1,7 @@
 import { Capacitor } from '@capacitor/core';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 /**
  * Notificaciones push (Firebase Cloud Messaging) en la app nativa.
@@ -88,8 +91,8 @@ export async function startPush(handlers: {
   try {
     await PushNotifications.createChannel({
       id: 'trade_alerts',
-      name: 'Operaciones',
-      description: 'Operaciones nuevas, cancelaciones y reembolsos',
+      name: tr('pushChannels.tradesName'),
+      description: tr('pushChannels.tradesDescription'),
       importance: 5,
       // Privado: en la pantalla bloqueada se ve que hay aviso, no el monto.
       visibility: 0,
@@ -97,8 +100,8 @@ export async function startPush(handlers: {
     });
     await PushNotifications.createChannel({
       id: 'sign_alerts',
-      name: 'Solicitudes de firma',
-      description: 'Firmas pedidas desde otro dispositivo',
+      name: tr('pushChannels.signName'),
+      description: tr('pushChannels.signDescription'),
       importance: 5,
       visibility: 0,
       sound: 'default',

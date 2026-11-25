@@ -1,4 +1,7 @@
 import { Keypair, Networks, TransactionBuilder } from '@stellar/stellar-sdk';
+import i18n from '../../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 /**
  * Firmador de la web. La billetera es de la persona: aqui solo se recuerda que
@@ -58,10 +61,10 @@ function backend(): Promise<WalletBackend> {
       loaded.onChange((change) => {
         const connected = getConnectedAddress();
         if (!connected) return;
-        if (change.disconnected) walletLost('Tu billetera se desconectó.');
-        else if (change.address && change.address !== connected) walletLost('Cambiaste de cuenta en tu billetera.');
+        if (change.disconnected) walletLost(tr('signerErrors.disconnected'));
+        else if (change.address && change.address !== connected) walletLost(tr('signerErrors.accountChanged'));
         else if (change.networkPassphrase && change.networkPassphrase !== NETWORK_PASSPHRASE) {
-          walletLost('Cambiaste de red en tu billetera.');
+          walletLost(tr('signerErrors.networkChanged'));
         }
       });
       return loaded;
@@ -76,7 +79,7 @@ export function onWalletLost(listener: (reason: string) => void): () => void {
 }
 
 function networkError(): Error {
-  return new Error(`Tu billetera está en otra red. Cámbiala a ${NETWORK_PASSPHRASE === Networks.PUBLIC ? 'Mainnet' : 'Testnet'}.`);
+  return new Error(tr('signerErrors.wrongNetwork', { network: NETWORK_PASSPHRASE === Networks.PUBLIC ? 'Mainnet' : 'Testnet' }));
 }
 
 export async function connectWallet(): Promise<string> {
@@ -92,15 +95,15 @@ export async function connectWallet(): Promise<string> {
 /** Compuerta previa a cada firma: billetera conectada, misma cuenta y misma red. */
 export async function assertWalletReady(): Promise<string> {
   const connected = getConnectedAddress();
-  if (!connected) throw new Error('Conecta tu billetera para continuar.');
+  if (!connected) throw new Error(tr('signerErrors.connectWallet'));
   const wallet = await backend();
   const [current, passphrase] = await Promise.all([wallet.currentAddress(), wallet.networkPassphrase()]);
   if (current && current !== connected) {
-    walletLost('Cambiaste de cuenta en tu billetera.');
-    throw new Error('Cambiaste de cuenta en tu billetera. Inicia sesión de nuevo.');
+    walletLost(tr('signerErrors.accountChanged'));
+    throw new Error(tr('signerErrors.accountChangedLogin'));
   }
   if (passphrase && passphrase !== NETWORK_PASSPHRASE) {
-    walletLost('Cambiaste de red en tu billetera.');
+    walletLost(tr('signerErrors.networkChanged'));
     throw networkError();
   }
   return connected;
@@ -111,13 +114,13 @@ function assertSameTransaction(unsigned: string, signed: string, address: string
   const before = TransactionBuilder.fromXDR(unsigned, passphrase);
   const after = TransactionBuilder.fromXDR(signed, passphrase);
   const hash = after.hash();
-  if (!before.hash().equals(hash)) throw new Error('La billetera devolvió una transacción distinta.');
+  if (!before.hash().equals(hash)) throw new Error(tr('signerErrors.differentTx'));
 
   const signer = Keypair.fromPublicKey(address);
   const verified = after.signatures.some(
     (signature) => signature.hint().equals(signer.signatureHint()) && signer.verify(hash, signature.signature()),
   );
-  if (!verified) throw new Error('La billetera no firmó con la cuenta conectada.');
+  if (!verified) throw new Error(tr('signerErrors.notSignedByAccount'));
 }
 
 export async function signWithWallet(xdr: string, networkPassphrase: string): Promise<string> {

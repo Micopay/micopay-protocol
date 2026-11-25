@@ -191,6 +191,19 @@ function parseAssetIssuers(raw: string | undefined): Record<string, string> {
   return map;
 }
 
+export const DEFAULT_DEPOSIT_GRACE_MINUTES = 15;
+
+/**
+ * #514: margen del barrido para depositos. `parseInt` a secas aceptaria "15m"
+ * como 15 y "-5" como -5; un margen negativo ADELANTARIA el reembolso, justo
+ * lo contrario de lo que protege. Solo un entero >= 0; lo demas usa 15.
+ */
+export function parseGraceMinutes(raw: string | undefined): number {
+  const trimmed = raw?.trim() ?? '';
+  if (!/^\d+$/.test(trimmed)) return DEFAULT_DEPOSIT_GRACE_MINUTES;
+  return Number(trimmed);
+}
+
 const ESCROW_ASSET_ISSUERS = parseAssetIssuers(process.env.ESCROW_ASSET_ISSUERS);
 
 const ESCROW_DECLINE_CONTRACT_IDS = (process.env.ESCROW_DECLINE_CONTRACT_IDS || '')
@@ -290,6 +303,10 @@ export const config = {
   // un lock. Decision de producto del 2026-10-30 (WP3): bloquear a minutos de
   // que venza la solicitud no deja tiempo para encontrarse y entregar.
   lockMinRequestMarginMinutes: parseInt(process.env.LOCK_MIN_REQUEST_MARGIN_MINUTES || '30', 10),
+  // #514: minutos que el barrido espera, despues del vencimiento, antes de
+  // reembolsar un DEPOSITO. Es el tiempo que tiene el cliente que ya entrego
+  // el efectivo para apretar "Pague y no me confirmaron".
+  refundSweepDepositGraceMinutes: parseGraceMinutes(process.env.REFUND_SWEEP_DEPOSIT_GRACE_MINUTES),
 
   // Rate Limiting
   clientErrorRateLimitWindowMs: parseInt(process.env.CLIENT_ERROR_RATE_LIMIT_WINDOW_MS || '60000', 10),
