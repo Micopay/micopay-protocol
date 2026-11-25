@@ -2,6 +2,7 @@ import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit';
 import { KitEventType, Networks, type ModuleInterface } from '@creit.tech/stellar-wallets-kit/types';
 import { VarialModule } from '@creit.tech/stellar-wallets-kit/modules/varial';
 import type { WalletBackend } from './externalSigner';
+import { waitForModule } from './waitForModule';
 import i18n from '../../i18n';
 
 const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
@@ -10,6 +11,8 @@ const PROJECT_ID = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID as string | und
 const OFFICIAL_ORIGIN = (import.meta.env.VITE_WALLET_OFFICIAL_ORIGIN as string | undefined) || 'https://app.micopay.com.mx';
 const IS_PUBLIC = ['PUBLIC', 'MAINNET'].includes(String(import.meta.env.VITE_STELLAR_NETWORK || 'TESTNET').toUpperCase());
 
+let walletConnectModule: ModuleInterface | null = null;
+
 /** Solo estos modulos: `defaultModules` traeria Ledger, Trezor y otras dependencias. */
 async function walletModules(): Promise<ModuleInterface[]> {
   const modules: ModuleInterface[] = [new VarialModule()];
@@ -17,7 +20,7 @@ async function walletModules(): Promise<ModuleInterface[]> {
     const { WalletConnectModule, WalletConnectTargetChain } = await import(
       '@creit.tech/stellar-wallets-kit/modules/wallet-connect'
     );
-    modules.push(new WalletConnectModule({
+    walletConnectModule = new WalletConnectModule({
       projectId: PROJECT_ID,
       metadata: {
         name: 'MicoPay',
@@ -26,7 +29,8 @@ async function walletModules(): Promise<ModuleInterface[]> {
         icons: [],
       },
       allowedChains: [IS_PUBLIC ? WalletConnectTargetChain.PUBLIC : WalletConnectTargetChain.TESTNET],
-    }));
+    });
+    modules.push(walletConnectModule);
   }
   return modules;
 }
@@ -38,7 +42,10 @@ export async function createKitBackend(): Promise<WalletBackend> {
   });
 
   return {
-    connect: async () => (await StellarWalletsKit.authModal()).address,
+    connect: async () => {
+      await waitForModule(walletConnectModule);
+      return (await StellarWalletsKit.authModal()).address;
+    },
     currentAddress: () => StellarWalletsKit.fetchAddress().then(({ address }) => address).catch(() => null),
     networkPassphrase: () => StellarWalletsKit.getNetwork()
       .then(({ networkPassphrase }) => networkPassphrase)
