@@ -1,11 +1,27 @@
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../middleware/auth.middleware.js';
+import { createRateLimiter } from '../middleware/rateLimit.middleware.js';
 import {
   getOrCreateMerchantConfig,
   updateMerchantConfig,
   getAvailableMerchants,
 } from '../services/merchant.service.js';
+import {
+  enrollProvider,
+  getProviderReadiness,
+  activateProvider,
+} from '../services/providerEnrollment.service.js';
 import db from '../db/schema.js';
+import {
+  MAX_EFFECTIVE_FEE_PERCENT,
+  MAX_PROVIDER_FEE_PERCENT,
+} from '../services/tradeFees.js';
+
+// G1: /merchants/available is public and unauthenticated — without a rate
+// limit it lets anyone scrape the full census of merchant locations by
+// sweeping lat/lng. 30 req/min per IP is generous for legitimate use (the
+// app makes one request per search).
+const discoveryRateLimit = createRateLimiter({ windowMs: 60_000, max: 30 });
 
 export async function merchantRoutes(app: FastifyInstance) {
   /**
@@ -20,6 +36,7 @@ export async function merchantRoutes(app: FastifyInstance) {
    *   flow       – 'cashout' | 'deposit' (optional, reserved)
    */
   app.get('/merchants/available', {
+    preHandler: [discoveryRateLimit],
     schema: {
       querystring: {
         type: 'object',
@@ -55,13 +72,59 @@ export async function merchantRoutes(app: FastifyInstance) {
   });
 
   // ── Authenticated routes ──────────────────────────────────────────────────
+  // Auth is applied per-route (NOT via a plugin-level addHook) so the public
+  // /merchants/available discovery endpoint above stays unauthenticated.
 
-  app.addHook('preHandler', authMiddleware);
+  // ── RED-1: alta explicita en Red MicoPay ──────────────────────────────────
+  //
+  // Tres endpoints, tres hechos distintos: unirse, ver que falta, y activarse.
+  // Ninguno los mezcla, porque mezclarlos fue el defecto original.
 
-  app.get('/merchants/me/config', async (request) => {
+  /**
+   * POST /merchants/me/enroll
+   * Inicia el alta como agente. Idempotente: llamarlo dos veces no crea nada
+   * nuevo ni degrada a quien ya esta activo.
+   */
+  app.post('/merchants/me/enroll', { preHandler: [authMiddleware] }, async (request) => {
+    const readiness = await enrollProvider(request.user.id);
+    request.log.info(
+      { user_id: request.user.id, status: readiness.status, category: 'merchant' },
+      '[merchant] Provider enrollment started',
+    );
+    return readiness;
+  });
+
+  /**
+   * GET /merchants/me/readiness
+   * Que le falta a esta persona para poder activarse. La verdad la dice el
+   * servidor: la app no debe deducir la elegibilidad por su cuenta.
+   */
+  app.get('/merchants/me/readiness', { preHandler: [authMiddleware] }, async (request) => {
+    return getProviderReadiness(request.user.id);
+  });
+
+  /**
+   * POST /merchants/me/activate
+   * Activa al agente. Falla cerrada: recalcula contra la base, no confia en lo
+   * que la app crea saber.
+   */
+  app.post('/merchants/me/activate', { preHandler: [authMiddleware] }, async (request) => {
+    const readiness = await activateProvider(request.user.id);
+    request.log.info(
+      { user_id: request.user.id, status: readiness.status, category: 'merchant' },
+      '[merchant] Provider activated',
+    );
+    return readiness;
+  });
+
+  app.get('/merchants/me/config', { preHandler: [authMiddleware] }, async (request) => {
     const config = await getOrCreateMerchantConfig(request.user.id);
     return {
-      config,
+      config: {
+        ...config,
+        max_effective_fee_percent: MAX_EFFECTIVE_FEE_PERCENT,
+        max_provider_fee_percent: MAX_PROVIDER_FEE_PERCENT,
+      },
       daily_cap_reset_timezone: 'UTC',
       daily_cap_reset_time: '00:00',
       daily_cap_reset_note: 'Daily cap usage resets every day at 00:00 UTC.',
@@ -69,12 +132,13 @@ export async function merchantRoutes(app: FastifyInstance) {
   });
 
   app.put('/merchants/me/config', {
+    preHandler: [authMiddleware],
     schema: {
       body: {
         type: 'object',
         required: ['rate_percent', 'min_trade_mxn', 'max_trade_mxn', 'daily_cap_mxn'],
         properties: {
-          rate_percent:  { type: 'number', minimum: 0, maximum: 100 },
+          rate_percent:  { type: 'number', minimum: 0, maximum: MAX_PROVIDER_FEE_PERCENT },
           min_trade_mxn: { type: 'integer', minimum: 100, maximum: 50000 },
           max_trade_mxn: { type: 'integer', minimum: 100, maximum: 50000 },
           daily_cap_mxn: { type: 'integer', minimum: 100 },
@@ -98,7 +162,11 @@ export async function merchantRoutes(app: FastifyInstance) {
     });
 
     return {
-      config,
+      config: {
+        ...config,
+        max_effective_fee_percent: MAX_EFFECTIVE_FEE_PERCENT,
+        max_provider_fee_percent: MAX_PROVIDER_FEE_PERCENT,
+      },
       daily_cap_reset_timezone: 'UTC',
       daily_cap_reset_time: '00:00',
       daily_cap_reset_note: 'Daily cap usage resets every day at 00:00 UTC.',
@@ -107,17 +175,31 @@ export async function merchantRoutes(app: FastifyInstance) {
 
   /**
    * PATCH /merchants/me/location
-   * Authenticated. Sets or updates the merchant's location.
+   * Authenticated. Sets or updates the provider's location.
+   *
+   * RED-3: `address_text` era un solo campo de texto libre que viajaba tal
+   * cual en el discovery anonimo. Ahora se piden dos cosas distintas, porque
+   * lo son:
+   *
+   *   area_label     zona amplia, publica. "Centro, CDMX".
+   *   meeting_point  punto exacto, privado. Solo lo ven las dos partes de una
+   *                  operacion aceptada, salvo consentimiento explicito.
+   *
+   * `publish_storefront` es ese consentimiento y por omision es false. Tener
+   * `meeting_point` lleno NO se interpreta como permiso para publicarlo.
    */
   app.patch('/merchants/me/location', {
+    preHandler: [authMiddleware],
     schema: {
       body: {
         type: 'object',
         required: ['latitude', 'longitude'],
         properties: {
-          latitude:     { type: 'number', minimum: -90,  maximum: 90  },
-          longitude:    { type: 'number', minimum: -180, maximum: 180 },
-          address_text: { type: 'string', maxLength: 200 },
+          latitude:           { type: 'number', minimum: -90,  maximum: 90  },
+          longitude:          { type: 'number', minimum: -180, maximum: 180 },
+          area_label:         { type: 'string', maxLength: 120 },
+          meeting_point:      { type: 'string', maxLength: 200 },
+          publish_storefront: { type: 'boolean' },
         },
         additionalProperties: false,
       },
@@ -126,7 +208,9 @@ export async function merchantRoutes(app: FastifyInstance) {
     const body = request.body as {
       latitude: number;
       longitude: number;
-      address_text?: string;
+      area_label?: string;
+      meeting_point?: string;
+      publish_storefront?: boolean;
     };
 
     // Ensure config row exists before updating location
@@ -134,35 +218,26 @@ export async function merchantRoutes(app: FastifyInstance) {
 
     const updated = await db.getOne(
       `UPDATE merchant_configs
-       SET latitude = $2, longitude = $3, address_text = $4, updated_at = NOW()
+       SET latitude = $2,
+           longitude = $3,
+           area_label = $4,
+           meeting_point = $5,
+           publish_storefront = $6,
+           updated_at = NOW()
        WHERE user_id = $1
-       RETURNING user_id, latitude, longitude, address_text, updated_at`,
-      [request.user.id, body.latitude, body.longitude, body.address_text ?? null],
+       RETURNING user_id, latitude, longitude, area_label, meeting_point,
+                 publish_storefront, updated_at`,
+      [
+        request.user.id,
+        body.latitude,
+        body.longitude,
+        body.area_label ?? null,
+        body.meeting_point ?? null,
+        // Consentimiento explicito: ausente significa NO publicar.
+        body.publish_storefront === true,
+      ],
     );
 
     return reply.send({ location: updated });
-  });
-
-  /**
-   * GET /merchants/me/trades
-   * Authenticated. Returns trades where the caller is the seller.
-   */
-  app.get('/merchants/me/trades', async (request) => {
-    const q = request.query as { state?: string };
-
-    const stateFilter = q.state && q.state !== 'all' ? q.state : null;
-
-    const trades = await db.getMany(
-      `SELECT t.id, u.username AS buyer_handle, t.amount_mxn, t.status, t.created_at
-       FROM trades t
-       JOIN users u ON u.id = t.buyer_id
-       WHERE t.seller_id = $1
-         AND ($2::text IS NULL OR t.status = $2)
-       ORDER BY t.created_at DESC
-       LIMIT 100`,
-      [request.user.id, stateFilter],
-    );
-
-    return { trades };
   });
 }

@@ -1,63 +1,85 @@
-version: "3.9"
+version: '3.8'
 
 services:
-  api:
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
+  postgres:
+    image: postgres:15-alpine
+    container_name: micopay-postgres
     environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - DATABASE_URL=postgresql://micopay:micopay_secret@postgres:5432/micopay_db
-      - STELLAR_RPC_URL=${STELLAR_RPC_URL:-https://soroban-testnet.stellar.org}
-      - STELLAR_NETWORK=TESTNET
-      - ESCROW_CONTRACT_ID=${ESCROW_CONTRACT_ID:-CBQINHLR3M7NZAPQY7EJ3TWOE22R57LMFDVEMOK3C3X7ZIBFWHVQQP3A}
-      - PLATFORM_SECRET_KEY=${PLATFORM_SECRET_KEY}
-      - PLATFORM_STELLAR_ADDRESS=${PLATFORM_STELLAR_ADDRESS:-GDKKW2WSMQWZ63PIZBKDDBAAOBG5FP3TUHRYQ4U5RBKTFNESL5K5BJJK}
-      - JWT_SECRET=${JWT_SECRET:-change_me_in_production}
-      - SECRET_ENCRYPTION_KEY=${SECRET_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
-      - MOCK_STELLAR=${MOCK_STELLAR:-false}
+      POSTGRES_DB: micopay
+      POSTGRES_USER: micopay
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-micopay}
+      POSTGRES_INITDB_ARGS: "--wal-segsize=64"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/backup/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    ports:
+      - "5432:5432"
+    command:
+      - "postgres"
+      - "-c"
+      - "config_file=/etc/postgresql/postgresql.conf"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U micopay -d micopay"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgbackrest:
+    image: pgbackrest/pgbackrest:latest
+    container_name: micopay-pgbackrest
+    environment:
+      PGBACKREST_CIPHER_PASS: ${PGBACKREST_CIPHER_PASS:-secret_key_32_bytes_minimum}
+      PGBACKREST_REPO1_S3_KEY: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      PGBACKREST_REPO1_S3_KEY_SECRET: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
+      PGBACKREST_REPO1_S3_BUCKET: ${BACKUP_BUCKET:-micopay-backups}
+      PGBACKREST_REPO1_S3_ENDPOINT: ${BACKUP_ENDPOINT:-http://minio:9000}
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: micopay
+      PGPASSWORD: ${POSTGRES_PASSWORD:-micopay}
+    volumes:
+      - ./deploy/backup/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - backup_data:/var/lib/pgbackrest
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
 
-  web:
-    build:
-      context: ./apps/web
-      dockerfile: Dockerfile
-    ports:
-      - "5186:5186"
+  minio:
+    image: minio/minio:latest
+    container_name: micopay-minio
     environment:
-      - VITE_API_URL=http://api:3000
-    depends_on:
-      - api
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
     restart: unless-stopped
 
-  postgres:
-    image: postgres:16-alpine
-    ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_USER=micopay
-      - POSTGRES_PASSWORD=micopay_secret
-      - POSTGRES_DB=micopay_db
+  backup-scheduler:
+    image: alpine:latest
+    container_name: micopay-backup-scheduler
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U micopay -d micopay_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - ./deploy/backup/scripts:/scripts
+    command: |
+      sh -c "
+        apk add --no-cache postgresql-client curl
+        while true; do
+          echo 'Starting scheduled backup check...'
+          sh /scripts/backup.sh
+          sleep 3600
+        done
+      "
+    depends_on:
+      pgbackrest:
+        condition: service_started
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  backup_data:
+  minio_data:

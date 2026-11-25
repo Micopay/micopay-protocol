@@ -3,6 +3,7 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 import { createRateLimiter } from '../middleware/rateLimit.middleware.js';
 import { config } from '../config.js';
 import * as tradeService from '../services/trade.service.js';
+import { ASSET_CODE_MAX_LENGTH, normalizeEscrowAssetCode } from '../services/assetRate.service.js';
 
 const tradeRateLimit = createRateLimiter({
   windowMs: config.tradeRateLimitWindowMs,
@@ -16,37 +17,106 @@ export async function tradeRoutes(app: FastifyInstance) {
 
   /**
    * POST /trades
-   * Buyer creates a new trade. Generates HTLC secret and returns secret_hash.
+   * Creates a trade between the caller and a counterparty.
+   *
+   * CASH-1 (#372): the request carries the *product* flow, not the escrow role.
+   * The two are not the same thing and they reverse relative to each other:
+   *
+   *   flow 'deposit'  — the caller buys crypto with cash. The counterparty is
+   *                     the Red MicoPay provider and must be the escrow seller,
+   *                     because only the seller can lock funds and reveal the
+   *                     HTLC secret.
+   *   flow 'cashout'  — the caller sells crypto for cash. The caller gives up
+   *                     the crypto, so the caller is the escrow seller and the
+   *                     provider is the escrow buyer.
+   *
+   * In both directions the Red MicoPay liquidity provider is the counterparty,
+   * never the caller. provider_id is derived here from the authenticated caller
+   * and that rule; it is never read from the request body. With Fastify's
+   * default ajv options `additionalProperties: false` STRIPS unknown fields
+   * instead of rejecting them (pinned by tradeFlow.test.ts), so a forged
+   * provider_id is dropped before the handler runs.
+   *
+   * `asset_code` (optional): the escrow asset. Absent -> XLM, so installed APKs
+   * keep working. Error contract:
+   *   400 VALIDATION_ERROR / INVALID_ASSET_CODE — not a string (null, number,
+   *       boolean, object), empty, or longer than the column;
+   *   422 ASSET_NOT_ENABLED — well-formed code without a deployed escrow.
    */
   app.post('/trades', {
     preHandler: [tradeRateLimit],
+    // Fastify's default ajv runs with `coerceTypes`, which would turn 123 into
+    // "123" and null into "" before the schema check — so the schema alone
+    // cannot promise a 400 for a wrong type. The ORIGINAL type is checked here,
+    // before validation, without changing ajv globally.
+    preValidation: async (request) => {
+      const body = request.body as Record<string, unknown> | null | undefined;
+      if (body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, 'asset_code')) {
+        normalizeEscrowAssetCode(body.asset_code);
+      }
+    },
     schema: {
       body: {
         type: 'object',
-        required: ['seller_id', 'amount_mxn'],
+        required: ['counterparty_id', 'amount_mxn', 'flow'],
         properties: {
-          seller_id: { type: 'string', format: 'uuid' },
+          counterparty_id: { type: 'string', format: 'uuid' },
           amount_mxn: { type: 'integer', minimum: 100, maximum: 50000 },
+          flow: { type: 'string', enum: ['deposit', 'cashout'] },
+          asset_code: { type: 'string', minLength: 1, maxLength: ASSET_CODE_MAX_LENGTH },
         },
         additionalProperties: false,
       },
     },
   }, async (request, reply) => {
-    const { seller_id, amount_mxn } = request.body as { seller_id: string; amount_mxn: number };
-    const buyerId = request.user.id;
+    const { counterparty_id, amount_mxn, flow, asset_code } = request.body as {
+      counterparty_id: string;
+      amount_mxn: number;
+      flow: 'deposit' | 'cashout';
+      asset_code?: string;
+    };
+    const callerId = request.user.id;
+    const sellerId = flow === 'cashout' ? callerId : counterparty_id;
+    const buyerId = flow === 'cashout' ? counterparty_id : callerId;
 
     const trade = await tradeService.createTrade({
       request,
-      sellerId: seller_id,
+      sellerId,
       buyerId,
+      flow,
       amountMxn: amount_mxn,
+      assetCode: asset_code,
     });
 
     // Don't expose encrypted secret fields in response
     const { secret_enc, secret_nonce, ...safeTrade } = trade;
 
     reply.status(201);
-    return { trade: safeTrade };
+    return { trade: { ...safeTrade, ...tradeService.escrowAmountsForTrade(trade), ...tradeService.cashBreakdownForTrade(trade) } };
+  });
+
+  /**
+   * GET /trades/:id/refund-eligibility
+   *
+   * CASH-6: el reloj que decide es el del servidor. La UI mostraba el
+   * reembolso solo con estado `expired`, que nunca se persiste, asi que una
+   * operacion vencida quedaba sin salida.
+   */
+  app.get('/trades/:id/refund-eligibility', async (request) => {
+    const { id } = request.params as { id: string };
+    return tradeService.getRefundEligibility(id, request.user.id);
+  });
+
+  /**
+   * GET /trades/:id/meeting-point
+   *
+   * RED-3: el punto exacto sale de aqui y nunca del discovery anonimo. Exige
+   * autenticacion y participacion en la operacion; un tercero recibe 403 sin
+   * que se llegue a leer el dato.
+   */
+  app.get('/trades/:id/meeting-point', async (request) => {
+    const { id } = request.params as { id: string };
+    return tradeService.getTradeMeetingPoint(id, request.user.id);
   });
 
   /**
@@ -63,14 +133,22 @@ export async function tradeRoutes(app: FastifyInstance) {
    * GET /trades/history
    * All trades (active + completed) for the authenticated user, newest first.
    */
-  app.get('/trades/history', async (request) => {
-    const { status, page, limit } = request.query as { status?: string; page?: string; limit?: string };
-    const trades = await tradeService.getTradeHistory(
-      request.user.id,
-      status,
-      page ? parseInt(page) : 1,
-      limit ? parseInt(limit) : 20
-    );
+  app.get('/trades/history', {
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          // 'all', a stored status, or the derived 'expired'. An unknown value
+          // simply matches nothing, as before.
+          status: { type: 'string', maxLength: 32 },
+          page: { type: 'integer', minimum: 1, maximum: 10000, default: 1 },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+        },
+      },
+    },
+  }, async (request) => {
+    const { status, page, limit } = request.query as { status?: string; page: number; limit: number };
+    const trades = await tradeService.getTradeHistory(request.user.id, status, page, limit);
     return { trades };
   });
 
@@ -80,20 +158,67 @@ export async function tradeRoutes(app: FastifyInstance) {
    */
   app.get('/trades/:id', async (request) => {
     const { id } = request.params as { id: string };
-    const { trade, merchant_unavailable, seller_username } =
+    const {
+      trade,
+      decline_available,
+      refund_kind,
+      cash_handoff_confirmed,
+      merchant_unavailable,
+      seller_username,
+      buyer_username,
+      seller_stellar_address,
+      buyer_stellar_address,
+    } =
       await tradeService.getTradeDetailForParticipant(id, request.user.id);
 
     const { secret_enc, secret_nonce, ...safeTrade } = trade;
-    return { trade: safeTrade, merchant_unavailable, seller_username };
+    return {
+      trade: {
+        ...safeTrade,
+        ...tradeService.escrowAmountsForTrade(trade),
+        ...tradeService.cashBreakdownForTrade(trade),
+        seller_stellar_address,
+        buyer_stellar_address,
+      },
+      decline_available,
+      // #16: la pantalla dice si fue devolucion inmediata o vencimiento.
+      refund_kind,
+      // #2/#17: con la entrega registrada, el agente ve "Liberar fondos" y el cliente deja de pedir otro QR.
+      cash_handoff_confirmed,
+      merchant_unavailable,
+      seller_username,
+      buyer_username,
+    };
+  });
+
+  /**
+   * POST /trades/:id/lock/prepare
+   * Seller-only. Returns an unsigned lock() XDR for the seller to sign
+   * client-side with their own key (the contract requires seller.require_auth()).
+   */
+  app.post('/trades/:id/lock/prepare', async (request) => {
+    const { id } = request.params as { id: string };
+    return tradeService.prepareLockTrade(request, id, request.user.id);
   });
 
   /**
    * POST /trades/:id/lock
-   * Backend calls Soroban contract lock() and returns the tx hash.
+   * Seller-only. Submits the seller-signed lock() XDR and returns the tx hash.
    */
-  app.post('/trades/:id/lock', async (request) => {
+  app.post('/trades/:id/lock', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          signed_xdr: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request) => {
     const { id } = request.params as { id: string };
-    return tradeService.lockTrade(request, id, request.user.id);
+    const { signed_xdr } = (request.body as { signed_xdr?: string } | undefined) ?? {};
+    return tradeService.lockTrade(request, id, request.user.id, signed_xdr);
   });
 
   /**
@@ -122,12 +247,56 @@ export async function tradeRoutes(app: FastifyInstance) {
   });
 
   /**
-   * POST /trades/:id/complete
-   * Buyer confirms cash received. Backend calls release() on Soroban and returns the tx hash.
+   * POST /trades/:id/complete/prepare
+   * Buyer-only. Returns an unsigned release() XDR for the buyer to sign
+   * client-side with their own key (the contract requires buyer.require_auth()).
    */
-  app.post('/trades/:id/complete', async (request) => {
+  app.post('/trades/:id/complete/prepare', async (request) => {
     const { id } = request.params as { id: string };
-    return tradeService.completeTrade(request, id, request.user.id);
+    return tradeService.prepareReleaseTrade(request, id, request.user.id);
+  });
+
+  /**
+   * POST /trades/:id/complete
+   * Buyer confirms cash received. Submits the buyer-signed release() XDR and returns the tx hash.
+   */
+  app.post('/trades/:id/complete', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          signed_xdr: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request) => {
+    const { id } = request.params as { id: string };
+    const { signed_xdr } = (request.body as { signed_xdr?: string } | undefined) ?? {};
+    return tradeService.completeTrade(request, id, request.user.id, signed_xdr);
+  });
+
+  /** Buyer-only: build the early return transaction for local signing. */
+  app.post('/trades/:id/decline/prepare', async (request) => {
+    const { id } = request.params as { id: string };
+    return tradeService.prepareDeclineTrade(request, id, request.user.id);
+  });
+
+  /** Buyer-only: submit decline() and mark refunded after Stellar confirms. */
+  app.post('/trades/:id/decline', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          signed_xdr: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request) => {
+    const { id } = request.params as { id: string };
+    const { signed_xdr } = (request.body as { signed_xdr?: string } | undefined) ?? {};
+    return tradeService.declineTrade(request, id, request.user.id, signed_xdr);
   });
 
   /**
@@ -140,6 +309,30 @@ export async function tradeRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const { reason } = (request.body as { reason?: string } | undefined) ?? {};
     return tradeService.cancelTrade(request, id, request.user.id, reason);
+  });
+
+  /**
+   * POST /trades/:id/cash-claim
+   *
+   * D4: el cliente de un depósito reporta que pagó y el agente no confirmó.
+   * Bloquea el reembolso por la app y deja el caso a soporte.
+   */
+  app.post('/trades/:id/cash-claim', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          note: { type: 'string', maxLength: 1000 },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { note } = (request.body as { note?: string } | undefined) ?? {};
+    const claim = await tradeService.openCashClaim(request, id, request.user.id, note);
+    reply.status(201);
+    return { claim };
   });
 
   /**
@@ -187,9 +380,35 @@ export async function tradeRoutes(app: FastifyInstance) {
   });
 
   /**
+   * POST /trades/:id/merchant-confirm
+   * El comercio escanea el QR del usuario. Valida trade, participante, estado y
+   * expiración, y quema el `claim_token` del QR (SEC-02) para que un mismo
+   * código no sirva dos veces. Devuelve el resumen para la pantalla de
+   * confirmación — no mueve fondos.
+   */
+  app.post('/trades/:id/merchant-confirm', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['claim_token'],
+        properties: {
+          claim_token: { type: 'string', pattern: '^[0-9a-fA-F]{64}$' },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request) => {
+    const { id } = request.params as { id: string };
+    const { claim_token } = request.body as { claim_token: string };
+    return tradeService.merchantConfirmScan(request, id, request.user.id, claim_token);
+  });
+
+  /**
    * GET /merchants/me/trades
-   * List incoming trades for the authenticated merchant, filtered by state.
-   * Returns trades where merchant is the seller, newest first.
+   * List incoming trades for the authenticated provider, filtered by state.
+   * Returns trades where the caller is the Red MicoPay provider (CASH-3:
+   * antes era el vendedor del escrow, que en cash-out es el cliente), newest
+   * first.
    */
   app.get('/merchants/me/trades', {
     schema: {

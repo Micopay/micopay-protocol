@@ -1,8 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { config } from '../config.js';
-import { UpstreamError, ValidationError } from '../utils/errors.js';
+import { AppError, UpstreamError, ValidationError } from '../utils/errors.js';
+import { getRampAssets } from '../services/etherfuse.service.js';
+import { CircuitOpenError, UpstreamTimeoutError } from '../lib/circuitBreaker.js';
+import { authMiddleware } from '../middleware/auth.middleware.js';
 
-const CETES_APY = 11.45;
+const CETES_APY = 5.6;
 const HORIZON_TESTNET = 'https://horizon-testnet.stellar.org';
 const HORIZON_MAINNET = 'https://horizon.stellar.org';
 
@@ -10,6 +13,41 @@ export async function defiRoutes(app: FastifyInstance) {
   const horizonBase = config.stellarNetwork === 'TESTNET' ? HORIZON_TESTNET : HORIZON_MAINNET;
 
   // ─── CETES ───────────────────────────────────────────────────────────────
+
+  /**
+   * GET /defi/ramp/assets
+   * Real Stellar asset identifiers (CODE:ISSUER) supported by the Etherfuse
+   * ramp — the CETES issuer differs between sandbox and production, so it
+   * must always be read from here instead of hardcoded.
+   */
+  app.get('/defi/ramp/assets', async (request, reply) => {
+    if (!process.env.ETHERFUSE_API_KEY) {
+      throw new UpstreamError(
+        'ETHERFUSE_NOT_CONFIGURED',
+        'El servicio de rampa SPEI no está disponible por el momento.',
+        'ETHERFUSE_API_KEY not configured',
+        503,
+      );
+    }
+
+    const { wallet, currency } = request.query as { wallet?: string; currency?: string };
+    if (!wallet) {
+      throw new ValidationError('wallet querystring es requerido');
+    }
+
+    try {
+      const assets = await getRampAssets(wallet, currency);
+      return assets;
+    } catch (err: any) {
+      // Etherfuse unavailable or timed out: keep its 503/504 and message.
+      if (err instanceof CircuitOpenError || err instanceof UpstreamTimeoutError) throw err;
+      throw new UpstreamError(
+        'ETHERFUSE_ASSETS_FAILED',
+        'No se pudieron obtener los activos disponibles.',
+        err.message || 'Failed to fetch Etherfuse ramp assets',
+      );
+    }
+  });
 
   /**
    * GET /defi/cetes/rate
@@ -67,9 +105,10 @@ export async function defiRoutes(app: FastifyInstance) {
    * POST /defi/cetes/buy
    * Body: { amount: string, sourceAsset: "XLM"|"USDC"|"MXNe" }
    * On TESTNET / mockStellar: returns simulated hash.
-   * On MAINNET with real key: builds + submits pathPaymentStrictReceive tx.
+   * On MAINNET: 501 CETES_BUY_DISABLED_ON_MAINNET.
    */
   app.post('/defi/cetes/buy', {
+    preHandler: [authMiddleware],
     schema: {
       body: {
         type: 'object',
@@ -100,56 +139,14 @@ export async function defiRoutes(app: FastifyInstance) {
       };
     }
 
-    // Mainnet real path payment
-    try {
-      const { Keypair, Asset, Operation, TransactionBuilder, Networks, Horizon: HorizonModule } =
-        await import('@stellar/stellar-sdk');
-
-      const keypair = Keypair.fromSecret(config.platformSecretKey);
-      const server = new HorizonModule.Server(HORIZON_MAINNET);
-      const account = await server.loadAccount(keypair.publicKey());
-
-      const usdcIssuerMainnet = 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN';
-      const sendAsset =
-        sourceAsset === 'XLM'
-          ? Asset.native()
-          : new Asset(sourceAsset, sourceAsset === 'USDC' ? usdcIssuerMainnet : config.mxneIssuerAddress);
-
-      const destAsset = new Asset('CETES', config.cetesIssuer);
-      const maxSend = (parseFloat(amount) * 1.05).toFixed(7); // 5% slippage tolerance
-
-      const tx = new TransactionBuilder(account, {
-        fee: '100',
-        networkPassphrase: Networks.PUBLIC,
-      })
-        .addOperation(
-          Operation.pathPaymentStrictReceive({
-            sendAsset,
-            sendMax: maxSend,
-            destination: keypair.publicKey(),
-            destAsset,
-            destAmount: amount,
-            path: [],
-          }),
-        )
-        .setTimeout(30)
-        .build();
-
-      tx.sign(keypair);
-      const result = await server.submitTransaction(tx);
-
-      return {
-        hash: result.hash,
-        status: 'success',
-        simulated: false,
-        amount,
-        sourceAsset,
-        explorerUrl: `https://stellar.expert/explorer/public/tx/${result.hash}`,
-      };
-    } catch (err: any) {
-      request.log.error({ err: err.message, category: 'stellar.tx' }, '[defi] CETES buy failed');
-      return reply.status(500).send({ error: err.message || 'Failed to buy CETES' });
-    }
+    // Red principal: la compra todavia no esta disponible. Se responde antes
+    // de construir, firmar o enviar cualquier transaccion.
+    throw new AppError(
+      'CETES_BUY_DISABLED_ON_MAINNET',
+      'La compra de CETES todavía no está disponible.',
+      'POST /defi/cetes/buy is disabled outside testnet/mock',
+      501,
+    );
   });
 
   /**
@@ -157,6 +154,7 @@ export async function defiRoutes(app: FastifyInstance) {
    * Body: { amount: string, destAsset: "XLM"|"USDC"|"MXNe" }
    */
   app.post('/defi/cetes/sell', {
+    preHandler: [authMiddleware],
     schema: {
       body: {
         type: 'object',
@@ -224,6 +222,7 @@ export async function defiRoutes(app: FastifyInstance) {
    * Supply tokens to Blend pool (platform keypair). Demo: simulated on testnet.
    */
   app.post('/defi/blend/supply', {
+    preHandler: [authMiddleware],
     schema: {
       body: {
         type: 'object',
@@ -262,6 +261,7 @@ export async function defiRoutes(app: FastifyInstance) {
    * Borrow against collateral. Demo: simulated on testnet.
    */
   app.post('/defi/blend/borrow', {
+    preHandler: [authMiddleware],
     schema: {
       body: {
         type: 'object',

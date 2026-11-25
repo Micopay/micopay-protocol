@@ -1,20 +1,36 @@
-import db from '../db/schema.js';
+import db, { pool as dbPool } from '../db/schema.js';
+import {
+  computeTradeFees,
+  isEffectiveFeeAllowed,
+  isProviderRateAllowed,
+  MAX_EFFECTIVE_FEE_PERCENT,
+  MAX_PROVIDER_FEE_PERCENT,
+  PLATFORM_FEE_PERCENT,
+} from './tradeFees.js';
+import {
+  AssetNotEnabledError,
+  assertEnabledEscrowAsset,
+  convertMxnToAsset,
+  resolveRequestedEscrowAsset,
+  stroopsAtFrozenRate,
+  type SupportedAsset,
+} from './assetRate.service.js';
+import { StrKey, TransactionBuilder, Networks } from '@stellar/stellar-sdk';
 import { config } from '../config.js';
 import pino from 'pino';
 import { generateTradeSecret, encryptSecret, decryptSecret } from './secret.service.js';
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import type { FastifyRequest } from 'fastify';
-import { callLockOnChain, callReleaseOnChain, callRefundOnChain, verifyLockOnChain, assertNotReplayed } from './stellar.service.js';
+import { prepareLockTx, submitLockTx, prepareReleaseTx, submitReleaseTx, prepareDeclineTx, submitDeclineTx, callRefundOnChain, verifyLockOnChain, assertNotReplayed, readEscrowTrade } from './stellar.service.js';
 import {
-  NotFoundError,
-  ForbiddenError,
-  ConflictError,
-  BadRequestError,
-  AuthError,
-  ValidationError,
-  TradeStateError,
-  MerchantLimitError,
-} from '../utils/errors.js';
+  recordLockSubmission, clearLockAttempt, markLockConfirmed, resolveSubmittedLock, contractTradeIdFor, LockConfirmingError,
+  lockAttemptMayHaveLanded,
+} from './lockAttempt.service.js';
+import { escrowContractForTrade, escrowContractSupportsDecline } from './escrowContract.js';
+import { assertReceiverCanReceive } from './receiverReadiness.service.js';
+import { assertEscrowCollectable } from './escrowCollectable.service.js';
+import { fundsRefundTiming, tradeDeadline } from './fundsDeadline.service.js';
+import { AppError, NotFoundError, ForbiddenError, ConflictError, BadRequestError, AuthError, ValidationError, TradeStateError, MerchantLimitError, KycMonthlyCapExceededError } from '../utils/errors.js';
 import {
   getTradeAuditTrail as getTradeAuditTrailRows,
   getAuditEventsByRequestId,
@@ -22,10 +38,22 @@ import {
 } from '../db/audit-log.model.js';
 import {
   assertCanCreateTrade,
+  deriveInitiatorId,
   assertCanCancelTrade,
   recordTradeCancelled,
 } from './abuse.service.js';
-import { sendTradeNotificationToMerchant } from './push.service.js';
+import {
+  evaluateKycForParticipant,
+  kycDecisionToError,
+  logKycDecision,
+  currentMonthWindow,
+} from './kyc-gate.service.js';
+import {
+  lockUsersForVolume,
+  reserveVolume,
+  getMonthlyReservedMxn,
+} from './kycVolumeLedger.service.js';
+import { sendTradeNotificationToMerchant, sendTradeUpdateNotification, type TradeUpdatePayload } from './push.service.js';
 
 const logger = pino({ name: 'trade.service' });
 
@@ -34,9 +62,20 @@ const logger = pino({ name: 'trade.service' });
 /** Trade states where the buyer still depends on the merchant before cash handoff / release (#31). */
 const MERCHANT_DEPENDENT_STATUSES = ['pending', 'locked', 'revealing'] as const;
 
+/**
+ * Avisa a la contraparte de quien movio la operacion. Va despues de guardar el
+ * cambio y no se espera: un aviso que falla no deshace ni frena la operacion.
+ */
+function notifyTradeUpdate(userId: string | null | undefined, payload: TradeUpdatePayload) {
+  if (!userId) return;
+  sendTradeUpdateNotification(userId, payload).catch((err: unknown) => {
+    logger.error({ err, trade_id: payload.tradeId, kind: payload.kind, category: 'trade.lifecycle' }, '[trade] Push notification failed silently');
+  });
+}
+
 async function getSellerMerchantRow(sellerId: string) {
-  return db.getOne<{ username: string; merchant_available: boolean | null }>(
-    'SELECT username, merchant_available FROM users WHERE id = $1',
+  return db.getOne<{ username: string; stellar_address: string; merchant_available: boolean | null }>(
+    'SELECT username, stellar_address, merchant_available FROM users WHERE id = $1',
     [sellerId],
   );
 }
@@ -57,9 +96,12 @@ function getRequestId(request: FastifyRequest): string | undefined {
 }
 
 const STROOPS_PER_MXN = 10_000_000; // 7 decimals
-const PLATFORM_FEE_PERCENT = 0.8; // 0.8% platform fee
+// El desglose vive en tradeFees.ts, un solo sitio: tenerlo en dos fue el
+// origen de que el agente cobrara menos de lo que configuraba.
 const DEFAULT_TIMEOUT_MINUTES = 120; // 2 hours
 const UNKNOWN_STATE = 'unknown';
+/** SEC-02: TTL corto del token del QR. Nunca sobrepasa `trades.expires_at`. */
+const CLAIM_TOKEN_TTL_MINUTES = 15;
 
 interface TransitionFailureContext {
   tradeId: string;
@@ -117,12 +159,14 @@ function getUtcDayRange(date = new Date()) {
   return { start, end };
 }
 
-async function validateAgainstMerchantLimits(sellerId: string, amountMxn: number) {
+// Los limites son del agente (`provider_id`), no del vendedor del escrow: en
+// un retiro el vendedor es el cliente.
+async function validateAgainstMerchantLimits(providerId: string, amountMxn: number) {
   const merchantConfig = await db.getOne(
     `SELECT user_id, min_trade_mxn, max_trade_mxn, daily_cap_mxn
      FROM merchant_configs
      WHERE user_id = $1`,
-    [sellerId],
+    [providerId],
   );
 
   const minTrade = merchantConfig?.min_trade_mxn ?? 100;
@@ -139,11 +183,11 @@ async function validateAgainstMerchantLimits(sellerId: string, amountMxn: number
   const todayTrades = await db.getMany<{ amount_mxn: number }>(
     `SELECT amount_mxn
      FROM trades
-     WHERE seller_id = $1
+     WHERE provider_id = $1
        AND created_at >= $2
        AND created_at < $3
        AND status IN ('pending', 'locked', 'revealing', 'completed')`,
-    [sellerId, start.toISOString(), end.toISOString()],
+    [providerId, start.toISOString(), end.toISOString()],
   );
 
   const todayVolume = todayTrades.reduce((sum, t) => sum + Number(t.amount_mxn || 0), 0);
@@ -156,16 +200,173 @@ async function validateAgainstMerchantLimits(sellerId: string, amountMxn: number
   }
 }
 
+/** CASH-1 (#372): canonical product flow, independent of the escrow roles. */
+export type TradeFlow = 'deposit' | 'cashout';
+
 export interface CreateTradeInput {
   request: FastifyRequest;
   sellerId: string;
   buyerId: string;
+  /**
+   * Product flow. Callers pass this explicitly — it must never be inferred
+   * from the escrow roles, which reverse between the two flows.
+   */
+  flow: TradeFlow;
   amountMxn: number;
+  /**
+   * Activo pedido, tal como llega. `undefined` -> XLM (APK ya instalados). Se
+   * valida con `resolveRequestedEscrowAsset` antes de cualquier otro efecto.
+   */
+  assetCode?: unknown;
+}
+
+/**
+ * Traduce la politica de activos al contexto del BLOQUEO.
+ *
+ * Al crear, un activo no habilitado es un error de quien pide (422
+ * ASSET_NOT_ENABLED). Al bloquear, la operacion ya existe: si su activo no tiene
+ * escrow, el registro es incoherente con el contrato que se va a invocar, y eso
+ * es un conflicto de estado (409 ASSET_ESCROW_MISMATCH), no una peticion mal
+ * formada.
+ *
+ * Sin default: un registro con `asset_code` nulo o vacio NO se trata como XLM.
+ * Bloquear fondos sobre una suposicion es exactamente lo que no debe pasar.
+ * Tampoco se normaliza: un 'xlm' guardado en minusculas tambien es incoherente,
+ * porque la creacion siempre persiste el codigo normalizado.
+ */
+export function assertLockableEscrowAsset(trade: { id?: string; asset_code?: unknown }): SupportedAsset {
+  const stored = trade.asset_code;
+  const mismatch = (detail: string) =>
+    new ConflictError(
+      'ASSET_ESCROW_MISMATCH',
+      'Esta operacion no se puede bloquear con el escrow disponible.',
+      `Trade ${trade.id ?? '?'}: ${detail}`,
+      409,
+    );
+
+  if (typeof stored !== 'string' || stored.length === 0) {
+    throw mismatch(`asset_code is missing (${stored === null ? 'null' : typeof stored})`);
+  }
+  try {
+    return assertEnabledEscrowAsset(stored);
+  } catch (err) {
+    if (err instanceof AssetNotEnabledError) {
+      throw mismatch(`asset_code ${stored} has no deployed escrow`);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Las tres cifras del escrow en stroops, como cadenas enteras (D9 del plan).
+ *
+ * El contrato transfiere `amount + platform_fee` al bloquear y ese mismo total
+ * al reembolsar; al liberar, `amount` va al comprador y la comision aparte. La
+ * comision sale de la tasa congelada, igual que en `prepareLockTrade`, para que
+ * la cifra que ve la app sea la que se firma.
+ *
+ * Con datos incompletos devuelve `null` en lugar de adivinar.
+ */
+/**
+ * H5 · lo que paga y recibe el CLIENTE, calculado por el servidor para que la
+ * app no reste nada. Solo para operaciones `cash_in_hand`: las anteriores se
+ * liquidaron con otro modelo y sus cifras no admiten esta lectura (null).
+ *
+ *   retiro:   paga monto + comisiones de su saldo; recibe el monto en efectivo
+ *   deposito: paga el monto en efectivo; recibe lo que libera el escrow
+ */
+export function cashBreakdownForTrade(trade: {
+  fee_model?: unknown;
+  flow?: unknown;
+  amount_mxn?: unknown;
+  provider_fee_mxn?: unknown;
+  platform_fee_mxn?: unknown;
+  escrow_amount_mxn?: unknown;
+}): { client_pays_mxn: number | null; client_receives_mxn: number | null } {
+  if (trade.fee_model !== 'cash_in_hand') return { client_pays_mxn: null, client_receives_mxn: null };
+  const amount = Number(trade.amount_mxn);
+  const provider = Number(trade.provider_fee_mxn ?? 0);
+  const platform = Number(trade.platform_fee_mxn ?? 0);
+  const escrow = Number(trade.escrow_amount_mxn);
+  if (![amount, provider, platform, escrow].every(Number.isFinite)) {
+    return { client_pays_mxn: null, client_receives_mxn: null };
+  }
+  return trade.flow === 'cashout'
+    ? { client_pays_mxn: amount + provider + platform, client_receives_mxn: amount }
+    : { client_pays_mxn: amount, client_receives_mxn: escrow };
+}
+
+export function escrowAmountsForTrade(trade: {
+  asset_code?: unknown;
+  amount_stroops?: unknown;
+  platform_fee_mxn?: unknown;
+  rate_mxn?: unknown;
+}): {
+  amount_stroops: string | null;
+  platform_fee_stroops: string | null;
+  total_locked_stroops: string | null;
+} {
+  const empty = { amount_stroops: null, platform_fee_stroops: null, total_locked_stroops: null };
+  if (typeof trade.asset_code !== 'string' || trade.asset_code.length === 0) return empty;
+  if (trade.amount_stroops === null || trade.amount_stroops === undefined) return empty;
+  if (trade.rate_mxn === null || trade.rate_mxn === undefined) return empty;
+
+  let amount: bigint;
+  try {
+    amount = BigInt(String(trade.amount_stroops));
+  } catch {
+    return empty;
+  }
+  // `platform_fee_mxn` es INTEGER (init.sql). Los mismos argumentos que
+  // `prepareLockTrade`: si esto calculara distinto, la app mostraria una cifra
+  // y se firmaria otra.
+  let fee: bigint;
+  try {
+    fee = stroopsAtFrozenRate(Number(trade.platform_fee_mxn), String(trade.rate_mxn));
+  } catch {
+    return { amount_stroops: amount.toString(), platform_fee_stroops: null, total_locked_stroops: null };
+  }
+  return {
+    amount_stroops: amount.toString(),
+    platform_fee_stroops: fee.toString(),
+    total_locked_stroops: (amount + fee).toString(),
+  };
+}
+
+/**
+ * The Red MicoPay liquidity provider for a flow, derived from the escrow roles.
+ * This is the single definition of that rule: 'deposit' means the provider
+ * locks the crypto (escrow seller), 'cashout' means the provider receives it
+ * and hands over cash (escrow buyer). The same rule is enforced by
+ * chk_trades_flow_provider at the database boundary.
+ */
+export function deriveProviderId(
+  flow: TradeFlow,
+  sellerId: string,
+  buyerId: string,
+): string {
+  return flow === 'cashout' ? buyerId : sellerId;
 }
 
 export async function createTrade(input: CreateTradeInput) {
-  const { request, sellerId, buyerId, amountMxn } = input;
-  request.log.info({ seller_id: sellerId, buyer_id: buyerId, amount_mxn: amountMxn, category: 'trade.lifecycle' }, '[trade] Creating trade');
+  const { request, sellerId, buyerId, flow, amountMxn } = input;
+
+  // PRIMERA instruccion, a proposito: antes del log, KYC, limites, el secreto
+  // HTLC, la conversion, la transaccion CASH-10 y los avisos. Un activo sin
+  // escrow no debe dejar ningun efecto de negocio. La ruta ya lo valida, pero
+  // esto cubre tambien a quien llame al servicio directamente.
+  const assetCode = resolveRequestedEscrowAsset(input.assetCode);
+
+  if (flow !== 'deposit' && flow !== 'cashout') {
+    throw new ValidationError(
+      'INVALID_FLOW',
+      'Tipo de operacion invalido',
+      `flow must be 'deposit' or 'cashout'`,
+    );
+  }
+
+  const providerId = deriveProviderId(flow, sellerId, buyerId);
+  request.log.info({ seller_id: sellerId, buyer_id: buyerId, flow, provider_id: providerId, amount_mxn: amountMxn, category: 'trade.lifecycle' }, '[trade] Creating trade');
 
   if (amountMxn < 100 || amountMxn > 50000) {
     throw new ValidationError(
@@ -183,10 +384,27 @@ export async function createTrade(input: CreateTradeInput) {
     );
   }
 
-  await assertCanCreateTrade({ request, buyerId, sellerId, amountMxn });
+  await assertCanCreateTrade({ request, buyerId, sellerId, flow, providerId, amountMxn });
 
-  const seller = await db.getOne<{ id: string; stellar_address: string }>(
-    'SELECT id, stellar_address FROM users WHERE id = $1',
+  // CASH-10: el KYC general aplica a las DOS personas, no solo al comprador
+  // del escrow. En cash-out el comprador es el proveedor, asi que la version
+  // anterior dejaba fuera al cliente. Se evalua aqui sin escribir nada; la
+  // reserva de volumen ocurre mas abajo, dentro de la misma transaccion que
+  // crea la operacion.
+  const kycDecisions = await Promise.all(
+    [sellerId, buyerId].map((userId) =>
+      evaluateKycForParticipant({ userId, operationType: 'p2p_transfer', amountMxn }),
+    ),
+  );
+  for (const decision of kycDecisions) {
+    const error = kycDecisionToError(decision, 'p2p_transfer');
+    if (error) throw error;
+  }
+
+  // `username` se necesita para nombrar al cliente en el aviso al proveedor:
+  // en cash-out el cliente es el seller, no el buyer.
+  const seller = await db.getOne<{ id: string; stellar_address: string; username: string | null }>(
+    'SELECT id, stellar_address, username FROM users WHERE id = $1',
     [sellerId],
   );
   if (!seller) {
@@ -201,59 +419,210 @@ export async function createTrade(input: CreateTradeInput) {
     throw new NotFoundError('USER_NOT_FOUND', 'El usuario comprador no existe', 'Buyer not found');
   }
 
-  await validateAgainstMerchantLimits(sellerId, amountMxn);
+  // El buyer del escrow es quien firma `release` y quien recibe el activo. Si
+  // no puede, la operacion vence y el contrato devuelve los fondos a quien
+  // bloqueo, despues de que el efectivo ya cambio de mano. Ver
+  // receiverReadiness.service.ts.
+  await assertReceiverCanReceive({
+    stellarAddress: buyer.stellar_address,
+    assetCode,
+    receiverIsCaller: buyerId === (request as any).user?.id,
+  });
+
+  await validateAgainstMerchantLimits(providerId, amountMxn);
 
   // Generate HTLC secret
   const { secret, secretHash } = generateTradeSecret();
 
-  // Calculate amounts
-  const amountStroops = BigInt(amountMxn) * BigInt(STROOPS_PER_MXN);
-  const platformFeeMxn = Math.ceil(amountMxn * PLATFORM_FEE_PERCENT / 100);
+  // La tarifa del agente se congela AQUI. `merchant_configs.rate_percent` es
+  // configuracion mutable: si se leyera al liquidar, un agente podria cambiar
+  // retroactivamente lo que cobro por operaciones ya pactadas.
+  const providerConfig = await db.getOne<{ rate_percent: string | number }>(
+    'SELECT rate_percent FROM merchant_configs WHERE user_id = $1',
+    [providerId],
+  );
+  const providerRatePercent = Number(providerConfig?.rate_percent ?? 0);
+  if (!isProviderRateAllowed(providerRatePercent)) {
+    throw new ValidationError(
+      'FEE_LIMIT_EXCEEDED',
+      'La comisión de este agente supera el límite permitido. Elige otro agente.',
+      `provider rate ${providerRatePercent}% exceeds ${MAX_PROVIDER_FEE_PERCENT}% (effective cap ${MAX_EFFECTIVE_FEE_PERCENT}%)`,
+    );
+  }
+  // H5: el monto escrito es el efectivo que cambia de mano, y lo que va al
+  // contrato es lo que recibe el comprador del escrow (`escrowAmountMxn`), que
+  // ya lleva la comision del agente segun el flujo. Ver `tradeFees.ts`.
+  const fees = computeTradeFees(amountMxn, providerRatePercent, flow);
+  if (!isEffectiveFeeAllowed(fees)) {
+    throw new ValidationError(
+      'FEE_LIMIT_EXCEEDED',
+      'La comisión total supera el límite permitido. Elige otro agente o cambia el monto.',
+      `effective fee ${fees.effectivePercent}% exceeds configured cap ${MAX_EFFECTIVE_FEE_PERCENT}%`,
+    );
+  }
+  const { providerFeeMxn, platformFeeMxn, payoutMxn, escrowAmountMxn } = fees;
+  if (escrowAmountMxn < 1) {
+    throw new ValidationError(
+      'AMOUNT_BELOW_FEES',
+      'El monto no alcanza para cubrir las comisiones.',
+      `escrow amount ${escrowAmountMxn} MXN after fees on ${amountMxn} MXN`,
+    );
+  }
+
+  // El peso es la denominacion del acuerdo; el activo es solo el vehiculo. La
+  // conversion vive en UN sitio (`assetRate.service`) y la tasa se congela aqui.
+  //
+  // Antes esto era `amountMxn * 10^7`, o sea 1 MXN = 1 unidad del activo. Con el
+  // escrow bloqueando XLM a ~3.13 MXN, una operacion de 500 pesos bloqueaba 500
+  // XLM = ~1 563 pesos: el cliente entregaba 3.13 veces lo que valia.
+  const conversion = await convertMxnToAsset(escrowAmountMxn, assetCode, request);
+  const amountStroops = conversion.stroops;
 
   // Encrypt and store secret immediately (Option A from spec)
   const { encrypted, nonce } = encryptSecret(secret);
 
   const expiresAt = new Date(Date.now() + DEFAULT_TIMEOUT_MINUTES * 60 * 1000);
 
-  const result = await db.getOne(
-    `INSERT INTO trades
-      (seller_id, buyer_id, amount_mxn, amount_stroops, platform_fee_mxn,
-       secret_hash, secret_enc, secret_nonce, status, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9)
-     RETURNING *`,
-    [
-      sellerId,
-      buyerId,
-      amountMxn,
-      amountStroops.toString(),
-      platformFeeMxn,
-      secretHash,
-      encrypted,
-      nonce,
-      expiresAt,
-    ],
-  );
+  // CASH-10: la operacion y las reservas de volumen entran juntas o no entra
+  // ninguna. Antes el volumen se incrementaba antes de que la operacion
+  // existiera, asi que un fallo posterior dejaba volumen fantasma cargado a
+  // una persona por una operacion que nunca ocurrio.
+  const insertTradeSql = `INSERT INTO trades
+      (seller_id, buyer_id, flow, provider_id, amount_mxn, amount_stroops, platform_fee_mxn,
+       provider_fee_mxn, provider_rate_percent, payout_mxn,
+       asset_code, rate_mxn, rate_source, rate_locked_at,
+       secret_hash, secret_enc, secret_nonce, status, expires_at, escrow_contract_id,
+       fee_model, escrow_amount_mxn)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'pending', $18, $19, $20, $21)
+     RETURNING *`;
+  // En el MISMO orden que las columnas de arriba. El store en memoria parsea el
+  // SQL posicionalmente, asi que intercalar los marcadores lo rompia — y el
+  // error que daba ("Cannot read properties of undefined") no señalaba a nada.
+  const insertTradeParams = [
+    sellerId,
+    buyerId,
+    flow,
+    providerId,
+    amountMxn,
+    amountStroops.toString(),
+    platformFeeMxn,
+    providerFeeMxn,
+    fees.providerRatePercent,
+    payoutMxn,
+    conversion.assetCode,
+    conversion.rateMxn,
+    conversion.rateSource,
+    // Como parametro y no `NOW()`: el store en memoria corta el VALUES en el
+    // primer parentesis de cierre, asi que una llamada a funcion ahi dentro
+    // trunca la lista y el error resultante no señala a nada.
+    new Date(),
+    secretHash,
+    encrypted,
+    nonce,
+    expiresAt,
+    // El contrato donde se bloqueara, congelado como la tasa: lock, release y
+    // refund van a este aunque cambie ESCROW_CONTRACTS. Null con MOCK_STELLAR.
+    config.escrowContracts[conversion.assetCode] ?? null,
+    'cash_in_hand',
+    escrowAmountMxn,
+  ];
+
+  let result: any;
+  const client = dbPool ? await dbPool.connect() : null;
+
+  if (client) {
+    try {
+      await client.query('BEGIN');
+
+      // Lock por usuario dentro de la transaccion: `keyedMutex` solo servia
+      // dentro de un proceso, asi que con dos instancias del backend dos
+      // peticiones podian pasar el tope juntas.
+      await lockUsersForVolume(client, [sellerId, buyerId]);
+
+      // Se relee el volumen YA con el lock tomado: la lectura previa solo
+      // sirvio para decidir, y entre esa lectura y este punto otra peticion
+      // pudo haber reservado.
+      for (const decision of kycDecisions) {
+        const reserved = await getMonthlyReservedMxn(decision.userId, undefined, client);
+        if (
+          config.kycGateEnabled &&
+          decision.ceilingMxn !== null &&
+          reserved + amountMxn > decision.ceilingMxn
+        ) {
+          throw new KycMonthlyCapExceededError(
+            Math.max(decision.ceilingMxn - reserved, 0),
+            decision.ceilingMxn,
+            currentMonthWindow().resetAt,
+            decision.currentLevel,
+          );
+        }
+      }
+
+      const inserted = await client.query(insertTradeSql, insertTradeParams);
+      result = inserted.rows[0];
+
+      for (const userId of [sellerId, buyerId]) {
+        await reserveVolume(client, { tradeId: result.id, userId, amountMxn });
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  } else {
+    // Store en memoria: sin transacciones ni locks de aviso. Se deja
+    // funcionando para los tests de servicio, pero la atomicidad y la
+    // concurrencia NO se pueden verificar aqui — ver kycVolumeLedger.test.ts.
+    result = await db.getOne(insertTradeSql, insertTradeParams);
+  }
+
+  // CASH-9: el actor de la creacion es quien la inicio. Antes era `buyerId`,
+  // que en cash-out es el proveedor: la auditoria atribuia la creacion a quien
+  // solo respondio a ella.
+  const initiatorId = deriveInitiatorId(flow, sellerId, buyerId);
+
+  // CASH-10: la decision se registra DESPUES de commitear, para que la
+  // auditoria refleje operaciones durables y no intentos fallidos.
+  for (const decision of kycDecisions) {
+    await logKycDecision(decision, 'p2p_transfer', amountMxn, result.id);
+  }
 
   await insertTradeAuditEvent({
     tradeId: result.id,
     fromState: UNKNOWN_STATE,
     toState: 'pending',
-    actor: buyerId,
+    actor: initiatorId,
     requestId: getRequestId(request),
     metadata: {
       success: true,
       amount_mxn: amountMxn,
       seller_id: sellerId,
       buyer_id: buyerId,
+      flow,
+      provider_id: providerId,
+      initiator_id: initiatorId,
     },
   });
 
-  // Fire-and-forget — push failure must never fail trade creation
-  const buyerUsername = buyer.username || buyer.stellar_address || 'Usuario';
-  sendTradeNotificationToMerchant(sellerId, {
+  // El aviso va al PROVEEDOR, no al `seller`.
+  //
+  // Antes iba a `sellerId`, que es correcto solo en deposito. En cash-out el
+  // seller del escrow es el CLIENTE —lo fijo CASH-1 con `deriveProviderId`— asi
+  // que la app le notificaba a la persona su propia operacion recien creada,
+  // mientras el agente, que es quien tiene que actuar, no se enteraba de nada.
+  // Este codigo es anterior al modelo de flujos y nunca se actualizo.
+  //
+  // Y por lo mismo el nombre que se anuncia es el del CLIENTE: la contraparte
+  // del proveedor, sea comprador o vendedor del escrow segun el flujo.
+  const clientParty = providerId === sellerId ? buyer : seller;
+  const clientUsername = clientParty.username || clientParty.stellar_address || 'Usuario';
+  sendTradeNotificationToMerchant(providerId, {
     tradeId: result.id,
     amount: `${amountMxn.toLocaleString('es-MX')} MXN`,
-    buyerUsername,
+    buyerUsername: clientUsername,
   }).catch((err: unknown) => {
     logger.error({ err, trade_id: result.id, category: 'trade.lifecycle' }, '[trade] Push notification failed silently');
   });
@@ -278,12 +647,52 @@ export async function getTradeById(tradeId: string, userId: string) {
 export async function getTradeDetailForParticipant(tradeId: string, userId: string) {
   const trade = await getTradeById(tradeId, userId);
   const seller = await getSellerMerchantRow(trade.seller_id);
-  const merchant_unavailable = isMerchantUnavailableForTrade(trade, seller);
+  // La disponibilidad es la del agente (provider_id), igual que en cancelTrade.
+  // En un retiro el vendedor del escrow es el cliente.
+  const provider = trade.provider_id && trade.provider_id !== trade.seller_id
+    ? await getSellerMerchantRow(trade.provider_id)
+    : seller;
+  const merchant_unavailable = isMerchantUnavailableForTrade(trade, provider);
+  const buyer = await db.getOne<{ username: string | null; stellar_address: string }>(
+    'SELECT username, stellar_address FROM users WHERE id = $1',
+    [trade.buyer_id],
+  );
+  const cashConfirmed = trade.lock_tx_hash && !trade.release_tx_hash
+    ? await hasCashConfirmation(trade)
+    : false;
+  const decline_available = trade.buyer_id === userId
+    && Boolean(trade.lock_tx_hash)
+    && !trade.release_tx_hash
+    && ['locked', 'revealing', 'cancelled'].includes(trade.status)
+    && !cashConfirmed
+    && escrowContractSupportsDecline(trade);
+
+  // #16: el decline y el vencimiento terminan igual (`refunded`); el registro
+  // de auditoria dice cual fue.
+  let refund_kind: 'decline' | 'timeout' | null = null;
+  if (trade.status === 'refunded') {
+    const events = await db.getMany<{ metadata: unknown }>(
+      `SELECT metadata FROM audit_log WHERE trade_id = $1 AND to_state = 'refunded'`,
+      [tradeId],
+    );
+    const settlement = events
+      .map((e) => (typeof e.metadata === 'string' ? JSON.parse(e.metadata) : e.metadata) as { settlement?: string } | null)
+      .some((m) => m?.settlement === 'decline');
+    refund_kind = settlement ? 'decline' : 'timeout';
+  }
 
   return {
     trade,
+    decline_available,
+    refund_kind,
+    // #2/#17: la entrega ya quedo registrada (cash-out). La pantalla del agente
+    // ofrece liberar y la del cliente deja de pedir otro QR.
+    cash_handoff_confirmed: Boolean(cashConfirmed),
     merchant_unavailable,
     seller_username: seller?.username ?? null,
+    buyer_username: buyer?.username ?? null,
+    seller_stellar_address: seller?.stellar_address ?? null,
+    buyer_stellar_address: buyer?.stellar_address ?? null,
   };
 }
 
@@ -297,52 +706,255 @@ export async function getActiveTrades(userId: string) {
   );
 }
 
-export async function getTradeHistory(userId: string, status?: string, page = 1, limit = 20) {
-  const trades = await db.getMany(
-    `SELECT id, status, amount_mxn, platform_fee_mxn, lock_tx_hash, release_tx_hash,
-            created_at, completed_at, seller_id, buyer_id, expires_at
-     FROM trades
-     WHERE (seller_id = $1 OR buyer_id = $1)
-     ORDER BY created_at DESC`,
-    [userId],
-  );
+/**
+ * Stored states of a trade that is still open. Only these can expire: a
+ * `completed`, `cancelled` or `refunded` trade is finished, whatever its
+ * `expires_at` says.
+ */
+const OPEN_TRADE_STATUSES = ['pending', 'locked', 'revealing'] as const;
 
-  let filtered = trades;
-  const now = new Date();
+export async function getTradeHistory(userId: string, status?: string, page = 1, limit = 20) {
+  // 'expired' is a derived status (never stored): a trade that is still open
+  // and past its deadline. A refunded trade is not expired, it is finished.
+  const conditions = ['(t.seller_id = $1 OR t.buyer_id = $1)'];
+  const params: unknown[] = [userId];
 
   if (status && status !== 'all') {
     if (status === 'expired') {
-      filtered = trades.filter(t =>
-        !['completed', 'cancelled'].includes(t.status) &&
-        new Date(t.expires_at) < now
-      );
+      const open = OPEN_TRADE_STATUSES.map((s) => `'${s}'`).join(', ');
+      conditions.push(`(t.status IN (${open}) AND t.expires_at < NOW())`);
     } else {
-      filtered = trades.filter(t => t.status === status);
+      params.push(status);
+      conditions.push(`t.status = $${params.length}`);
     }
   }
 
-  // Fetch usernames to provide merchant info
-  const allUsers = await db.getMany('SELECT id, username FROM users');
-  const userMap = Object.fromEntries(allUsers.map(u => [u.id, u.username]));
+  params.push(limit, (page - 1) * limit);
 
-  const mapped = filtered.map(t => {
+  const trades = await db.getMany<{
+    id: string; status: string; amount_mxn: number; platform_fee_mxn: number;
+    lock_tx_hash: string | null; release_tx_hash: string | null; created_at: string;
+    completed_at: string | null; seller_id: string; buyer_id: string; expires_at: string;
+    // CASH-1 (#372): canonical product flow + Red MicoPay provider.
+    flow: string; provider_id: string;
+    seller_username: string | null; buyer_username: string | null;
+  }>(
+    `SELECT
+       t.id, t.status, t.amount_mxn, t.platform_fee_mxn, t.lock_tx_hash, t.release_tx_hash,
+       t.created_at, t.completed_at, t.seller_id, t.buyer_id, t.expires_at,
+       t.flow, t.provider_id,
+       su.username AS seller_username, bu.username AS buyer_username
+     FROM trades t
+     JOIN users su ON su.id = t.seller_id
+     JOIN users bu ON bu.id = t.buyer_id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY t.created_at DESC
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params,
+  );
+
+  return trades.map(({ seller_username, buyer_username, ...t }) => {
     const isBuyer = t.buyer_id === userId;
-    const otherPartyId = isBuyer ? t.seller_id : t.buyer_id;
     return {
       ...t,
       direction: isBuyer ? 'cash-in' : 'cash-out',
-      merchant_username: userMap[otherPartyId] || 'Usuario Micopay',
+      merchant_username: (isBuyer ? seller_username : buyer_username) || 'Usuario Micopay',
     };
   });
+}
 
-  const offset = (page - 1) * limit;
-  return mapped.slice(offset, offset + limit);
+/**
+ * Build the unsigned lock() transaction for the seller to sign with their own key.
+ * Backend never holds or needs the seller's secret key.
+ */
+
+/**
+ * Una direccion Stellar valida no es solo una cadena de 56 caracteres que
+ * empieza por G: lleva checksum. Los agentes sembrados por el seed tenian
+ * direcciones fabricadas a partir del nombre de usuario
+ * (`GABARROTESXLAXESQUINAXXX...`) que pasaban cualquier comprobacion superficial
+ * y reventaban dentro del SDK.
+ */
+function assertUsableStellarAddress(address: string | null | undefined, whose: string): void {
+  if (address && StrKey.isValidEd25519PublicKey(address)) return;
+  throw new AppError(
+    'INVALID_STELLAR_ADDRESS',
+    `No se puede bloquear el dinero: ${whose} no tiene una cuenta Stellar valida.`,
+    `Invalid Stellar address for ${whose}: ${address ?? 'null'}`,
+    422,
+  );
+}
+
+/** Hash del lock firmado, o null si el XDR no se puede leer (lo rechaza `submitLockTx`). */
+function hashOfSignedLock(signedXdr: string): string | null {
+  try {
+    const passphrase = config.stellarNetwork === 'TESTNET' ? Networks.TESTNET : Networks.PUBLIC;
+    return TransactionBuilder.fromXDR(signedXdr, passphrase).hash().toString('hex');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * WP3: `expires_at` es la caducidad de la SOLICITUD. Bloquear a minutos de que
+ * venza no deja tiempo para encontrarse y entregar el efectivo, asi que se
+ * exige un margen (decision de producto del 2026-10-30: 30 minutos).
+ */
+function assertLockRequestMargin(trade: { id: string; expires_at: string }): void {
+  const marginMs = config.lockMinRequestMarginMinutes * 60 * 1000;
+  if (new Date(trade.expires_at).getTime() - Date.now() >= marginMs) return;
+  throw new TradeStateError(
+    'TRADE_EXPIRING',
+    `A esta solicitud le quedan menos de ${config.lockMinRequestMarginMinutes} minutos. Crea una nueva.`,
+    `Trade ${trade.id} expires at ${trade.expires_at}; lock needs ${config.lockMinRequestMarginMinutes} min of margin`,
+  );
+}
+
+export async function prepareLockTrade(
+  request: FastifyRequest,
+  tradeId: string,
+  userId: string,
+) {
+  const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (!trade) throw new NotFoundError('Trade not found');
+  if (trade.seller_id !== userId) throw new ForbiddenError('Only the seller can lock');
+  if (trade.status !== 'pending') throw new ConflictError(`Trade is ${trade.status}, expected pending`);
+
+  // Antes del atajo mock: un registro incoherente se rechaza igual en pruebas
+  // que en cadena, y nunca se construye un XDR para el contrato equivocado.
+  assertLockableEscrowAsset(trade);
+
+  if (config.mockStellar) {
+    assertLockRequestMargin(trade);
+    return { mock: true as const };
+  }
+
+  const seller = await db.getOne('SELECT stellar_address FROM users WHERE id = $1', [userId]);
+  const buyer = await db.getOne('SELECT stellar_address FROM users WHERE id = $1', [trade.buyer_id]);
+  if (!seller) throw new NotFoundError('Seller not found');
+  if (!buyer) throw new NotFoundError('Buyer not found');
+
+  // Se comprueba ANTES de llamar a Soroban. Una direccion invalida hacia
+  // reventar el SDK con "Unsupported address type", que salia como 500 y la app
+  // mostraba "el servidor no responde": un mensaje que manda a buscar el fallo
+  // en el sitio equivocado. El problema no es la red, son los datos.
+  assertUsableStellarAddress(seller.stellar_address, 'tu cuenta');
+  assertUsableStellarAddress(buyer.stellar_address, 'la cuenta de la otra parte');
+
+  // WP2: con un intento anterior sin resolver no se arma otro XDR; los dos
+  // podrian entrar. Primero se pregunta a la cadena que paso con el primero.
+  if (trade.lock_submitted_tx_hash) {
+    const resolution = await resolveSubmittedLock(trade, userId);
+    if (resolution === 'locked') {
+      const row = await db.getOne('SELECT status, lock_tx_hash FROM trades WHERE id = $1', [tradeId]);
+      return { status: row?.status as string, lock_tx_hash: row?.lock_tx_hash as string };
+    }
+    if (resolution === 'pending') throw new LockConfirmingError(trade.lock_submitted_tx_hash);
+  }
+
+  assertLockRequestMargin(trade);
+
+  const contractId = escrowContractForTrade(trade);
+  let prepared: { xdr: string; networkPassphrase: string };
+  try {
+    prepared = await prepareLockTx({
+      request,
+      contractId,
+      sellerAddress: seller.stellar_address,
+      buyerAddress: buyer.stellar_address,
+      amountStroops: BigInt(trade.amount_stroops),
+      // A la MISMA tasa congelada de la operacion. Volver a consultar la tasa
+      // viva aqui cambiaria por detras lo pactado al crearla.
+      platformFeeStroops: stroopsAtFrozenRate(trade.platform_fee_mxn, trade.rate_mxn),
+      secretHash: trade.secret_hash,
+    });
+  } catch (err: any) {
+    const message = String(err?.message ?? '');
+    const assetLabel = lockAssetLabel(trade.asset_code);
+    // WP6: los errores del token (SAC) en la simulacion llegaban como 500.
+    // #13 es `TrustlineMissingError`; el escrow no tiene un #13 propio.
+    if (message.includes('Error(Contract, #13)')) {
+      throw new AppError(
+        'LOCK_TRUSTLINE_MISSING',
+        `Tu cuenta no tiene la línea de confianza del ${assetLabel} que usa MicoPay. Agrégala en tu billetera y vuelve a intentar.`,
+        `Lock simulation for trade ${trade.id}: seller has no trustline for the escrow token (${message.slice(0, 120)})`,
+        422,
+      );
+    }
+    if (!message.includes('Error(Contract, #10)')) throw err;
+    // #10 es `TradeAlreadyExists` del escrow o `BalanceError` del token. Si el
+    // escrow no conoce la operacion, es saldo.
+    await explainTradeAlreadyExists(request, trade, contractId, seller.stellar_address, buyer.stellar_address, err);
+    throw new AppError(
+      'LOCK_INSUFFICIENT_BALANCE',
+      `No tienes saldo suficiente de ${assetLabel} para bloquear esta operación.`,
+      `Lock simulation for trade ${trade.id}: token balance error (${message.slice(0, 120)})`,
+      422,
+    );
+  }
+
+  return { xdr: prepared.xdr, network_passphrase: prepared.networkPassphrase };
+}
+
+/** Nombre del activo para los mensajes; con emisor configurado, abreviado. */
+function lockAssetLabel(assetCode: unknown): string {
+  const code = String(assetCode || config.escrowAsset || 'XLM').toUpperCase();
+  const issuer = config.escrowAssetIssuers[code];
+  return issuer ? `${code} (emisor ${issuer.slice(0, 4)}…${issuer.slice(-4)})` : code;
+}
+
+/**
+ * N4: `Error(Contract, #10)` es `TradeAlreadyExists` del escrow, pero el token
+ * que el escrow llama comparte numeracion. Antes de decir que el escrow ya
+ * existe se pregunta al contrato.
+ */
+async function explainTradeAlreadyExists(
+  request: FastifyRequest,
+  trade: Record<string, any>,
+  contractId: string,
+  sellerAddress: string,
+  buyerAddress: string,
+  cause: unknown,
+): Promise<void> {
+  const { trade: onChain } = await readEscrowTrade({
+    contractId,
+    tradeIdBytes: Buffer.from(contractTradeIdFor(trade.secret_hash), 'hex'),
+  });
+  if (!onChain) {
+    request.log.warn({ trade_id: trade.id, err: (cause as any)?.message, category: 'trade.lifecycle' }, '[trade] Lock simulation #10 did not come from the escrow');
+    return;
+  }
+
+  const ours = onChain.seller === sellerAddress
+    && onChain.buyer === buyerAddress
+    && onChain.amount === BigInt(trade.amount_stroops);
+  // Un lock anterior a WP2 que entro sin que la app lo registrara: no hay hash
+  // que guardar, asi que va a soporte en vez de inventar uno.
+  request.log.error(
+    { trade_id: trade.id, contract_id: contractId, on_chain_status: onChain.status, ours, category: 'trade.lifecycle' },
+    '[trade] Escrow already exists on chain for a pending trade — needs review',
+  );
+  if (ours) {
+    throw new AppError(
+      'LOCK_ALREADY_ON_CHAIN',
+      'Este bloqueo ya está en la red. Lo estamos revisando; no lo vuelvas a firmar.',
+      `Escrow for trade ${trade.id} already exists on ${contractId} (${onChain.status})`,
+      409,
+    );
+  }
+  throw new AppError(
+    'TRADE_ID_TAKEN',
+    'No se puede bloquear esta operación. Crea una nueva.',
+    `Another escrow with this trade_id exists on ${contractId}`,
+    409,
+  );
 }
 
 export async function lockTrade(
   request: FastifyRequest,
   tradeId: string,
   userId: string,
+  signedXdr?: string,
 ) {
   request.log.info({ trade_id: tradeId, user_id: userId, category: 'trade.lifecycle' }, '[trade] Locking trade');
   let fromState = UNKNOWN_STATE;
@@ -355,25 +967,69 @@ export async function lockTrade(
     if (trade.seller_id !== userId) throw new ForbiddenError('Only the seller can lock');
     if (trade.status !== 'pending') throw new ConflictError(`Trade is ${trade.status}, expected pending`);
 
-    // Fetch buyer's Stellar address
-    const buyer = await db.getOne('SELECT stellar_address FROM users WHERE id = $1', [trade.buyer_id]);
-    if (!buyer) throw new NotFoundError('Buyer not found');
+    // Mismo guard que en `prepareLockTrade`, antes de enviar nada (y antes de
+    // la rama mock). Si alguien llega aqui sin pasar por prepare, tampoco pasa.
+    assertLockableEscrowAsset(trade);
 
     let lockTxHash: string;
-    let stellarTradeId: string;
 
     if (!config.mockStellar) {
-      // Real on-chain lock via Soroban
-      const result = await callLockOnChain({
-        request,
-        buyerStellarAddress: buyer.stellar_address,
-        amountStroops: BigInt(trade.amount_stroops),
-        platformFeeMxn: trade.platform_fee_mxn,
-        secretHash: trade.secret_hash,
-      });
-      lockTxHash = result.txHash;
-      stellarTradeId = result.txHash;
+      // Real on-chain lock — the seller already signed the XDR client-side.
+      if (!signedXdr) {
+        throw new BadRequestError('SIGNED_XDR_REQUIRED', 'Falta la transacción firmada.', 'signed_xdr is required when MOCK_STELLAR=false');
+      }
+      const seller = await db.getOne('SELECT stellar_address FROM users WHERE id = $1', [userId]);
+      const buyer = await db.getOne('SELECT stellar_address FROM users WHERE id = $1', [trade.buyer_id]);
+      if (!seller) throw new NotFoundError('Seller not found');
+      if (!buyer) throw new NotFoundError('Buyer not found');
+
+      // WP2: un intento anterior se resuelve primero. Si ya entro, la
+      // operacion esta bloqueada y no se envia nada mas.
+      const priorHash: string | null = trade.lock_submitted_tx_hash ?? null;
+      if (priorHash) {
+        const resolution = await resolveSubmittedLock(trade, userId);
+        if (resolution === 'locked') {
+          const row = await db.getOne('SELECT status, lock_tx_hash FROM trades WHERE id = $1', [tradeId]);
+          return { status: row?.status, lock_tx_hash: row?.lock_tx_hash };
+        }
+      }
+
+      // Un reenvio del mismo XDR ya guardado se deja pasar: su primer envio
+      // paso el margen y puede haber entrado.
+      if (priorHash !== hashOfSignedLock(signedXdr)) assertLockRequestMargin(trade);
+
+      let recordedHash: string | null = null;
+      try {
+        const result = await submitLockTx({
+          request,
+          contractId: escrowContractForTrade(trade),
+          signedXdr,
+          sellerAddress: seller.stellar_address,
+          buyerAddress: buyer.stellar_address,
+          amountStroops: BigInt(trade.amount_stroops),
+          // Debe coincidir EXACTAMENTE con lo que se firmo en `prepare`: si
+          // difiere, `assertInvocationMatches` rechaza el XDR, que es lo que se
+          // busca. Por eso ambos salen de la tasa congelada, no de la viva.
+          platformFeeStroops: stroopsAtFrozenRate(trade.platform_fee_mxn, trade.rate_mxn),
+          secretHash: trade.secret_hash,
+          onSubmitting: async (hash) => {
+            // Un XDR distinto con otro intento sin resolver se rechaza aqui.
+            await recordLockSubmission(tradeId, trade.secret_hash, hash);
+            recordedHash = hash;
+          },
+        });
+        lockTxHash = result.txHash;
+      } catch (err) {
+        // Solo una respuesta definitiva de la red descarta el intento. Un
+        // reenvio de un intento ya guardado no se descarta aqui: su primer
+        // envio pudo haber entrado; lo resuelve `resolveSubmittedLock`.
+        if (recordedHash && recordedHash !== priorHash && !lockAttemptMayHaveLanded(err)) {
+          await clearLockAttempt(tradeId, recordedHash, (err as any)?.code ?? 'send_failed');
+        }
+        throw err;
+      }
     } else {
+      assertLockRequestMargin(trade);
       // Mock mode — generate placeholder hashes
       const verified = await verifyLockOnChain(
         request,
@@ -383,41 +1039,22 @@ export async function lockTrade(
       );
       if (!verified) throw new BadRequestError('Could not verify lock on-chain');
       lockTxHash = `mock_${Date.now()}`;
-      stellarTradeId = lockTxHash;
     }
 
     await assertNotReplayed(lockTxHash, 'trade/lock', userId);
 
-    // Compute contract_trade_id = sha256(secret_hash_bytes), matching compute_trade_id()
-    // in the Soroban contract. Stored for O(1) lookup when on-chain events arrive.
-    const secretHashBytes = Buffer.from(trade.secret_hash, 'hex');
-    const contractTradeId = createHash('sha256').update(secretHashBytes).digest('hex');
-
-    await db.execute(
-      `UPDATE trades
-       SET status = 'locked',
-           stellar_trade_id = $2,
-           lock_tx_hash = $3,
-           locked_at = NOW(),
-           contract_trade_id = $4
-       WHERE id = $1`,
-      [tradeId, stellarTradeId, lockTxHash, contractTradeId],
-    );
-
-    await insertTradeAuditEvent({
+    // `pending` pasa a `locked`. Si se cancelo mientras se confirmaba, queda
+    // `cancelled` con el lock registrado para que el sweep lo reembolse.
+    const confirmed = await markLockConfirmed({
       tradeId,
-      fromState,
-      toState: 'locked',
+      lockTxHash,
       actor: userId,
+      source: 'http',
       requestId: getRequestId(request),
-      metadata: {
-        success: true,
-        lock_tx_hash: lockTxHash,
-        stellar_trade_id: stellarTradeId,
-      },
     });
+    const row = await db.getOne('SELECT status FROM trades WHERE id = $1', [tradeId]);
 
-    return { status: 'locked', lock_tx_hash: lockTxHash };
+    return { status: confirmed === 'noop' ? row?.status : confirmed, lock_tx_hash: lockTxHash };
   } catch (error) {
     await logTransitionFailure({
       tradeId,
@@ -484,13 +1121,27 @@ export async function getTradeSecret(request: FastifyRequest, tradeId: string, u
     throw new TradeStateError('INVALID_STATE', `El intercambio no está en estado de revelación (actual: ${trade.status})`, `Trade is ${trade.status}, must be revealing`);
   }
 
-  // Check not expired
-  if (new Date(trade.expires_at) < new Date()) {
+  // Check not expired. WP3: con fondos bloqueados, el plazo es el de la
+  // cadena (estimado); `expires_at` solo limita hasta cuando se puede bloquear.
+  const deadline = tradeDeadline(trade);
+  if (deadline < new Date()) {
     throw new TradeStateError('TRADE_EXPIRED', 'El intercambio ha expirado', 'Trade has expired');
   }
 
-  // Decrypt secret
-  const secret = decryptSecret(trade.secret_enc, trade.secret_nonce);
+  // SEC-02: el preimage ya no sale del backend. El QR lleva un token opaco de
+  // un solo uso; quien libera on-chain sigue siendo el backend, que descifra el
+  // secreto por su cuenta en prepareReleaseTrade/completeTrade.
+  const claimToken = randomBytes(32).toString('hex');
+  const tokenExpiresAt = new Date(Math.min(
+    Date.now() + CLAIM_TOKEN_TTL_MINUTES * 60 * 1000,
+    deadline.getTime(),
+  ));
+
+  await db.execute(
+    `INSERT INTO trade_claim_tokens (token_hash, trade_id, issued_to, expires_at)
+     VALUES ($1, $2, $3, $4)`,
+    [hashClaimToken(claimToken), tradeId, userId, tokenExpiresAt],
+  );
 
   // Log access
   await db.execute(
@@ -499,12 +1150,139 @@ export async function getTradeSecret(request: FastifyRequest, tradeId: string, u
     [tradeId, userId, ip, userAgent],
   );
 
-  const qrPayload = `micopay://release?trade_id=${tradeId}&secret=${secret}`;
+  const qrPayload = `micopay://release?trade_id=${tradeId}&claim_token=${claimToken}`;
 
-  return { secret, qr_payload: qrPayload, expires_in: 120 };
+  return {
+    qr_payload: qrPayload,
+    expires_at: tokenExpiresAt.toISOString(),
+    expires_in: Math.max(0, Math.floor((tokenExpiresAt.getTime() - Date.now()) / 1000)),
+  };
 }
 
-export async function completeTrade(request: FastifyRequest, tradeId: string, userId: string) {
+/** El token en claro nunca se persiste — mismo principio que `trades.secret_hash`. */
+function hashClaimToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+/**
+ * Marca un token de QR como usado. El UPDATE filtra por `consumed_at IS NULL`,
+ * así que bajo concurrencia solo un escaneo puede ganarlo; el SELECT posterior
+ * confirma quién fue.
+ */
+async function consumeClaimToken(tradeId: string, claimToken: string, consumedBy: string) {
+  const tokenHash = hashClaimToken(claimToken);
+  const selectToken = `SELECT consumed_at, consumed_by, expires_at FROM trade_claim_tokens
+     WHERE token_hash = $1 AND trade_id = $2`;
+
+  const before = await db.getOne<{
+    consumed_at: string | null;
+    consumed_by: string | null;
+    expires_at: string;
+  }>(selectToken, [tokenHash, tradeId]);
+
+  if (!before) {
+    throw new NotFoundError(
+      'INVALID_CLAIM_TOKEN',
+      'Este código QR no es válido para esta operación',
+      `No claim token matching trade ${tradeId}`,
+    );
+  }
+
+  // `?? null`: el store in-memory omite las columnas que nunca se escribieron,
+  // así que un token virgen llega con `consumed_at` undefined, no null.
+  if ((before.consumed_at ?? null) !== null) {
+    throw new ConflictError(
+      'CLAIM_TOKEN_USED',
+      'Este código QR ya fue usado',
+      `Claim token for trade ${tradeId} was already consumed`,
+    );
+  }
+
+  if (new Date(before.expires_at) < new Date()) {
+    throw new TradeStateError(
+      'CLAIM_TOKEN_EXPIRED',
+      'Este código QR expiró. Pide al usuario que genere uno nuevo',
+      `Claim token for trade ${tradeId} expired at ${before.expires_at}`,
+    );
+  }
+
+  await db.execute(
+    `UPDATE trade_claim_tokens
+     SET consumed_at = NOW(), consumed_by = $3
+     WHERE token_hash = $1 AND trade_id = $2 AND consumed_at IS NULL`,
+    [tokenHash, tradeId, consumedBy],
+  );
+
+  // Dos escaneos simultáneos pasan los checks de arriba; solo uno gana el
+  // UPDATE (`consumed_at IS NULL`). Releer dice cuál fue.
+  const after = await db.getOne<{ consumed_by: string | null }>(selectToken, [tokenHash, tradeId]);
+  if (after?.consumed_by !== consumedBy) {
+    throw new ConflictError(
+      'CLAIM_TOKEN_USED',
+      'Este código QR ya fue usado',
+      `Claim token for trade ${tradeId} was consumed by another scan`,
+    );
+  }
+}
+
+/**
+ * Build the unsigned release() transaction for the buyer to sign with their own key.
+ * Backend never holds or needs the buyer's secret key.
+ */
+export async function prepareReleaseTrade(request: FastifyRequest, tradeId: string, userId: string) {
+  const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (!trade) throw new NotFoundError('Trade not found');
+  if (trade.buyer_id !== userId) throw new ForbiddenError('Only the buyer can complete');
+  if (trade.status !== 'revealing') {
+    throw new ConflictError(`Trade is ${trade.status}, expected revealing`);
+  }
+
+  // CASH-4: este es el punto de aplicacion real, no `completeTrade`. Aqui el
+  // backend descifra el preimage HTLC y lo embebe en el XDR; quien obtiene
+  // ese XDR puede firmarlo y enviarlo a la red por su cuenta. Si la compuerta
+  // viviera solo en `completeTrade`, seria cosmetica.
+  if (trade.flow === 'cashout') {
+    const handoff = await getCashHandoff(tradeId);
+    if (!handoff) {
+      throw new ConflictError(
+        'CASH_HANDOFF_REQUIRED',
+        'Escanea el código del cliente antes de liberar los fondos',
+        `Trade ${tradeId} is a cashout with no confirmed cash handoff`,
+      );
+    }
+    if (handoff.provider_id !== userId) {
+      throw new ForbiddenError(
+        'HANDOFF_BELONGS_TO_ANOTHER_PROVIDER',
+        'Otro proveedor atendió este intercambio',
+        `Handoff for trade ${tradeId} belongs to ${handoff.provider_id}, not ${userId}`,
+      );
+    }
+  }
+
+  if (config.mockStellar) {
+    return { mock: true as const };
+  }
+
+  const buyer = await db.getOne('SELECT stellar_address FROM users WHERE id = $1', [userId]);
+  if (!buyer) throw new NotFoundError('Buyer not found');
+
+  const secret = decryptSecret(trade.secret_enc, trade.secret_nonce);
+  const secretHashBytes = Buffer.from(trade.secret_hash, 'hex');
+  const tradeIdBytes = createHash('sha256').update(secretHashBytes).digest();
+  const secretBytes = Buffer.from(secret, 'hex');
+
+  const { xdr, networkPassphrase } = await prepareReleaseTx({
+    request,
+    contractId: escrowContractForTrade(trade),
+    buyerAddress: buyer.stellar_address,
+    tradeIdBytes,
+    secretBytes,
+  });
+
+  return { xdr, network_passphrase: networkPassphrase };
+}
+
+export async function completeTrade(request: FastifyRequest, tradeId: string, userId: string, signedXdr?: string) {
   request.log.info({ trade_id: tradeId, user_id: userId, category: 'trade.lifecycle' }, '[trade] Completing trade');
   let fromState = UNKNOWN_STATE;
 
@@ -514,25 +1292,79 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
 
     fromState = trade.status;
     if (trade.buyer_id !== userId) throw new ForbiddenError('Only the buyer can complete');
+
+    // CASH-4: una liberacion ya confirmada se puede releer con seguridad. El
+    // proveedor puede perder la respuesta de red despues de que la operacion
+    // se completo; reintentar debe devolverle el hash existente, no un 409 ni
+    // una segunda liberacion on-chain.
+    if (trade.status === 'completed' && trade.release_tx_hash) {
+      request.log.info(
+        { trade_id: tradeId, user_id: userId, category: 'trade.lifecycle' },
+        '[trade] Completion replayed; returning the existing release',
+      );
+      return { status: 'completed' as const, release_tx_hash: trade.release_tx_hash };
+    }
+
     if (trade.status !== 'revealing') {
       throw new ConflictError(`Trade is ${trade.status}, expected revealing`);
     }
 
-    // Decrypt the HTLC secret stored at lock time
-    const secret = decryptSecret(trade.secret_enc, trade.secret_nonce);
+    // CASH-4: en cash-out el proveedor entrega efectivo ANTES de liberar el
+    // escrow. Exigir la constancia durable del escaneo impide liberar sin que
+    // esa entrega haya ocurrido. El deposito no la lleva: ahi el cliente es
+    // quien completa desde su propia pantalla y no hay efectivo que entregar
+    // contra el QR del agente.
+    if (trade.flow === 'cashout') {
+      const handoff = await getCashHandoff(tradeId);
+      if (!handoff) {
+        throw new ConflictError(
+          'CASH_HANDOFF_REQUIRED',
+          'Escanea el código del cliente antes de liberar los fondos',
+          `Trade ${tradeId} is a cashout with no confirmed cash handoff`,
+        );
+      }
+      if (handoff.provider_id !== userId) {
+        throw new ForbiddenError(
+          'HANDOFF_BELONGS_TO_ANOTHER_PROVIDER',
+          'Otro proveedor atendió este intercambio',
+          `Handoff for trade ${tradeId} belongs to ${handoff.provider_id}, not ${userId}`,
+        );
+      }
+    }
 
     let releaseTxHash: string;
 
     if (!config.mockStellar) {
-      // Compute trade_id as the contract does: sha256(secret_hash_bytes)
+      // Real on-chain release — the buyer already signed the XDR client-side.
+      if (!signedXdr) {
+        throw new BadRequestError('SIGNED_XDR_REQUIRED', 'Falta la transacción firmada.', 'signed_xdr is required when MOCK_STELLAR=false');
+      }
+      const buyer = await db.getOne<{ stellar_address: string }>(
+        'SELECT stellar_address FROM users WHERE id = $1',
+        [userId],
+      );
+      if (!buyer) throw new NotFoundError('Buyer not found');
+      const secret = decryptSecret(trade.secret_enc, trade.secret_nonce);
       const secretHashBytes = Buffer.from(trade.secret_hash, 'hex');
       const tradeIdBytes = createHash('sha256').update(secretHashBytes).digest();
       const secretBytes = Buffer.from(secret, 'hex');
 
-      const result = await callReleaseOnChain({ request, tradeIdBytes, secretBytes });
+      const result = await submitReleaseTx({
+        request,
+        contractId: escrowContractForTrade(trade),
+        signedXdr,
+        buyerAddress: buyer.stellar_address,
+        tradeIdBytes,
+        secretBytes,
+      });
       releaseTxHash = result.txHash;
     } else {
-      releaseTxHash = `mock_release_${Date.now()}`;
+      // Con MOCK_STELLAR el hash lo inventa el backend. Usar solo Date.now()
+      // hace que dos operaciones cerradas en el mismo milisegundo produzcan
+      // el MISMO hash, y el guard de replay rechaza la segunda: un fallo
+      // intermitente que no dice nada sobre el codigo real. El sufijo
+      // aleatorio lo elimina.
+      releaseTxHash = `mock_release_${Date.now()}_${randomBytes(4).toString('hex')}`;
     }
 
     await assertNotReplayed(releaseTxHash, 'trade/complete', userId);
@@ -561,15 +1393,8 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
       },
     });
 
-    // Update merchant reputation after successful trade completion
-    try {
-      await updateMerchantReputation(trade.seller_id);
-    } catch (reputationError) {
-      logger.warn(
-        { trade_id: tradeId, seller_id: trade.seller_id },
-        '[reputation] Failed to update merchant reputation (non-critical)'
-      );
-    }
+    // Libera el comprador; el aviso es para el vendedor.
+    notifyTradeUpdate(trade.seller_id, { tradeId, kind: 'completed', amountMxn: Number(trade.amount_mxn) });
 
     return { status: 'completed', release_tx_hash: releaseTxHash };
   } catch (error) {
@@ -583,108 +1408,178 @@ export async function completeTrade(request: FastifyRequest, tradeId: string, us
   }
 }
 
-// ── Reputation calculation ───────────────────────────────────────────────────
+const DECLINEABLE_STATES = new Set(['locked', 'revealing', 'cancelled']);
 
-/**
- * Calculate and update merchant reputation from trade history.
- * Queries micopay backend's trades table for completed trades.
- */
-async function updateMerchantReputation(userId: string): Promise<void> {
-  // Query micopay backend for trade statistics
-  const result = await db.query(`
-    SELECT
-      COUNT(*) FILTER (WHERE status = 'completed') as completed_trades,
-      COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_trades,
-      COUNT(*) as total_trades,
-      AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60) FILTER (WHERE status = 'completed') as avg_time_minutes,
-      SUM(amount_mxn) FILTER (WHERE status = 'completed') as total_volume_mxn
-    FROM trades
-    WHERE seller_id = $1
-  `, [userId]);
-
-  const stats = result.rows[0];
-
-  if (!stats) {
-    // No trades yet - reset to defaults
-    await db.query(`
-      UPDATE merchants
-      SET trades_completed = 0,
-          completion_rate = 0,
-          avg_time_minutes = 0,
-          tier = 'espora',
-          total_volume_usdc = 0,
-          last_trade_at = NULL,
-          updated_at = NOW()
-      WHERE user_id = $1
-    `, [userId]);
-    return;
+async function getDeclineableTrade(tradeId: string, userId: string) {
+  const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (!trade) throw new NotFoundError('Trade not found');
+  if (trade.buyer_id !== userId) {
+    throw new ForbiddenError(
+      'ONLY_BUYER_CAN_DECLINE',
+      'Solo quien recibiría los fondos puede autorizar la devolución inmediata.',
+      `User ${userId} is not buyer of trade ${tradeId}`,
+    );
+  }
+  if (!escrowContractSupportsDecline(trade)) {
+    throw new ConflictError(
+      'DECLINE_NOT_SUPPORTED',
+      'Esta operación usa una versión anterior del contrato. El reembolso estará disponible al vencer el plazo.',
+      `Contract ${escrowContractForTrade(trade)} does not advertise decline support`,
+    );
+  }
+  if (!trade.lock_tx_hash) {
+    throw new ConflictError(
+      'TRADE_NOT_LOCKED',
+      'La operación todavía no tiene fondos bloqueados.',
+      `Trade ${tradeId} has no lock transaction`,
+    );
+  }
+  if (!DECLINEABLE_STATES.has(trade.status)) {
+    throw new ConflictError(
+      'TRADE_NOT_DECLINEABLE',
+      `No se puede devolver una operación en estado ${trade.status}.`,
+      `Trade ${tradeId} is ${trade.status}`,
+    );
+  }
+  if (trade.release_tx_hash) {
+    throw new ConflictError(
+      'TRADE_ALREADY_SETTLED',
+      'La operación ya fue liquidada.',
+      `Trade ${tradeId} already has settlement ${trade.release_tx_hash}`,
+    );
   }
 
-  const completedTrades = parseInt(stats.completed_trades) || 0;
-  const cancelledTrades = parseInt(stats.cancelled_trades) || 0;
-  const totalTrades = parseInt(stats.total_trades) || 0;
-  const avgTimeMinutes = stats.avg_time_minutes ? Math.round(parseFloat(stats.avg_time_minutes)) : 0;
-  const totalVolumeMXN = parseFloat(stats.total_volume_mxn) || 0;
+  if (await hasCashConfirmation(trade)) {
+    throw new ConflictError(
+      'CASH_HANDOFF_CONFIRMED',
+      'La entrega de efectivo ya fue confirmada. Completa la operación o abre soporte.',
+      `Trade ${tradeId} has a confirmed cash handoff`,
+    );
+  }
 
-  // Convert MXN to USDC (approximate: 1 USDC ≈ 17 MXN)
-  const totalVolumeUSDC = totalVolumeMXN / 17;
-
-  // Calculate completion rate
-  const completionRate = totalTrades > 0 ? completedTrades / totalTrades : 0;
-
-  // Determine tier
-  const tier = getTier(completedTrades, completionRate);
-
-  // Get last trade timestamp
-  const lastTradeResult = await db.query(`
-    SELECT updated_at FROM trades 
-    WHERE seller_id = $1 AND status = 'completed'
-    ORDER BY updated_at DESC LIMIT 1
-  `, [userId]);
-
-  const lastTradeAt = lastTradeResult.rows[0]?.updated_at || null;
-
-  // Update merchant record
-  await db.query(`
-    UPDATE merchants
-    SET trades_completed = $1,
-        completion_rate = $2,
-        avg_time_minutes = $3,
-        tier = $4,
-        total_volume_usdc = $5,
-        last_trade_at = $6,
-        updated_at = NOW()
-    WHERE user_id = $7
-  `, [
-    completedTrades,
-    completionRate,
-    avgTimeMinutes,
-    tier,
-    totalVolumeUSDC,
-    lastTradeAt,
-    userId,
-  ]);
+  return trade;
 }
 
-// ── Tier definitions ─────────────────────────────────────────────────────────
-const TIERS = [
-  { name: "maestro", minTrades: 100, minCompletion: 0.95 },
-  { name: "experto", minTrades: 30, minCompletion: 0.88 },
-  { name: "activo", minTrades: 10, minCompletion: 0.80 },
-  { name: "espora", minTrades: 0, minCompletion: 0.0 },
-] as const;
+/** Build the unsigned buyer-authorized early return transaction. */
+export async function prepareDeclineTrade(request: FastifyRequest, tradeId: string, userId: string) {
+  const trade = await getDeclineableTrade(tradeId, userId);
+  if (config.mockStellar) return { mock: true as const };
 
-function getTier(tradesCompleted: number, completionRate: number): typeof TIERS[number]["name"] {
-  return TIERS.find(
-    (t) => tradesCompleted >= t.minTrades && completionRate >= t.minCompletion
-  )?.name ?? "espora";
+  const buyer = await db.getOne<{ stellar_address: string }>(
+    'SELECT stellar_address FROM users WHERE id = $1',
+    [userId],
+  );
+  if (!buyer) throw new NotFoundError('Buyer not found');
+
+  const tradeIdBytes = createHash('sha256').update(Buffer.from(trade.secret_hash, 'hex')).digest();
+  const { xdr, networkPassphrase } = await prepareDeclineTx({
+    request,
+    contractId: escrowContractForTrade(trade),
+    buyerAddress: buyer.stellar_address,
+    tradeIdBytes,
+  });
+
+  return { xdr, network_passphrase: networkPassphrase };
+}
+
+export interface DeclineTradeResult {
+  status: 'refunded';
+  refund_tx_hash: string;
+}
+
+/** Submit decline() and only then record that funds were returned. */
+export async function declineTrade(
+  request: FastifyRequest,
+  tradeId: string,
+  userId: string,
+  signedXdr?: string,
+): Promise<DeclineTradeResult> {
+  const existing = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (!existing) throw new NotFoundError('Trade not found');
+  if (existing.buyer_id !== userId) throw new ForbiddenError('Only the buyer can decline');
+  if (existing.status === 'refunded' && existing.release_tx_hash) {
+    return { status: 'refunded', refund_tx_hash: existing.release_tx_hash };
+  }
+
+  const trade = await getDeclineableTrade(tradeId, userId);
+  let refundTxHash: string;
+  if (config.mockStellar) {
+    refundTxHash = `mock_decline_${Date.now()}_${randomBytes(4).toString('hex')}`;
+  } else {
+    if (!signedXdr) {
+      throw new BadRequestError(
+        'SIGNED_XDR_REQUIRED',
+        'Falta la transacción firmada.',
+        'signed_xdr is required when MOCK_STELLAR=false',
+      );
+    }
+    const buyer = await db.getOne<{ stellar_address: string }>(
+      'SELECT stellar_address FROM users WHERE id = $1',
+      [userId],
+    );
+    if (!buyer) throw new NotFoundError('Buyer not found');
+    const tradeIdBytes = createHash('sha256').update(Buffer.from(trade.secret_hash, 'hex')).digest();
+    const result = await submitDeclineTx({
+      request,
+      contractId: escrowContractForTrade(trade),
+      signedXdr,
+      buyerAddress: buyer.stellar_address,
+      tradeIdBytes,
+    });
+    refundTxHash = result.txHash;
+  }
+
+  await assertNotReplayed(refundTxHash, 'trade/decline', userId);
+  await db.execute(
+    `UPDATE trades
+     SET status = 'refunded',
+         release_tx_hash = $2,
+         completed_at = NOW(),
+         secret_enc = NULL,
+         secret_nonce = NULL
+     WHERE id = $1
+       AND status NOT IN ('completed', 'refunded')`,
+    [tradeId, refundTxHash],
+  );
+
+  await insertTradeAuditEvent({
+    tradeId,
+    fromState: trade.status,
+    toState: 'refunded',
+    actor: userId,
+    requestId: getRequestId(request),
+    metadata: {
+      success: true,
+      settlement: 'decline',
+      refund_tx_hash: refundTxHash,
+    },
+  });
+
+  notifyTradeUpdate(trade.seller_id, {
+    tradeId,
+    kind: 'refunded',
+    amountMxn: Number(trade.amount_mxn),
+  });
+
+  return { status: 'refunded', refund_tx_hash: refundTxHash };
 }
 
 /** Response shape for POST /trades/:id/cancel — drives refund copy on the client (#20). */
 export interface CancelTradeResult {
   status: 'cancelled';
+  /**
+   * CASH-2: hay fondos en el contrato que volveran a su dueño. NO significa
+   * que ya hayan vuelto: cancelar detiene el flujo de la app, no liquida la
+   * cadena. Sin un `decline` en el contrato —fuera de alcance por decision de
+   * producto— la unica via on-chain tras el bloqueo es el reembolso por
+   * vencimiento.
+   */
   refund_expected: boolean;
+  /** CASH-2: a partir de cuando se puede reclamar. `null` si no hay fondos. */
+  refund_available_at: string | null;
   lock_tx_hash: string | null;
+  /** The authenticated actor is the buyer and may sign decline() now. */
+  decline_available: boolean;
 }
 
 async function finalizeTradeCancellation(tradeId: string) {
@@ -698,6 +1593,31 @@ async function finalizeTradeCancellation(tradeId: string) {
   );
 }
 
+/**
+ * CASH-2 · Quien puede cancelar, segun flujo y actor.
+ *
+ * La version anterior consultaba la disponibilidad comercial sobre
+ * `trade.seller_id`. En deposito ese es el proveedor, pero en cash-out es el
+ * CLIENTE: se preguntaba por la persona equivocada, asi que quien habia
+ * bloqueado su USDC se quedaba sin via de recuperacion en la app mientras el
+ * proveedor podia cancelar en casos donde debia mandar el cliente.
+ *
+ * La tabla aprobada, y la razon de cada fila:
+ *
+ *   pending     · cualquiera de los dos. No hay nada en cadena todavia.
+ *   locked      · el CLIENTE puede detener el flujo. El PROVEEDOR solo si el
+ *                 mismo esta marcado como no disponible: es su via de
+ *                 repliegue, no una forma de deshacer operaciones ajenas.
+ *   revealing   · igual, y ademas nadie puede cancelar si ya existe la
+ *                 constancia durable de entrega de efectivo (CASH-4). Ahi el
+ *                 dinero ya cambio de manos: las salidas son completar o
+ *                 soporte, no cancelar.
+ *   terminal    · nadie.
+ *
+ * En ningun caso cancelar devuelve fondos. Sin un `decline` en el contrato
+ * —que producto decidio no implementar todavia— la unica via on-chain tras el
+ * bloqueo sigue siendo el reembolso por vencimiento (CASH-6).
+ */
 export async function cancelTrade(
   request: FastifyRequest,
   tradeId: string,
@@ -731,71 +1651,105 @@ export async function cancelTrade(
       throw new ForbiddenError('Not a participant of this trade');
     }
 
-    await assertCanCancelTrade(userId);
-
     const lockTx: string | null = trade.lock_tx_hash ?? null;
+    // CASH-2: el proveedor sale de la columna canonica, nunca del rol del
+    // escrow. Es el arreglo central de este issue.
+    const isProvider = trade.provider_id === userId;
 
-    const finishCancel = async (result: CancelTradeResult) => {
+    const buildResult = (): CancelTradeResult => ({
+      status: 'cancelled',
+      // WP2: un lock enviado y sin confirmar tambien puede tener fondos; si
+      // entra, `markLockConfirmed` lo registra y el sweep lo reembolsa.
+      refund_expected: Boolean(lockTx || trade.lock_submitted_tx_hash),
+      refund_available_at: lockTx ? tradeDeadline(trade).toISOString() : null,
+      lock_tx_hash: lockTx,
+      decline_available: Boolean(lockTx)
+        && trade.buyer_id === userId
+        && escrowContractSupportsDecline(trade),
+    });
+
+    const finishCancel = async () => {
+      const result = buildResult();
+      await finalizeTradeCancellation(tradeId);
       await audit(result);
       await recordTradeCancelled({
         tradeId,
         sellerId: trade.seller_id,
         cancelledBy: userId,
       });
+      // El aviso es para la otra parte. Si es quien bloqueo los fondos, se le
+      // dice desde cuando regresan: es lo primero que va a preguntar.
+      const recipient = userId === trade.seller_id ? trade.buyer_id : trade.seller_id;
+      notifyTradeUpdate(recipient, {
+        tradeId,
+        kind: 'cancelled',
+        amountMxn: Number(trade.amount_mxn),
+        refundAvailableAt: recipient === trade.seller_id ? result.refund_available_at : null,
+      });
       return result;
     };
 
+    // WP3: el limite de cancelaciones aplica solo con fondos en juego. Una
+    // operacion `pending` que no se pudo bloquear (p. ej. un error del
+    // servidor) no debe castigar a quien la cancela.
+    const hasFunds = Boolean(lockTx || trade.lock_submitted_tx_hash);
+    if (hasFunds) await assertCanCancelTrade(userId);
+
     if (trade.status === 'pending') {
-      await finalizeTradeCancellation(tradeId);
-      const result: CancelTradeResult = { status: 'cancelled', refund_expected: false, lock_tx_hash: lockTx };
-      return finishCancel(result);
+      // Nada en cadena: cancelar aqui solo suelta la reserva.
+      return finishCancel();
     }
 
-    if (trade.status === 'locked') {
-      if (trade.buyer_id === userId) {
-        await finalizeTradeCancellation(tradeId);
-        const result: CancelTradeResult = {
-          status: 'cancelled',
-          refund_expected: Boolean(lockTx),
-          lock_tx_hash: lockTx,
-        };
-        return finishCancel(result);
-      }
-      if (trade.seller_id === userId) {
-        const seller = await getSellerMerchantRow(trade.seller_id);
-        if (!isMerchantUnavailableForTrade(trade, seller)) {
-          throw new ForbiddenError(
-            'Only the buyer may cancel a locked trade before reveal. Pause merchant availability if you need to unwind as the agent.',
-          );
-        }
-        await finalizeTradeCancellation(tradeId);
-        const result: CancelTradeResult = {
-          status: 'cancelled',
-          refund_expected: Boolean(lockTx),
-          lock_tx_hash: lockTx,
-        };
-        return finishCancel(result);
-      }
-      throw new ForbiddenError('Not a participant of this trade');
-    }
-
-    if (trade.status === 'revealing') {
-      const seller = await getSellerMerchantRow(trade.seller_id);
-      if (!isMerchantUnavailableForTrade(trade, seller)) {
+    if (trade.status === 'locked' || trade.status === 'revealing') {
+      // Con la entrega ya confirmada, el efectivo cambio de manos. Cancelar
+      // dejaria al proveedor sin cripto y sin efectivo.
+      // En el deposito la constancia es la confirmacion del agente: si ya dijo
+      // que recibio el efectivo, tampoco puede pausarse y cancelar.
+      if (await hasCashConfirmation(trade)) {
         throw new ConflictError(
-          'Cannot cancel while the trade is in handoff. Wait for completion, or cancel only if the merchant is temporarily unavailable.',
+          'CASH_HANDOFF_CONFIRMED',
+          'La entrega de efectivo ya fue confirmada. Completa la operación o abre soporte.',
+          `Trade ${tradeId} has a confirmed cash handoff`,
         );
       }
-      await finalizeTradeCancellation(tradeId);
-      const result: CancelTradeResult = {
-        status: 'cancelled',
-        refund_expected: Boolean(lockTx),
-        lock_tx_hash: lockTx,
-      };
-      return finishCancel(result);
+
+      // Retiro: mientras el cliente tenga un QR vigente, el agente puede estar
+      // entregando el efectivo. Al vencer el QR puede volver a cancelar.
+      if (!isProvider && trade.flow === 'cashout') {
+        const liveUntil = await liveReleaseQrExpiry(tradeId);
+        if (liveUntil) {
+          const minutes = Math.max(1, Math.ceil((liveUntil.getTime() - Date.now()) / 60_000));
+          throw new ConflictError(
+            'RELEASE_QR_ACTIVE',
+            `Tu código QR para el agente sigue vigente. Si no vas a recibir el efectivo, espera ${minutes} min a que venza y vuelve a cancelar.`,
+            `Trade ${tradeId} has a live release QR until ${liveUntil.toISOString()}`,
+          );
+        }
+      }
+
+      if (isProvider) {
+        // Repliegue del proveedor: solo si el mismo esta no disponible.
+        const providerRow = await getSellerMerchantRow(trade.provider_id);
+        if (!isMerchantUnavailableForTrade(trade, providerRow)) {
+          throw new ForbiddenError(
+            'PROVIDER_MUST_PAUSE_FIRST',
+            'Pausa tu disponibilidad si necesitas dejar de atender esta operación.',
+            `Provider ${userId} cannot cancel an active trade while still available`,
+          );
+        }
+        return finishCancel();
+      }
+
+      // El cliente puede detener el flujo. No recupera los fondos aqui: eso
+      // ocurre con el reembolso por vencimiento.
+      return finishCancel();
     }
 
-    throw new ConflictError(`Cannot cancel trade in status ${trade.status}.`);
+    throw new ConflictError(
+      'TRADE_NOT_CANCELLABLE',
+      `No se puede cancelar una operación en estado ${trade.status}.`,
+      `Cannot cancel trade in status ${trade.status}.`,
+    );
   } catch (error) {
     await logTransitionFailure({
       tradeId,
@@ -816,6 +1770,168 @@ export interface RefundTradeResult {
   refund_tx_hash: string;
 }
 
+/**
+ * Shared on-chain refund execution, used by both the user-triggered
+ * `refundTrade` and the automatic `sweepPendingRefunds` background job.
+ * The contract's `refund()` is permissionless and always pays out to
+ * `trade.seller` (whoever originally locked the funds) regardless of who
+ * calls it — `actorUserId` only identifies who/what triggered the call for
+ * the replay-guard and audit trail, not who receives the funds.
+ */
+async function executeRefundOnChain(
+  request: Pick<FastifyRequest, 'log'>,
+  tradeId: string,
+  trade: { status: string; secret_hash: string; asset_code?: string | null; escrow_contract_id?: string | null },
+  actorUserId: string,
+  extraMetadata: Record<string, unknown> = {},
+): Promise<RefundTradeResult> {
+  let refundTxHash: string;
+
+  if (!config.mockStellar) {
+    const secretHashBytes = Buffer.from(trade.secret_hash, 'hex');
+    const tradeIdBytes = createHash('sha256').update(secretHashBytes).digest();
+
+    const result = await callRefundOnChain({ request, contractId: escrowContractForTrade(trade), tradeIdBytes });
+    refundTxHash = result.txHash;
+  } else {
+    refundTxHash = `mock_refund_${Date.now()}_${randomBytes(4).toString('hex')}`;
+  }
+
+  await assertNotReplayed(refundTxHash, 'trade/refund', actorUserId);
+
+  await db.execute(
+    `UPDATE trades
+     SET status = 'refunded',
+         release_tx_hash = $2,
+         completed_at = NOW()
+     WHERE id = $1`,
+    [tradeId, refundTxHash],
+  );
+
+  await insertTradeAuditEvent({
+    tradeId,
+    fromState: trade.status,
+    toState: 'refunded',
+    actor: actorUserId,
+    metadata: {
+      success: true,
+      refund_tx_hash: refundTxHash,
+      ...extraMetadata,
+    },
+  });
+
+  // El contrato siempre reembolsa al vendedor, la llame quien la llame (incluido
+  // el sweep, que corre sin nadie mirando la pantalla).
+  const refunded = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (refunded) {
+    notifyTradeUpdate(refunded.seller_id, { tradeId, kind: 'refunded', amountMxn: Number(refunded.amount_mxn) });
+  }
+
+  return { status: 'refunded', refund_tx_hash: refundTxHash };
+}
+
+/**
+ * CASH-6 · Elegibilidad de reembolso, decidida por el servidor.
+ *
+ * El backend ya permitia reembolsar tras `expires_at` con fondos bloqueados,
+ * pero la UI solo ofrecia la accion cuando el estado era `expired`... y ese
+ * estado NUNCA se persiste. Una operacion `locked` o `revealing` que vencia
+ * quedaba sin salida visible, justo en el momento en que el reembolso por
+ * timeout es la ultima garantia del usuario.
+ *
+ * La elegibilidad se calcula aqui y no en la proyeccion compartida del
+ * detalle, a proposito: el reloj que decide es el del servidor. Un cliente
+ * con la hora corrida no debe poder adelantar ni retrasar la unica via de
+ * recuperacion, y tampoco tiene que deducirla de tres campos sueltos.
+ */
+export interface RefundEligibility {
+  trade_id: string;
+  eligible: boolean;
+  /** Por que no, cuando no. */
+  reason:
+    | 'eligible'
+    | 'not_participant'
+    | 'no_funds_locked'
+    | 'not_expired_yet'
+    | 'already_settled'
+    | 'cash_handoff_confirmed'
+    /** D4: el cliente reclamo haber pagado; lo revisa soporte. */
+    | 'cash_claim_open'
+    /** WP3: no se pudo leer el plazo en cadena; nunca se toma por vencido. */
+    | 'unverifiable';
+  /** Caducidad de la solicitud. */
+  expires_at: string;
+  /**
+   * WP3: desde cuando se estima que el contrato acepta el reembolso. Con lock,
+   * sale del ledger del contrato; sin lock, es `expires_at`. Aproximado: el
+   * que decide es el ledger.
+   */
+  refund_available_at: string;
+  /** Hora del servidor, para que el cliente pinte la cuenta atras sin usar la suya. */
+  server_time: string;
+  /** Segundos que faltan para `refund_available_at`; 0 si ya vencio. */
+  seconds_remaining: number;
+}
+
+export async function getRefundEligibility(
+  tradeId: string,
+  userId: string,
+): Promise<RefundEligibility> {
+  const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (!trade) throw new NotFoundError('TRADE_NOT_FOUND', 'El intercambio no existe', 'Trade not found');
+
+  const now = new Date();
+  const secondsUntil = (at: Date) => Math.max(0, Math.ceil((at.getTime() - now.getTime()) / 1000));
+  const fallback = tradeDeadline(trade);
+
+  const base = {
+    trade_id: trade.id,
+    expires_at: trade.expires_at,
+    refund_available_at: fallback.toISOString(),
+    server_time: now.toISOString(),
+    seconds_remaining: secondsUntil(fallback),
+  };
+
+  // Mismo orden de comprobaciones que `refundTrade`, para que esta respuesta
+  // no pueda prometer algo que la accion luego rechace.
+  if (trade.seller_id !== userId && trade.buyer_id !== userId) {
+    return { ...base, eligible: false, reason: 'not_participant' };
+  }
+  if (!trade.lock_tx_hash) {
+    return { ...base, eligible: false, reason: 'no_funds_locked' };
+  }
+  if (['completed', 'refunded'].includes(trade.status)) {
+    return { ...base, eligible: false, reason: 'already_settled' };
+  }
+  if (await hasCashConfirmation(trade)) {
+    return { ...base, eligible: false, reason: 'cash_handoff_confirmed' };
+  }
+  if (await getOpenCashClaim(tradeId)) {
+    return { ...base, eligible: false, reason: 'cash_claim_open' };
+  }
+
+  // WP3: decide el ledger del contrato, no `expires_at`.
+  let timing;
+  try {
+    timing = await fundsRefundTiming(trade, now);
+  } catch (err) {
+    if (err instanceof AppError && err.code === 'ESCROW_UNVERIFIABLE') {
+      return { ...base, eligible: false, reason: 'unverifiable' };
+    }
+    throw err;
+  }
+  const withTiming = {
+    ...base,
+    refund_available_at: timing.availableAt.toISOString(),
+    seconds_remaining: timing.reached ? 0 : Math.max(1, secondsUntil(timing.availableAt)),
+  };
+  if (!timing.reached) {
+    return { ...withTiming, eligible: false, reason: 'not_expired_yet' };
+  }
+
+  return { ...withTiming, eligible: true, reason: 'eligible' };
+}
+
 export async function refundTrade(
   request: FastifyRequest,
   tradeId: string,
@@ -829,61 +1945,63 @@ export async function refundTrade(
     if (!trade) throw new NotFoundError('Trade not found');
     fromState = trade.status;
 
-    if (trade.buyer_id !== userId) {
-      throw new ForbiddenError('Solo el comprador puede solicitar un reembolso');
+    // Either participant may trigger the refund — the contract's refund() is
+    // permissionless and always pays out to trade.seller (whoever locked the
+    // funds), so it doesn't matter which side of the trade calls this. This
+    // matters most for the cashout flow, where the caller who locked their
+    // own crypto is `seller_id`, not `buyer_id`.
+    if (trade.seller_id !== userId && trade.buyer_id !== userId) {
+      throw new ForbiddenError('Not a participant of this trade');
     }
 
     if (!trade.lock_tx_hash) {
       throw new ConflictError('No hay fondos en cadena para reembolsar en este intercambio');
     }
 
-    if (new Date(trade.expires_at) > new Date()) {
-      throw new TradeStateError(
-        'TRADE_NOT_EXPIRED',
-        'El intercambio aún no ha expirado. Espera a que venza el tiempo.',
-        `Trade ${tradeId} has not expired yet (expires at ${trade.expires_at})`
-      );
-    }
-
-    if (['completed', 'cancelled', 'refunded'].includes(trade.status)) {
+    // 'cancelled' is deliberately allowed through here: cancelling a
+    // locked/revealing trade (see cancelTrade below) no longer implies the
+    // on-chain funds have been settled — it only stops the app-level flow.
+    // Only 'completed' (buyer already released) and 'refunded' (already
+    // settled) are terminal on-chain states that make a refund() call moot.
+    if (['completed', 'refunded'].includes(trade.status)) {
       throw new ConflictError(`No se puede reembolsar un intercambio en estado ${trade.status}`);
     }
 
-    let refundTxHash: string;
-
-    if (!config.mockStellar) {
-      const secretHashBytes = Buffer.from(trade.secret_hash, 'hex');
-      const tradeIdBytes = createHash('sha256').update(secretHashBytes).digest();
-
-      const result = await callRefundOnChain({ request, tradeIdBytes });
-      refundTxHash = result.txHash;
-    } else {
-      refundTxHash = `mock_refund_${Date.now()}`;
+    // D2 (decision de producto 2026-10-29): con la entrega de efectivo
+    // confirmada, quien bloqueo la cripto ya recibio el efectivo. MicoPay no le
+    // devuelve tambien la cripto por su cuenta; el caso va a soporte. El
+    // contrato sigue aceptando un refund directo: esto no lo impide, solo
+    // evita que la app lo ofrezca.
+    if (await hasCashConfirmation(trade)) {
+      throw new ConflictError(
+        'CASH_HANDOFF_CONFIRMED',
+        'La entrega de efectivo ya fue confirmada. Este intercambio lo revisa soporte.',
+        `Trade ${tradeId} has a confirmed cash handoff; refund goes to support`,
+      );
+    }
+    // D4: el reclamo del cliente pesa igual que una constancia hasta que
+    // soporte lo resuelva.
+    if (await getOpenCashClaim(tradeId)) {
+      throw new ConflictError(
+        'CASH_CLAIM_OPEN',
+        'El cliente reportó que ya pagó. Este intercambio lo revisa soporte.',
+        `Trade ${tradeId} has an open cash claim; refund goes to support`,
+      );
     }
 
-    await assertNotReplayed(refundTxHash, 'trade/refund', userId);
+    // WP3: el contrato solo acepta `refund` cuando su ledger llega a
+    // `timeout_ledger`, que corre desde el lock. Antes se miraba `expires_at`
+    // (desde la creacion) y el reembolso fallaba en cadena.
+    const timing = await fundsRefundTiming(trade);
+    if (!timing.reached) {
+      throw new TradeStateError(
+        'TRADE_NOT_EXPIRED',
+        'El intercambio aún no ha expirado. Espera a que venza el tiempo.',
+        `Trade ${tradeId}: on-chain timeout not reached (est. ${timing.availableAt.toISOString()})`,
+      );
+    }
 
-    await db.execute(
-      `UPDATE trades
-       SET status = 'refunded',
-           release_tx_hash = $2,
-           completed_at = NOW()
-       WHERE id = $1`,
-      [tradeId, refundTxHash],
-    );
-
-    await insertTradeAuditEvent({
-      tradeId,
-      fromState,
-      toState: 'refunded',
-      actor: userId,
-      metadata: {
-        success: true,
-        refund_tx_hash: refundTxHash,
-      },
-    });
-
-    return { status: 'refunded', refund_tx_hash: refundTxHash };
+    return await executeRefundOnChain(request, tradeId, trade, userId);
   } catch (error) {
     await logTransitionFailure({
       tradeId,
@@ -893,6 +2011,85 @@ export async function refundTrade(
     }, error);
     throw error;
   }
+}
+
+/**
+ * Background safety net (see docs/AUDIT_MOBILE_MAINNET.md finding B3):
+ * cancelling a 'locked'/'revealing' trade only stops the app-level flow —
+ * the contract's refund() requires its on-chain timeout to have passed, so a
+ * cancelled trade can be left with real funds still sitting in escrow with
+ * no further app-driven trigger. This scans for exactly that situation and
+ * settles it automatically, so a user is never depending on remembering to
+ * manually retry a refund. WP5 (#10): expired 'locked'/'revealing' trades
+ * without a cash confirmation or an open claim are settled the same way.
+ * Safe to call repeatedly — each trade is only
+ * refunded once (replay-guarded by `assertNotReplayed` + the `release_tx_hash
+ * IS NULL` filter). Errors are per-trade and non-fatal so one bad trade can't
+ * block the rest of the sweep.
+ */
+export async function sweepPendingRefunds(
+  request: Pick<FastifyRequest, 'log'>,
+): Promise<{ swept: number; failed: number }> {
+  // No `mockStellar` early-return here — `executeRefundOnChain` already
+  // branches on it per-trade (mock hash vs real on-chain call), same as
+  // `refundTrade`. Skipping the whole sweep in mock mode would leave
+  // mock-mode 'cancelled' trades permanently stuck, unlike production.
+  const candidates = await db.getMany<{
+    id: string; status: string; secret_hash: string; seller_id: string; expires_at: string;
+  }>(
+    // `expires_at < NOW()` sigue siendo un filtro previo valido: el lock ocurre
+    // despues de crear la solicitud y dura lo mismo que ella, asi que el plazo
+    // en cadena nunca vence antes. Lo decide `fundsRefundTiming` abajo.
+    `SELECT id, status, secret_hash, seller_id, expires_at, asset_code, escrow_contract_id,
+            lock_tx_hash, funds_timeout_ledger, funds_expires_at_estimate,
+            flow, reveal_requested_at FROM trades
+     WHERE status IN ('cancelled', 'locked', 'revealing')
+       AND lock_tx_hash IS NOT NULL
+       AND release_tx_hash IS NULL
+       AND expires_at < NOW()`,
+  );
+
+  let swept = 0;
+  let failed = 0;
+
+  for (const trade of candidates) {
+    // Defense in depth: don't rely solely on the SQL-level expiry filter —
+    // re-check in application code before ever calling on-chain refund().
+    // The contract itself would reject an early call (TimeoutNotReached),
+    // but failing fast here avoids a wasted RPC round-trip either way.
+    if (new Date(trade.expires_at) > new Date()) continue;
+    // D2/D4: con constancia de efectivo o reclamo abierto no se reembolsa sola;
+    // la revisa soporte. WP5 (#10): sin ninguna de las dos, una operacion
+    // `locked`/`revealing` vencida regresa a quien bloqueo igual que una
+    // cancelada; antes se quedaba en el escrow hasta que alguien la pidiera.
+    if (await hasCashConfirmation(trade) || await getOpenCashClaim(trade.id)) {
+      logger.warn(
+        { trade_id: trade.id, status: trade.status, category: 'trade.lifecycle' },
+        '[refund-sweep] Expired trade has a cash confirmation or claim — left for support',
+      );
+      continue;
+    }
+    try {
+      // WP3: el ledger del contrato decide. Un RPC caido deja la fila para el
+      // siguiente ciclo; nunca se toma como "ya vencio".
+      const timing = await fundsRefundTiming(trade);
+      if (!timing.reached) continue;
+      // Attribute the audit trail to the seller (the actual funds recipient)
+      // since there's no HTTP-authenticated actor for a background sweep.
+      await executeRefundOnChain(request, trade.id, trade, trade.seller_id, {
+        triggered_by: 'refund_sweep',
+      });
+      swept++;
+    } catch (err) {
+      failed++;
+      logger.error(
+        { err, trade_id: trade.id, category: 'trade.lifecycle' },
+        '[refund-sweep] Failed to auto-refund cancelled trade',
+      );
+    }
+  }
+
+  return { swept, failed };
 }
 
 export async function getTradeAuditTrail(tradeId: string, userId: string) {
@@ -914,29 +2111,66 @@ export async function lookupAuditByRequestId(requestId: string) {
   }));
 }
 
-export async function getMerchantTrades(merchantId: string, state: string = 'all') {
+/**
+ * CASH-3: la bandeja del proveedor.
+ *
+ * Filtraba por `seller_id`. En deposito eso es el proveedor, pero en cash-out
+ * el vendedor del escrow es el CLIENTE: el proveedor no veia ni una sola
+ * solicitud de cash-out, que es justo el flujo donde tiene que salir de lo que
+ * este haciendo para entregar efectivo. Ahora filtra por `provider_id`, la
+ * columna canonica de CASH-1 — la misma que ya usa `idx_trades_provider`.
+ *
+ * La contraparte tampoco se podia leer del JOIN sobre `buyer_id`: en cash-out
+ * ese es el propio proveedor, asi que la fila mostraba su nombre como si fuera
+ * el del cliente. El nombre se resuelve aparte con `deriveInitiatorId`, que es
+ * la unica definicion de quien es el cliente segun el flujo (CASH-9).
+ */
+export async function getMerchantTrades(providerId: string, state: string = 'all') {
   const statusValues = state === 'all'
     ? ['pending', 'locked', 'revealing', 'completed', 'cancelled', 'refunded']
     : [state];
 
-  const trades = await db.getMany(
+  const trades = await db.getMany<{
+    id: string; seller_id: string; buyer_id: string; flow: TradeFlow;
+    amount_mxn: number; status: string; created_at: string;
+  }>(
     `SELECT
        t.id,
        t.seller_id,
        t.buyer_id,
+       t.flow,
        t.amount_mxn,
        t.status,
-       t.created_at,
-       u.username as buyer_handle
+       t.created_at
      FROM trades t
-     JOIN users u ON t.buyer_id = u.id
-     WHERE t.seller_id = $1
+     WHERE t.provider_id = $1
        AND t.status = ANY($2)
      ORDER BY t.created_at DESC`,
-    [merchantId, statusValues],
+    [providerId, statusValues],
   );
 
-  return trades;
+  const clientIds = [
+    ...new Set(trades.map((t) => deriveInitiatorId(t.flow, t.seller_id, t.buyer_id))),
+  ];
+  const clients = clientIds.length
+    ? await db.getMany<{ id: string; username: string | null }>(
+        'SELECT id, username FROM users WHERE id = ANY($1)',
+        [clientIds],
+      )
+    : [];
+  const handleById = new Map(clients.map((c) => [c.id, c.username]));
+
+  return trades.map((t) => ({
+    id: t.id,
+    seller_id: t.seller_id,
+    buyer_id: t.buyer_id,
+    flow: t.flow,
+    amount_mxn: t.amount_mxn,
+    status: t.status,
+    created_at: t.created_at,
+    client_handle:
+      handleById.get(deriveInitiatorId(t.flow, t.seller_id, t.buyer_id)) ?? 'Usuario MicoPay',
+  }));
 }
 
 /**
@@ -944,36 +2178,193 @@ export async function getMerchantTrades(merchantId: string, state: string = 'all
  *
  * Called when the merchant scans a buyer's QR code. Validates:
  *   1. The trade exists
- *   2. The scanning user is a participant (seller) in the trade
+ *   2. The scanning user is the persisted `provider_id` for this trade
  *   3. The trade has not expired
  *   4. The trade is in the correct state for the scanned QR type
  *
- * Returns a summary suitable for a merchant confirmation screen.
+ * CASH-4 (#70 follow-up): antes autorizaba contra `seller_id`, que en un
+ * cash-out es el CLIENTE, no el proveedor. El proveedor real recibia 403 en
+ * el unico paso que le tocaba. Ahora se autoriza contra `provider_id`, la
+ * columna canonica que CASH-1 persiste, y el escaneo deja una constancia
+ * durable de la entrega de efectivo para poder reanudar.
  */
 export interface MerchantConfirmResult {
   trade_id: string;
   status: string;
+  /** CASH-4: flujo canonico, para que la UI no lo infiera de los roles. */
+  flow: TradeFlow;
   amount_mxn: number;
   platform_fee_mxn: number;
-  buyer_handle: string;
+  /**
+   * CASH-4: la CONTRAPARTE de quien escanea, es decir el cliente. Antes
+   * devolvia siempre el handle del comprador, y como en cash-out el
+   * proveedor ES el comprador, la pantalla le mostraba su propio nombre.
+   */
+  client_handle: string;
+  /** H5: la comision del agente, para que vea lo que gana con esta entrega. */
+  provider_fee_mxn: number;
   expires_at: string;
   expired: boolean;
   created_at: string;
   lock_tx_hash: string | null;
   release_tx_hash: string | null;
+  /** CASH-4: true si esta llamada reanudo una entrega ya confirmada. */
+  resumed: boolean;
+  handoff_confirmed_at: string;
+}
+
+/** CASH-4: constancia durable de que el efectivo se entrego. */
+export interface CashHandoff {
+  trade_id: string;
+  provider_id: string;
+  confirmed_at: string;
+}
+
+/**
+ * Lee la constancia de entrega de una operacion, si existe.
+ * Es la pieza que hace reanudable el cierre del cash-out.
+ */
+export async function getCashHandoff(tradeId: string): Promise<CashHandoff | null> {
+  const row = await db.getOne<CashHandoff>(
+    'SELECT trade_id, provider_id, confirmed_at FROM trade_cash_handoffs WHERE trade_id = $1',
+    [tradeId],
+  );
+  return row ?? null;
+}
+
+/**
+ * Constancia de que el efectivo ya cambio de manos (D2, D4). Con ella la app no
+ * cancela, no ofrece decline y no reembolsa: el caso va a soporte.
+ *
+ *   · retiro: la entrega registrada al escanear el QR del cliente.
+ *   · deposito: el agente confirmo el efectivo (`revealTrade`). La marca
+ *     `reveal_requested_at` sobrevive a una cancelacion posterior.
+ */
+export async function hasCashConfirmation(trade: {
+  id: string;
+  flow?: string | null;
+  reveal_requested_at?: unknown;
+}): Promise<boolean> {
+  if (trade.flow === 'deposit' && trade.reveal_requested_at) return true;
+  return Boolean(await getCashHandoff(trade.id));
+}
+
+export interface CashClaim {
+  trade_id: string;
+  claimant_id: string;
+  note: string | null;
+  status: string;
+  created_at: string;
+}
+
+/** D4: reclamo abierto del cliente de un deposito. */
+export async function getOpenCashClaim(tradeId: string): Promise<CashClaim | null> {
+  const row = await db.getOne<CashClaim>(
+    `SELECT trade_id, claimant_id, note, status, created_at FROM trade_cash_claims
+     WHERE trade_id = $1 AND status = 'open'`,
+    [tradeId],
+  );
+  return row ?? null;
+}
+
+/**
+ * D4: "Pagué y no me confirmaron". Solo el cliente de un deposito con fondos
+ * bloqueados. No mueve fondos: deja la palabra del cliente, bloquea el
+ * reembolso por la app y avisa a soporte. Repetirlo devuelve el mismo reclamo.
+ */
+export async function openCashClaim(
+  request: FastifyRequest,
+  tradeId: string,
+  userId: string,
+  note?: string,
+): Promise<CashClaim> {
+  const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (!trade) throw new NotFoundError('TRADE_NOT_FOUND', 'El intercambio no existe', 'Trade not found');
+  if (trade.flow !== 'deposit' || trade.buyer_id !== userId) {
+    throw new ForbiddenError(
+      'CASH_CLAIM_NOT_ALLOWED',
+      'Solo el cliente de un depósito puede reportar que ya pagó.',
+      `User ${userId} cannot open a cash claim on trade ${tradeId}`,
+    );
+  }
+  if (!trade.lock_tx_hash || trade.release_tx_hash || !['locked', 'revealing', 'cancelled'].includes(trade.status)) {
+    throw new ConflictError(
+      'CASH_CLAIM_NOT_ALLOWED',
+      'Esta operación ya no tiene fondos en garantía que revisar.',
+      `Trade ${tradeId} is ${trade.status}; no locked funds to hold`,
+    );
+  }
+
+  const existing = await getOpenCashClaim(tradeId);
+  if (existing) return existing;
+
+  // Un doble toque manda dos reclamos a la vez: el segundo devuelve el primero
+  // en vez de chocar con la llave primaria.
+  const claim = await db.insertUnique<CashClaim>(
+    `INSERT INTO trade_cash_claims (trade_id, claimant_id, note, status)
+     VALUES ($1, $2, $3, 'open')
+     RETURNING trade_id, claimant_id, note, status, created_at`,
+    [tradeId, userId, note?.trim() || null],
+    'trade_id',
+  );
+  if (!claim) {
+    const concurrent = await getOpenCashClaim(tradeId);
+    if (concurrent) return concurrent;
+    throw new ConflictError(
+      'CASH_CLAIM_CLOSED',
+      'Soporte ya revisó el reclamo de esta operación.',
+      `Trade ${tradeId} already has a resolved cash claim`,
+    );
+  }
+
+  await insertTradeAuditEvent({
+    tradeId,
+    fromState: trade.status,
+    toState: trade.status,
+    actor: userId,
+    requestId: getRequestId(request),
+    metadata: { success: true, cash_claim_opened: true },
+  });
+  request.log.warn(
+    { trade_id: tradeId, user_id: userId, category: 'trade.support' },
+    '[trade] Cash claim opened — refund held for support',
+  );
+  notifyTradeUpdate(trade.provider_id, {
+    tradeId,
+    kind: 'cash_claim',
+    amountMxn: Number(trade.amount_mxn),
+  });
+
+  return claim;
+}
+
+/** Vencimiento del QR de liberacion vigente mas tardio, o null si no hay. */
+async function liveReleaseQrExpiry(tradeId: string): Promise<Date | null> {
+  const tokens = await db.getMany<{ expires_at: string }>(
+    `SELECT expires_at FROM trade_claim_tokens
+     WHERE trade_id = $1 AND consumed_at IS NULL`,
+    [tradeId],
+  );
+  const now = Date.now();
+  const live = tokens
+    .map((t) => new Date(t.expires_at))
+    .filter((at) => at.getTime() > now);
+  if (live.length === 0) return null;
+  return new Date(Math.max(...live.map((at) => at.getTime())));
 }
 
 export async function merchantConfirmScan(
   request: FastifyRequest,
   tradeId: string,
-  merchantId: string,
+  scannerId: string,
+  claimToken: string,
 ): Promise<MerchantConfirmResult> {
   request.log.info(
-    { trade_id: tradeId, merchant_id: merchantId, category: 'trade.lifecycle' },
-    '[trade] Merchant QR scan confirmation',
+    { trade_id: tradeId, scanner_id: scannerId, category: 'trade.lifecycle' },
+    '[trade] Provider QR scan confirmation',
   );
 
-  // 1. Trade must exist
+  // 1. La operacion debe existir
   const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
   if (!trade) {
     throw new NotFoundError(
@@ -983,24 +2374,18 @@ export async function merchantConfirmScan(
     );
   }
 
-  // 2. Scanning user must be the seller (merchant) for this trade
-  if (trade.seller_id !== merchantId) {
+  // 2. CASH-4: autoriza el PROVEEDOR persistido, no el vendedor del escrow.
+  //    En cash-out el vendedor es el cliente; comprobar seller_id le daba 403
+  //    justo a quien entrega el efectivo.
+  if (trade.provider_id !== scannerId) {
     throw new ForbiddenError(
-      'NOT_PARTICIPANT',
-      'No eres participante de este intercambio',
-      `User ${merchantId} is not the seller of trade ${tradeId}`,
+      'NOT_TRADE_PROVIDER',
+      'No eres el proveedor de este intercambio',
+      `User ${scannerId} is not the provider of trade ${tradeId}`,
     );
   }
 
-  // 3. Trade must not already be completed or cancelled
-  if (trade.status === 'completed') {
-    throw new ConflictError(
-      'TRADE_ALREADY_COMPLETED',
-      'Este intercambio ya fue completado',
-      `Trade ${tradeId} is already completed`,
-    );
-  }
-
+  // 3. Cancelada: no hay nada que entregar.
   if (trade.status === 'cancelled') {
     throw new ConflictError(
       'TRADE_CANCELLED',
@@ -1009,32 +2394,210 @@ export async function merchantConfirmScan(
     );
   }
 
-  // 4. Check expiry
-  const expired = new Date(trade.expires_at) < new Date();
-  if (expired) {
+  const existingHandoff = await getCashHandoff(tradeId);
+
+  // 4. Ya completada: se puede releer con seguridad, pero solo por quien
+  //    entrego el efectivo. No libera nada de nuevo.
+  if (trade.status === 'completed') {
+    if (!existingHandoff || existingHandoff.provider_id !== scannerId) {
+      throw new ConflictError(
+        'TRADE_ALREADY_COMPLETED',
+        'Este intercambio ya fue completado',
+        `Trade ${tradeId} is already completed`,
+      );
+    }
+    return buildConfirmResult(trade, existingHandoff, true);
+  }
+
+  // 5. Expirada. Se comprueba DESPUES de la reanudacion para no dejar
+  //    atrapado a un proveedor que ya entrego efectivo y cuya operacion
+  //    expiro mientras reintentaba la firma.
+  //    WP3: el plazo efectivo es el de los fondos; el margen exacto en cadena
+  //    lo comprueba `assertEscrowCollectable` en el paso 6b.
+  if (!existingHandoff && tradeDeadline(trade) < new Date()) {
     throw new TradeStateError(
       'TRADE_EXPIRED',
       'Este intercambio ha expirado',
-      `Trade ${tradeId} expired at ${trade.expires_at}`,
+      `Trade ${tradeId} expired at ${tradeDeadline(trade).toISOString()}`,
     );
   }
 
-  // Fetch buyer info for display
-  const buyer = await db.getOne<{ username: string }>(
+  // 6. Reanudar: la entrega ya estaba confirmada por este mismo proveedor.
+  //    No se vuelve a quemar el QR ni se crea una segunda entrega.
+  if (existingHandoff) {
+    if (existingHandoff.provider_id !== scannerId) {
+      throw new ForbiddenError(
+        'HANDOFF_BELONGS_TO_ANOTHER_PROVIDER',
+        'Otro proveedor ya atendió este intercambio',
+        `Handoff for trade ${tradeId} belongs to ${existingHandoff.provider_id}`,
+      );
+    }
+    request.log.info(
+      { trade_id: tradeId, provider_id: scannerId, category: 'trade.lifecycle' },
+      '[trade] Resuming an already-confirmed cash handoff',
+    );
+    return buildConfirmResult(trade, existingHandoff, true);
+  }
+
+  // 6b. Solo una operacion cobrable registra una entrega (N2/H1 de la
+  //     auditoria del escrow 2026-10-29). Antes solo se rechazaba
+  //     `cancelled`: una fila `refunded` con un QR vigente registraba la
+  //     entrega y el agente daba efectivo que ya no iba a poder cobrar. Antes
+  //     de gastar el QR se confirma EN CADENA que el escrow sigue bloqueado,
+  //     es de esta operacion y le queda margen.
+  if (trade.status !== 'revealing') {
+    throw new ConflictError(
+      'TRADE_NOT_COLLECTABLE',
+      'Este intercambio ya no se puede cobrar. No entregues efectivo.',
+      `Trade ${tradeId} is ${trade.status}, expected revealing`,
+    );
+  }
+  await assertEscrowCollectable(trade);
+
+  // 7. Primera vez: el QR debe traer un token vivo y sin usar (SEC-02). Se
+  //    quema aqui, ya validada la operacion, para que un QR contra un trade
+  //    invalido no lo gaste.
+  await consumeClaimToken(tradeId, claimToken, scannerId);
+
+  // 8. Constancia durable de la entrega. `trade_id` es la llave primaria, asi
+  //    que dos escaneos concurrentes no pueden crear dos entregas.
+  await db.execute(
+    `INSERT INTO trade_cash_handoffs (trade_id, provider_id, claim_token_hash)
+     VALUES ($1, $2, $3)`,
+    [tradeId, scannerId, hashClaimToken(claimToken)],
+  );
+
+  const handoff = await getCashHandoff(tradeId);
+  if (!handoff) {
+    throw new ConflictError(
+      'HANDOFF_NOT_RECORDED',
+      'No se pudo registrar la entrega. Intenta de nuevo.',
+      `Cash handoff for trade ${tradeId} could not be read back`,
+    );
+  }
+
+  await insertTradeAuditEvent({
+    tradeId,
+    fromState: trade.status,
+    toState: trade.status,
+    actor: scannerId,
+    requestId: getRequestId(request),
+    metadata: {
+      success: true,
+      event: 'cash_handoff_confirmed',
+      flow: trade.flow,
+      provider_id: scannerId,
+    },
+  });
+
+  return buildConfirmResult(trade, handoff, false);
+}
+
+/**
+ * Resumen para la pantalla del proveedor.
+ *
+ * CASH-4: la contraparte es el CLIENTE, que depende del flujo — en cash-out
+ * el cliente es el vendedor del escrow, en deposito el comprador. Antes se
+ * devolvia siempre el comprador, asi que en cash-out el proveedor veia su
+ * propio nombre como contraparte.
+ */
+async function buildConfirmResult(
+  trade: any,
+  handoff: CashHandoff,
+  resumed: boolean,
+): Promise<MerchantConfirmResult> {
+  const clientId = deriveInitiatorId(trade.flow, trade.seller_id, trade.buyer_id);
+  const client = await db.getOne<{ username: string }>(
     'SELECT username FROM users WHERE id = $1',
-    [trade.buyer_id],
+    [clientId],
   );
 
   return {
     trade_id: trade.id,
     status: trade.status,
+    flow: trade.flow,
     amount_mxn: Number(trade.amount_mxn),
     platform_fee_mxn: Number(trade.platform_fee_mxn ?? 0),
-    buyer_handle: buyer?.username ?? 'Usuario MicoPay',
-    expires_at: trade.expires_at,
-    expired: false,
+    client_handle: client?.username ?? 'Usuario MicoPay',
+    provider_fee_mxn: Number(trade.provider_fee_mxn ?? 0),
+    // WP3: lo que ve el agente es el plazo de los fondos, no el de la solicitud.
+    expires_at: tradeDeadline(trade).toISOString(),
+    expired: tradeDeadline(trade) < new Date(),
     created_at: trade.created_at,
     lock_tx_hash: trade.lock_tx_hash ?? null,
     release_tx_hash: trade.release_tx_hash ?? null,
+    resumed,
+    handoff_confirmed_at: handoff.confirmed_at,
+  };
+}
+
+
+// ── RED-3 · punto de encuentro, solo para participantes ───────────────────
+
+/**
+ * Estados en que compartir el punto exacto tiene sentido.
+ *
+ * `pending` NO entra: la operacion existe pero nadie comprometio fondos, asi
+ * que basta con crear operaciones contra un proveedor para sacarle la
+ * direccion — la misma enumeracion que RED-3 viene a cerrar, con un paso mas.
+ * Los estados terminales tampoco: ahi la politica de retencion es dejar de
+ * revelarlo.
+ */
+const MEETING_POINT_STATES = ['locked', 'revealing'];
+
+export interface TradeMeetingPoint {
+  trade_id: string;
+  /** Zona publica; se devuelve siempre que haya. */
+  area_label: string | null;
+  /**
+   * Punto exacto. `null` si el proveedor no lo configuro, o si la operacion
+   * ya no esta en un estado que justifique revelarlo.
+   */
+  meeting_point: string | null;
+  /** Por que no viene el punto, cuando no viene. */
+  reason: 'shared' | 'not_set' | 'trade_not_accepted' | 'trade_terminal';
+}
+
+/**
+ * RED-3: devuelve el punto de encuentro de una operacion a quien participa en
+ * ella. Reutiliza la autorizacion normal de participante, asi que un tercero
+ * recibe 403 antes de que se lea nada.
+ */
+export async function getTradeMeetingPoint(
+  tradeId: string,
+  userId: string,
+): Promise<TradeMeetingPoint> {
+  // Lanza 403 si no es participante y 404 si no existe.
+  const trade = await getTradeById(tradeId, userId);
+
+  const config = await db.getOne<{ area_label: string | null; meeting_point: string | null }>(
+    `SELECT area_label, meeting_point FROM merchant_configs WHERE user_id = $1`,
+    [trade.provider_id],
+  );
+
+  const terminal = ['completed', 'cancelled', 'expired', 'refunded'].includes(trade.status);
+  if (terminal) {
+    return {
+      trade_id: trade.id,
+      area_label: config?.area_label ?? null,
+      meeting_point: null,
+      reason: 'trade_terminal',
+    };
+  }
+
+  if (!MEETING_POINT_STATES.includes(trade.status)) {
+    return {
+      trade_id: trade.id,
+      area_label: config?.area_label ?? null,
+      meeting_point: null,
+      reason: 'trade_not_accepted',
+    };
+  }
+
+  return {
+    trade_id: trade.id,
+    area_label: config?.area_label ?? null,
+    meeting_point: config?.meeting_point ?? null,
+    reason: config?.meeting_point ? 'shared' : 'not_set',
   };
 }

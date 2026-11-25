@@ -1,4 +1,7 @@
 import type { PermState } from '../hooks/usePermission';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 interface PermissionGateProps {
   state: PermState;
@@ -14,17 +17,18 @@ interface PermissionGateProps {
   icon: string;
 }
 
-const COPY = {
+// Funcion y no constante: se lee al pintar, asi sigue el idioma activo.
+const copyFor = () => ({
   denied: {
-    title: 'Permiso denegado',
-    body: 'Puedes intentarlo de nuevo o usar la alternativa.',
+    title: tr('permissionGate.deniedTitle'),
+    body: tr('permissionGate.deniedBody'),
   },
   permanently_denied: {
-    title: 'Acceso bloqueado',
-    body: 'Abre los ajustes de la app y habilita el permiso manualmente.',
-    settingsNote: 'Ajustes → Aplicaciones → MicoPay → Permisos',
+    title: tr('permissionGate.blockedTitle'),
+    body: tr('permissionGate.blockedBody'),
+    settingsNote: tr('permissionGate.settingsPath'),
   },
-};
+});
 
 export function PermissionGate({
   state,
@@ -39,6 +43,7 @@ export function PermissionGate({
   if (state === 'granted') return <>{children}</>;
 
   const isPermanent = state === 'permanently_denied';
+  const COPY = copyFor();
   const copy = isPermanent ? COPY.permanently_denied : COPY.denied;
   const isRationale = state === 'unknown' || state === 'prompt';
 
@@ -46,7 +51,7 @@ export function PermissionGate({
     <div className="flex flex-col items-center gap-4 px-6 py-10 text-center">
       {/* Icon bubble */}
       <div
-        className={`w-16 h-16 rounded-full flex items-center justify-center ${
+        className={`w-16 h-16 rounded-sm flex items-center justify-center ${
           isPermanent
             ? 'bg-error/10'
             : isRationale
@@ -56,7 +61,7 @@ export function PermissionGate({
       >
         <span
           className={`material-symbols-outlined text-3xl ${
-            isPermanent ? 'text-error' : isRationale ? 'text-primary' : 'text-outline'
+            isPermanent ? 'text-error' : isRationale ? 'text-primary' : 'text-gris'
           }`}
         >
           {isPermanent ? 'lock' : isRationale ? icon : 'block'}
@@ -68,11 +73,11 @@ export function PermissionGate({
         <h3 className="font-headline font-bold text-lg text-on-surface">
           {isRationale ? title : copy.title}
         </h3>
-        <p className="text-sm text-outline leading-snug max-w-[280px] mx-auto">
+        <p className="text-sm text-gris leading-snug max-w-[280px] mx-auto">
           {isRationale ? description : copy.body}
         </p>
         {isPermanent && (
-          <p className="text-xs text-outline/60 font-mono mt-1">{COPY.permanently_denied.settingsNote}</p>
+          <p className="text-xs text-gris/60 font-mono mt-1">{COPY.permanently_denied.settingsNote}</p>
         )}
       </div>
 
@@ -80,18 +85,18 @@ export function PermissionGate({
       {isPermanent ? (
         <button
           onClick={onOpenSettings}
-          className="mt-2 h-[48px] px-8 bg-primary text-white font-bold rounded-xl active:scale-95 transition-all flex items-center gap-2"
+          className="mt-2 h-[48px] px-8 bg-primary text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all flex items-center gap-2"
         >
           <span className="material-symbols-outlined text-sm">settings</span>
-          Ir a Ajustes
+          {tr('permissionGate.openSettings')}
         </button>
       ) : (
         <button
           onClick={onRequest}
-          className="mt-2 h-[48px] px-8 bg-primary text-white font-bold rounded-xl active:scale-95 transition-all flex items-center gap-2"
+          className="mt-2 h-[48px] px-8 bg-primary text-papel font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all flex items-center gap-2"
         >
           <span className="material-symbols-outlined text-sm">{icon}</span>
-          {isRationale ? 'Permitir acceso' : 'Reintentar'}
+          {isRationale ? tr('permissionGate.allow') : tr('permissionGate.retry')}
         </button>
       )}
 

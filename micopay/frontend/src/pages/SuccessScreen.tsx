@@ -1,11 +1,77 @@
-import { TradeHistoryItem } from '../services/api';
-import { buildTxUrl, truncateHash } from '../utils/stellarExplorer';
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TradeData, TradeDetailResponse } from '../services/api';
+import { buildTxUrl, truncateHash, STELLAR_NETWORK_LABEL } from '../utils/stellarExplorer';
+import { formatStroops } from '../utils/escrowAmounts';
 import SupportLink from '../components/SupportLink';
+import TradeEscrowSummary from '../components/TradeEscrowSummary';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
+// Fechas del recibo en el idioma activo, no siempre en es-MX.
+const displayLocale = () => (i18n.language === 'en' ? 'en-US' : 'es-MX');
+
+/**
+ * WP-D: el recibo, con datos del servidor. Lo que no llega es `null` y la
+ * pantalla lo oculta; nunca se rellena con estado local ni con porcentajes.
+ */
+export interface SuccessReceipt
+  extends Pick<
+    TradeData,
+    'id' | 'status' | 'amount_mxn' | 'seller_id' | 'buyer_id' | 'asset_code' | 'amount_stroops' | 'platform_fee_stroops' | 'total_locked_stroops'
+  > {
+    lock_tx_hash: string | null;
+    release_tx_hash: string | null;
+    created_at: string | null;
+    completed_at: string | null;
+    platform_fee_mxn: number | null;
+    provider_fee_mxn: number | null;
+    /** Lo que recibe el cliente: efectivo en retiro, saldo en deposito. */
+    payout_mxn: number | null;
+    /** H5: lo que pago el cliente (saldo en retiro). Null en operaciones anteriores. */
+    client_pays_mxn: number | null;
+}
+
+type ServerTrade = TradeData & Partial<Omit<TradeDetailResponse['trade'], keyof TradeData>>;
+
+const numOrNull = (v: unknown): number | null => {
+    const n = typeof v === 'string' ? Number(v) : v;
+    return typeof n === 'number' && Number.isFinite(n) ? n : null;
+};
+
+export function receiptFromServer(
+    trade: ServerTrade,
+    lockTxHash: string | null,
+    releaseTxHash: string | null,
+): SuccessReceipt {
+    return {
+        id: trade.id,
+        status: trade.status,
+        amount_mxn: trade.amount_mxn,
+        seller_id: trade.seller_id,
+        buyer_id: trade.buyer_id,
+        asset_code: trade.asset_code,
+        amount_stroops: trade.amount_stroops,
+        platform_fee_stroops: trade.platform_fee_stroops,
+        total_locked_stroops: trade.total_locked_stroops,
+        lock_tx_hash: trade.lock_tx_hash ?? lockTxHash,
+        release_tx_hash: trade.release_tx_hash ?? releaseTxHash,
+        created_at: trade.created_at ?? null,
+        completed_at: trade.completed_at ?? null,
+        platform_fee_mxn: numOrNull(trade.platform_fee_mxn),
+        provider_fee_mxn: numOrNull(trade.provider_fee_mxn),
+        payout_mxn: numOrNull(trade.payout_mxn),
+        client_pays_mxn: numOrNull(trade.client_pays_mxn),
+    };
+}
 
 interface SuccessScreenProps {
     type: 'cashout' | 'deposit';
-    trade: TradeHistoryItem & { completed_at: string | null };
-    agentName: string;
+    trade: SuccessReceipt;
+    /** Quien mira, para la cifra del escrow que le toca. */
+    viewerId?: string | null;
+    /** El agente (proveedor). null si no se pudo obtener: no se inventa. */
+    agentName: string | null;
     onHome: () => void;
 }
 
@@ -14,10 +80,22 @@ function isMockHash(hash: string | null | undefined): boolean {
     return !!hash && hash.startsWith('mock');
 }
 
-const SuccessScreen = ({ type, trade, agentName, onHome }: SuccessScreenProps) => {
-    const amount = trade.amount_mxn.toFixed(2);
-    const commission = trade.platform_fee_mxn.toFixed(2);
-    const received = (trade.amount_mxn - trade.platform_fee_mxn).toFixed(2);
+const SuccessScreen = ({ type, trade, viewerId, agentName, onHome }: SuccessScreenProps) => {
+    const { t } = useTranslation();
+    // H5: en un retiro `cash_in_hand` lo que salio del saldo es el monto mas
+    // las comisiones; el efectivo recibido es el monto. Sin ese dato (operacion
+    // anterior) se muestra el monto, como antes.
+    const amount = (type === 'cashout' && trade.client_pays_mxn !== null
+        ? trade.client_pays_mxn
+        : trade.amount_mxn).toFixed(2);
+    // Las dos comisiones y el neto salen de la operacion. Antes el neto era
+    // `monto - comision de plataforma`, que ignoraba la del agente.
+    const commission =
+        trade.platform_fee_mxn !== null && trade.provider_fee_mxn !== null
+            ? (trade.platform_fee_mxn + trade.provider_fee_mxn).toFixed(2)
+            : null;
+    const received = trade.payout_mxn !== null ? trade.payout_mxn.toFixed(2) : null;
+    const agentLabel = agentName ?? '—';
     const lockTxHash = trade.lock_tx_hash;
     const releaseTxHash = trade.release_tx_hash;
 
@@ -27,7 +105,7 @@ const SuccessScreen = ({ type, trade, agentName, onHome }: SuccessScreenProps) =
         if (!isoString) return '—';
         const date = new Date(isoString);
         const day = date.getDate();
-        const month = date.toLocaleString('es-MX', { month: 'short' });
+        const month = date.toLocaleString(displayLocale(), { month: 'short' });
         const hours = date.getHours();
         const minutes = date.getMinutes().toString().padStart(2, '0');
         const ampm = hours >= 12 ? 'pm' : 'am';
@@ -35,20 +113,49 @@ const SuccessScreen = ({ type, trade, agentName, onHome }: SuccessScreenProps) =
         return `${day} ${month} · ${displayHours}:${minutes} ${ampm}`;
     };
 
+    // #21: el recibo lleva lo que alguien necesita para verificarlo fuera de la
+    // app: red, fecha, monto en cripto y los hashes completos con su enlace.
+    const cryptoAmount = trade.asset_code && trade.amount_stroops && /^\d+$/.test(trade.amount_stroops)
+        ? `${formatStroops(trade.amount_stroops)} ${trade.asset_code}`
+        : null;
+    const receiptDate = trade.completed_at ?? trade.created_at;
+    const buildReceiptText = () => {
+        const receiptType = type === 'cashout' ? t('success.receiptWithdrawal') : t('success.receiptDeposit');
+        return [
+            `${t('success.receiptTextTitle', { type: receiptType })}${isSimulated ? ` (${t('success.testnetSimulated')})` : ''}`,
+            `${tr('success.receiptNetwork')}: Stellar ${STELLAR_NETWORK_LABEL.toUpperCase()}`,
+            receiptDate ? `${tr('success.receiptDate')}: ${new Date(receiptDate).toLocaleString(displayLocale(), { dateStyle: 'medium', timeStyle: 'short' })}` : '',
+            `${t('success.receiptAmount')}: $${amount} MXN`,
+            cryptoAmount ? `${tr('success.receiptCrypto')}: ${cryptoAmount}` : '',
+            received !== null ? `${t('success.receiptReceived')}: $${received} MXN` : '',
+            commission !== null ? `${t('success.receiptCommission')}: $${commission} MXN` : '',
+            `${t('success.receiptAgent')}: ${agentLabel}`,
+            `${t('success.receiptTradeId')}: ${trade.id}`,
+            lockTxHash ? `${t('success.receiptLock')}: ${lockTxHash}\n${buildTxUrl(lockTxHash)}` : '',
+            releaseTxHash ? `${t('success.receiptRelease')}: ${releaseTxHash}\n${buildTxUrl(releaseTxHash)}` : '',
+        ].filter(Boolean).join('\n');
+    };
+
+    // En PC el menú de compartir de Windows se atora con algunas apps: copiar
+    // es la vía directa.
+    const [copied, setCopied] = useState(false);
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(buildReceiptText());
+            setCopied(true);
+        } catch {
+            setCopied(false);
+        }
+    };
+
     const handleShare = async () => {
-        const receiptText = `Recibo de ${type === 'cashout' ? 'retiro' : 'depósito'}${isSimulated ? ' (Simulado — Testnet)' : ''}
-Monto: $${amount} MXN
-Recibido: $${received} MXN
-Comisión: $${commission} MXN
-Agente: ${agentName}
-Operación ID: ${trade.id}
-${lockTxHash ? `Bloqueo: ${truncateHash(lockTxHash, 16)}` : ''}
-${releaseTxHash ? `Liberación: ${truncateHash(releaseTxHash, 16)}` : ''}`;
+        const receiptType = type === 'cashout' ? t('success.receiptWithdrawal') : t('success.receiptDeposit');
+        const receiptText = buildReceiptText();
 
         if (navigator.share) {
             try {
                 await navigator.share({
-                    title: `Recibo ${type === 'cashout' ? 'Retiro' : 'Depósito'}`,
+                    title: t('success.receiptTextTitle', { type: receiptType }),
                     text: receiptText,
                 });
                 return;
@@ -58,7 +165,7 @@ ${releaseTxHash ? `Liberación: ${truncateHash(releaseTxHash, 16)}` : ''}`;
         }
 
         await navigator.clipboard.writeText(receiptText);
-        alert('Recibo copiado al portapapeles');
+        alert(t('success.receiptCopied'));
     };
 
     return (
@@ -69,84 +176,87 @@ ${releaseTxHash ? `Liberación: ${truncateHash(releaseTxHash, 16)}` : ''}`;
                 {isSimulated && (
                     <div className="mb-4 inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-full">
                         <span className="material-symbols-outlined text-[14px]">science</span>
-                        Testnet · Simulado
+                        {t('success.testnetSimulated')}
                     </div>
                 )}
 
-                <div className="bg-[#E1F5EE] w-[72px] h-[72px] rounded-full flex items-center justify-center mb-8 shadow-sm">
-                    <span className="material-symbols-outlined text-[#1D9E75] text-[40px]" style={{ fontVariationSettings: '"wght" 600' }}>
+                <div className="bg-[#E1F5EE] w-[72px] h-[72px] rounded-full flex items-center justify-center mb-8 ">
+                    <span className="material-symbols-outlined text-verde-claro text-[40px]" style={{ fontVariationSettings: '"wght" 600' }}>
                         {type === 'cashout' ? 'check' : 'check_circle'}
                     </span>
                 </div>
                 <h1 className="font-headline font-extrabold text-4xl tracking-tight mb-2">
-                    {type === 'cashout' ? '¡Listo!' : '¡Depósito exitoso!'}
+                    {type === 'cashout' ? t('success.cashoutDone') : t('success.depositDone')}
                 </h1>
                 <p className="text-secondary font-medium text-lg opacity-70">
-                    {type === 'cashout' ? 'Recibiste tu efectivo' : 'Tus MXNE ya están en tu billetera'}
+                    {type === 'cashout' ? t('success.cashoutSubtitle') : t('success.depositSubtitle')}
                 </p>
             </section>
 
             {/* Summary Card */}
-            <section className="w-full bg-[#f6f7f8] rounded-[24px] p-6 my-8 space-y-5 shadow-sm">
+            <section className="w-full bg-[#f6f7f8] rounded-sm p-6 my-8 space-y-5 ">
                 <div className="space-y-4">
                     <div className="flex justify-between items-center">
                         <span className="text-on-surface-variant font-medium text-sm">
-                            {type === 'cashout' ? 'MXN enviados' : 'Efectivo entregado'}
+                            {type === 'cashout' ? t('success.mxnSent') : t('success.cashDelivered')}
                         </span>
-                        <span className="font-bold text-on-surface">${amount}</span>
+                        <span className="num font-bold text-on-surface">${amount}</span>
                     </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-on-surface-variant font-medium text-sm">
-                            {type === 'cashout' ? 'Efectivo recibido' : 'MXNE recibidos'}
-                        </span>
-                        <span className="font-bold text-primary text-lg">
-                            {type === 'cashout' ? `$${received}` : `+${received}`}
-                        </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-on-surface-variant font-medium text-sm">Comisión</span>
-                        <span className="font-medium text-on-surface">-${commission}</span>
-                    </div>
+                    {received !== null ? (
+                        <div className="flex justify-between items-center">
+                            <span className="text-on-surface-variant font-medium text-sm">
+                                {type === 'cashout' ? t('success.cashReceived') : t('success.mxneReceived')}
+                            </span>
+                            <span className="font-bold text-primary text-lg">${received}</span>
+                        </div>
+                    ) : null}
+                    {commission !== null ? (
+                        <div className="flex justify-between items-center">
+                            <span className="text-on-surface-variant font-medium text-sm">{t('success.commission')}</span>
+                            <span className="font-medium text-on-surface">-${commission}</span>
+                        </div>
+                    ) : null}
+                    <TradeEscrowSummary trade={trade} viewerId={viewerId} />
                 </div>
 
                 <div className="h-[1px] w-full bg-outline-variant/10"></div>
 
                 <div className="space-y-4">
                     <div className="flex justify-between items-start">
-                        <span className="text-on-surface-variant font-medium text-sm">Agente</span>
+                        <span className="text-on-surface-variant font-medium text-sm">{t('success.agent')}</span>
                         <div className="text-right">
-                            <p className="font-semibold text-on-surface text-sm">{agentName}</p>
+                            <p className="font-semibold text-on-surface text-sm">{agentLabel}</p>
                             <div className="flex items-center justify-end gap-1 mt-0.5 text-primary">
                                 <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: '"FILL" 1' }}>verified</span>
-                                <span className="text-[10px] font-bold uppercase tracking-wider">Verificado</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wider">{t('success.verified')}</span>
                             </div>
                         </div>
                     </div>
                     <div className="flex justify-between items-center">
-                        <span className="text-on-surface-variant font-medium text-sm">Fecha y hora</span>
+                        <span className="text-on-surface-variant font-medium text-sm">{t('success.dateTime')}</span>
                         <span className="text-on-surface text-sm font-medium">{formatTimestamp(trade.completed_at ?? trade.created_at)}</span>
                     </div>
                 </div>
             </section>
 
             {/* Receipt — trade evidence */}
-            <section className="w-full bg-white border border-outline-variant/15 rounded-2xl p-5 mb-6 space-y-3">
-                <h3 className="text-[11px] font-bold text-outline-variant uppercase tracking-[0.15em] mb-3">Recibo de transacción</h3>
+            <section className="w-full bg-papel border-2 border-tinta rounded-sm p-5 mb-6 space-y-3">
+                <h3 className="text-[11px] font-bold text-gris uppercase tracking-[0.15em] mb-3">{t('success.receiptTitle')}</h3>
 
                 <div className="flex justify-between items-center">
-                    <span className="text-on-surface-variant text-xs">Trade ID</span>
+                    <span className="text-on-surface-variant text-xs">{t('success.tradeId')}</span>
                     <span className="font-mono text-xs text-on-surface">{trade.id.slice(0, 8)}…</span>
                 </div>
 
                 <div className="flex justify-between items-center">
-                    <span className="text-on-surface-variant text-xs">Estado</span>
+                    <span className="text-on-surface-variant text-xs">{t('success.status')}</span>
                     <span className="text-xs font-semibold text-on-surface capitalize">{trade.status}</span>
                 </div>
 
                 {lockTxHash && (
                     <div className="flex justify-between items-center">
                         <span className="text-on-surface-variant text-xs">
-                            Lock TX {isMockHash(lockTxHash) && <span className="text-amber-600">(simulado)</span>}
+                            {t('success.lockTx')} {isMockHash(lockTxHash) && <span className="text-amber-600">{t('success.simulated')}</span>}
                         </span>
                         {isMockHash(lockTxHash) ? (
                             <span className="font-mono text-xs text-on-surface-variant opacity-60">{truncateHash(lockTxHash, 8)}</span>
@@ -160,7 +270,7 @@ ${releaseTxHash ? `Liberación: ${truncateHash(releaseTxHash, 16)}` : ''}`;
                 {releaseTxHash && (
                     <div className="flex justify-between items-center">
                         <span className="text-on-surface-variant text-xs">
-                            Release TX {isMockHash(releaseTxHash) && <span className="text-amber-600">(simulado)</span>}
+                            {t('success.releaseTx')} {isMockHash(releaseTxHash) && <span className="text-amber-600">{t('success.simulated')}</span>}
                         </span>
                         {isMockHash(releaseTxHash) ? (
                             <span className="font-mono text-xs text-on-surface-variant opacity-60">{truncateHash(releaseTxHash, 8)}</span>
@@ -172,13 +282,13 @@ ${releaseTxHash ? `Liberación: ${truncateHash(releaseTxHash, 16)}` : ''}`;
                 )}
 
                 <div className="flex justify-between items-center">
-                    <span className="text-on-surface-variant text-xs">Creado</span>
+                    <span className="text-on-surface-variant text-xs">{t('success.created')}</span>
                     <span className="text-xs text-on-surface">{formatTimestamp(trade.created_at)}</span>
                 </div>
 
                 {trade.completed_at && (
                     <div className="flex justify-between items-center">
-                        <span className="text-on-surface-variant text-xs">Completado</span>
+                        <span className="text-on-surface-variant text-xs">{t('success.completed')}</span>
                         <span className="text-xs text-on-surface">{formatTimestamp(trade.completed_at)}</span>
                     </div>
                 )}
@@ -190,7 +300,7 @@ ${releaseTxHash ? `Liberación: ${truncateHash(releaseTxHash, 16)}` : ''}`;
 
             {/* Hash & Rating */}
             <div className="w-full space-y-8 text-center">
-                {/* Hashes de operación */}
+                {/* Transaction hashes */}
                 <section className="space-y-4">
                     {releaseTxHash && !isMockHash(releaseTxHash) && (
                         <div>
@@ -200,7 +310,7 @@ ${releaseTxHash ? `Liberación: ${truncateHash(releaseTxHash, 16)}` : ''}`;
                                 rel="noopener noreferrer"
                                 className="text-primary font-bold text-sm hover:opacity-80 transition-opacity flex items-center justify-center gap-2 mx-auto"
                             >
-                                Ver liberación de la operación
+                                {t('success.viewRelease')}
                                 <span className="material-symbols-outlined text-[18px]">open_in_new</span>
                             </a>
                             <p className="font-mono text-[11px] text-on-surface-variant opacity-60 tracking-tight mt-1">
@@ -216,7 +326,7 @@ ${releaseTxHash ? `Liberación: ${truncateHash(releaseTxHash, 16)}` : ''}`;
                                 rel="noopener noreferrer"
                                 className="text-primary font-bold text-sm hover:opacity-80 transition-opacity flex items-center justify-center gap-2 mx-auto"
                             >
-                                Ver bloqueo de la operación
+                                {t('success.viewLock')}
                                 <span className="material-symbols-outlined text-[18px]">open_in_new</span>
                             </a>
                             <p className="font-mono text-[11px] text-on-surface-variant opacity-60 tracking-tight mt-1">
@@ -226,7 +336,7 @@ ${releaseTxHash ? `Liberación: ${truncateHash(releaseTxHash, 16)}` : ''}`;
                     )}
                     {(!lockTxHash && !releaseTxHash) && (
                         <span className="text-primary font-bold text-sm opacity-40 flex items-center justify-center gap-2">
-                            Ver operación en cadena
+                            {t('success.viewOnChain')}
                             <span className="material-symbols-outlined text-[18px]">open_in_new</span>
                         </span>
                     )}
@@ -234,38 +344,47 @@ ${releaseTxHash ? `Liberación: ${truncateHash(releaseTxHash, 16)}` : ''}`;
 
                 {/* Share button */}
                 <section>
-                    <button
-                        onClick={handleShare}
-                        className="text-primary font-bold text-sm hover:opacity-80 transition-opacity flex items-center justify-center gap-2 mx-auto bg-primary/10 px-4 py-2 rounded-lg"
-                    >
-                        Compartir recibo
-                        <span className="material-symbols-outlined text-[18px]">share</span>
-                    </button>
+                    <div className="flex flex-wrap justify-center gap-2">
+                        <button
+                            onClick={handleCopy}
+                            className="text-primary font-bold text-sm hover:opacity-80 transition-opacity flex items-center justify-center gap-2 bg-primary/10 px-4 py-2 rounded-sm"
+                        >
+                            {copied ? tr('success.receiptCopiedShort') : tr('success.copyReceipt')}
+                            <span className="material-symbols-outlined text-[18px]">content_copy</span>
+                        </button>
+                        <button
+                            onClick={handleShare}
+                            className="text-primary font-bold text-sm hover:opacity-80 transition-opacity flex items-center justify-center gap-2 bg-primary/10 px-4 py-2 rounded-sm"
+                        >
+                            {t('success.shareReceipt')}
+                            <span className="material-symbols-outlined text-[18px]">share</span>
+                        </button>
+                    </div>
                 </section>
 
                 {/* Star rating */}
-                <section>
-                    <p className="text-on-surface-variant font-medium text-sm mb-4">¿Cómo estuvo el servicio de {agentName}?</p>
+                {agentName ? <section>
+                    <p className="text-on-surface-variant font-medium text-sm mb-4">{t('success.howWasService', { agentName })}</p>
                     <div className="flex justify-center gap-2">
                         {[1, 2, 3, 4, 5].map((star) => (
                             <span
                                 key={star}
-                                className="material-symbols-outlined text-outline-variant text-[32px] cursor-pointer hover:text-primary transition-colors"
+                                className="material-symbols-outlined text-gris text-[32px] cursor-pointer hover:text-primary transition-colors"
                             >
                                 star
                             </span>
                         ))}
                     </div>
-                </section>
+                </section> : null}
             </div>
 
             {/* Primary Action */}
             <div className="w-full pt-8">
                 <button
                     onClick={onHome}
-                    className="w-full h-[54px] bg-gradient-to-r from-primary to-primary-container text-white font-bold rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                    className="w-full h-[54px] bg-naranja text-papel border-2 border-tinta shadow-solida font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all flex items-center justify-center gap-2"
                 >
-                    Volver al inicio
+                    {t('success.backToHome')}
                     <span className="material-symbols-outlined">arrow_forward</span>
                 </button>
             </div>

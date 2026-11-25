@@ -45,3 +45,34 @@ All errors follow this shape:
 ```
 
 The `devMessage` is logged on the server but never exposed to the client.
+
+## Delegated Signing Endpoints (MicoPay Connect - SIGN-01)
+
+Delegated signing allows first-party desktop or web products (such as Coffee Payments) to request Stellar transaction signatures from the MicoPay wallet without ever transmitting or storing private key material on the backend or external client.
+
+### Endpoints
+
+1. `POST /sign-requests` (Device-authenticated)
+   - **Headers:** `Authorization: Bearer <device_token>`
+   - **Body:** `{ txxdr, identifier?, instruction?, kind?, expire_minutes? }`
+   - **Response (200):** `{ id, qr, deeplink, pushed }`
+
+2. `GET /sign-requests/:id` (Device-authenticated)
+   - **Headers:** `Authorization: Bearer <device_token>`
+   - **Response (200 - Xaman byte-identical shape):** `{ resolved, signed, cancelled, expired, txid, account }`
+
+3. `POST /sign-requests/:id/resolve` (Wallet-authenticated)
+   - **Headers:** `Authorization: Bearer <wallet_jwt>`
+   - **Body:** `{ signed_xdr?, cancelled? }`
+   - **Response (200):** `{ success: true, status: "signed" | "cancelled", txid?, account? }`
+
+### Issuing a Device Key
+
+Device keys are hashed at rest using SHA-256 and authenticated via Bearer tokens. To issue a new device key for an external client:
+
+```bash
+npm run issue-device-key -- "Coffee Payments POS"
+```
+
+The script outputs the plaintext token (`mp_dev_...`) ONCE. Save this token securely in the consuming client application.
+

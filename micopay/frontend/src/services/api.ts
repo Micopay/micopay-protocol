@@ -1,8 +1,17 @@
 import axios from 'axios';
+import { Networks } from '@stellar/stellar-sdk';
 import { extractApiErrorPayload, toApiError } from '../utils/apiError';
-import { signChallenge, getPublicKey } from '../lib/keystore';
+import { signChallenge, getPublicKey, signTransactionXdr } from '../lib/keystore';
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
+import { assertWebAuthChallenge } from '../lib/signer/webAuthChallenge';
+import { validatePreparedEscrowTx } from './escrowTxValidation';
+// CASH-5A: el conjunto canónico de estados vive en TradeStateBadge, que es su
+// dueño según el issue. Import de solo tipo: se borra al compilar, así que no
+// crea dependencia en runtime de services -> components.
+import type { TradeState } from '../components/TradeStateBadge';
 import { removeKey } from './secureStorage';
 import { PLATFORM_FEE_PERCENT } from '../constants/trade';
+import type { MutationType, MutationPayloadMap } from './offlineQueue';
 
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
@@ -13,29 +22,42 @@ function authHeaders(token: string) {
   return { headers: { Authorization: `Bearer ${token}` } };
 }
 
-// ─── DeFi: KYC (Etherfuse hosted flow) ─────────────────────────────────────
+// ─── DeFi: KYC (hosted flows — Etherfuse for CETES onboarding, Didit for #314's
+// tiered gate; both share the same POST start / GET status polling contract) ──
 
-export type KYCStatus = 'pending' | 'approved' | 'rejected';
+export type KYCProvider = 'etherfuse' | 'didit';
+export type KYCLevel = 1 | 2;
+export type KYCStatus = 'not_started' | 'pending' | 'approved' | 'rejected';
 
 export interface KYCStatusResponse {
   status: KYCStatus;
   reason?: string | null;
+  level?: KYCLevel;
 }
 
 /**
  * Generates a short-lived (≈15 min) onboarding URL.
  * URL must be generated at button touch (not earlier).
  */
-export async function startKYC(): Promise<{ onboardingUrl: string }>{
-  const res = await http.post('/defi/kyc/start', {});
+export async function startKYC(
+  token: string,
+  provider: KYCProvider = 'etherfuse',
+  email?: string,
+  level: KYCLevel = 1,
+): Promise<{ onboardingUrl: string }> {
+  const res = await http.post('/defi/kyc/start', { email }, { ...authHeaders(token), params: { provider, level } });
   return res.data;
 }
 
 /**
  * Poll KYC verification status.
  */
-export async function getKYCStatus(): Promise<KYCStatusResponse> {
-  const res = await http.get('/defi/kyc/status');
+export async function getKYCStatus(
+  token: string,
+  provider: KYCProvider = 'etherfuse',
+  level: KYCLevel = 1,
+): Promise<KYCStatusResponse> {
+  const res = await http.get('/defi/kyc/status', { ...authHeaders(token), params: { provider, level } });
   return res.data;
 }
 
@@ -54,44 +76,152 @@ export interface CurrentUserProfile {
   deleted_at?: string | null;
   wallet_type?: string | null;
   created_at?: string;
+  /** Completed trades (reputation) — computed by GET /users/me */
+  trades_completed?: number;
+  /** Completion rate (%) over terminal trades, null if no history */
+  completion_rate?: number | null;
+  /** Reputation tier: Nuevo | Bronce | Plata | Oro */
+  reputation_tier?: string;
+
+  /**
+   * KYC-1: identidad real del KYC general. `Home` y `MerchantSettings` leían
+   * `verification_status`, un campo que no existe en la respuesta —el propio
+   * código lo casteaba con `as any`— así que su valor era siempre `undefined`.
+   */
+  kyc_level?: number | null;
+  kyc_provider?: 'didit' | 'etherfuse' | null;
+  kyc_level_verified_at?: string | null;
+  /**
+   * RED-1: pertenencia a Red MicoPay. Es un hecho aparte de tener sesión, de
+   * estar verificado y de estar disponible ahora mismo. Ausente = no inscrito;
+   * nunca se debe inferir de que haya sesión, que era el defecto anterior.
+   */
+  provider_status?: ProviderStatus | null;
+  /**
+   * Disponibilidad comercial actual. Solo significa algo si eres agente activo.
+   * El KYC dice quién eres, no si estás atendiendo.
+   */
+  availability?: 'online' | 'offline' | 'paused' | null;
+  merchant_available?: boolean | null;
 }
+
+/** RED-1: los cuatro estados posibles de pertenencia a Red MicoPay. */
+export type ProviderStatus = 'not_enrolled' | 'pending_verification' | 'active' | 'suspended';
+
+export interface ProviderReadinessItem {
+  /** Identificador estable: la app no depende del texto del servidor. */
+  key: 'kyc' | 'location' | 'limits';
+  done: boolean;
+  detail: string | null;
+}
+
+export interface ProviderReadiness {
+  status: ProviderStatus;
+  /** La elegibilidad la decide el servidor. La app no la deduce sumando items. */
+  can_activate: boolean;
+  items: ProviderReadinessItem[];
+  availability: string | null;
+  merchant_available: boolean;
+  required_kyc_level: number;
+  kyc_level: number;
+  kyc_provider: string | null;
+}
+
+/** RED-1: inicia el alta como agente. Idempotente. */
+export async function enrollAsProvider(token: string): Promise<ProviderReadiness> {
+  const res = await http.post('/merchants/me/enroll', {}, authHeaders(token));
+  return res.data;
+}
+
+/** RED-1: qué falta para poder activarse. La verdad la dice el servidor. */
+export async function fetchProviderReadiness(token: string): Promise<ProviderReadiness> {
+  const res = await http.get('/merchants/me/readiness', authHeaders(token));
+  return res.data;
+}
+
+/** RED-1: activa al agente. Falla cerrada en el servidor si falta algo. */
+export async function activateProvider(token: string): Promise<ProviderReadiness> {
+  const res = await http.post('/merchants/me/activate', {}, authHeaders(token));
+  return res.data;
+}
+
+/** CASH-1 (#372): canonical product flow, independent of the escrow roles. */
+export type TradeFlow = 'deposit' | 'cashout';
 
 export interface TradeData {
   id: string;
-  status: string;
+  /** CASH-5A: estado canónico. El tipo documenta el contrato; la realidad
+   *  en runtime se valida con parseTradeState antes de usarla. */
+  status: TradeState;
   secret_hash: string;
   amount_mxn: number;
+  /** Roles del escrow. GET /trades/:id y POST /trades los devuelven. */
+  seller_id?: string;
+  buyer_id?: string;
+  /** CASH-1: flujo de producto y agente, columnas de `trades`. */
+  flow?: TradeFlow;
+  provider_id?: string;
+  seller_stellar_address?: string | null;
+  buyer_stellar_address?: string | null;
+  escrow_contract_id?: string | null;
   lock_tx_hash?: string | null;
+  release_tx_hash?: string | null;
+  /**
+   * WP-A: activo y cifras del escrow, congelados por el servidor al crear la
+   * operacion. Opcionales porque una respuesta antigua o una operacion demo no
+   * los trae: en ese caso la UI muestra solo pesos y no inventa el activo.
+   */
+  asset_code?: string | null;
+  /** MXN por 1 unidad del activo, decimal en cadena. */
+  rate_mxn?: string | null;
+  /**
+   * Cifras en unidades minimas (stroops), como cadenas enteras. Nunca se
+   * recalculan en el cliente. El contrato bloquea `amount + platform_fee`:
+   *  - `amount_stroops`: lo que recibe el comprador al liberar;
+   *  - `platform_fee_stroops`: la comision de plataforma;
+   *  - `total_locked_stroops`: lo que retiene el escrow y devuelve si hay reembolso.
+   */
+  amount_stroops?: string | null;
+  platform_fee_stroops?: string | null;
+  total_locked_stroops?: string | null;
+  /**
+   * H5: `cash_in_hand` = el monto es el efectivo que cambia de mano. Las
+   * anteriores (`amount_is_escrow`) no traen el desglose del cliente.
+   */
+  fee_model?: string | null;
+  /** Lo que paga el cliente: saldo en retiro (monto + comisiones), efectivo en deposito. */
+  client_pays_mxn?: number | null;
+  /** Lo que recibe el cliente: efectivo en retiro, saldo en deposito. */
+  client_receives_mxn?: number | null;
 }
 
 export interface TradeDetailResponse {
   trade: TradeData & {
     lock_tx_hash?: string | null;
     release_tx_hash?: string | null;
+    /** WP5: la base y el contrato no coinciden; soporte lo revisa. */
+    chain_review_reason?: string | null;
     platform_fee_mxn?: number;
+    /** Congeladas al crear la operacion (tradeFees.ts del backend). */
+    provider_fee_mxn?: number;
+    payout_mxn?: number;
     seller_id?: string;
     buyer_id?: string;
+    flow?: TradeFlow;
+    provider_id?: string;
     created_at?: string;
     completed_at?: string | null;
     expires_at?: string;
   };
+  /** Buyer may sign decline() for this exact contract and trade state. */
+  decline_available: boolean;
+  /** #16: en `refunded`, si fue decline o vencimiento. */
+  refund_kind?: 'decline' | 'timeout' | null;
+  /** Cash-out: el agente ya escaneó el QR y registró la entrega. */
+  cash_handoff_confirmed?: boolean;
   merchant_unavailable: boolean;
   seller_username: string | null;
-}
-
-export interface RampQuote {
-  id: string;
-  amount_in: number;
-  amount_out: number;
-  expires_at: string;
-}
-
-export interface RampOrder {
-  id: string;
-  status: string;
-  withdrawAnchorAccount?: string;
-  withdrawMemo?: string;
-  withdrawMemoType?: string;
+  buyer_username: string | null;
 }
 
 export async function fetchTradeDetail(tradeId: string, buyerToken: string): Promise<TradeDetailResponse> {
@@ -102,34 +232,52 @@ export async function fetchTradeDetail(tradeId: string, buyerToken: string): Pro
 /** Mirrors backend `CancelTradeResult` after POST /trades/:id/cancel (#20). */
 export interface CancelTradeResponse {
   status: 'cancelled';
+  /**
+   * CASH-2: hay fondos que volverán a su dueño. NO significa que ya hayan
+   * vuelto: cancelar detiene el flujo de la app, no liquida la cadena.
+   */
   refund_expected: boolean;
+  /** CASH-2: desde cuándo se puede reclamar. `null` si no hay fondos. */
+  refund_available_at: string | null;
   lock_tx_hash: string | null;
+  decline_available: boolean;
 }
 
-export async function getOfframpQuote(cetesAmount: string, token: string): Promise<RampQuote> {
-  const res = await http.post('/defi/ramp/quote', { type: 'offramp', amount: cetesAmount }, authHeaders(token));
-  return res.data;
-}
-
-export async function createOfframpOrder(quoteId: string, token: string): Promise<RampOrder> {
-  const res = await http.post('/defi/ramp/order', { quote_id: quoteId, useAnchor: true }, authHeaders(token));
-  return res.data;
-}
-
-export async function regenerateOfframpTx(orderId: string, token: string): Promise<RampOrder> {
-  const res = await http.post(`/defi/ramp/order/${orderId}/regenerate_tx`, {}, authHeaders(token));
-  return res.data;
-}
-
-export async function getRampOrder(orderId: string, token: string): Promise<RampOrder> {
-  const res = await http.get(`/defi/ramp/order/${orderId}`, authHeaders(token));
-  return res.data;
+export async function declineTradeRequest(tradeId: string, token: string): Promise<RefundTradeResponse> {
+  try {
+    const trade = await getTrade(tradeId, token);
+    const prepareRes = await http.post(`/trades/${tradeId}/decline/prepare`, {}, authHeaders(token));
+    const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
+    let signedXdr: string | undefined;
+    if (!('mock' in prepared)) {
+      await validatePreparedEscrowTx(prepared.xdr, prepared.network_passphrase, trade, 'decline');
+      signedXdr = await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'decline');
+    }
+    const res = await http.post(
+      `/trades/${tradeId}/decline`,
+      signedXdr ? { signed_xdr: signedXdr } : {},
+      authHeaders(token),
+    );
+    return res.data as RefundTradeResponse;
+  } catch (e: unknown) {
+    const { message } = extractApiErrorPayload(e);
+    throw new Error(message);
+  }
 }
 
 export async function cancelTradeRequest(tradeId: string, buyerToken: string): Promise<CancelTradeResponse> {
   try {
     const res = await http.post(`/trades/${tradeId}/cancel`, {}, authHeaders(buyerToken));
     return res.data as CancelTradeResponse;
+  } catch (e: unknown) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+/** D4: el cliente de un depósito reporta que pagó y el agente no confirmó. */
+export async function openCashClaim(tradeId: string, token: string, note?: string): Promise<void> {
+  try {
+    await http.post(`/trades/${tradeId}/cash-claim`, note ? { note } : {}, authHeaders(token));
   } catch (e: unknown) {
     throw toApiError(extractApiErrorPayload(e));
   }
@@ -143,60 +291,191 @@ export async function patchMerchantAvailability(
   return res.data.user;
 }
 
-export async function registerUser(username: string): Promise<UserData> {
-  const stellar_address = (await getPublicKey()) ?? generateFallbackAddress(username);
-  const res = await http.post("/users/register", { username, stellar_address });
-  return { ...res.data.user, token: res.data.token };
+/**
+ * Mirrors backend `MerchantLocation` after PATCH /merchants/me/location.
+ *
+ * RED-3: `address_text` era un solo campo de texto libre que acababa en el
+ * discovery anonimo. Ahora son dos cosas distintas, porque lo son: la zona es
+ * publica y el punto exacto es privado.
+ */
+export interface MerchantLocation {
+  latitude: number;
+  longitude: number;
+  /** Zona amplia y publica. */
+  area_label: string | null;
+  /** Punto exacto. Privado salvo consentimiento explicito. */
+  meeting_point: string | null;
+  /** Consentimiento para publicar el punto exacto. Nunca se infiere. */
+  publish_storefront: boolean;
+  updated_at: string;
 }
 
-// Used only if keypair hasn't been generated yet (should not happen in normal flow)
-function generateFallbackAddress(prefix: string): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let address = "G" + prefix.toUpperCase().replace(/[^A-Z2-7]/g, "A");
-  while (address.length < 56) {
-    address += chars[Math.floor(Math.random() * chars.length)];
+export async function updateMerchantLocation(
+    input: {
+      latitude: number;
+      longitude: number;
+      area_label?: string;
+      meeting_point?: string;
+      publish_storefront?: boolean;
+    },
+    token: string,
+): Promise<MerchantLocation> {
+  const res = await http.patch('/merchants/me/location', input, authHeaders(token));
+  return res.data.location;
+}
+
+/** Lo que dice la billetera llega tal cual; solo se traducen las respuestas del backend. */
+function webAuthError(e: unknown): unknown {
+  return axios.isAxiosError(e) ? toApiError(extractApiErrorPayload(e)) : e;
+}
+
+/** Reto SEP-10 firmado por la billetera. Se revisa antes de pedir la firma. */
+async function signedWebChallenge(account: string): Promise<string> {
+  const passphrase = import.meta.env.VITE_NETWORK_PASSPHRASE || Networks.TESTNET;
+  const res = await http.get('/auth/sep10', { params: { account } });
+  assertWebAuthChallenge(res.data.transaction, account, passphrase);
+  return signTransactionXdr(res.data.transaction, passphrase, 'web_auth');
+}
+
+/**
+ * Registers a new user. The backend requires proof that this device holds
+ * stellar_address's private key (same challenge/response dance as login) —
+ * otherwise anyone could register someone else's public Stellar address
+ * before they do. See docs/AUDIT_MOBILE_MAINNET.md, "Registro sin prueba de
+ * posesión de llave".
+ *
+ * `phoneHash` stays optional and is forwarded untouched: it belongs to the
+ * anti-abuse controls added in #319 and is unrelated to key possession.
+ */
+export async function registerUser(username: string, phoneHash?: string): Promise<UserData> {
+  // No fallback address here: a synthetic address whose key we do not hold
+  // could never sign the challenge, so it would fail server-side anyway.
+  const stellar_address = await getPublicKey();
+  if (!stellar_address) {
+    throw new Error('No device keypair found — generateAndStoreKeypair() must run before registerUser()');
   }
-  return address.substring(0, 56);
-}
 
-export async function getAuthToken(username: string): Promise<string> {
-  const stellar_address = (await getPublicKey()) ?? generateFallbackAddress(username);
+  if (IS_EXTERNAL_SIGNER) {
+    try {
+      const body: Record<string, string> = {
+        username,
+        stellar_address,
+        transaction: await signedWebChallenge(stellar_address),
+      };
+      if (phoneHash) body.phone_hash = phoneHash;
+      const res = await http.post('/users/register', body);
+      return { ...res.data.user, token: res.data.token };
+    } catch (e: unknown) {
+      throw webAuthError(e);
+    }
+  }
 
-  // Step 1: request a one-time challenge from the server
-  const { challenge } = await fetch(`${BASE_URL}/auth/challenge`, {
+  const challengeRes = await fetch(`${BASE_URL}/auth/challenge`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ stellar_address }),
-  }).then(r => r.json());
+  });
+  const challengeData = await challengeRes.json();
+  const challenge: string | undefined = challengeData.challenge;
+  if (!challenge) throw new Error(`Auth challenge failed (${challengeRes.status}): ${challengeData.error ?? 'no challenge'}`);
+
+  const signature = await signChallenge(challenge);
+
+  try {
+    const body: Record<string, string> = { username, stellar_address, challenge, signature };
+    if (phoneHash) {
+      body.phone_hash = phoneHash;
+    }
+    const res = await http.post("/users/register", body);
+    return { ...res.data.user, token: res.data.token };
+  } catch (e: unknown) {
+    // Surface the backend's code (ADDRESS_ALREADY_REGISTERED / USERNAME_TAKEN)
+    // as an ApiError — the two 409s need very different UI, see Register.tsx.
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+/**
+ * Exchanges the device keypair for a JWT. Authentication is by Stellar address
+ * only: the server finds the account from the signed challenge, so there is no
+ * username to pass. (It used to take one, which was never sent anywhere — the
+ * login screen was asking for a value it then ignored.)
+ */
+export async function getAuthToken(): Promise<string> {
+  const stellar_address = await getPublicKey();
+  if (!stellar_address) {
+    throw new Error('No device keypair found — generateAndStoreKeypair() must run before getAuthToken()');
+  }
+
+  if (IS_EXTERNAL_SIGNER) {
+    try {
+      const transaction = await signedWebChallenge(stellar_address);
+      const res = await http.post('/auth/sep10', { transaction });
+      return res.data.token;
+    } catch (e: unknown) {
+      throw webAuthError(e);
+    }
+  }
+
+  // Step 1: request a one-time challenge from the server
+  const challengeRes = await fetch(`${BASE_URL}/auth/challenge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stellar_address }),
+  });
+  const challengeData = await challengeRes.json();
+  const challenge: string | undefined = challengeData.challenge;
+  if (!challenge) throw new Error(`Auth challenge failed (${challengeRes.status}): ${challengeData.error ?? 'no challenge'}`);
 
   // Step 2: sign with the device keypair — private key never leaves the device
   const signature = await signChallenge(challenge);
 
   // Step 3: exchange challenge + signature for a JWT
-  const { token } = await fetch(`${BASE_URL}/auth/token`, {
+  const tokenRes = await fetch(`${BASE_URL}/auth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ stellar_address, challenge, signature }),
-  }).then(r => r.json());
+  });
+  const tokenData = await tokenRes.json();
+  const token: string | undefined = tokenData.token;
+  if (!token) throw new Error(tokenData.error ?? `Auth failed (${tokenRes.status})`);
 
   return token;
 }
 
+/**
+ * Creates a trade between the caller and a counterparty.
+ *
+ * CASH-1 (#372): the payload carries the *product* flow, not the caller's
+ * escrow role. 'deposit' means the caller buys crypto with cash (the
+ * counterparty locks funds as escrow seller); 'cashout' means the caller sells
+ * crypto for cash and is therefore the escrow seller, because only the seller
+ * can lock funds and reveal the HTLC secret. The backend derives the escrow
+ * roles and the Red MicoPay provider from this flow — the client never sends a
+ * provider id, and the API rejects the request if it tries.
+ */
 export async function createTrade(
-    sellerId: string,
+    counterpartyId: string,
     amountMxn: number,
-    buyerToken: string,
+    callerToken: string,
+    flow: TradeFlow = 'deposit',
+    /** WP-B: `asset_code` del escrow. Omitido -> el backend usa XLM. */
+    assetCode?: string,
 ): Promise<TradeData> {
   try {
-    const res = await http.post(
-        '/trades',
-        { seller_id: sellerId, amount_mxn: amountMxn },
-        authHeaders(buyerToken),
-    );
+    const body: Record<string, unknown> = { counterparty_id: counterpartyId, amount_mxn: amountMxn, flow };
+    if (assetCode !== undefined) body.asset_code = assetCode;
+    const res = await http.post('/trades', body, authHeaders(callerToken));
     return res.data.trade;
   } catch (e: unknown) {
     throw toApiError(extractApiErrorPayload(e));
   }
+}
+
+/** Operaciones abiertas de esta cuenta, para ubicar una firma pedida desde la web. */
+export async function getActiveTrades(token: string): Promise<TradeData[]> {
+  const res = await http.get('/trades/active', authHeaders(token));
+  return res.data.trades;
 }
 
 export async function getTrade(
@@ -207,16 +486,45 @@ export async function getTrade(
   return res.data.trade;
 }
 
+/**
+ * Locks the trade on-chain. The seller's own device key signs the lock()
+ * call locally (the contract requires seller.require_auth()) — the backend
+ * only ever sees the already-signed transaction.
+ */
 export async function lockTrade(
     tradeId: string,
     sellerToken: string,
-): Promise<{ lock_tx_hash: string }> {
-  const res = await http.post(
-      `/trades/${tradeId}/lock`,
+): Promise<{ status?: TradeState; lock_tx_hash: string }> {
+  const trade = await getTrade(tradeId, sellerToken);
+  const prepareRes = await http.post(
+      `/trades/${tradeId}/lock/prepare`,
       {},
       authHeaders(sellerToken),
   );
-  return { lock_tx_hash: res.data.lock_tx_hash };
+  const prepared = prepareRes.data as
+    | { mock: true }
+    | { xdr: string; network_passphrase: string }
+    | { status: TradeState; lock_tx_hash: string };
+  // Un lock anterior que tardo en confirmarse ya entro: no se firma otro.
+  if ('lock_tx_hash' in prepared) {
+    return { status: prepared.status, lock_tx_hash: prepared.lock_tx_hash };
+  }
+  let signedXdr: string | undefined;
+  if (!('mock' in prepared)) {
+    await validatePreparedEscrowTx(prepared.xdr, prepared.network_passphrase, trade, 'lock');
+    signedXdr = await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'lock');
+  }
+
+  const res = await http.post(
+      `/trades/${tradeId}/lock`,
+      signedXdr ? { signed_xdr: signedXdr } : {},
+      authHeaders(sellerToken),
+  );
+  // El `status` viaja tambien. Descartarlo dejaba el estado local en `pending`
+  // despues de un bloqueo exitoso, y la pantalla del QR volvia a intentar
+  // bloquear una operacion ya bloqueada: el servidor respondia 409 y la app lo
+  // traducia a "otra persona movio esta operacion antes que tu".
+  return { status: res.data.status as TradeState | undefined, lock_tx_hash: res.data.lock_tx_hash };
 }
 
 export async function revealTrade(
@@ -230,10 +538,14 @@ export async function revealTrade(
   );
 }
 
+/**
+ * Devuelve el QR de cobro del vendedor. El payload lleva un token opaco de un
+ * solo uso, no el preimage HTLC (SEC-02).
+ */
 export async function getSecret(
     tradeId: string,
     sellerToken: string,
-): Promise<{ secret: string; qr_payload: string }> {
+): Promise<{ qr_payload: string; expires_at: string; expires_in: number }> {
   const res = await http.get(
       `/trades/${tradeId}/secret`,
       authHeaders(sellerToken),
@@ -242,15 +554,39 @@ export async function getSecret(
 }
 
 export interface CompleteTradeResponse {
-  status: string;
+  /** CASH-5A: estado canónico. El tipo documenta el contrato; la realidad
+   *  en runtime se valida con parseTradeState antes de usarla. */
+  status: TradeState;
   release_tx_hash: string;
 }
 
+/**
+ * Releases the trade on-chain. The buyer's own device key signs the release()
+ * call locally (the contract requires buyer.require_auth()) — the backend
+ * only ever sees the already-signed transaction.
+ */
 export async function completeTrade(
     tradeId: string,
-    buyerToken: string,
+    token: string,
 ): Promise<CompleteTradeResponse> {
-  const res = await http.post(`/trades/${tradeId}/complete`, {}, authHeaders(buyerToken));
+  // Quien recibe un activo emitido (USDC) necesita su trustline ANTES del
+  // prepare: sin ella la simulacion del release falla. El activo sale de la
+  // operacion, no de la configuracion del APK. XLM no necesita nada.
+  const trade = await getTrade(tradeId, token);
+  if (trade.asset_code && trade.asset_code.toUpperCase() !== 'XLM') {
+    const { ensureTrustline } = await import('./payment');
+    await ensureTrustline(trade.asset_code);
+  }
+
+  const prepareRes = await http.post(`/trades/${tradeId}/complete/prepare`, {}, authHeaders(token));
+  const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
+  let signedXdr: string | undefined;
+  if (!('mock' in prepared)) {
+    await validatePreparedEscrowTx(prepared.xdr, prepared.network_passphrase, trade, 'release');
+    signedXdr = await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'release');
+  }
+
+  const res = await http.post(`/trades/${tradeId}/complete`, signedXdr ? { signed_xdr: signedXdr } : {}, authHeaders(token));
   return res.data;
 }
 
@@ -271,7 +607,9 @@ export async function refundTradeRequest(tradeId: string, token: string): Promis
 
 export interface TradeHistoryItem {
   id: string;
-  status: string;
+  /** CASH-5A: estado canónico. El tipo documenta el contrato; la realidad
+   *  en runtime se valida con parseTradeState antes de usarla. */
+  status: TradeState;
   amount_mxn: number;
   platform_fee_mxn: number;
   lock_tx_hash: string | null;
@@ -280,13 +618,23 @@ export interface TradeHistoryItem {
   completed_at: string | null;
   seller_id: string;
   buyer_id: string;
+  flow: TradeFlow;
+  provider_id: string;
 }
 
 export interface MerchantTrade {
   id: string;
-  buyer_handle: string;
+  /** CASH-3: la contraparte es el CLIENTE, que en cash-out es el vendedor del
+   *  escrow y no el comprador. Antes se llamaba `buyer_handle` y en cash-out
+   *  traia el nombre del propio proveedor. */
+  client_handle: string;
+  /** CASH-3: sin esto las dos clases de solicitud se ven identicas en la
+   *  bandeja, y el proveedor no sabe si va a entregar o a recibir efectivo. */
+  flow: TradeFlow;
   amount_mxn: number;
-  status: string;
+  /** CASH-5A: estado canónico. El tipo documenta el contrato; la realidad
+   *  en runtime se valida con parseTradeState antes de usarla. */
+  status: TradeState;
   created_at: string;
 }
 
@@ -300,9 +648,31 @@ export async function getMerchantTrades(
 
 export async function getTradeHistory(
     token: string,
+    status?: string,
 ): Promise<TradeHistoryItem[]> {
-  const res = await http.get("/trades/history", authHeaders(token));
+  const res = await http.get("/trades/history", {
+    ...authHeaders(token),
+    // The server filters; "all" (or no value) means no status filter.
+    params: status && status !== "all" ? { status } : undefined,
+  });
   return res.data.trades;
+}
+
+/** Transferencia de la cuenta leida de la red (Enviar pago, pagos de fuera). */
+export interface PaymentHistoryItem {
+  id: string;
+  tx_hash: string;
+  created_at: string;
+  direction: 'in' | 'out';
+  amount: string;
+  asset: string;
+  counterparty: string;
+  counterparty_username: string | null;
+}
+
+export async function getPaymentHistory(token: string): Promise<PaymentHistoryItem[]> {
+  const res = await http.get("/payments/history", authHeaders(token));
+  return res.data.payments;
 }
 
 export async function getCurrentUser(
@@ -338,6 +708,19 @@ export async function setAvailability(availability: Availability, token: string)
   await http.patch('/users/me/availability', { availability }, authHeaders(token));
 }
 
+/** Guarda el token de Firebase del telefono para que el backend pueda avisar. */
+export async function registerPushToken(pushToken: string, token: string): Promise<void> {
+  await http.patch('/users/me/push_token', { push_token: pushToken }, authHeaders(token));
+}
+
+/**
+ * Despues de "Enviar pago": el backend lee la transaccion en la red y, si quien
+ * recibe es usuario de MicoPay, le avisa al telefono.
+ */
+export async function notifyPaymentSent(txHash: string, token: string): Promise<void> {
+  await http.post('/payments/notify', { tx_hash: txHash }, authHeaders(token));
+}
+
 // ─── DeFi: CETES ──────────────────────────────────────────────────────────
 
 export interface CETESRate {
@@ -365,10 +748,54 @@ export interface XlmMxnRate {
   rate: number;
   source: string;
   fetchedAt: string;
+  /** true cuando se sirvió la última cotización conocida porque las fuentes fallaron. */
+  stale?: boolean;
 }
 
 export async function getXlmMxnRate(): Promise<XlmMxnRate> {
   const res = await http.get('/rate/xlm-mxn');
+  return res.data;
+}
+
+/** Tasas por `code` de `ESCROW_ASSET_OPTIONS`. Solo activos con escrow. */
+const ESCROW_RATE_FETCHERS: Record<string, () => Promise<XlmMxnRate>> = {
+  XLM: getXlmMxnRate,
+  USDC: getUsdcMxnRate,
+};
+
+/**
+ * WP-B: MXN por 1 unidad del activo del escrow, para mostrar el equivalente
+ * ESTIMADO antes de crear la operacion. La tasa vinculante la congela el
+ * servidor al crearla; esta nunca se envia de vuelta.
+ *
+ * Rechaza una tasa que no sea un numero finito y positivo: dividir el monto
+ * entre 0, NaN o un negativo pintaria un equivalente absurdo con apariencia de
+ * dato real.
+ */
+export async function getEscrowAssetRate(code: string): Promise<XlmMxnRate> {
+  const fetcher = ESCROW_RATE_FETCHERS[code];
+  if (!fetcher) {
+    throw new Error(`No rate source for escrow asset ${code}`);
+  }
+  const data = await fetcher();
+  return { ...data, rate: parseEscrowAssetRate(data?.rate) };
+}
+
+export function parseEscrowAssetRate(raw: unknown): number {
+  const rate = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+  if (typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) {
+    throw new Error(`Invalid escrow asset rate: ${String(raw)}`);
+  }
+  return rate;
+}
+
+/**
+ * USDC→MXN desde el backend (multi-fuente + caché). El frontend nunca debe
+ * llevar un FX literal: si esto falla, la UI muestra "—"
+ * (docs/AUDIT_MOBILE_MAINNET.md §3).
+ */
+export async function getUsdcMxnRate(): Promise<XlmMxnRate> {
+  const res = await http.get('/rate/usdc-mxn');
   return res.data;
 }
 
@@ -377,19 +804,23 @@ export async function getCETESRate(amount = "100"): Promise<CETESRate> {
   return res.data;
 }
 
+// #12: estas rutas exigen sesion. Sin el token el backend respondia 401 y el
+// interceptor global cerraba la sesion: el sitio "se reiniciaba".
 export async function buyCETES(
     amount: string,
-    sourceAsset: "XLM" | "USDC" | "MXNe",
+    sourceAsset: "XLM" | "USDC",
+    token: string,
 ): Promise<CETESTxResult> {
-  const res = await http.post("/defi/cetes/buy", { amount, sourceAsset });
+  const res = await http.post("/defi/cetes/buy", { amount, sourceAsset }, authHeaders(token));
   return res.data;
 }
 
 export async function sellCETES(
     amount: string,
-    destAsset: "XLM" | "USDC" | "MXNe",
+    destAsset: "XLM" | "USDC",
+    token: string,
 ): Promise<CETESTxResult> {
-  const res = await http.post("/defi/cetes/sell", { amount, destAsset });
+  const res = await http.post("/defi/cetes/sell", { amount, destAsset }, authHeaders(token));
   return res.data;
 }
 
@@ -433,21 +864,23 @@ export async function getBlendPools(): Promise<BlendPoolsResponse> {
 export async function blendSupply(
     amount: string,
     asset: string,
-    collateral = false,
+    collateral: boolean,
+    token: string,
 ): Promise<BlendTxResult> {
   const res = await http.post("/defi/blend/supply", {
     amount,
     asset,
     collateral,
-  });
+  }, authHeaders(token));
   return res.data;
 }
 
 export async function blendBorrow(
     amount: string,
     asset: string,
+    token: string,
 ): Promise<BlendTxResult> {
-  const res = await http.post("/defi/blend/borrow", { amount, asset });
+  const res = await http.post("/defi/blend/borrow", { amount, asset }, authHeaders(token));
   return res.data;
 }
 
@@ -456,6 +889,19 @@ export interface MerchantConfig {
   min_trade_mxn: number;
   max_trade_mxn: number;
   daily_cap_mxn: number;
+  /** Politica vigente del servidor. No se reenvian al guardar. */
+  max_effective_fee_percent?: number;
+  max_provider_fee_percent?: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  address_text?: string | null;
+  /**
+   * RED-3: campos de ubicacion. Opcionales aqui porque los escribe
+   * PATCH /merchants/me/location, no el PATCH de tarifas y limites.
+   */
+  area_label?: string | null;
+  meeting_point?: string | null;
+  publish_storefront?: boolean;
 }
 
 export interface UserProfile {
@@ -486,7 +932,12 @@ export async function updateMerchantConfig(token: string, config: MerchantConfig
   return res.data.config;
 }
 
-type QueueFn = (type: string, payload: unknown) => Promise<string>;
+// Genérico y no `(string, unknown)`: así TypeScript verifica que el payload
+// que se encola tiene la forma que el sincronizador espera leer.
+type QueueFn = <T extends MutationType>(
+  type: T,
+  payload: MutationPayloadMap[T],
+) => Promise<string>;
 
 export async function updateMerchantConfigWithOfflineSupport(
   token: string,
@@ -496,7 +947,12 @@ export async function updateMerchantConfigWithOfflineSupport(
   try {
     const updated = await updateMerchantConfig(token, config);
     return { config: updated, queued: false };
-  } catch {
+  } catch (err: any) {
+    // Solo se encola si NO hubo respuesta del servidor, es decir, si fue un
+    // fallo de red. Un 400 de validación o un 401 de sesión expirada se van a
+    // rechazar igual al reintentar: propagarlos deja que la UI muestre el
+    // error real en vez de fingir que quedó guardado para más tarde.
+    if (err?.response) throw err;
     await queueFn('config', { config });
     return { config, queued: true };
   }
@@ -510,8 +966,11 @@ export async function updateMerchantAvailabilityWithOfflineSupport(
   try {
     await patchMerchantAvailability(token, available);
     return { queued: false };
-  } catch {
-    await queueFn('availability', { available });
+  } catch (err: any) {
+    // Mismo criterio que en updateMerchantConfigWithOfflineSupport: encolar
+    // solo los fallos de red, nunca los errores que el servidor sí respondió.
+    if (err?.response) throw err;
+    await queueFn('availability', { merchant_available: available });
     return { queued: true };
   }
 }
@@ -520,6 +979,13 @@ export async function updateMerchantAvailabilityWithOfflineSupport(
 
 /** Mirrors backend `AvailableMerchant` from GET /merchants/available. */
 export interface AvailableMerchant {
+  /** Desglose de comisiones calculado por el servidor, en MXN. Llega entero
+   *  para que la app no tenga que deducir ninguna parte restando. */
+  provider_fee_mxn?: number;
+  platform_fee_mxn?: number;
+  effective_fee_percent?: number;
+  /** Tope vigente enviado por el backend; permite cambiarlo sin recompilar el APK. */
+  max_effective_fee_percent?: number;
   seller_id: string;
   username: string;
   rate_percent: number;
@@ -528,10 +994,15 @@ export interface AvailableMerchant {
   daily_cap_mxn: number;
   latitude: number;
   longitude: number;
-  address_text: string | null;
+  /** RED-3: zona publica. Nunca el punto exacto. */
+  area_label: string | null;
+  /** RED-3: solo si el proveedor consintio publicar su local. */
+  storefront_address: string | null;
   distance_km: number;
-  /** Payout the buyer receives for the requested amount. */
+  /** Lo que recibe el cliente: efectivo en retiro, saldo en deposito (H5). */
   payout_mxn: number;
+  /** Lo que le cuesta al cliente: saldo en retiro (monto + comisiones), efectivo en deposito. */
+  client_pays_mxn?: number;
   /** Reputation: fraction 0..1 of completed trades (optional) */
   completion_rate?: number;
   /** Total completed trades (optional) */
@@ -548,10 +1019,10 @@ export interface AvailableMerchant {
 
 /**
  * Effective-fee guardrail. Validations V-1/V-3/V-7/V-8 found a universal ceiling:
- * users abandon MicoPay when the *total* cost exceeds ~5%. The UI warns above this
- * threshold. Kept here (not hardcoded in components) so it can be tuned centrally.
+ * Fallback para APKs o respuestas antiguas. El backend envia el tope vigente
+ * en discovery para que pueda cambiarse sin recompilar la app.
  */
-export const MAX_EFFECTIVE_FEE_PERCENT = 5;
+export const MAX_EFFECTIVE_FEE_PERCENT = 6;
 
 /**
  * Total effective cost the user pays = provider commission + platform fee.
@@ -596,15 +1067,29 @@ export async function getMerchantsAvailable(
 
 export interface MerchantConfirmResult {
   trade_id: string;
-  status: string;
+  /** CASH-5A: estado canónico. El tipo documenta el contrato; la realidad
+   *  en runtime se valida con parseTradeState antes de usarla. */
+  status: TradeState;
+  /** CASH-4: flujo canónico; la UI no lo infiere de los roles del escrow. */
+  flow: TradeFlow;
   amount_mxn: number;
   platform_fee_mxn: number;
-  buyer_handle: string;
+  /** H5: comision del agente en esta operacion. */
+  provider_fee_mxn?: number;
+  /**
+   * CASH-4: la contraparte de quien escanea, es decir el cliente. Antes era
+   * `buyer_handle` y en un cash-out el proveedor ES el comprador, así que la
+   * pantalla le mostraba su propio nombre.
+   */
+  client_handle: string;
   expires_at: string;
   expired: boolean;
   created_at: string;
   lock_tx_hash: string | null;
   release_tx_hash: string | null;
+  /** CASH-4: true si esta llamada reanudó una entrega ya confirmada. */
+  resumed: boolean;
+  handoff_confirmed_at: string;
 }
 
 /**
@@ -613,12 +1098,13 @@ export interface MerchantConfirmResult {
  */
 export async function merchantConfirmScan(
   tradeId: string,
+  claimToken: string,
   token: string,
 ): Promise<MerchantConfirmResult> {
   try {
     const res = await http.post(
       `/trades/${tradeId}/merchant-confirm`,
-      {},
+      { claim_token: claimToken },
       authHeaders(token),
     );
     return res.data as MerchantConfirmResult;
@@ -675,14 +1161,21 @@ export async function getRampQuote(
   return res.data as RampQuote;
 }
 
+/**
+ * Creates a ramp order (SPEI onramp deposit instructions, or offramp anchor
+ * account+memo). `bankAccountId` is resolved server-side from the caller's
+ * onboarded Etherfuse profile — the backend ignores it if sent, so it is not
+ * a parameter here. `useAnchor` (offramp only) requests anchor-rail withdraw
+ * instructions instead of a raw wallet payout.
+ */
 export async function createRampOrder(
   quoteId: string,
-  bankAccountId: string,
   token: string,
+  useAnchor = true,
 ): Promise<RampOrder> {
   const res = await http.post(
     '/defi/ramp/order',
-    { quoteId, bankAccountId },
+    { quoteId, useAnchor },
     authHeaders(token),
   );
   return res.data as RampOrder;
@@ -696,16 +1189,9 @@ export async function getRampOrderStatus(
   return res.data as RampOrderStatus;
 }
 
-export async function registerBankAccount(
-  clabe: string,
-  token: string,
-): Promise<BankAccountResult> {
-  try {
-    const res = await http.post('/defi/bank-account', { clabe }, authHeaders(token));
-    return res.data as BankAccountResult;
-  } catch (e: unknown) {
-    throw toApiError(extractApiErrorPayload(e));
-  }
+export async function regenerateRampOrderTx(orderId: string, token: string): Promise<RampOrder> {
+  const res = await http.post(`/defi/ramp/order/${orderId}/regenerate_tx`, {}, authHeaders(token));
+  return res.data as RampOrder;
 }
 
 // Global 401 handler: clear the persisted session and bounce to login.
@@ -713,9 +1199,259 @@ http.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      removeKey('micopay_users');
+      removeKey('micopay_user');
       window.location.href = '/#/login';
     }
     return Promise.reject(error);
   }
 );
+
+// ─── RED-3 · punto de encuentro (solo participantes) ──────────────────────
+
+export interface TradeMeetingPoint {
+  trade_id: string;
+  area_label: string | null;
+  meeting_point: string | null;
+  reason: 'shared' | 'not_set' | 'trade_not_accepted' | 'trade_terminal';
+}
+
+/**
+ * El punto exacto vive detrás de esta llamada autenticada, nunca en el
+ * discovery público. El backend exige participación en la operación.
+ */
+export async function fetchTradeMeetingPoint(
+    tradeId: string,
+    token: string,
+): Promise<TradeMeetingPoint> {
+  const res = await http.get(`/trades/${tradeId}/meeting-point`, authHeaders(token));
+  return res.data as TradeMeetingPoint;
+}
+
+// ─── CASH-6 · elegibilidad de reembolso (autoritativa del servidor) ────────
+
+export interface RefundEligibility {
+  trade_id: string;
+  eligible: boolean;
+  reason:
+    | 'eligible'
+    | 'not_participant'
+    | 'no_funds_locked'
+    | 'not_expired_yet'
+    | 'already_settled'
+    /** Ya hubo entrega de efectivo: el reembolso lo revisa soporte (D2). */
+    | 'cash_handoff_confirmed'
+    /** D4: el cliente reportó que pagó; lo revisa soporte. */
+    | 'cash_claim_open'
+    /** No se pudo leer el plazo en cadena; se reintenta, nunca se da por vencido. */
+    | 'unverifiable';
+  /** Caducidad de la solicitud. */
+  expires_at: string;
+  /** Desde cuándo se estima que se puede reembolsar (plazo del contrato, aprox.). */
+  refund_available_at?: string;
+  /** Hora del servidor: la cuenta atrás no depende del reloj del teléfono. */
+  server_time: string;
+  seconds_remaining: number;
+}
+
+export async function fetchRefundEligibility(
+    tradeId: string,
+    token: string,
+): Promise<RefundEligibility> {
+  const res = await http.get(`/trades/${tradeId}/refund-eligibility`, authHeaders(token));
+  return res.data as RefundEligibility;
+}
+
+// ─── Retirar a banco (SPEI, via Etherfuse v2) ──────────────────────────────
+// Un metodo por ruta de /defi/bank-withdraw/*. El backend las resuelve contra
+// Etherfuse y preserva el estado en la base; la app solo pinta.
+
+export type BankWithdrawStage =
+  | 'needs_didit'
+  | 'needs_kyc'
+  | 'kyc_review'
+  | 'kyc_action'
+  | 'needs_bank'
+  | 'ready';
+
+export interface BankWithdrawStatusResponse {
+  stage: BankWithdrawStage;
+  clabeMasked?: string;
+  kycMessage?: string | null;
+}
+
+/**
+ * `detail` pide al backend los requisitos de Etherfuse (mas lento): al abrir la
+ * pantalla y al volver de /idv, no en el polling.
+ */
+export async function fetchBankWithdrawStatus(token: string, opts: { detail?: boolean } = {}): Promise<BankWithdrawStatusResponse> {
+  try {
+    const res = await http.get('/defi/bank-withdraw/status', {
+      ...authHeaders(token),
+      params: opts.detail ? { detail: '1' } : undefined,
+    });
+    return res.data as BankWithdrawStatusResponse;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+/** Launch form nuevo para volver a /idv sin reenviar los datos. */
+export async function relaunchBankKyc(token: string): Promise<BankKycLaunchForm> {
+  try {
+    const res = await http.post('/defi/bank-withdraw/kyc/launch', {}, authHeaders(token));
+    return (res.data as { launch: BankKycLaunchForm }).launch;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+export interface StartBankKycRequest {
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;    // YYYY-MM-DD
+  taxId: string;          // RFC
+  curp: string;
+  country: string;        // ISO alpha-3 ("MEX")
+  address: {
+    street: string;
+    city: string;
+    country: string;
+    region?: string;
+    postalCode?: string;
+    buildingNumber?: string;
+    flatNumber?: string;
+  };
+  email: string;
+  displayName: string;
+}
+
+export interface BankKycLaunchForm {
+  /** URL a abrir con POST desde el navegador del telefono. */
+  url: string;
+  fields: Record<string, string>;
+}
+
+export interface StartBankKycResponse {
+  customerOrgId: string;
+  verification: { overall: string; userMessage?: string | null };
+  launch: BankKycLaunchForm;
+}
+
+export async function startBankKyc(token: string, req: StartBankKycRequest): Promise<StartBankKycResponse> {
+  try {
+    const res = await http.post('/defi/bank-withdraw/kyc', req, authHeaders(token));
+    return res.data as StartBankKycResponse;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+export interface RegisterBankAccountRequest {
+  clabe: string;              // 18 digitos
+  accountHolderName: string;
+  taxId: string;              // RFC
+}
+
+export interface RegisterBankAccountResponse {
+  paymentAccountId: string;
+  status: 'pending' | 'ready' | 'rejected' | 'disabled';
+}
+
+export async function registerBankAccount(
+  token: string,
+  req: RegisterBankAccountRequest,
+): Promise<RegisterBankAccountResponse> {
+  try {
+    const res = await http.post('/defi/bank-withdraw/bank-account', req, authHeaders(token));
+    return res.data as RegisterBankAccountResponse;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+export interface BankWithdrawQuote {
+  quoteId: string;
+  sourceAmount: string;
+  sourceAsset: string;        // "USDC:ISSUER"
+  fundingAmount: string;      // CETES exactos que recibira Etherfuse
+  fundingAsset: string;       // "CETES:ISSUER"
+  dexPath: Array<{ code: string; issuer?: string }>;
+  destinationAmount: string;  // MXN
+  destinationAsset: 'MXN';
+  feeBps: number;
+  feeAmount: string;
+  feeAsset: string;
+  expiresAt: string;
+  clabeMasked: string;
+}
+
+export async function createBankWithdrawQuote(
+  token: string,
+  req: { asset: 'USDC'; amount: string },
+): Promise<BankWithdrawQuote> {
+  try {
+    const res = await http.post('/defi/bank-withdraw/quote', req, authHeaders(token));
+    return res.data as BankWithdrawQuote;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+export type BankOrderStatus =
+  | 'created' | 'funded' | 'claimable' | 'completed' | 'failed' | 'canceled' | 'refunded';
+
+export interface BankWithdrawOrder {
+  orderId: string;
+  status: BankOrderStatus;
+  fundingInstructions?: {
+    rail: string;
+    reference: string;
+    fundingDeadline: string;
+    destination?: {
+      address?: string;
+      memo?: string;
+      chain?: string;
+      clabe?: string;
+      bankName?: string;
+      recipientName?: string;
+    };
+  };
+  /** XDR sin firmar; la app lo valida con validatePreparedWithdrawTx. */
+  preparedTransaction?: string;
+  swap: {
+    sendAsset: { code: string; issuer?: string };
+    sendMax: string;
+    destinationAsset: { code: string; issuer?: string };
+    destinationAmount: string;
+    path: Array<{ code: string; issuer?: string }>;
+  };
+}
+
+export async function confirmBankWithdrawOrder(
+  token: string,
+  quoteId: string,
+): Promise<BankWithdrawOrder> {
+  try {
+    const res = await http.post('/defi/bank-withdraw/order', { quoteId }, authHeaders(token));
+    return res.data as BankWithdrawOrder;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+export interface BankWithdrawOrderSummary {
+  orderId: string;
+  status: BankOrderStatus;
+  destinationMxn: string | null;
+  createdAt: string;
+  statusUpdatedAt: string | null;
+}
+
+export async function fetchBankWithdrawOrders(token: string): Promise<BankWithdrawOrderSummary[]> {
+  try {
+    const res = await http.get('/defi/bank-withdraw/orders', authHeaders(token));
+    return (res.data as { orders: BankWithdrawOrderSummary[] }).orders;
+  } catch (e) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}

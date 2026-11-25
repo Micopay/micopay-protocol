@@ -1,14 +1,20 @@
-import { useState, useEffect, useCallback } from 'react';
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { useQRScanner } from '../hooks/useQRScanner';
-import { usePushNotifications } from '../hooks/usePushNotifications';
+import { useCountdown } from '../hooks/useCountdown';
 import {
   getMerchantTrades,
   merchantConfirmScan,
+  completeTrade,
   type MerchantTrade,
   type MerchantConfirmResult,
 } from '../services/api';
 import { parseQRPayload } from '../utils/qrPayload';
+import { confirmCashReceived, cashConfirmErrorMessage } from '../utils/cashConfirm';
 import SupportLink from '../components/SupportLink';
+import { Pill } from '../components/ui';
+import { getPushPermission, requestPushPermission, type PushPermission } from '../lib/push';
 
 // ── Status display config ──────────────────────────────────────────────────
 
@@ -21,15 +27,6 @@ const STATUS_COLORS: Record<string, string> = {
   refunded: 'bg-gray-100 text-gray-800',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Pendiente',
-  locked: 'Bloqueado',
-  revealing: 'Revelando',
-  completed: 'Completado',
-  cancelled: 'Cancelado',
-  refunded: 'Reembolsado',
-};
-
 const STATUS_ICONS: Record<string, string> = {
   pending: 'hourglass_top',
   locked: 'lock',
@@ -39,34 +36,6 @@ const STATUS_ICONS: Record<string, string> = {
   refunded: 'undo',
 };
 
-// ── Countdown hook ─────────────────────────────────────────────────────────
-
-function useCountdown(expiresAt: string | null) {
-  const [remaining, setRemaining] = useState('');
-
-  useEffect(() => {
-    if (!expiresAt) return;
-
-    const tick = () => {
-      const diff = new Date(expiresAt).getTime() - Date.now();
-      if (diff <= 0) {
-        setRemaining('Expirado');
-        return;
-      }
-      const h = Math.floor(diff / 3_600_000);
-      const m = Math.floor((diff % 3_600_000) / 60_000);
-      const s = Math.floor((diff % 60_000) / 1000);
-      setRemaining(h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`);
-    };
-
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [expiresAt]);
-
-  return remaining;
-}
-
 // ── Scan state machine ─────────────────────────────────────────────────────
 
 type ScanView =
@@ -74,27 +43,70 @@ type ScanView =
   | { type: 'loading' }
   | { type: 'parse_error'; message: string }
   | { type: 'api_error'; message: string; tradeId?: string }
-  | { type: 'confirmation'; data: MerchantConfirmResult };
+  | { type: 'confirmation'; data: MerchantConfirmResult }
+  | { type: 'cash_confirmed'; tradeId: string };
 
 // ── Trade confirmation screen ──────────────────────────────────────────────
 
 function TradeConfirmationCard({
   data,
+  token,
+  onReleased,
   onDismiss,
 }: {
   data: MerchantConfirmResult;
+  token: string | null;
+  onReleased: (result: MerchantConfirmResult) => void;
   onDismiss: () => void;
 }) {
-  const countdown = useCountdown(data.expires_at);
+  const { t } = useTranslation();
+  // CASH-4: el escaneo dejaba la operación a medias — confirmaba la entrega y
+  // ahí terminaba, sin liberar el escrow. El proveedor entregaba efectivo y no
+  // tenía cómo cobrarlo. Este estado gobierna ese último paso.
+  const [releasing, setReleasing] = useState(false);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+
+  const yaLiberado = data.status === 'completed' && !!data.release_tx_hash;
+  // N2 (auditoría del escrow 2026-10-29): la tarjeta normal salía también para
+  // una operación ya reembolsada, con solo una etiqueta gris como aviso. El
+  // backend ya no registra entregas fuera de `revealing`; esto cubre la
+  // relectura de una entrega previa sobre una fila que dejó de ser cobrable.
+  const cobrable = data.status === 'revealing' || data.status === 'completed';
+  // Solo el cash-out se cierra desde aquí: en depósito quien completa es el
+  // cliente desde su propia pantalla.
+  const puedeLiberar = cobrable && data.flow === 'cashout' && !yaLiberado && !!token;
+
+  const liberar = async () => {
+    if (!token) return;
+    setReleasing(true);
+    setReleaseError(null);
+    try {
+      const { release_tx_hash } = await completeTrade(data.trade_id, token);
+      // Éxito solo con un hash real persistido, nunca antes (criterio de #70).
+      if (!release_tx_hash) {
+        setReleaseError(t('inbox.releaseNoReceipt'));
+        return;
+      }
+      onReleased({ ...data, status: 'completed', release_tx_hash });
+    } catch (e) {
+      // La entrega quedó registrada en el servidor, así que reintentar retoma
+      // desde ahí: no hace falta volver a escanear ni entregar efectivo otra vez.
+      setReleaseError(e instanceof Error ? e.message : t('inbox.releaseFailed'));
+    } finally {
+      setReleasing(false);
+    }
+  };
+  const { label: countdownLabel, expired } = useCountdown(data.expires_at);
+  const countdown = expired ? t('inbox.expired') : countdownLabel;
   const statusColor = STATUS_COLORS[data.status] || 'bg-gray-100 text-gray-800';
-  const statusLabel = STATUS_LABELS[data.status] || data.status;
+  const statusLabel = t(`home.status.${data.status}`, { defaultValue: data.status });
   const statusIcon = STATUS_ICONS[data.status] || 'info';
 
   return (
-    <div className="bg-white rounded-2xl shadow-md border border-emerald-200 overflow-hidden">
+    <div className="bg-papel rounded-sm border border-emerald-200 overflow-hidden">
       {/* Header */}
       <div className="bg-emerald-50 px-5 py-4 flex items-center gap-3 border-b border-emerald-100">
-        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-sm bg-emerald-100 flex items-center justify-center">
           <span
             className="material-symbols-outlined text-emerald-600"
             style={{ fontVariationSettings: '"FILL" 1' }}
@@ -103,12 +115,12 @@ function TradeConfirmationCard({
           </span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-sm text-emerald-900">QR verificado</p>
-          <p className="text-xs text-emerald-700">Trade confirmado por el servidor</p>
+          <p className="font-bold text-sm text-emerald-900">{t('inbox.qrVerified')}</p>
+          <p className="text-xs text-emerald-700">{t('inbox.tradeConfirmed')}</p>
         </div>
         <button
           onClick={onDismiss}
-          aria-label="Cerrar"
+          aria-label={t('a11y.close')}
           className="material-symbols-outlined text-emerald-600 text-base hover:bg-emerald-100 rounded-full p-1 transition-colors"
         >
           close
@@ -117,27 +129,41 @@ function TradeConfirmationCard({
 
       {/* Body */}
       <div className="px-5 py-4 space-y-4">
+        {!cobrable && (
+          <div role="alert" className="bg-red-50 border-2 border-red-700 rounded-sm p-4">
+            <p className="font-bold text-sm text-red-800">{t('inbox.notCollectableTitle')}</p>
+            <p className="text-xs text-red-700 mt-1">{t('inbox.notCollectableBody')}</p>
+          </div>
+        )}
         {/* Amount */}
         <div className="text-center">
           <p className="text-3xl font-extrabold text-on-surface">
             ${data.amount_mxn.toLocaleString('es-MX')}{' '}
             <span className="text-base font-medium text-gray-400">MXN</span>
           </p>
-          {data.platform_fee_mxn > 0 && (
+          {/* H5: el monto es el efectivo que cambia de mano. Lo que le importa
+              al agente es su comision; la de plataforma la paga el cliente. */}
+          {data.provider_fee_mxn !== undefined ? (
             <p className="text-xs text-gray-500 mt-1">
-              Comisión plataforma: ${data.platform_fee_mxn} MXN
+              {data.flow === 'cashout'
+                ? t('inbox.cashToHand', { amount: data.amount_mxn, fee: data.provider_fee_mxn })
+                : t('inbox.cashToReceive', { amount: data.amount_mxn, fee: data.provider_fee_mxn })}
             </p>
-          )}
+          ) : data.platform_fee_mxn > 0 ? (
+            <p className="text-xs text-gray-500 mt-1">
+              {t('inbox.platformFee', { amount: data.platform_fee_mxn })}
+            </p>
+          ) : null}
         </div>
 
         {/* Details */}
-        <div className="bg-gray-50 rounded-xl p-4 space-y-3 text-sm">
+        <div className="bg-gray-50 rounded-sm p-4 space-y-3 text-sm">
           <div className="flex justify-between items-center">
-            <span className="text-gray-500">Comprador</span>
-            <span className="font-semibold text-on-surface">{data.buyer_handle}</span>
+            <span className="text-gray-500">{t('inbox.buyer')}</span>
+            <span className="font-semibold text-on-surface">{data.client_handle}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-gray-500">Estado</span>
+            <span className="text-gray-500">{t('inbox.status')}</span>
             <span
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${statusColor}`}
             >
@@ -151,11 +177,11 @@ function TradeConfirmationCard({
             </span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-gray-500">Expira en</span>
+            <span className="text-gray-500">{t('inbox.expiresIn')}</span>
             <span className="font-semibold text-primary">{countdown}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-gray-500">Creado</span>
+            <span className="text-gray-500">{t('inbox.created')}</span>
             <span className="text-on-surface">
               {new Date(data.created_at).toLocaleString('es-MX', {
                 dateStyle: 'short',
@@ -165,7 +191,7 @@ function TradeConfirmationCard({
           </div>
           {data.lock_tx_hash && (
             <div className="flex justify-between items-start">
-              <span className="text-gray-500">Lock TX</span>
+              <span className="text-gray-500">{t('inbox.lockTx')}</span>
               <span className="font-mono text-xs text-primary break-all text-right max-w-[180px]">
                 {data.lock_tx_hash.slice(0, 16)}…
               </span>
@@ -173,14 +199,14 @@ function TradeConfirmationCard({
           )}
           {data.release_tx_hash && (
             <div className="flex justify-between items-start">
-              <span className="text-gray-500">Release TX</span>
+              <span className="text-gray-500">{t('inbox.releaseTx')}</span>
               <span className="font-mono text-xs text-emerald-600 break-all text-right max-w-[180px]">
                 {data.release_tx_hash.slice(0, 16)}…
               </span>
             </div>
           )}
           <div className="flex justify-between items-center">
-            <span className="text-gray-500">Trade ID</span>
+            <span className="text-gray-500">{t('inbox.tradeId')}</span>
             <span className="font-mono text-xs text-gray-400">
               {data.trade_id.slice(0, 12)}…
             </span>
@@ -188,13 +214,46 @@ function TradeConfirmationCard({
         </div>
 
         {/* Security note */}
-        <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+        <div className="bg-blue-50 border border-blue-100 rounded-sm p-3">
           <p className="text-xs text-blue-800 leading-relaxed">
-            <span className="font-bold">🔒 Verificado on-chain.</span> La información fue
-            validada por el servidor. No muestra datos crudos del QR.
+            <Trans
+              i18nKey="inbox.verifiedOnchain"
+              components={{ strong: <span className="font-bold" /> }}
+            />
           </p>
         </div>
       </div>
+
+      {/* CASH-4: cierre del cash-out */}
+      {puedeLiberar && (
+        <div className="px-5 pb-4 space-y-2">
+          {data.resumed && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-sm px-3 py-2">
+              {t('inbox.resumedTrade')}
+            </p>
+          )}
+          {releaseError && (
+            <p role="alert" className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-sm px-3 py-2">
+              {releaseError}
+            </p>
+          )}
+          <button
+            onClick={liberar}
+            disabled={releasing}
+            className="w-full min-h-12 bg-naranja text-papel border-2 border-tinta shadow-solida font-bold py-3 rounded-sm transition-all active:translate-x-[3px] active:translate-y-[3px] active:shadow-solida-xs disabled:opacity-60"
+          >
+            {releasing ? t('inbox.releasing') : t('inbox.releaseFunds')}
+          </button>
+        </div>
+      )}
+
+      {yaLiberado && (
+        <div className="px-5 pb-4">
+          <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-sm px-3 py-2">
+            {t('inbox.fundsReleased')}
+          </p>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="px-5 py-3 border-t border-gray-100 flex justify-center">
@@ -215,10 +274,11 @@ function ScanErrorCard({
   tradeId?: string;
   onDismiss: () => void;
 }) {
+  const { t } = useTranslation();
   return (
-    <div className="bg-white rounded-2xl shadow-md border border-red-200 overflow-hidden">
+    <div className="bg-papel rounded-sm border border-red-200 overflow-hidden">
       <div className="bg-red-50 px-5 py-4 flex items-center gap-3 border-b border-red-100">
-        <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-sm bg-red-100 flex items-center justify-center">
           <span
             className="material-symbols-outlined text-red-600"
             style={{ fontVariationSettings: '"FILL" 1' }}
@@ -227,11 +287,11 @@ function ScanErrorCard({
           </span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-sm text-red-900">Error al verificar QR</p>
+          <p className="font-bold text-sm text-red-900">{t('inbox.qrVerificationError')}</p>
         </div>
         <button
           onClick={onDismiss}
-          aria-label="Cerrar"
+          aria-label={t('a11y.close')}
           className="material-symbols-outlined text-red-600 text-base hover:bg-red-100 rounded-full p-1 transition-colors"
         >
           close
@@ -240,12 +300,13 @@ function ScanErrorCard({
       <div className="px-5 py-4 space-y-3">
         <p className="text-sm text-red-800 font-medium">{message}</p>
         {tradeId && (
-          <p className="text-xs text-gray-400 font-mono">Trade ID: {tradeId.slice(0, 12)}…</p>
+          <p className="text-xs text-gray-400 font-mono">
+            {t('inbox.tradeIdValue', { id: tradeId.slice(0, 12) })}
+          </p>
         )}
-        <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+        <div className="bg-amber-50 border border-amber-100 rounded-sm p-3">
           <p className="text-xs text-amber-800 leading-relaxed">
-            Verifica que el código QR sea de MicoPay, que el intercambio no esté expirado y que
-            seas participante del trade.
+            {t('inbox.qrVerificationHint')}
           </p>
         </div>
       </div>
@@ -261,61 +322,35 @@ function ScanErrorCard({
 interface MerchantInboxProps {
   token: string | null;
   onBack: () => void;
+  /** #4: abre el detalle, donde estan las acciones (bloquear, liberar, chat). */
+  onOpenTrade?: (tradeId: string) => void;
+  /**
+   * WP1: llegar desde el detalle de un retiro abre el escaner de una vez, para
+   * que el agente escanee en el momento en que entrega el efectivo.
+   */
+  autoScan?: boolean;
 }
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
+const MerchantInbox = ({ token, onBack, onOpenTrade, autoScan = false }: MerchantInboxProps) => {
+  const { t } = useTranslation();
   const [trades, setTrades] = useState<MerchantTrade[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [scanView, setScanView] = useState<ScanView>({ type: 'idle' });
   const { scan } = useQRScanner();
 
-  // Initialize push notifications for merchant
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-  const { isEnabled: pushEnabled } = usePushNotifications({
-    isMerchant: !!token,
-    userToken: token,
-    apiUrl,
-  });
+  // Con la app abierta Android no muestra el aviso: la bandeja se refresca
+  // sola cada 30 s de todos modos. El aviso es para cuando esta cerrada.
+  const [pushPermission, setPushPermission] = useState<PushPermission>('unsupported');
+  useEffect(() => {
+    getPushPermission().then(setPushPermission).catch(() => setPushPermission('unsupported'));
+  }, []);
+  const enableNotifications = useCallback(async () => {
+    setPushPermission(await requestPushPermission());
+  }, []);
 
-  const handleScan = useCallback(async () => {
-    if (!token) return;
-    const { value, error } = await scan();
-
-    if (error) {
-      setScanView({ type: 'parse_error', message: error });
-      return;
-    }
-
-    // Parse the scanned QR into a typed MicoPay payload.
-    const parsed = parseQRPayload(value);
-    if (!parsed.ok) {
-      setScanView({ type: 'parse_error', message: parsed.error });
-      return;
-    }
-
-    // The merchant scans the buyer's release QR, which carries the trade_id.
-    const tradeId =
-      parsed.payload.type === 'release' ? parsed.payload.tradeId : null;
-
-    if (!tradeId) {
-      setScanView({ type: 'parse_error', message: 'No se encontró un ID de trade en el QR' });
-      return;
-    }
-
-    // Validate with backend.
-    setScanView({ type: 'loading' });
-
-    try {
-      const result = await merchantConfirmScan(tradeId, token);
-      setScanView({ type: 'confirmation', data: result });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Error al verificar el intercambio';
-      setScanView({ type: 'api_error', message, tradeId });
-    }
-  }, [token, scan]);
 
   // ── Dismiss scan result ────────────────────────────────────────────────
   const dismissScan = useCallback(() => {
@@ -339,15 +374,80 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
     [token],
   );
 
+  const handleScan = useCallback(async () => {
+    if (!token) return;
+    const { value, error } = await scan();
+
+    if (error) {
+      setScanView({ type: 'parse_error', message: error });
+      return;
+    }
+    // La persona cerro el escaner de la web: no es un error.
+    if (IS_EXTERNAL_SIGNER && !value) return;
+
+    // Parse the scanned QR into a typed MicoPay payload.
+    const parsed = parseQRPayload(value);
+    if (!parsed.ok) {
+      setScanView({ type: 'parse_error', message: parsed.error });
+      return;
+    }
+
+    // Depósito: el agente escanea el QR del cliente al recibir el efectivo.
+    // El QR solo trae el trade_id; el servidor decide si a este agente le
+    // toca confirmar (vendedor del escrow, operación en `locked`).
+    if (parsed.payload.type === 'confirm') {
+      const tradeId = parsed.payload.tradeId;
+      setScanView({ type: 'loading' });
+      try {
+        await confirmCashReceived(tradeId, token);
+        setScanView({ type: 'cash_confirmed', tradeId });
+        fetchTrades(activeFilter).catch(() => {});
+      } catch (e) {
+        setScanView({ type: 'api_error', message: cashConfirmErrorMessage(e), tradeId });
+      }
+      return;
+    }
+
+    // Cash-out: the merchant scans the buyer's release QR: trade_id + a
+    // one-time claim token. The HTLC preimage never travels in the QR (SEC-02).
+    const release = parsed.payload.type === 'release' ? parsed.payload : null;
+
+    if (!release) {
+      setScanView({ type: 'parse_error', message: t('inbox.missingTradeId') });
+      return;
+    }
+
+    const tradeId = release.tradeId;
+
+    // Validate with backend.
+    setScanView({ type: 'loading' });
+
+    try {
+      const result = await merchantConfirmScan(tradeId, release.claimToken, token);
+      setScanView({ type: 'confirmation', data: result });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : t('inbox.verificationFailed');
+      setScanView({ type: 'api_error', message, tradeId });
+    }
+  }, [token, scan, activeFilter, fetchTrades, t]);
+
+  const autoScanned = useRef(false);
+  useEffect(() => {
+    if (!autoScan || !token || autoScanned.current) return;
+    autoScanned.current = true;
+    void handleScan();
+  }, [autoScan, token, handleScan]);
+
   // Main effect: fetch trades on filter change
   useEffect(() => {
     fetchTrades(activeFilter);
   }, [activeFilter, fetchTrades]);
 
-  // Polling fallback when push notifications are disabled
+  // Refresco mientras la bandeja esta a la vista, haya o no avisos: con la app
+  // abierta el aviso no se muestra, y un aviso perdido no deja la lista vieja.
   useEffect(() => {
-    if (pushEnabled || !token) {
-      return; // No polling needed if push works
+    if (!token) {
+      return;
     }
 
     const pollInterval = setInterval(() => {
@@ -360,69 +460,73 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
     }, 30_000); // Poll every 30 seconds
 
     return () => clearInterval(pollInterval);
-  }, [pushEnabled, token, activeFilter]);
+  }, [token, activeFilter]);
 
   const filters = [
-    { key: 'all', label: 'Todos' },
-    { key: 'pending', label: 'Pendientes' },
-    { key: 'locked', label: 'Bloqueados' },
-    { key: 'revealing', label: 'Revelando' },
-    { key: 'completed', label: 'Completados' },
+    { key: 'all', label: t('inbox.filterAll') },
+    { key: 'pending', label: t('home.status.pending') },
+    { key: 'locked', label: t('home.status.locked') },
+    { key: 'revealing', label: t('home.status.revealing') },
+    { key: 'completed', label: t('home.status.completed') },
   ];
 
   return (
-    <div className="min-h-screen bg-[#F4FAFF]">
-      <header className="fixed top-0 left-0 w-full z-50 bg-white/90 backdrop-blur-md px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] flex items-center gap-4">
-        <button onClick={onBack} className="material-symbols-outlined text-primary">
+    <div className="min-h-screen bg-fondo">
+      <header className="border-b-2 border-tinta fixed top-0 left-0 w-full z-50 bg-papel px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] flex items-center gap-4">
+        <button onClick={onBack} className="material-symbols-outlined text-verde min-h-12 min-w-12 flex items-center justify-center">
           arrow_back
         </button>
-        <h1 className="font-headline font-bold text-lg flex-1">Bandeja de entrada</h1>
+        <h1 className="font-headline font-bold text-lg flex-1">{t('inbox.title')}</h1>
         <button
           onClick={handleScan}
-          aria-label="Escanear QR del cliente"
-          className="flex items-center gap-1 bg-primary text-white px-3 py-2 rounded-full text-xs font-bold shadow active:scale-95"
+          aria-label={t('inbox.scanClientQr')}
+          className="flex items-center gap-1 bg-primary text-papel min-h-12 px-3 rounded-sm text-xs font-bold active:translate-x-[2px] active:translate-y-[2px]"
         >
           <span aria-hidden="true" className="material-symbols-outlined text-sm">
             qr_code_scanner
           </span>
-          Escanear
+          {t('inbox.scan')}
         </button>
       </header>
 
-      <main className="pt-24 px-6 pb-32">
-        {/* Push notification disabled banner with polling fallback */}
-        {!pushEnabled && token && (
-          <div className="mb-4 rounded-2xl p-4 bg-amber-50 border border-amber-200">
+      <main className="pt-[calc(6rem+env(safe-area-inset-top))] px-6 pb-32">
+        {/* Sin permiso de avisos: el agente no se entera con la app cerrada */}
+        {!IS_EXTERNAL_SIGNER && (pushPermission === 'prompt' || pushPermission === 'denied') && token && (
+          <div className="mb-4 rounded-sm p-4 bg-amber-50 border border-amber-200">
             <div className="flex items-start gap-3">
               <span className="material-symbols-outlined text-amber-600">notifications_off</span>
               <div className="flex-1">
                 <p className="text-sm text-amber-900 font-medium">
-                  Las notificaciones están deshabilitadas. La bandeja se actualiza automáticamente cada 30 segundos.
+                  {t('inbox.pollBanner')}
                 </p>
-                <p className="text-xs text-amber-800 mt-1">
-                  <a href="#" onClick={(e) => { e.preventDefault(); }} className="underline">
-                    Habilitar notificaciones
-                  </a>
-                </p>
+                {pushPermission === 'prompt' ? (
+                  <p className="text-xs text-amber-800 mt-1">
+                    <button type="button" onClick={() => { void enableNotifications(); }} className="underline inline-flex min-h-12 items-center font-bold">
+                      {t('inbox.enableNotif')}
+                    </button>
+                  </p>
+                ) : (
+                  <p className="text-xs text-amber-800 mt-1">{t('inbox.notifDenied')}</p>
+                )}
               </div>
             </div>
           </div>
         )}
 
         {scanView.type === 'loading' && (
-          <div className="mb-4 rounded-2xl p-4 bg-emerald-50 border border-emerald-200 flex items-center gap-3">
+          <div className="mb-4 rounded-sm p-4 bg-emerald-50 border border-emerald-200 flex items-center gap-3">
             <span className="material-symbols-outlined animate-spin text-emerald-600">progress_activity</span>
-            <p className="text-sm text-emerald-900 font-medium">Verificando QR con el servidor…</p>
+            <p className="text-sm text-emerald-900 font-medium">{t('inbox.verifyingQr')}</p>
           </div>
         )}
 
         {scanView.type === 'parse_error' && (
-          <div className="mb-4 rounded-2xl p-4 bg-red-50 border border-red-200 flex items-start gap-3">
+          <div className="mb-4 rounded-sm p-4 bg-red-50 border border-red-200 flex items-start gap-3">
             <span className="material-symbols-outlined text-red-600">error</span>
             <p className="flex-1 text-sm text-red-800 font-medium">{scanView.message}</p>
             <button
               onClick={dismissScan}
-              aria-label="Cerrar"
+              aria-label={t('a11y.close')}
               className="material-symbols-outlined text-on-surface-variant text-base"
             >
               close
@@ -431,13 +535,13 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
         )}
 
         {scanView.type === 'api_error' && (
-          <div className="mb-4 rounded-2xl p-4 bg-red-50 border border-red-200">
+          <div className="mb-4 rounded-sm p-4 bg-red-50 border border-red-200">
             <div className="flex items-start gap-3">
               <span className="material-symbols-outlined text-red-600">error</span>
               <p className="flex-1 text-sm text-red-800 font-medium">{scanView.message}</p>
               <button
                 onClick={dismissScan}
-                aria-label="Cerrar"
+                aria-label={t('a11y.close')}
                 className="material-symbols-outlined text-on-surface-variant text-base"
               >
                 close
@@ -449,26 +553,55 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
           </div>
         )}
 
+        {scanView.type === 'cash_confirmed' && (
+          <div
+            role="status"
+            className="mb-4 rounded-sm p-4 bg-emerald-50 border border-emerald-200 flex items-start gap-3"
+          >
+            <span className="material-symbols-outlined text-emerald-600" style={{ fontVariationSettings: '"FILL" 1' }}>
+              task_alt
+            </span>
+            <div className="flex-1">
+              <p className="font-bold text-sm text-emerald-900">{t('inbox.cashConfirmedTitle')}</p>
+              <p className="text-xs text-emerald-700">
+                {t('inbox.cashConfirmedDesc')}
+              </p>
+            </div>
+            <button
+              onClick={dismissScan}
+              aria-label={t('a11y.close')}
+              className="material-symbols-outlined text-on-surface-variant text-base"
+            >
+              close
+            </button>
+          </div>
+        )}
+
         {scanView.type === 'confirmation' && (
           <div className="mb-4">
-            <TradeConfirmationCard data={scanView.data} onDismiss={dismissScan} />
+            <TradeConfirmationCard
+              data={scanView.data}
+              token={token}
+              onReleased={(updated) => setScanView({ type: 'confirmation', data: updated })}
+              onDismiss={dismissScan}
+            />
           </div>
         )}
 
         {/* ── Filters ───────────────────────────────────────────────────── */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+        {/* Estos filtros eran chips propios: activo en verde y borde de 1 px.
+            El estado activo del sistema es el cintillo de TINTA invertido
+            (.pill[data-on]), no un relleno de color — es lo mismo que hace la
+            pestaña activa de BottomNav. Ahora usan la primitiva. */}
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2 -mx-6 px-6">
           {filters.map((f) => (
-            <button
+            <Pill
               key={f.key}
+              activa={activeFilter === f.key}
               onClick={() => setActiveFilter(f.key)}
-              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-                activeFilter === f.key
-                  ? 'bg-primary text-white'
-                  : 'bg-white text-primary border border-primary'
-              }`}
             >
               {f.label}
-            </button>
+            </Pill>
           ))}
         </div>
 
@@ -478,17 +611,34 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
           </div>
         ) : trades.length === 0 ? (
-          <div className="text-center py-12">
-            <span className="material-symbols-outlined text-6xl text-gray-300 mb-4">inbox</span>
-            <p className="text-gray-500">No hay operaciones {activeFilter !== 'all' ? `con estado "${STATUS_LABELS[activeFilter]}"` : ''}</p>
+          /* §4.6: sin ilustración y sin icono gigante en gris de Tailwind, que
+             además no era un gris del sistema. Queda la línea en --gris, que es
+             la que dice qué falta. El cintillo se omite a propósito: el único
+             texto disponible sería "Bandeja de entrada", que ya está en el
+             encabezado, y el copy no se toca aquí (§7). */
+          <div className="py-12">
+            <p className="text-gris">{t('inbox.noTrades')}{activeFilter !== 'all' ? t('inbox.withStatus', { status: t(`home.status.${activeFilter}`) }) : ''}</p>
           </div>
         ) : (
           <div className="space-y-4">
             {trades.map((trade) => (
-              <div key={trade.id} className="bg-white rounded-2xl p-4 shadow-sm">
+              <button
+                type="button"
+                key={trade.id}
+                onClick={() => onOpenTrade?.(trade.id)}
+                disabled={!onOpenTrade}
+                className="block w-full text-left bg-papel rounded-sm p-4 border-2 border-transparent hover:border-tinta focus-visible:border-tinta disabled:hover:border-transparent"
+              >
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <p className="font-medium text-on-surface">{trade.buyer_handle}</p>
+                    <p className="font-medium text-on-surface">{trade.client_handle}</p>
+                    {/* CASH-3: desde que la bandeja tambien trae los cash-out,
+                        las dos clases de solicitud se veian identicas. Esta
+                        linea dice lo unico que el proveedor necesita saber de
+                        un vistazo: si va a recibir efectivo o a entregarlo. */}
+                    <p className="text-sm text-gris">
+                      {trade.flow === 'cashout' ? t('inbox.flowCashout') : t('inbox.flowDeposit')}
+                    </p>
                     <p className="text-sm text-gray-500">
                       {new Date(trade.created_at).toLocaleDateString('es-MX')}
                     </p>
@@ -498,23 +648,23 @@ const MerchantInbox = ({ token, onBack }: MerchantInboxProps) => {
                       STATUS_COLORS[trade.status] || 'bg-gray-100'
                     }`}
                   >
-                    {STATUS_LABELS[trade.status] || trade.status}
+                    {t(`home.status.${trade.status}`, { defaultValue: trade.status })}
                   </span>
                 </div>
-                <p className="font-bold text-lg">${trade.amount_mxn} MXN</p>
+                <p className="num font-bold text-lg">${trade.amount_mxn} MXN</p>
                 {trade.status === 'locked' && (
                   <div className="mt-2 flex items-center gap-1.5 text-sm text-emerald-600">
                     <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: '"FILL" 1' }}>lock</span>
-                    <span className="font-medium">USDC locked in escrow &middot; ${trade.amount_mxn.toLocaleString('es-MX')} MXN</span>
+                    <span className="num font-medium">{t('inbox.locked', { amount: trade.amount_mxn.toLocaleString('es-MX') })}</span>
                   </div>
                 )}
                 {trade.status === 'pending' && (
                   <div className="mt-2 flex items-center gap-1.5 text-sm text-amber-600">
                     <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: '"FILL" 1' }}>hourglass_top</span>
-                    <span className="font-medium">Awaiting escrow lock</span>
+                    <span className="font-medium">{t('inbox.pending')}</span>
                   </div>
                 )}
-              </div>
+              </button>
             ))}
           </div>
         )}

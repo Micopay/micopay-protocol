@@ -16,7 +16,14 @@ import {
   hasPendingMutations,
   type MutationType,
   type QueueItem,
+  type ConfigMutationPayload,
+  type AvailabilityMutationPayload,
 } from './offlineQueue.js';
+// Se usa el cliente de api.ts a propósito, en vez de `fetch` directo: aquel
+// lleva baseURL desde VITE_API_URL y las cabeceras de auth. Con `fetch` y una
+// ruta relativa, el WebView de Capacitor resolvía contra `https://localhost/`,
+// es decir contra la propia app, y la sincronización nunca llegaba al backend.
+import { updateMerchantConfig, patchMerchantAvailability } from './api';
 
 export type QueueStatus = 'idle' | 'syncing' | 'error' | 'online' | 'offline';
 
@@ -36,27 +43,14 @@ let isSyncing = false;
  * Handle availability mutation sync
  */
 async function syncAvailabilityMutation(
-  payload: any,
+  payload: AvailabilityMutationPayload,
   token: string | null,
 ): Promise<boolean> {
   if (!token) {
     throw new Error('No authentication token available');
   }
 
-  const response = await fetch('/users/me', {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify({ merchant_available: payload.merchant_available }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `HTTP ${response.status}`);
-  }
-
+  await patchMerchantAvailability(token, payload.merchant_available);
   return true;
 }
 
@@ -64,27 +58,14 @@ async function syncAvailabilityMutation(
  * Handle config mutation sync
  */
 async function syncConfigMutation(
-  payload: any,
+  payload: ConfigMutationPayload,
   token: string | null,
 ): Promise<boolean> {
   if (!token) {
     throw new Error('No authentication token available');
   }
 
-  const response = await fetch('/merchants/me/config', {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `HTTP ${response.status}`);
-  }
-
+  await updateMerchantConfig(token, payload.config);
   return true;
 }
 
@@ -105,8 +86,13 @@ async function syncMutation(
       case 'config':
         success = await syncConfigMutation(item.payload, token);
         break;
-      default:
-        throw new Error(`Unknown mutation type: ${item.type}`);
+      default: {
+        // El switch es exhaustivo sobre MutationType, así que aquí `item` es
+        // `never`. La rama se conserva porque IndexedDB puede contener
+        // registros de un formato anterior, escritos por una versión vieja.
+        const unhandled: never = item;
+        throw new Error(`Unknown mutation type: ${JSON.stringify(unhandled)}`);
+      }
     }
 
     if (success) {

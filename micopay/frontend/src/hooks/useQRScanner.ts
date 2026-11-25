@@ -1,6 +1,10 @@
 import { useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { useCameraPermission, type PermState } from './usePermission';
+import { IS_EXTERNAL_SIGNER } from '../lib/signer/mode';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 export interface ScanResult {
   value: string | null;
@@ -12,6 +16,11 @@ export function useQRScanner() {
   const { state: permState, request: requestPerm, openSettings } = useCameraPermission();
 
   const scan = useCallback(async (): Promise<ScanResult> => {
+    if (IS_EXTERNAL_SIGNER) {
+      const { requestWebScan } = await import('../lib/webScan');
+      return { value: await requestWebScan() };
+    }
+
     if (!Capacitor.isNativePlatform()) {
       // Web: caller should render a manual paste UI instead of calling scan()
       return { value: null, error: 'scanner_unavailable' };
@@ -28,7 +37,7 @@ export function useQRScanner() {
 
     const supported = await BarcodeScanner.isSupported();
     if (!supported.supported) {
-      return { value: null, error: 'Scanner no disponible en este device' };
+      return { value: null, error: tr('qrErrors.scannerUnavailable') };
     }
 
     try {

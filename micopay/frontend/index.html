@@ -4,14 +4,18 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#00694C" />
+    <!-- Papel cálido, igual que --color-fondo: la franja del sistema
+         continúa la hoja hacia arriba en vez de cortarla. -->
+    <meta name="theme-color" content="#f5f1e8" />
     <title>MicoPay</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <!-- Las fuentes se sirven desde /fonts, no desde el CDN de Google: la app
+         asume red intermitente (cola offline, banner de conexión) y con la
+         tipografía en CDN se caía a system-ui y los iconos a texto crudo.
+         Ver @font-face en src/index.css. -->
+    <link rel="preload" href="/fonts/archivo-latin-var.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/material-symbols-subset.woff2" as="font" type="font/woff2" crossorigin>
   </head>
-  <body class="bg-background text-on-surface font-body min-h-screen">
+  <body class="bg-fondo text-tinta font-body min-h-screen">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

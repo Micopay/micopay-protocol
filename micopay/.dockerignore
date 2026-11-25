@@ -1,0 +1,29 @@
+# Contexto de build de micopay/backend/Dockerfile (el contexto es este
+# directorio, `micopay/`, porque la imagen necesita copiar `sql/`).
+#
+# Todo lo que sobre aquí se sube al daemon de Docker en cada build, así que
+# excluir frontend/ y node_modules/ es la diferencia entre un contexto de
+# ~2 MB y uno de varios GB.
+
+# Dependencias y artefactos: se reconstruyen dentro de la imagen
+**/node_modules
+**/dist
+**/build
+
+# Secretos locales — nunca deben entrar a una imagen
+**/.env
+**/.env.*
+
+# Fuera de alcance para el backend (sin barra final: .dockerignore usa
+# patrones tipo filepath.Match, no gitignore)
+frontend
+contracts
+scripts
+
+# Ruido
+**/*.md
+**/.git
+**/.gitignore
+**/.DS_Store
+**/*.log
+**/coverage

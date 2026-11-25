@@ -133,6 +133,52 @@ export class RiskBlockedError extends AppError {
   }
 }
 
+/** Operation blocked because the user's KYC tier is below the required level (#314). */
+export class KycTierInsufficientError extends AppError {
+  public readonly requiredLevel: number;
+  public readonly currentLevel: number;
+
+  constructor(requiredLevel: number, currentLevel: number, operationType: string) {
+    super(
+      'KYC_TIER_INSUFFICIENT',
+      `Esta operación requiere un nivel de verificación más alto (nivel ${requiredLevel}). Verifica tu identidad para continuar.`,
+      `User kyc_level=${currentLevel} below required=${requiredLevel} for operation ${operationType}`,
+      403,
+    );
+    this.name = 'KycTierInsufficientError';
+    this.requiredLevel = requiredLevel;
+    this.currentLevel = currentLevel;
+  }
+}
+
+/**
+ * Operation blocked because it would push the user's monthly cumulative
+ * volume, for their current KYC level, over the configured ceiling (#316).
+ * Distinct from KycTierInsufficientError: this fires even when the user's
+ * tier is sufficient for the operation itself, once accumulated volume for
+ * the month is too high — the guard against structuring (pitufeo) that
+ * #314's per-operation limit alone can't catch.
+ */
+export class KycMonthlyCapExceededError extends AppError {
+  public readonly remainingMxn: number;
+  public readonly ceilingMxn: number;
+  public readonly resetAt: string;
+
+  constructor(remainingMxn: number, ceilingMxn: number, resetAt: string, level: number) {
+    const resetLabel = new Date(resetAt).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
+    super(
+      'KYC_MONTHLY_CAP_EXCEEDED',
+      `Superarías tu límite mensual de operaciones para tu nivel de verificación. Disponible este mes: $${remainingMxn.toFixed(2)} MXN. Se reinicia el ${resetLabel}.`,
+      `User at kyc_level=${level} would exceed monthly volume ceiling=${ceilingMxn}; remaining=${remainingMxn}`,
+      403,
+    );
+    this.name = 'KycMonthlyCapExceededError';
+    this.remainingMxn = remainingMxn;
+    this.ceilingMxn = ceilingMxn;
+    this.resetAt = resetAt;
+  }
+}
+
 /**
  * Thrown when a Stellar tx hash has already been processed.
  * HTTP 409 — the outcome of a replayed tx is deterministic, so this is

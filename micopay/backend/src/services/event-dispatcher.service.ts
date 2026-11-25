@@ -1,6 +1,8 @@
 import pino from 'pino';
 import db from '../db/schema.js';
 import { insertTradeAuditEvent } from '../db/audit-log.model.js';
+import { escrowContractForTrade } from './escrowContract.js';
+import { markLockConfirmed } from './lockAttempt.service.js';
 
 const logger = pino({ name: 'event-dispatcher' });
 
@@ -9,6 +11,15 @@ const logger = pino({ name: 'event-dispatcher' });
 /** Raw event shape from Stellar RPC getEvents. */
 export interface RawContractEvent {
   id: string;
+  /**
+   * Contrato que emitio el evento. El `trade_id` es sha256(secret_hash) y el
+   * hash es publico: cualquiera puede repetirlo en OTRA instancia del escrow.
+   * Sin el contrato, un refund en B cerraba la fila de A (H1 de
+   * docs/audits/AUDITORIA_ESCROW_REFERENCIA_XRPL_2026-10-29.md).
+   */
+  contractId?: string;
+  /** False si la llamada que emitio el evento fallo: no es una liquidacion. */
+  inSuccessfulContractCall?: boolean;
   topic: unknown[];
   value: unknown;
   txHash: string;
@@ -17,13 +28,17 @@ export interface RawContractEvent {
 
 /** Parsed, XDR-free representation of a known escrow event. */
 export interface ParsedEscrowEvent {
-  type: 'locked' | 'released' | 'refunded';
+  type: 'locked' | 'released' | 'refunded' | 'declined';
+  /** Contrato que emitio el evento: la identidad es contrato + trade_id. */
+  contractId: string;
   /** 64-char hex of the contract's trade_id (sha256 of secret_hash). */
   contractTradeIdHex: string;
   /** Stellar RPC event ID — used in audit metadata for traceability. */
   eventId: string;
   txHash: string;
   ledger: number;
+  /** Solo en `locked`: lo que el contrato bloqueo, para compararlo con la fila. */
+  lock?: { seller: string; buyer: string; amount: bigint; timeoutLedger?: number };
 }
 
 // ── Parsing ───────────────────────────────────────────────────────────────
@@ -35,16 +50,21 @@ export interface ParsedEscrowEvent {
  *   locked   → topic[0] = Symbol("locked"),   value = (trade_id, seller, buyer, amount, timeout_ledger)
  *   released → topic[0] = Symbol("released"), value = (trade_id, seller, buyer)
  *   refunded → topic[0] = Symbol("refunded"), value = (trade_id, seller)
+ *   declined → topic[0] = Symbol("declined"), value = (trade_id, seller)
  *
  * `scValToNative` is injected so this function is pure and unit-testable.
  *
- * Returns null for unknown or malformed events (caller should skip them).
+ * Returns null for unknown or malformed events (caller should skip them), for
+ * events without their contract, and for events of a failed contract call.
  */
 export function parseEscrowEvent(
   event: RawContractEvent,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   scValToNative: (v: any) => any,
 ): ParsedEscrowEvent | null {
+  if (!event.contractId) return null;
+  if (event.inSuccessfulContractCall === false) return null;
+
   let eventType: string;
   try {
     eventType = String(scValToNative(event.topic[0]));
@@ -52,52 +72,76 @@ export function parseEscrowEvent(
     return null;
   }
 
-  if (eventType !== 'locked' && eventType !== 'released' && eventType !== 'refunded') {
+  if (eventType !== 'locked' && eventType !== 'released' && eventType !== 'refunded' && eventType !== 'declined') {
     return null;
   }
 
   let tradeIdBytes: Buffer;
+  let lock: ParsedEscrowEvent['lock'];
   try {
     const values = scValToNative(event.value) as unknown[];
     const raw = values[0];
     if (!raw || typeof raw !== 'object') return null;
     tradeIdBytes = Buffer.from(raw as ArrayBufferLike);
     if (tradeIdBytes.length !== 32) return null;
+    if (eventType === 'locked') {
+      if (values.length < 4) return null;
+      lock = { seller: String(values[1]), buyer: String(values[2]), amount: BigInt(values[3] as bigint) };
+      if (values.length >= 5) lock.timeoutLedger = Number(values[4]);
+    }
   } catch {
     return null;
   }
 
   return {
     type: eventType,
+    contractId: event.contractId,
     contractTradeIdHex: tradeIdBytes.toString('hex'),
     eventId: event.id,
     txHash: event.txHash,
     ledger: event.ledger,
+    ...(lock ? { lock } : {}),
   };
 }
 
 // ── DB mutations (idempotent) ─────────────────────────────────────────────
 
 const ACTOR_SYSTEM = 'system:event-listener';
-const TERMINAL_STATES = new Set(['completed', 'cancelled']);
+
+/**
+ * Estados en los que el escrow YA se liquido: los fondos salieron del contrato.
+ *
+ * Antes eran `completed` y `cancelled`. Pero `cancelled` no es una liquidacion:
+ * cancelar detiene la app y NO toca el contrato (CASH-2). Una operacion
+ * cancelada con bloqueo sigue teniendo los fondos dentro hasta que alguien
+ * llama a `refund()` o `release()`, y ese evento era justo el que se ignoraba.
+ * Y `refunded` no estaba, asi que un evento tardio podia degradar a `cancelled`
+ * una operacion que el refund HTTP o el sweep ya habian liquidado.
+ * (Hallazgo H1 de docs/AUDITORIA_IMPLEMENTACION_SELECTOR_ACTIVO_2026-09-14.md.)
+ */
+const SETTLED_STATES = new Set(['completed', 'refunded']);
 
 /**
  * Apply a parsed escrow event to the database.
  *
- * All mutations are guarded with NOT IN ('completed', 'cancelled') so
- * re-delivering the same event is a safe no-op.
+ * Mutations are guarded with NOT IN ('completed', 'refunded') so re-delivering
+ * the same event is a safe no-op, and a settled trade is never rewritten.
  *
- * - released  → trade transitions to completed (clears encrypted secret).
- * - refunded  → trade transitions to cancelled (clears encrypted secret).
- * - locked    → no-op (the HTTP lock route already handled this).
+ * - released  → completed, with the tx hash (clears encrypted secret).
+ * - refunded  → refunded, with the tx hash in `release_tx_hash`, the same
+ *               column the HTTP refund and the sweep use (clears secret).
+ *               Also from `cancelled`: that is where refunds usually happen.
+ * - locked    → confirma un lock que la ruta HTTP no alcanzo a registrar
+ *               (WP2, N1), solo si seller, buyer y monto coinciden.
  */
 export async function applyEscrowEvent(parsed: ParsedEscrowEvent): Promise<void> {
   if (parsed.type === 'released') {
     await handleReleased(parsed);
-  } else if (parsed.type === 'refunded') {
+  } else if (parsed.type === 'refunded' || parsed.type === 'declined') {
     await handleRefunded(parsed);
+  } else if (parsed.type === 'locked') {
+    await handleLocked(parsed);
   }
-  // 'locked': trade already updated by the HTTP route; nothing to do here.
 }
 
 // ── Full pipeline ─────────────────────────────────────────────────────────
@@ -120,11 +164,102 @@ export async function dispatchEscrowEvent(event: RawContractEvent): Promise<void
 
 // ── Handlers ──────────────────────────────────────────────────────────────
 
-async function handleReleased(ev: ParsedEscrowEvent): Promise<void> {
-  const trade = await db.getOne<{ id: string; status: string }>(
-    'SELECT id, status FROM trades WHERE contract_trade_id = $1',
+/**
+ * La fila de ESTE contrato con ese trade_id, o null.
+ *
+ * El `trade_id` solo es unico dentro de una instancia del escrow, asi que se
+ * filtra por el contrato de cada fila con la misma regla que usan lock,
+ * release y refund (`escrowContractForTrade`, que tambien resuelve las filas
+ * legacy sin `escrow_contract_id`). Si dos filas del mismo contrato tienen el
+ * mismo trade_id no se adivina: se registra y no se toca ninguna.
+ */
+async function findTradeForEvent(ev: ParsedEscrowEvent): Promise<{ id: string; status: string } | null> {
+  const candidates = await db.getMany<{
+    id: string; status: string; escrow_contract_id: string | null; asset_code: string | null;
+  }>(
+    'SELECT id, status, escrow_contract_id, asset_code FROM trades WHERE contract_trade_id = $1',
     [ev.contractTradeIdHex],
   );
+
+  const matches = candidates.filter((row) => {
+    try {
+      return escrowContractForTrade(row) === ev.contractId;
+    } catch {
+      return false;
+    }
+  });
+
+  if (matches.length === 1) return matches[0];
+
+  if (matches.length > 1) {
+    logger.error(
+      { contract_id: ev.contractId, contract_trade_id: ev.contractTradeIdHex, rows: matches.map((m) => m.id), category: 'event-dispatcher' },
+      '[dispatcher] Several trades share contract + trade_id — event not applied',
+    );
+  } else if (candidates.length > 0) {
+    // El trade_id existe, pero en OTRO contrato: justo el caso de H1.
+    logger.warn(
+      { contract_id: ev.contractId, contract_trade_id: ev.contractTradeIdHex, event_id: ev.eventId, ledger: ev.ledger, category: 'event-dispatcher' },
+      '[dispatcher] Event from a contract that does not hold this trade — ignored',
+    );
+  }
+  return null;
+}
+
+/**
+ * WP2 (N1): si la confirmacion HTTP se agoto, la fila sigue `pending` (o se
+ * cancelo mientras tanto). El evento del contrato correcto la confirma, pero
+ * solo si lo bloqueado es exactamente lo pactado: cualquier diferencia se
+ * registra y no se aplica.
+ */
+async function handleLocked(ev: ParsedEscrowEvent): Promise<void> {
+  const found = await findTradeForEvent(ev);
+  if (!found || !ev.lock) return;
+
+  const trade = await db.getOne<{
+    id: string; status: string; lock_tx_hash: string | null; amount_stroops: string;
+    seller_id: string; buyer_id: string;
+  }>(
+    'SELECT id, status, lock_tx_hash, amount_stroops, seller_id, buyer_id FROM trades WHERE id = $1',
+    [found.id],
+  );
+  if (!trade || trade.lock_tx_hash) return; // ya registrado
+  if (trade.status !== 'pending' && trade.status !== 'cancelled') return;
+
+  const seller = await db.getOne<{ stellar_address: string }>('SELECT stellar_address FROM users WHERE id = $1', [trade.seller_id]);
+  const buyer = await db.getOne<{ stellar_address: string }>('SELECT stellar_address FROM users WHERE id = $1', [trade.buyer_id]);
+  const matches = ev.lock.seller === seller?.stellar_address
+    && ev.lock.buyer === buyer?.stellar_address
+    && ev.lock.amount === BigInt(trade.amount_stroops);
+  if (!matches) {
+    logger.error(
+      {
+        trade_id: trade.id, contract_id: ev.contractId, event_id: ev.eventId, tx_hash: ev.txHash,
+        on_chain: { seller: ev.lock.seller, buyer: ev.lock.buyer, amount: String(ev.lock.amount) },
+        category: 'event-dispatcher',
+      },
+      '[dispatcher] locked event does not match the trade — not applied',
+    );
+    return;
+  }
+
+  const result = await markLockConfirmed({
+    tradeId: trade.id,
+    lockTxHash: ev.txHash,
+    actor: ACTOR_SYSTEM,
+    source: 'event',
+    // El ledger del evento como referencia: si el listener va atrasado, la
+    // estimacion sale tarde, nunca temprano.
+    fundsTimeout: ev.lock.timeoutLedger != null ? { timeoutLedger: ev.lock.timeoutLedger, latestLedger: ev.ledger } : undefined,
+  });
+  logger.info(
+    { trade_id: trade.id, result, ledger: ev.ledger, tx_hash: ev.txHash, category: 'event-dispatcher' },
+    '[dispatcher] Lock confirmed via on-chain locked event',
+  );
+}
+
+async function handleReleased(ev: ParsedEscrowEvent): Promise<void> {
+  const trade = await findTradeForEvent(ev);
 
   if (!trade) {
     // Expected when the on-chain release was performed by a different environment or
@@ -136,8 +271,8 @@ async function handleReleased(ev: ParsedEscrowEvent): Promise<void> {
     return;
   }
 
-  if (TERMINAL_STATES.has(trade.status)) {
-    // Idempotent: already in a terminal state — no mutation required.
+  if (SETTLED_STATES.has(trade.status)) {
+    // Idempotent: already settled — no mutation required.
     return;
   }
 
@@ -149,7 +284,7 @@ async function handleReleased(ev: ParsedEscrowEvent): Promise<void> {
             secret_enc   = NULL,
             secret_nonce = NULL
       WHERE id     = $1
-        AND status NOT IN ('completed', 'cancelled')`,
+        AND status NOT IN ('completed', 'refunded')`,
     [trade.id, ev.txHash],
   );
 
@@ -160,6 +295,7 @@ async function handleReleased(ev: ParsedEscrowEvent): Promise<void> {
     actor: ACTOR_SYSTEM,
     metadata: {
       source: 'soroban_event',
+      contract_id: ev.contractId,
       event_id: ev.eventId,
       release_tx_hash: ev.txHash,
       ledger: ev.ledger,
@@ -173,10 +309,7 @@ async function handleReleased(ev: ParsedEscrowEvent): Promise<void> {
 }
 
 async function handleRefunded(ev: ParsedEscrowEvent): Promise<void> {
-  const trade = await db.getOne<{ id: string; status: string }>(
-    'SELECT id, status FROM trades WHERE contract_trade_id = $1',
-    [ev.contractTradeIdHex],
-  );
+  const trade = await findTradeForEvent(ev);
 
   if (!trade) {
     logger.info(
@@ -186,37 +319,43 @@ async function handleRefunded(ev: ParsedEscrowEvent): Promise<void> {
     return;
   }
 
-  if (TERMINAL_STATES.has(trade.status)) {
+  if (SETTLED_STATES.has(trade.status)) {
     return;
   }
 
+  // Antes pasaba a `cancelled` sin guardar el hash: la fila quedaba con
+  // `lock_tx_hash` y sin liquidacion, exactamente lo que la app lee como "en
+  // garantia", con el dinero ya devuelto. Ahora queda como lo deja el refund
+  // HTTP (`executeRefundOnChain`): `refunded` y el hash en `release_tx_hash`.
   await db.execute(
     `UPDATE trades
-        SET status       = 'cancelled',
-            secret_enc   = NULL,
-            secret_nonce = NULL
+        SET status          = 'refunded',
+            release_tx_hash = $2,
+            completed_at    = NOW(),
+            secret_enc      = NULL,
+            secret_nonce    = NULL
       WHERE id     = $1
-        AND status NOT IN ('completed', 'cancelled')`,
-    [trade.id],
+        AND status NOT IN ('completed', 'refunded')`,
+    [trade.id, ev.txHash],
   );
 
   await insertTradeAuditEvent({
     tradeId: trade.id,
     fromState: trade.status,
-    toState: 'cancelled',
+    toState: 'refunded',
     actor: ACTOR_SYSTEM,
     metadata: {
       source: 'soroban_event',
+      contract_id: ev.contractId,
+      settlement: ev.type,
       event_id: ev.eventId,
-      cancel_reason: 'refunded_on_chain',
       refund_tx_hash: ev.txHash,
-      refund_expected: true,
       ledger: ev.ledger,
     },
   });
 
   logger.info(
     { trade_id: trade.id, ledger: ev.ledger, tx_hash: ev.txHash, category: 'event-dispatcher' },
-    '[dispatcher] Trade cancelled via on-chain refunded event',
+    `[dispatcher] Trade refunded via on-chain ${ev.type} event`,
   );
 }

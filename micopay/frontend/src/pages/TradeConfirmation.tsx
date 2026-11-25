@@ -1,114 +1,225 @@
+import { useTranslation } from 'react-i18next';
+import type { ApiErrorAction } from '../utils/apiError';
 import {
   PLATFORM_FEE_PERCENT,
   platformFeeMxnFromAmount,
 } from '../constants/trade';
-import { effectiveFeePercent, MAX_EFFECTIVE_FEE_PERCENT } from '../services/api';
+import { MAX_EFFECTIVE_FEE_PERCENT } from '../services/api';
+import { getEscrowAssetOption } from '../constants/escrowAssets';
+import { formatEstimateUnits, useEscrowAssetEstimate } from '../hooks/useEscrowAssetEstimate';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 export interface TradeConfirmationPageProps {
   merchantName: string;
   merchantId: string;
+  /** Lo que recibe el cliente: efectivo en retiro, saldo en deposito (servidor). */
   receiveMxn: number;
+  /**
+   * H5: lo que le cuesta al cliente, calculado por el servidor. En retiro es lo
+   * que sale de su saldo (monto + comisiones); en deposito, los billetes.
+   */
+  clientPaysMxn?: number;
   commissionPct: number;
+  /** El efectivo que cambia de mano: lo que la persona escribio. */
   amountMxn: number;
+  /**
+   * Desglose calculado por el servidor. Llega entero para que la pantalla no
+   * tenga que deducir ninguna parte restando, que es como se colo el error de
+   * que el agente cobrara menos de lo que configuraba.
+   */
+  platformFeeMxn?: number;
+  providerFeeMxn?: number;
   flow: 'cashout' | 'deposit';
   nearbyCount: number;
-  merchantOnline?: boolean;
   onBack: () => void;
   onConfirm: () => Promise<boolean>;
   loading?: boolean;
   errorMessage?: string | null;
+  errorAction?: ApiErrorAction;
+  /** Codigo del error; `ACTIVE_TRADE_OFFER` ofrece crear otra operacion. */
+  errorCode?: string;
+  /** WP3: la persona prefiere crear otra en vez de retomar la activa. */
+  onCreateNewInstead?: () => void;
+  onVerifyIdentity?: () => void;
+  onChooseAnotherAgent?: () => void;
   /** Effective-fee threshold (%) above which a warning is shown. Defaults to the shared guardrail. */
   maxEffectiveFeePercent?: number;
+  /**
+   * WP-D: clave del activo elegido en la pantalla de monto. La operacion aun no
+   * existe, asi que lo que se muestra es un ESTIMADO rotulado como tal.
+   */
+  assetKey?: string;
+  /** Inyectable para pruebas. */
+  fetchRate?: (code: string) => Promise<{ rate: number }>;
 }
 
 export default function TradeConfirmationPage({
   merchantName,
   receiveMxn,
+  clientPaysMxn,
   commissionPct,
   amountMxn,
+  platformFeeMxn,
+  providerFeeMxn,
   flow,
   nearbyCount,
-  merchantOnline = true,
   onBack,
   onConfirm,
   loading = false,
   errorMessage,
+  errorAction,
+  errorCode,
+  onCreateNewInstead,
+  onVerifyIdentity,
+  onChooseAnotherAgent,
   maxEffectiveFeePercent = MAX_EFFECTIVE_FEE_PERCENT,
+  assetKey,
+  fetchRate,
 }: TradeConfirmationPageProps) {
-  const totalFee = amountMxn - receiveMxn;
-  const platformFee = platformFeeMxnFromAmount(amountMxn);
-  const providerFee = totalFee - platformFee;
-  // Combined effective cost the user actually pays: provider commission + platform fee.
-  const effectivePct = effectiveFeePercent(commissionPct);
+  const { t, i18n } = useTranslation();
+  const isCashout = flow === 'cashout';
+  const isChooseAgentAction = isCashout && errorAction === 'choose_agent';
+  const asset = assetKey ? getEscrowAssetOption(assetKey) : undefined;
+  // H5: el monto escrito es el efectivo. En retiro las comisiones van encima
+  // (sale de tu saldo `clientPays`); en deposito se descuentan (recibes
+  // `receiveMxn` en tu saldo). El estimado en el activo es de lo que se mueve
+  // en tu saldo, no del efectivo.
+  const clientPays = clientPaysMxn ?? (isCashout ? null : amountMxn);
+  const balanceMxn = isCashout ? clientPays : receiveMxn;
+  const estimate = useEscrowAssetEstimate(asset?.enabled ? asset.code : null, balanceMxn ?? amountMxn, fetchRate);
+  // Antes la parte del agente se DEDUCIA restando: `receiveMxn` venia del
+  // descubrimiento descontando solo la tarifa del agente, y a ese total se le
+  // restaba la comision de plataforma. Resultado: un agente al 1.5% aparecia
+  // cobrando 0.7%, y el cliente veia un neto que la operacion no cumplia.
+  //
+  // Ahora las tres cifras llegan del servidor, que es quien las congela en la
+  // operacion. Si no vinieran (build antiguo), se recalculan con la misma
+  // formula en vez de deducirlas restando.
+  const platformFee = platformFeeMxn ?? platformFeeMxnFromAmount(amountMxn);
+  const providerFee = providerFeeMxn ?? Math.ceil((amountMxn * commissionPct) / 100);
+  const totalFee = providerFee + platformFee;
+  // Costo real tras redondear ambas comisiones a pesos, igual que el backend.
+  // No basta sumar los porcentajes nominales: en montos pequeños, dos `ceil`
+  // pueden convertir 5.2% + 0.8% en un costo efectivo mayor a 6%.
+  const effectivePct = amountMxn > 0 ? (totalFee / amountMxn) * 100 : 0;
   const exceedsThreshold = effectivePct > maxEffectiveFeePercent;
 
-  const title = flow === 'cashout' ? 'Confirmar retiro' : 'Confirmar depósito';
-  const agentType = flow === 'cashout' ? 'Agente de retiro' : 'Punto de depósito';
+  const title = flow === 'cashout' ? t('confirm.cashoutTitle') : t('confirm.depositTitle');
+  const agentType = flow === 'cashout' ? t('confirm.cashoutAgentType') : t('confirm.depositAgentType');
 
   return (
     <div className="min-h-screen bg-surface-container-lowest text-on-surface font-body pb-28">
-      <header className="sticky top-0 z-40 border-b border-outline-variant/20 bg-surface/90 backdrop-blur-md px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center gap-3">
+      <header className="sticky top-0 z-40 border-b-2 border-tinta bg-surface/90 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center gap-3">
         <button
           type="button"
           onClick={onBack}
-          className="p-2 rounded-full hover:bg-surface-container-low text-primary transition-colors"
-          aria-label="Volver al mapa"
+          className="min-h-12 min-w-12 p-2 rounded-sm hover:bg-surface-container-low text-verde transition-colors"
+          aria-label={tr('tradeConfirmText.backToMap')}
         >
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
-        <h1 className="font-headline font-bold text-lg text-primary truncate">{title}</h1>
+        <h1 className="font-headline font-bold text-lg text-tinta truncate">{title}</h1>
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-6 space-y-5">
         {errorMessage ? (
           <div
-            className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+            className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
             role="alert"
           >
-            {errorMessage}
+            <p>{errorMessage}</p>
+            {errorCode === 'ACTIVE_TRADE_OFFER' && onCreateNewInstead ? (
+              <button
+                type="button"
+                onClick={async () => { onCreateNewInstead(); await onConfirm(); }}
+                className="mt-3 w-full min-h-12 rounded-sm border-2 border-tinta bg-papel px-4 font-bold text-tinta"
+              >
+                {tr('tradeConfirmText.createAnother')}
+              </button>
+            ) : null}
+            {errorAction === 'verify_identity' && onVerifyIdentity ? (
+              <button
+                type="button"
+                onClick={onVerifyIdentity}
+                className="mt-3 w-full min-h-12 rounded-sm bg-verde px-4 font-bold text-papel"
+              >
+                {tr('tradeConfirmText.verifyIdentity')}
+              </button>
+            ) : null}
           </div>
         ) : null}
 
-        <section className="rounded-2xl border border-outline-variant/20 bg-surface p-5 space-y-4 shadow-sm">
+        <section className="rounded-sm border-2 border-tinta bg-surface p-5 space-y-4 ">
           <h2 className="text-xs font-bold tracking-widest text-on-surface-variant uppercase">
-            Resumen de la operación
+            {t('confirm.summary')}
           </h2>
 
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between gap-4">
-              <dt className="text-on-surface-variant">Agente</dt>
+              <dt className="text-on-surface-variant">{t('confirm.agent')}</dt>
               <dd className="font-semibold text-right">{merchantName}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-on-surface-variant">Tipo</dt>
+              <dt className="text-on-surface-variant">{t('confirm.type')}</dt>
               <dd className="font-semibold text-right">{agentType}</dd>
             </div>
 
-            <div className="flex justify-between gap-4 border-t border-outline-variant/15 pt-3">
-              <dt className="text-on-surface-variant">Recibes (MXN)</dt>
-              <dd className="font-bold text-lg text-primary">
-                ${receiveMxn.toFixed(2)} MXN
+            {asset ? (
+              <div className="flex justify-between gap-4">
+                <dt className="text-on-surface-variant">{t('escrowAsset.selectedAsset')}</dt>
+                <dd className="text-right">
+                  <span className="font-semibold">{asset.code} · {asset.networkLabel}</span>
+                  {estimate.status === 'ready' && estimate.units !== null ? (
+                    <span className="num block text-xs text-on-surface-variant" data-testid="confirm-asset-estimate">
+                      {t('escrowAsset.estimate', {
+                        units: formatEstimateUnits(estimate.units, asset.displayDecimals, i18n.language),
+                        code: asset.code,
+                        rate: formatEstimateUnits(estimate.rate, 2, i18n.language),
+                      })}
+                    </span>
+                  ) : null}
+                  <span className="block text-xs text-on-surface-variant">
+                    {estimate.status === 'error' ? t('escrowAsset.rateUnavailable') : t('escrowAsset.rateLocksOnCreate')}
+                  </span>
+                </dd>
+              </div>
+            ) : null}
+
+            <div className="flex justify-between gap-4 border-t border-linea pt-3">
+              <dt className="text-on-surface-variant">{isCashout ? t('confirm.cashReceived') : t('confirm.cashGiven')}</dt>
+              <dd className="font-bold text-lg text-verde" data-testid="confirm-cash">
+                ${(isCashout ? receiveMxn : amountMxn).toFixed(2)} MXN
               </dd>
             </div>
+            {balanceMxn !== null ? (
+              <div className="flex justify-between gap-4">
+                <dt className="text-on-surface-variant">{isCashout ? t('confirm.balanceDebited') : t('confirm.balanceReceived')}</dt>
+                <dd className="font-semibold text-right" data-testid="confirm-balance">
+                  ${balanceMxn.toFixed(2)} MXN
+                </dd>
+              </div>
+            ) : null}
 
             <div className="flex justify-between gap-4">
-              <dt className="text-on-surface-variant">Fee total</dt>
-              <dd className="font-semibold tabular-nums">${totalFee.toFixed(2)} MXN</dd>
+              <dt className="num text-on-surface-variant">{t('confirm.totalFee')}</dt>
+              <dd className="num font-semibold tabular-nums">${totalFee.toFixed(2)} MXN</dd>
             </div>
 
-            <div className="text-xs text-on-surface-variant pl-2 border-l-2 border-outline-variant/20 ml-1 space-y-1">
+            <div className="text-xs text-on-surface-variant pl-2 border-l-2 border-linea ml-1 space-y-1">
               <div className="flex justify-between">
-                <span>Comisión del agente ({commissionPct}%)</span>
+                <span>{t('confirm.agentCommission', { pct: commissionPct })}</span>
                 <span>${providerFee.toFixed(2)} MXN</span>
               </div>
               <div className="flex justify-between">
-                <span>Comisión plataforma ({PLATFORM_FEE_PERCENT}%)</span>
+                <span>{t('confirm.platformCommission', { pct: PLATFORM_FEE_PERCENT })}</span>
                 <span>${platformFee.toFixed(2)} MXN</span>
               </div>
             </div>
 
-            <div className="flex justify-between gap-4 border-t border-outline-variant/15 pt-3">
-              <dt className="text-on-surface-variant">Costo total efectivo</dt>
+            <div className="flex justify-between gap-4 border-t border-linea pt-3">
+              <dt className="num text-on-surface-variant">{t('confirm.totalEffectiveCost')}</dt>
               <dd
                 className={`font-bold tabular-nums ${exceedsThreshold ? 'text-error' : 'text-on-surface'}`}
               >
@@ -116,18 +227,10 @@ export default function TradeConfirmationPage({
               </dd>
             </div>
 
-            <div className="flex justify-between gap-4 border-t border-outline-variant/15 pt-3">
-              <dt className="text-on-surface-variant">Estado del agente</dt>
-              <dd className={`flex items-center gap-1.5 font-medium ${merchantOnline ? 'text-green-700' : 'text-red-600'}`}>
-                <span className={`w-2 h-2 rounded-full inline-block ${merchantOnline ? 'bg-green-500' : 'bg-red-500'}`} />
-                {merchantOnline ? 'En línea' : 'Sin conexión'}
-              </dd>
-            </div>
-
             <div className="flex justify-between gap-4">
-              <dt className="text-on-surface-variant">Proveedores cerca</dt>
+              <dt className="text-on-surface-variant">{t('confirm.nearbyProviders')}</dt>
               <dd className="font-medium">
-                {nearbyCount} disponible{nearbyCount !== 1 ? 's' : ''}
+                {nearbyCount} {t('confirm.available')}{nearbyCount !== 1 ? 's' : ''}
               </dd>
             </div>
           </dl>
@@ -136,32 +239,41 @@ export default function TradeConfirmationPage({
         {exceedsThreshold && (
           <div
             role="alert"
-            className="flex items-start gap-2 rounded-xl border border-error/30 bg-error/5 px-4 py-3"
+            className="flex items-start gap-2 rounded-sm border border-error/30 bg-error/5 px-4 py-3"
           >
             <span className="material-symbols-outlined text-error text-base leading-none">warning</span>
             <p className="text-sm font-medium text-error leading-snug">
-              El costo total efectivo ({effectivePct.toFixed(1)}%) supera el {maxEffectiveFeePercent}% recomendado.
-              Revísalo antes de confirmar, o vuelve al mapa para elegir otra oferta.
+              {t('confirm.exceedsWarning', { pct: effectivePct.toFixed(1), maxPct: maxEffectiveFeePercent })}
             </p>
           </div>
         )}
 
+        {isChooseAgentAction ? (
+          <button
+            type="button"
+            onClick={onChooseAnotherAgent || onBack}
+            className="w-full rounded-sm bg-verde py-3.5 text-sm font-semibold text-on-primary hover:opacity-95 transition-opacity"
+          >
+            {t('confirm.chooseAnotherAgent', 'Elegir otro agente')}
+          </button>
+        ) : null}
+
         <button
           type="button"
-          disabled={loading}
+          disabled={loading || isChooseAgentAction || exceedsThreshold}
           onClick={async () => { await onConfirm(); }}
-          className="w-full rounded-xl bg-primary py-3.5 text-sm font-semibold text-on-primary shadow-md hover:opacity-95 disabled:opacity-50 transition-opacity"
+          className="w-full rounded-sm bg-verde py-3.5 text-sm font-semibold text-on-primary hover:opacity-95 disabled:opacity-50 transition-opacity"
         >
-          {loading ? 'Creando operación…' : 'Confirmar'}
+          {loading ? t('confirm.creating') : t('confirm.confirmBtn')}
         </button>
 
         <button
           type="button"
           disabled={loading}
           onClick={onBack}
-          className="w-full rounded-xl border border-outline-variant/30 py-3.5 text-sm font-semibold text-on-surface hover:bg-surface-container-low transition-colors"
+          className="w-full rounded-sm border-2 border-tinta py-3.5 text-sm font-semibold text-on-surface hover:bg-surface-container-low transition-colors"
         >
-          Cancelar
+          {t('confirm.cancel')}
         </button>
       </main>
     </div>

@@ -11,11 +11,17 @@ const mem: Record<string, any[]> = {
   secret_access_log: [],
   audit_log: [],
   processed_tx: [],
+  disputes: [],
   merchant_configs: [],
   user_devices: [],
   platform_risk_events: [],
   trade_messages: [],
   trade_disputes: [],
+  compliance_alerts: [],
+  compliance_filings: [],
+  device_keys: [],
+  sign_requests: [],
+  trade_claim_tokens: [],
 };
 
 function memNow() {
@@ -29,10 +35,11 @@ function resolveVal(token: string, params: any[]): any {
   if (pMatch) return params[parseInt(pMatch[1]) - 1];
   if (t.toUpperCase() === "NOW()") return memNow();
   if (t.toUpperCase() === "NULL") return null;
-  if (t.toUpperCase() === "TRUE") return true;
-  if (t.toUpperCase() === "FALSE") return false;
+  if (t.toLowerCase() === "true") return true;
+  if (t.toLowerCase() === "false") return false;
   const strMatch = t.match(/^'(.*)'$/s);
   if (strMatch) return strMatch[1];
+  if (!isNaN(Number(t))) return Number(t);
   return t;
 }
 
@@ -87,6 +94,27 @@ function evalCondition(row: any, clause: string, params: any[]): boolean {
     return isNot
       ? row[col] !== null && row[col] !== undefined
       : row[col] === null || row[col] === undefined;
+  }
+
+  // = ANY($n). A diferencia de IN, la lista no viene inline en el SQL sino
+  // como parametro (un array), asi que la rama de igualdad de abajo comparaba
+  // la columna contra la cadena literal "ANY($2)" y no casaba nunca. La
+  // bandeja del proveedor filtra asi por estado: sin esto devolvia [] siempre
+  // y cualquier test contra el store en memoria pasaba por el motivo
+  // equivocado.
+  const anyMatch = trimmed.match(/^([\w.]+)\s*=\s*ANY\s*\((\$\d+)\)$/i);
+  if (anyMatch) {
+    const col = colName(anyMatch[1]);
+    const list = resolveVal(anyMatch[2], params);
+    return Array.isArray(list) && list.some((v) => v === row[col]);
+  }
+
+  // Comparacion contra un parametro: `expires_at > $6`
+  const cmpMatch = trimmed.match(/^([\w.]+)\s*([<>])\s*(\$\d+)$/);
+  if (cmpMatch) {
+    const value = row[colName(cmpMatch[1])];
+    const param = resolveVal(cmpMatch[3], params);
+    return cmpMatch[2] === ">" ? value > param : value < param;
   }
 
   // Equality
@@ -209,8 +237,13 @@ function memQuery(sql: string, params: any[] = []): any[] {
     const tableMatch = s.match(/UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(.+)$/i);
     if (!tableMatch) return [];
     const tableName = tableMatch[1].toLowerCase();
+
+    if (["platform_risk_events", "compliance_alerts", "compliance_filings"].includes(tableName)) {
+      throw new Error("Updates and deletions are not allowed on this table (append-only compliance data).");
+    }
     const setStr = tableMatch[2];
-    const whereStr = tableMatch[3];
+    const returning = tableMatch[3].match(/\s+RETURNING\s+.+$/i);
+    const whereStr = returning ? tableMatch[3].slice(0, returning.index) : tableMatch[3];
 
     const updates: Record<string, any> = {};
     const setPairs = setStr.split(/,\s*(?=\w+\s*=)/);
@@ -223,7 +256,7 @@ function memQuery(sql: string, params: any[] = []): any[] {
       evalCondition(row, whereStr, params),
     );
     rows.forEach((row) => Object.assign(row, updates));
-    return [];
+    return returning ? rows : [];
   }
 
   // ── DELETE ───────────────────────────────────────────────────────────────
@@ -231,6 +264,10 @@ function memQuery(sql: string, params: any[] = []): any[] {
     const tableMatch = s.match(/DELETE FROM\s+(\w+)(?:\s+WHERE\s+(.+))?$/i);
     if (!tableMatch) return [];
     const tableName = tableMatch[1].toLowerCase();
+
+    if (["platform_risk_events", "compliance_alerts", "compliance_filings"].includes(tableName)) {
+      throw new Error("Updates and deletions are not allowed on this table (append-only compliance data).");
+    }
     const whereStr = tableMatch[2];
 
     if (!whereStr) {
@@ -251,37 +288,73 @@ let pgPool: InstanceType<typeof Pool> | null = null;
 let pgAvailable = false;
 
 async function initPg() {
-  try {
-    const p = new Pool({
-      connectionString: config.databaseUrl,
-      connectionTimeoutMillis: 2000,
-    });
-    await p.query("SELECT 1");
-    pgPool = p;
-    pgAvailable = true;
-    console.log("✅ PostgreSQL connected");
-  } catch (err) {
-    // B-3: never fall back to the ephemeral in-memory store in production
-    // unless explicitly opted in. A silent fallback would serve/lose real
-    // user data on a volatile store, so fail fast instead.
-    if (config.isProduction && !config.allowInMemoryDb) {
-      console.error(
-        "❌ PostgreSQL unavailable in production and ALLOW_IN_MEMORY_DB is not set — " +
-          "refusing to start on an ephemeral in-memory store. Exiting.",
-        err instanceof Error ? err.message : err,
+  // Render's managed Postgres (and most managed providers) can take several
+  // seconds for the first TLS+auth handshake after the service boots. A short
+  // 2s timeout spuriously fails that first connect and drops us to the
+  // in-memory store. Use a production-grade timeout and retry the initial
+  // connection a few times with backoff before giving up.
+  const CONNECT_TIMEOUT_MS = 15_000;
+  const MAX_ATTEMPTS = 5;
+
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let p: InstanceType<typeof Pool> | null = null;
+    try {
+      p = new Pool({
+        connectionString: config.databaseUrl,
+        connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+        // Keep idle TCP connections alive so a sleeping NAT/proxy doesn't drop them.
+        keepAlive: true,
+        max: 10,
+      });
+      await p.query("SELECT 1");
+
+      // Don't let an async pool error (idle disconnect, DB restart) crash the
+      // process — log it and let the next query re-establish a connection.
+      p.on("error", (err) => {
+        console.error("⚠️  PostgreSQL pool error (will reconnect on next query):", err.message);
+      });
+
+      pgPool = p;
+      pgAvailable = true;
+      console.log(`✅ PostgreSQL connected (attempt ${attempt}/${MAX_ATTEMPTS})`);
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (p) await p.end().catch(() => {});
+      console.warn(
+        `⏳ PostgreSQL connect attempt ${attempt}/${MAX_ATTEMPTS} failed: ${err instanceof Error ? err.message : err}`,
       );
-      process.exit(1);
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, attempt * 2000)); // 2s, 4s, 6s, 8s
+      }
     }
-    pgAvailable = false;
-    console.warn(
-      "⚠️  PostgreSQL unavailable — using in-memory store (data resets on restart)",
-    );
   }
+
+  // B-3: never fall back to the ephemeral in-memory store in production
+  // unless explicitly opted in. A silent fallback would serve/lose real
+  // user data on a volatile store, so fail fast instead.
+  if (config.isProduction && !config.allowInMemoryDb) {
+    console.error(
+      "❌ PostgreSQL unavailable in production after retries and ALLOW_IN_MEMORY_DB is not set — " +
+        "refusing to start on an ephemeral in-memory store. Exiting.",
+      lastErr instanceof Error ? lastErr.message : lastErr,
+    );
+    process.exit(1);
+  }
+  pgAvailable = false;
+  console.warn(
+    "⚠️  PostgreSQL unavailable — using in-memory store (data resets on restart)",
+  );
 }
 
 await initPg();
 
-export const pool = pgPool;
+// La anotación explícita es necesaria: TypeScript no ve la asignación que
+// ocurre dentro de initPg(), así que sin ella infiere el tipo `null` y todo
+// `if (pool)` en los consumidores queda narrowed a `never` — código muerto a
+// ojos del compilador aunque en runtime el pool exista.
+export const pool: InstanceType<typeof Pool> | null = pgPool;
 
 /**
  * B-7: live readiness check. Returns true only when a real PostgreSQL

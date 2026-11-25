@@ -46,3 +46,8 @@
 -keepclassmembers,allowobfuscation class * {
     @com.google.gson.annotations.SerializedName <fields>;
 }
+
+# ── Stellar Java SDK compile-time annotations ────────────────────────────────
+# Lombok is not needed at runtime; these references remain only in class metadata.
+-dontwarn lombok.Generated
+-dontwarn lombok.NonNull

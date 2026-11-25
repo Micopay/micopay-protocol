@@ -6,16 +6,45 @@
  * is restored.
  */
 
-export type MutationType = 'availability' | 'config';
+import type { MerchantConfig } from './api';
 
-export interface QueueItem {
+/**
+ * Forma exacta del payload de cada tipo de mutación.
+ *
+ * Esto existe porque quien encolaba y quien sincronizaba no se pusieron de
+ * acuerdo: se encolaba `{ available }` y el sincronizador leía
+ * `payload.merchant_available`, así que enviaba `undefined` al backend. Con el
+ * mapa de abajo, un desajuste así lo atrapa TypeScript en vez del usuario.
+ *
+ * El import de MerchantConfig es `import type`, se borra al compilar y no crea
+ * dependencia circular con api.ts.
+ */
+export interface ConfigMutationPayload {
+  config: MerchantConfig;
+}
+
+export interface AvailabilityMutationPayload {
+  merchant_available: boolean;
+}
+
+export interface MutationPayloadMap {
+  config: ConfigMutationPayload;
+  availability: AvailabilityMutationPayload;
+}
+
+export type MutationType = keyof MutationPayloadMap;
+
+/** Par tipo+payload correlacionado, para poder discriminar por `type`. */
+export type QueuedMutation = {
+  [K in MutationType]: { type: K; payload: MutationPayloadMap[K] };
+}[MutationType];
+
+export type QueueItem = QueuedMutation & {
   id: string;
-  type: MutationType;
-  payload: any;
   timestamp: number;
   synced: boolean;
   error?: string;
-}
+};
 
 const DB_NAME = 'micopay_offline';
 const STORE_NAME = 'mutations';
@@ -68,20 +97,20 @@ function ensureDb(): IDBDatabase {
 /**
  * Add a mutation to the offline queue
  */
-export async function queueMutation(
-  type: MutationType,
-  payload: any,
+export async function queueMutation<T extends MutationType>(
+  type: T,
+  payload: MutationPayloadMap[T],
 ): Promise<string> {
   const database = ensureDb();
   const id = `${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  
-  const item: QueueItem = {
+
+  const item = {
     id,
     type,
     payload,
     timestamp: Date.now(),
     synced: false,
-  };
+  } as QueueItem;
 
   return new Promise((resolve, reject) => {
     const transaction = database.transaction([STORE_NAME], 'readwrite');
@@ -109,11 +138,11 @@ export async function getPendingMutations(): Promise<QueueItem[]> {
   return new Promise((resolve, reject) => {
     const transaction = database.transaction([STORE_NAME], 'readonly');
     const store = transaction.objectStore(STORE_NAME);
-    const index = store.index('synced');
-    const request = index.getAll(IDBKeyRange.only(false)); // false = not synced
+    // Un booleano no es una clave valida de IndexedDB: filtrar por el indice lanza.
+    const request = store.getAll();
 
     request.onsuccess = () => {
-      const items = request.result as QueueItem[];
+      const items = (request.result as QueueItem[]).filter((item) => !item.synced);
       resolve(items.sort((a, b) => a.timestamp - b.timestamp));
     };
 

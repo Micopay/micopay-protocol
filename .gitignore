@@ -1,6 +1,7 @@
 # Node.js
 node_modules/
 dist/
+dist-web/
 npm-debug.log*
 
 # Build/typecheck scratch output (should never be committed)
@@ -17,12 +18,20 @@ target/
 .env
 .env.local
 
+# Agent demo wallet (Juanita Tienda) — local keypair + session token, never commit
+.agent-wallet/
+
 # OS
 .DS_Store
 Thumbs.db
 
 # Claude Code session state
 .claude/scheduled_tasks.lock
+.claude/settings.local.json
+
+# Local tool and editor preferences
+.turbo/
+.vscode/
 
 # Gemini/Antigravity (Internal files)
 .gemini/
@@ -35,3 +44,29 @@ brain/
 task.md
 implementation_plan.md
 walkthrough.md
+
+# IDE
+.idea/
+
+
+__pycache__/
+
+# Local release APKs, audit evidence, and temporary investigation work.
+# Keep them on the workstation; do not publish them with source changes.
+artifacts/
+tmp/
+
+# MicoPay Bridge has its own repository. Preserve any local leftovers without
+# allowing its protocol API, SDK, circuits, or contracts back into this repo.
+/apps/
+/packages/
+/circuits/
+/contracts/
+/skill/
+
+# Generated presentation workbench and inspection metadata.
+.deck-build/
+*.pptx.inspect.ndjson
+
+# Release APKs are distributed separately from the source repository.
+*.apk
