@@ -2036,17 +2036,21 @@ export async function sweepPendingRefunds(
   // mock-mode 'cancelled' trades permanently stuck, unlike production.
   const candidates = await db.getMany<{
     id: string; status: string; secret_hash: string; seller_id: string; expires_at: string;
-    flow: string | null;
+    flow: string | null; chain_review_reason: string | null;
   }>(
+    // #514: `chain_review_reason` lo pone la conciliacion
+    // (escrowReconciliation.service.ts) cuando la cadena y la base no cuadran.
+    // Esa operacion la revisa soporte; el barrido no la toca.
     // `expires_at < NOW()` sigue siendo un filtro previo valido: el lock ocurre
     // despues de crear la solicitud y dura lo mismo que ella, asi que el plazo
     // en cadena nunca vence antes. Lo decide `fundsRefundTiming` abajo.
     `SELECT id, status, secret_hash, seller_id, expires_at, asset_code, escrow_contract_id,
             lock_tx_hash, funds_timeout_ledger, funds_expires_at_estimate,
-            flow, reveal_requested_at FROM trades
+            flow, reveal_requested_at, chain_review_reason FROM trades
      WHERE status IN ('cancelled', 'locked', 'revealing')
        AND lock_tx_hash IS NOT NULL
        AND release_tx_hash IS NULL
+       AND chain_review_reason IS NULL
        AND expires_at < NOW()`,
   );
 
@@ -2059,6 +2063,7 @@ export async function sweepPendingRefunds(
     // The contract itself would reject an early call (TimeoutNotReached),
     // but failing fast here avoids a wasted RPC round-trip either way.
     if (new Date(trade.expires_at) > new Date()) continue;
+    if (trade.chain_review_reason) continue;
     // #514: un deposito vencido espera el margen antes de reembolsarse, para que
     // el cliente que ya pago alcance a reclamar. El cash-out no espera.
     const graceEndsAt = depositGraceEndsAt(trade);

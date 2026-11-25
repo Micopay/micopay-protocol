@@ -108,8 +108,19 @@ async function main() {
   const depositSixteenMin = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "locked", expired: true, expiredMinutesAgo: 16 });
   const depositCancelledFiveMin = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "cancelled", expired: true, expiredMinutesAgo: 5 });
 
+  // #514 · casilla 3: lo que la conciliacion marco para soporte no entra al
+  // barrido, aunque ya haya pasado el margen o sea un cash-out.
+  const cashoutInReview = await insertTrade({ flow: "cashout", clientId: client, providerId: provider, status: "locked", expired: true });
+  const depositInReview = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "cancelled", expired: true, expiredMinutesAgo: 30 });
+  for (const id of [cashoutInReview, depositInReview]) {
+    await db.execute("UPDATE trades SET chain_review_reason = $2 WHERE id = $1", [id, "escrow_mismatch"]);
+  }
+
   await sweepPendingRefunds(fakeRequest);
 
+  strictEqual(await statusOf(cashoutInReview), "locked", "cash-out en revision: queda para soporte");
+  strictEqual(await statusOf(depositInReview), "cancelled", "deposito en revision: queda para soporte");
+  console.log("  ✓ #514 con chain_review_reason no se reembolsa");
   strictEqual(await statusOf(depositFiveMin), "locked", "deposito vencido hace 5 min: el cliente aun puede reclamar");
   strictEqual(await statusOf(depositCancelledFiveMin), "cancelled", "deposito cancelado vencido hace 5 min: tambien espera");
   console.log("  ✓ #514 deposito vencido hace 5 min: no se reembolsa");
