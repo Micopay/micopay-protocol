@@ -31,6 +31,7 @@ import {
   activateProvider,
   type ProviderReadiness,
 } from '../services/api';
+import { localizeServerMessage } from '../utils/apiError';
 
 interface Props {
   token: string;
@@ -293,6 +294,6 @@ export default function ProviderOnboarding({
 }
 
 function messageFrom(err: unknown, fallback: string): string {
-  const res = (err as { response?: { data?: { message?: string } } })?.response;
-  return res?.data?.message || fallback;
+  const res = (err as { response?: { data?: { message?: string; code?: string } } })?.response;
+  return (res?.data?.message && localizeServerMessage(res.data.code, res.data.message)) || fallback;
 }

@@ -48,13 +48,15 @@ async function createUser(suffix: string): Promise<string> {
 async function insertLockedTrade(
   sellerId: string,
   buyerId: string,
-  opts: { expired: boolean },
+  opts: { expired: boolean; expiredMinutesAgo?: number },
 ): Promise<string> {
   const { encryptSecret, generateTradeSecret } = await import("../services/secret.service.js");
   const { secret, secretHash } = generateTradeSecret();
   const { encrypted, nonce } = encryptSecret(secret);
   const expiresAt = new Date(
-    Date.now() + (opts.expired ? -60_000 : 2 * 60 * 60 * 1000),
+    // El fixture es un deposito: desde #514 el barrido y el boton esperan el
+    // margen (15 min) despues del vencimiento. "Vencido" aqui ya lo paso.
+    Date.now() + (opts.expired ? -(opts.expiredMinutesAgo ?? 16) * 60_000 : 2 * 60 * 60 * 1000),
   ).toISOString();
   const lockTxHash = `mock_lock_${Math.random().toString(36).slice(2)}`;
 

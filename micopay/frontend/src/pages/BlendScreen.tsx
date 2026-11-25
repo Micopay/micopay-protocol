@@ -9,6 +9,9 @@ import {
 } from '../services/api';
 import { extractApiErrorPayload } from '../utils/apiError';
 import BetaBanner from '../components/BetaBanner';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 interface BlendScreenProps {
   onBack: () => void;
@@ -105,12 +108,12 @@ const BlendScreen = ({ onBack, userToken = '' }: BlendScreenProps) => {
       <div className="flex items-center gap-2">
         <span className="material-symbols-outlined text-verde-claro text-xl">check_circle</span>
         <p className="font-bold text-verde-claro">
-          {result.simulated ? '¡Prueba simulada!' : '¡Operación enviada!'}
+          {result.simulated ? tr('blend.simulated') : tr('blend.sent')}
         </p>
       </div>
       {result.simulated && (
         <p className="text-xs text-on-surface-variant">
-          Demostración — no se movieron fondos reales on-chain.
+          {tr('blend.demoNote')}
         </p>
       )}
       <p className="text-xs text-on-surface-variant font-mono">{shortHash(result.hash)}</p>
@@ -120,7 +123,7 @@ const BlendScreen = ({ onBack, userToken = '' }: BlendScreenProps) => {
         rel="noopener noreferrer"
         className="flex items-center gap-1 text-xs text-primary font-bold"
       >
-        Ver en el explorador Stellar
+        {tr('blend.viewExplorer')}
         <span className="material-symbols-outlined text-sm">open_in_new</span>
       </a>
     </div>
@@ -139,7 +142,7 @@ const BlendScreen = ({ onBack, userToken = '' }: BlendScreenProps) => {
         </button>
         <div>
           <h1 className="font-headline font-bold text-lg leading-tight">Blend Capital</h1>
-          <p className="text-[11px] text-on-surface-variant">Protocolo financiero en Stellar</p>
+          <p className="text-[11px] text-on-surface-variant">{tr('blend.subtitle')}</p>
         </div>
         <div className="ml-auto bg-on-surface/5 border-2 border-tinta rounded-full px-3 py-1">
           <span className="text-on-surface font-bold text-xs">
@@ -159,7 +162,7 @@ const BlendScreen = ({ onBack, userToken = '' }: BlendScreenProps) => {
               tab === 'loan' ? 'bg-papel text-on-surface ' : 'text-on-surface-variant'
             }`}
           >
-            Préstamo
+            {tr('blend.tabLoan')}
           </button>
           <button
             onClick={() => { setTab('yield'); setError(null); }}
@@ -167,7 +170,7 @@ const BlendScreen = ({ onBack, userToken = '' }: BlendScreenProps) => {
               tab === 'yield' ? 'bg-papel text-primary ' : 'text-on-surface-variant'
             }`}
           >
-            Rendimiento
+            {tr('blend.tabYield')}
           </button>
         </div>
 
@@ -188,8 +191,8 @@ const BlendScreen = ({ onBack, userToken = '' }: BlendScreenProps) => {
                   <span className="text-papel font-bold text-sm">1</span>
                 </div>
                 <div>
-                  <p className="font-bold text-on-surface">Depositar garantía</p>
-                  <p className="text-xs text-on-surface-variant">Usa XLM como colateral</p>
+                  <p className="font-bold text-on-surface">{tr('blend.collateralTitle')}</p>
+                  <p className="text-xs text-on-surface-variant">{tr('blend.collateralHint')}</p>
                 </div>
                 {collateralResult && (
                   <div className="ml-auto bg-verde-claro/10 rounded-full px-2 py-1">
@@ -202,7 +205,7 @@ const BlendScreen = ({ onBack, userToken = '' }: BlendScreenProps) => {
 
               <div>
                 <label className="block text-xs font-bold text-on-surface-variant mb-2 uppercase tracking-wide">
-                  Cantidad XLM
+                  {tr('blend.amountXlm')}
                 </label>
                 <input
                   type="text"
@@ -216,7 +219,7 @@ const BlendScreen = ({ onBack, userToken = '' }: BlendScreenProps) => {
 
               {collateralAmount && parseFloat(collateralAmount) > 0 && (
                 <div className="bg-primary/5 rounded-sm px-4 py-2 flex justify-between">
-                  <span className="text-xs text-on-surface-variant">Capacidad de préstamo</span>
+                  <span className="text-xs text-on-surface-variant">{tr('blend.borrowCapacity')}</span>
                   <span className="text-xs font-bold text-on-surface">
                     ~${(parseFloat(collateralAmount) * 0.058 * 0.7).toFixed(2)} USDC
                   </span>
@@ -233,12 +236,12 @@ const BlendScreen = ({ onBack, userToken = '' }: BlendScreenProps) => {
                 {collateralLoading ? (
                   <>
                     <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
-                    Procesando…
+                    {tr('blend.processing')}
                   </>
                 ) : (
                   <>
                     <span className="material-symbols-outlined text-lg">lock</span>
-                    Depositar XLM como garantía
+                    {tr('blend.depositCollateral')}
                   </>
                 )}
               </button>
@@ -251,11 +254,11 @@ const BlendScreen = ({ onBack, userToken = '' }: BlendScreenProps) => {
                   <span className="text-papel font-bold text-sm">2</span>
                 </div>
                 <div>
-                  <p className="font-bold text-on-surface">Pedir prestado</p>
+                  <p className="font-bold text-on-surface">{tr('blend.borrowTitle')}</p>
                   <p className="text-xs text-on-surface-variant">
                     {collateralResult
-                      ? `Máx ~${maxBorrow.toFixed(2)} ${borrowAsset}`
-                      : 'Deposita garantía primero'}
+                      ? tr('blend.maxBorrow', { amount: maxBorrow.toFixed(2), asset: borrowAsset })
+                      : tr('blend.collateralFirst')}
                   </p>
                 </div>
               </div>
@@ -290,12 +293,12 @@ const BlendScreen = ({ onBack, userToken = '' }: BlendScreenProps) => {
                 {borrowLoading ? (
                   <>
                     <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
-                    Procesando…
+                    {tr('blend.processing')}
                   </>
                 ) : (
                   <>
                     <span className="material-symbols-outlined text-lg">payments</span>
-                    Pedir prestado
+                    {tr('blend.borrowTitle')}
                   </>
                 )}
               </button>
@@ -337,19 +340,19 @@ const BlendScreen = ({ onBack, userToken = '' }: BlendScreenProps) => {
                       </div>
                     </div>
                     <div className="flex justify-between text-xs text-on-surface-variant">
-                      <span>Préstamo: <strong className="text-on-surface">{asset.borrowApy}%</strong></span>
-                      <span>Liquidez: <strong className="text-on-surface">${(asset.liquidity / 1000).toFixed(0)}K</strong></span>
+                      <span>{tr('blend.borrowApy')} <strong className="text-on-surface">{asset.borrowApy}%</strong></span>
+                      <span>{tr('blend.liquidity')} <strong className="text-on-surface">${(asset.liquidity / 1000).toFixed(0)}K</strong></span>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-center text-on-surface-variant text-sm py-8">No hay fondos disponibles</p>
+              <p className="text-center text-on-surface-variant text-sm py-8">{tr('blend.noPools')}</p>
             )}
 
             {/* Supply form */}
             <div className="bg-papel rounded-sm p-5 border-2 border-tinta space-y-4">
-              <p className="font-bold text-on-surface">Depositar para ganar</p>
+              <p className="font-bold text-on-surface">{tr('blend.supplyTitle')}</p>
 
               {/* Asset selector */}
               <div className="flex gap-2">
@@ -380,11 +383,14 @@ const BlendScreen = ({ onBack, userToken = '' }: BlendScreenProps) => {
               {supplyAmount && parseFloat(supplyAmount) > 0 && mainPool && (
                 <div className="bg-primary/5 rounded-sm px-4 py-2">
                   <p className="text-xs text-on-surface-variant">
-                    Ganarás ~{(
-                      (parseFloat(supplyAmount) *
-                        (mainPool.assets.find((a) => a.code === supplyAsset)?.supplyApy ?? 4)) /
-                      100
-                    ).toFixed(4)} {supplyAsset} / año
+                    {tr('blend.earnPerYear', {
+                      amount: (
+                        (parseFloat(supplyAmount) *
+                          (mainPool.assets.find((a) => a.code === supplyAsset)?.supplyApy ?? 4)) /
+                        100
+                      ).toFixed(4),
+                      asset: supplyAsset,
+                    })}
                   </p>
                 </div>
               )}
@@ -399,19 +405,19 @@ const BlendScreen = ({ onBack, userToken = '' }: BlendScreenProps) => {
                 {supplyLoading ? (
                   <>
                     <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
-                    Procesando…
+                    {tr('blend.processing')}
                   </>
                 ) : (
                   <>
                     <span className="material-symbols-outlined text-lg">savings</span>
-                    Depositar y ganar
+                    {tr('blend.supplyButton')}
                   </>
                 )}
               </button>
             </div>
 
             <p className="text-center text-xs text-gris pb-4">
-              Blend Capital · Stellar Testnet · Las tasas son orientativas
+              {tr('blend.footer')}
             </p>
           </div>
         )}

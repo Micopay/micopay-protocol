@@ -9,6 +9,9 @@ import {
 } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 import type { EscrowAction } from './escrowTxValidation';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 /**
  * Puerta de entrada de las firmas que pide una web a la APK. Todo lo que llega
@@ -20,7 +23,7 @@ export const WALLET_SIGN_METHOD = 'stellar_signXDR';
 
 export class WalletRequestRejected extends Error {
   constructor(detail: string) {
-    super(`Solicitud rechazada: ${detail}`);
+    super(tr('walletRequestErrors.rejected', { detail }));
     this.name = 'WalletRequestRejected';
   }
 }
@@ -82,12 +85,12 @@ export function assertWalletProposal(
 ): void {
   if (proposal.isScam) throw new WalletRequestRejected('dominio marcado como fraude');
   if (proposal.validation !== 'VALID') throw new WalletRequestRejected('dominio sin verificar');
-  if (proposal.verifiedOrigin !== policy.officialOrigin) throw new WalletRequestRejected('dominio no autorizado');
+  if (proposal.verifiedOrigin !== policy.officialOrigin) throw new WalletRequestRejected(tr('walletRequestErrors.domain'));
   if (proposal.requiredMethods.some((method) => method !== WALLET_SIGN_METHOD)) {
-    throw new WalletRequestRejected('método no permitido');
+    throw new WalletRequestRejected(tr('walletRequestErrors.method'));
   }
   if (proposal.requiredChains.some((chain) => chain !== policy.chainId)) {
-    throw new WalletRequestRejected('red distinta a la de esta app');
+    throw new WalletRequestRejected(tr('walletRequestErrors.network'));
   }
 }
 
@@ -99,9 +102,9 @@ export function assertWalletRequestOrigin(
 ): void {
   if (request.isScam) throw new WalletRequestRejected('dominio marcado como fraude');
   if (request.validation !== 'VALID') throw new WalletRequestRejected('dominio sin verificar');
-  if (request.verifiedOrigin !== policy.officialOrigin) throw new WalletRequestRejected('dominio no autorizado');
-  if (request.chainId !== policy.chainId) throw new WalletRequestRejected('red distinta a la de esta app');
-  if (request.method !== WALLET_SIGN_METHOD) throw new WalletRequestRejected('método no permitido');
+  if (request.verifiedOrigin !== policy.officialOrigin) throw new WalletRequestRejected(tr('walletRequestErrors.domain'));
+  if (request.chainId !== policy.chainId) throw new WalletRequestRejected(tr('walletRequestErrors.network'));
+  if (request.method !== WALLET_SIGN_METHOD) throw new WalletRequestRejected(tr('walletRequestErrors.method'));
   if (request.expiry <= policy.now) throw new WalletRequestRejected('solicitud vencida');
 
   const key = `${request.topic}:${request.id}`;
@@ -123,7 +126,7 @@ export function isSep10Challenge(xdr: unknown, policy: WalletPolicy): boolean {
 /** Valida el reto con las reglas de SEP-10; nunca como transaccion ejecutable. */
 export function parseSep10Request(xdr: string, policy: WalletPolicy): { homeDomain: string } {
   if (!policy.sep10SigningKey || !policy.sep10HomeDomain || !policy.sep10WebAuthDomain) {
-    throw new WalletRequestRejected('inicio de sesión web sin configurar');
+    throw new WalletRequestRejected(tr('walletRequestErrors.webAuthOff'));
   }
   let challenge: ReturnType<typeof WebAuth.readChallengeTx>;
   try {
@@ -135,51 +138,51 @@ export function parseSep10Request(xdr: string, policy: WalletPolicy): { homeDoma
       policy.sep10WebAuthDomain,
     );
   } catch {
-    throw new WalletRequestRejected('reto de inicio de sesión inválido');
+    throw new WalletRequestRejected(tr('walletRequestErrors.badChallenge'));
   }
   if (challenge.clientAccountID !== policy.account) {
-    throw new WalletRequestRejected('el reto es de otra cuenta');
+    throw new WalletRequestRejected(tr('walletRequestErrors.challengeOtherAccount'));
   }
   return { homeDomain: challenge.matchedHomeDomain };
 }
 
 /** Decodifica el XDR y exige una llamada a un escrow de MicoPay de esta cuenta. */
 export function parseEscrowRequest(xdr: unknown, policy: WalletPolicy): EscrowRequestSummary {
-  if (typeof xdr !== 'string' || xdr.length === 0) throw new WalletRequestRejected('transacción vacía');
+  if (typeof xdr !== 'string' || xdr.length === 0) throw new WalletRequestRejected(tr('walletRequestErrors.emptyTx'));
 
   let parsed: Transaction | FeeBumpTransaction;
   try {
     parsed = TransactionBuilder.fromXDR(xdr, policy.networkPassphrase);
   } catch {
-    throw new WalletRequestRejected('no se pudo decodificar la transacción');
+    throw new WalletRequestRejected(tr('walletRequestErrors.undecodable'));
   }
-  if (parsed instanceof FeeBumpTransaction) throw new WalletRequestRejected('no se admiten fee-bump');
-  if (parsed.source !== policy.account) throw new WalletRequestRejected('la transacción es de otra cuenta');
-  if (parsed.signatures.length !== 0) throw new WalletRequestRejected('la transacción ya contiene firmas');
+  if (parsed instanceof FeeBumpTransaction) throw new WalletRequestRejected(tr('walletRequestErrors.noFeeBump'));
+  if (parsed.source !== policy.account) throw new WalletRequestRejected(tr('walletRequestErrors.txOtherAccount'));
+  if (parsed.signatures.length !== 0) throw new WalletRequestRejected(tr('walletRequestErrors.alreadySigned'));
   if (parsed.operations.length !== 1 || parsed.operations[0].type !== 'invokeHostFunction') {
-    throw new WalletRequestRejected('se esperaba una sola llamada de contrato');
+    throw new WalletRequestRejected(tr('walletRequestErrors.singleCall'));
   }
 
   const operation = parsed.operations[0] as Operation.InvokeHostFunction;
   if (operation.source && operation.source !== policy.account) {
-    throw new WalletRequestRejected('la operación usa otra cuenta');
+    throw new WalletRequestRejected(tr('walletRequestErrors.opOtherAccount'));
   }
   if (operation.func.switch().name !== 'hostFunctionTypeInvokeContract') {
-    throw new WalletRequestRejected('la operación no llama un contrato');
+    throw new WalletRequestRejected(tr('walletRequestErrors.notContractCall'));
   }
 
   const invocation = operation.func.invokeContract();
   const contractId = Address.fromScAddress(invocation.contractAddress()).toString();
-  if (!policy.allowedContracts.includes(contractId)) throw new WalletRequestRejected('contrato no autorizado');
+  if (!policy.allowedContracts.includes(contractId)) throw new WalletRequestRejected(tr('walletRequestErrors.contract'));
 
   const action = invocation.functionName().toString() as EscrowAction;
-  if (!(action in EXPECTED_ARGS)) throw new WalletRequestRejected('función no permitida');
+  if (!(action in EXPECTED_ARGS)) throw new WalletRequestRejected(tr('walletRequestErrors.function'));
   const args = invocation.args();
   if (args.length !== EXPECTED_ARGS[action]) throw new WalletRequestRejected('argumentos inesperados');
 
   const key = scValToNative(action === 'lock' ? args[4] : args[0]);
   if (!(key instanceof Uint8Array) || key.length !== 32) {
-    throw new WalletRequestRejected('identificador de operación inválido');
+    throw new WalletRequestRejected(tr('walletRequestErrors.tradeId'));
   }
   return {
     action,

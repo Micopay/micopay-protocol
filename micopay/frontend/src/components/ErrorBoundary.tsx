@@ -1,6 +1,9 @@
 import { Component, ReactNode } from 'react';
 import SupportLink from './SupportLink';
 import { resolveErrorMessage } from '../constants/errorMap';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 interface Props {
   children: ReactNode;
@@ -49,7 +52,7 @@ class ErrorBoundary extends Component<Props, State> {
             <h2 className="font-headline font-bold text-xl text-on-surface mb-2">{resolved.title}</h2>
             <p className="text-sm text-on-surface-variant mb-2">{resolved.message}</p>
             <p className="text-xs text-on-surface-variant/70 mb-2">
-              {resolved.fundsSafe ? 'Tus fondos están seguros.' : 'Revisa el estado de tus fondos antes de seguir.'}
+              {resolved.fundsSafe ? tr('errorBoundary.fundsSafe') : tr('errorBoundary.checkFunds')}
             </p>
             <p className="text-xs text-on-surface-variant/70 mb-2">{resolved.action}</p>
             {this.state.error && (
@@ -59,7 +62,7 @@ class ErrorBoundary extends Component<Props, State> {
             )}
             {this.state.supportCode && (
               <p className="text-xs text-on-surface-variant mb-6">
-                Código de soporte:{' '}
+                {tr('errorBoundary.supportCode')}{' '}
                 <span className="font-mono font-bold text-on-surface">
                   {this.state.supportCode}
                 </span>
@@ -70,7 +73,7 @@ class ErrorBoundary extends Component<Props, State> {
                 onClick={() => window.location.reload()}
                 className="px-6 py-3 rounded-sm bg-primary text-on-primary font-bold text-sm active:translate-x-[2px] active:translate-y-[2px] transition-transform"
               >
-                Reintentar
+                {tr('errorBoundary.retry')}
               </button>
               <SupportLink state="ERROR" />
             </div>

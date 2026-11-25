@@ -219,6 +219,11 @@ export interface TradeDetailResponse {
   refund_kind?: 'decline' | 'timeout' | null;
   /** Cash-out: el agente ya escaneó el QR y registró la entrega. */
   cash_handoff_confirmed?: boolean;
+  /**
+   * #514: depósito, solo para el cliente. Hasta cuándo puede avisar "Pagué y
+   * no me confirmaron" antes de que el barrido reembolse. `null` si no aplica.
+   */
+  cash_claim_deadline?: string | null;
   merchant_unavailable: boolean;
   seller_username: string | null;
   buyer_username: string | null;
@@ -1243,7 +1248,9 @@ export interface RefundEligibility {
     /** D4: el cliente reportó que pagó; lo revisa soporte. */
     | 'cash_claim_open'
     /** No se pudo leer el plazo en cadena; se reintenta, nunca se da por vencido. */
-    | 'unverifiable';
+    | 'unverifiable'
+    /** #514: depósito dentro del margen; el cliente aún puede reportar el pago. */
+    | 'cash_claim_window';
   /** Caducidad de la solicitud. */
   expires_at: string;
   /** Desde cuándo se estima que se puede reembolsar (plazo del contrato, aprox.). */
