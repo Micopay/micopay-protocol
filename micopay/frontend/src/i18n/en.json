@@ -1120,7 +1120,28 @@
     "s3": "No transactions",
     "s4": "We didn't find transactions matching your current filter.",
     "s5": "Page",
-    "loading": "Loading history..."
+    "loading": "Loading history...",
+    "status": {
+      "completed": "Completed",
+      "locked": "Locked",
+      "revealing": "Revealing",
+      "pending": "Pending",
+      "cancelled": "Cancelled",
+      "expired": "Expired",
+      "refunded": "Refunded"
+    },
+    "filter": {
+      "all": "All",
+      "transfers": "Transfers",
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "expired": "Expired",
+      "refunded": "Refunded"
+    },
+    "from": "From {{who}}",
+    "to": "To {{who}}",
+    "received": "Received",
+    "sent": "Sent"
   },
   "qrRevealText": {
     "s1": "Open chat with the agent",

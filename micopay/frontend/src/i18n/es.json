@@ -1120,7 +1120,28 @@
     "s3": "Sin transacciones",
     "s4": "No encontramos transacciones que coincidan con tu filtro actual.",
     "s5": "Página",
-    "loading": "Cargando historial..."
+    "loading": "Cargando historial...",
+    "status": {
+      "completed": "Completado",
+      "locked": "Bloqueado",
+      "revealing": "Revelando",
+      "pending": "Pendiente",
+      "cancelled": "Cancelado",
+      "expired": "Expirado",
+      "refunded": "Reembolsado"
+    },
+    "filter": {
+      "all": "Todos",
+      "transfers": "Transferencias",
+      "completed": "Completados",
+      "cancelled": "Cancelados",
+      "expired": "Expirados",
+      "refunded": "Reembolsados"
+    },
+    "from": "De {{who}}",
+    "to": "A {{who}}",
+    "received": "Recibido",
+    "sent": "Enviado"
   },
   "qrRevealText": {
     "s1": "Abrir chat con el agente",
