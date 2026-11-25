@@ -9,6 +9,7 @@
 
 import { strictEqual } from "assert";
 import db from "../db/schema.js";
+import { DEFAULT_DEPOSIT_GRACE_MINUTES, parseGraceMinutes } from "../config.js";
 import { getTradeDetailForParticipant, openCashClaim, sweepPendingRefunds } from "../services/trade.service.js";
 
 const fakeRequest = {
@@ -67,8 +68,24 @@ async function statusOf(id: string) {
   return (await db.getOne<{ status: string }>("SELECT status FROM trades WHERE id = $1", [id]))?.status;
 }
 
+// #514 · casilla 1. Un margen negativo adelantaria el reembolso y uno mal
+// escrito ("15m") no debe leerse a medias: los dos caen al valor por defecto.
+function testGraceMinutesParsing() {
+  strictEqual(DEFAULT_DEPOSIT_GRACE_MINUTES, 15, "el margen por defecto es 15 minutos");
+  strictEqual(parseGraceMinutes(undefined), 15, "sin variable: 15");
+  strictEqual(parseGraceMinutes(""), 15, "vacia: 15");
+  strictEqual(parseGraceMinutes("-5"), 15, "negativo: 15");
+  strictEqual(parseGraceMinutes("abc"), 15, "no numerico: 15");
+  strictEqual(parseGraceMinutes("15m"), 15, "con unidad: 15, no se lee a medias");
+  strictEqual(parseGraceMinutes("2.5"), 15, "decimal: 15");
+  strictEqual(parseGraceMinutes(" 30 "), 30, "entero valido: se respeta");
+  strictEqual(parseGraceMinutes("0"), 0, "cero es valido: sin margen");
+  console.log("  ✓ #514 margen: invalido o negativo usa 15");
+}
+
 async function main() {
   console.log("\n  WP5 barrido de vencidas:\n");
+  testGraceMinutesParsing();
   const client = await createUser("cli");
   const provider = await createUser("prov");
 
