@@ -54,7 +54,9 @@ async function insertLockedTrade(
   const { secret, secretHash } = generateTradeSecret();
   const { encrypted, nonce } = encryptSecret(secret);
   const expiresAt = new Date(
-    Date.now() + (opts.expired ? -(opts.expiredMinutesAgo ?? 1) * 60_000 : 2 * 60 * 60 * 1000),
+    // El fixture es un deposito: desde #514 el barrido y el boton esperan el
+    // margen (15 min) despues del vencimiento. "Vencido" aqui ya lo paso.
+    Date.now() + (opts.expired ? -(opts.expiredMinutesAgo ?? 16) * 60_000 : 2 * 60 * 60 * 1000),
   ).toISOString();
   const lockTxHash = `mock_lock_${Math.random().toString(36).slice(2)}`;
 
@@ -149,9 +151,7 @@ async function testRefundIsNotDoubleSpendable() {
 async function testSweepAutoRefundsCancelledExpiredTrades() {
   const sellerId = await createUser("s4");
   const buyerId = await createUser("b4");
-  // El fixture es un deposito: desde #514 el barrido espera el margen
-  // (15 min) despues del vencimiento antes de reembolsarlo.
-  const tradeId = await insertLockedTrade(sellerId, buyerId, { expired: true, expiredMinutesAgo: 16 });
+  const tradeId = await insertLockedTrade(sellerId, buyerId, { expired: true });
 
   // Cancel, but nobody ever calls POST /trades/:id/refund manually.
   await cancelTrade(fakeRequest, tradeId, buyerId);

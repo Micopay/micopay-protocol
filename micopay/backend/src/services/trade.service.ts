@@ -1881,7 +1881,12 @@ export interface RefundEligibility {
     /** D4: el cliente reclamo haber pagado; lo revisa soporte. */
     | 'cash_claim_open'
     /** WP3: no se pudo leer el plazo en cadena; nunca se toma por vencido. */
-    | 'unverifiable';
+    | 'unverifiable'
+    /**
+     * #514: deposito vencido dentro del margen. El cliente todavia puede
+     * reportar el pago; `refund_available_at` dice desde cuando se puede.
+     */
+    | 'cash_claim_window';
   /** Caducidad de la solicitud. */
   expires_at: string;
   /**
@@ -1943,13 +1948,21 @@ export async function getRefundEligibility(
     }
     throw err;
   }
+  // #514: en un deposito manda el mas tardio de los dos plazos, el del
+  // contrato y el margen para que el cliente reporte el pago.
+  const graceEndsAt = depositGraceEndsAt(trade);
+  const availableAt = graceEndsAt && graceEndsAt > timing.availableAt ? graceEndsAt : timing.availableAt;
+  const inGrace = Boolean(graceEndsAt && graceEndsAt > now);
   const withTiming = {
     ...base,
-    refund_available_at: timing.availableAt.toISOString(),
-    seconds_remaining: timing.reached ? 0 : Math.max(1, secondsUntil(timing.availableAt)),
+    refund_available_at: availableAt.toISOString(),
+    seconds_remaining: timing.reached && !inGrace ? 0 : Math.max(1, secondsUntil(availableAt)),
   };
   if (!timing.reached) {
     return { ...withTiming, eligible: false, reason: 'not_expired_yet' };
+  }
+  if (inGrace) {
+    return { ...withTiming, eligible: false, reason: 'cash_claim_window' };
   }
 
   return { ...withTiming, eligible: true, reason: 'eligible' };
@@ -2024,7 +2037,34 @@ export async function refundTrade(
       );
     }
 
-    return await executeRefundOnChain(request, tradeId, trade, userId);
+    // #514: el agente es quien se queda con el efectivo y la cripto si el
+    // boton se salta el margen. Un deposito vencido espera igual que en el
+    // barrido.
+    const graceEndsAt = depositGraceEndsAt(trade);
+    if (graceEndsAt && graceEndsAt > new Date()) {
+      throw new TradeStateError(
+        'CASH_CLAIM_WINDOW',
+        `El cliente todavía puede reportar el pago; podrás recuperar los fondos a las ${formatTimeMx(graceEndsAt)}.`,
+        `Trade ${tradeId}: deposit grace until ${graceEndsAt.toISOString()}`,
+      );
+    }
+
+    // #514: la decision final con la fila tomada, igual que el barrido. Si el
+    // cliente reclamo despues de la revision de arriba, aqui se ve.
+    if (!(await startRefundDecision(tradeId))) {
+      throw new ConflictError(
+        'CASH_CLAIM_OPEN',
+        'El cliente reportó que ya pagó. Este intercambio lo revisa soporte.',
+        `Trade ${tradeId} got a cash claim before the refund started`,
+      );
+    }
+    try {
+      return await executeRefundOnChain(request, tradeId, trade, userId);
+    } catch (err) {
+      // No se completo: se quita la marca para que el cliente pueda reclamar.
+      await clearRefundDecision(tradeId).catch(() => {});
+      throw err;
+    }
   } catch (error) {
     await logTransitionFailure({
       tradeId,
@@ -2110,7 +2150,7 @@ export async function sweepPendingRefunds(
       if (!timing.reached) continue;
       // #514: la decision final, con la fila tomada. Si el cliente reclamo
       // despues de la revision de arriba, aqui se ve y no se reembolsa.
-      if (!(await startSweepRefund(trade.id))) {
+      if (!(await startRefundDecision(trade.id))) {
         logger.warn(
           { trade_id: trade.id, status: trade.status, category: 'trade.lifecycle' },
           '[refund-sweep] Cash claim opened before the refund started — left for support',
@@ -2128,7 +2168,7 @@ export async function sweepPendingRefunds(
       failed++;
       // El reembolso no se completo: se quita la marca para que el cliente
       // pueda reclamar y el siguiente ciclo lo vuelva a intentar.
-      if (refundStarted) await clearSweepRefund(trade.id).catch(() => {});
+      if (refundStarted) await clearRefundDecision(trade.id).catch(() => {});
       logger.error(
         { err, trade_id: trade.id, category: 'trade.lifecycle' },
         '[refund-sweep] Failed to auto-refund cancelled trade',
@@ -2311,6 +2351,15 @@ export async function hasCashConfirmation(trade: {
  * siguen decidiendo si la cadena ya admite `refund()`. Un retiro (cash-out)
  * devuelve `null`: ahi el efectivo lo entrega el agente y no hay que esperar.
  */
+/** Hora de Mexico para mensajes al usuario: el servidor corre en UTC. */
+function formatTimeMx(when: Date): string {
+  return when.toLocaleTimeString('es-MX', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Mexico_City',
+  });
+}
+
 export function depositGraceEndsAt(trade: {
   flow?: string | null;
   expires_at?: string | Date | null;
@@ -2337,8 +2386,8 @@ export function depositGraceEndsAt(trade: {
  * una de las dos gana y la otra se entera. Funciona aunque haya varias
  * instancias del backend.
  *
- * No cubre el boton "Recuperar fondos" del agente (`refundTrade`): esa ruta no
- * pasa por aqui. En el store en memoria (tests sin PostgreSQL) no hay
+ * Lo usan el barrido y el boton "Recuperar fondos" (`refundTrade`). Llamar a
+ * `refund()` del contrato directo, fuera de la app, no pasa por aqui. En el store en memoria (tests sin PostgreSQL) no hay
  * transacciones; ahi se serializa con `withKeyedLock`, que solo vale dentro de
  * un proceso, el mismo supuesto que ya tiene ese store.
  */
@@ -2376,10 +2425,11 @@ async function withTradeRowLock<T>(
 }
 
 /**
- * #514: el barrido decide reembolsar. Devuelve `false` si ya hay un reclamo
- * abierto (gano el cliente); si no, deja la marca y devuelve `true`.
+ * #514: el barrido o el boton "Recuperar fondos" deciden reembolsar. Devuelve
+ * `false` si ya hay un reclamo abierto (gano el cliente); si no, deja la marca
+ * y devuelve `true`.
  */
-async function startSweepRefund(tradeId: string): Promise<boolean> {
+async function startRefundDecision(tradeId: string): Promise<boolean> {
   return withTradeRowLock(tradeId, async (trade, q) => {
     if (!trade) return false;
     const [claim] = await q(
@@ -2395,7 +2445,7 @@ async function startSweepRefund(tradeId: string): Promise<boolean> {
 }
 
 /** #514: el reembolso fallo; el cliente vuelve a poder reclamar. */
-async function clearSweepRefund(tradeId: string): Promise<void> {
+async function clearRefundDecision(tradeId: string): Promise<void> {
   await db.execute('UPDATE trades SET refund_started_at = NULL WHERE id = $1', [tradeId]);
 }
 

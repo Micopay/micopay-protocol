@@ -1248,7 +1248,9 @@ export interface RefundEligibility {
     /** D4: el cliente reportó que pagó; lo revisa soporte. */
     | 'cash_claim_open'
     /** No se pudo leer el plazo en cadena; se reintenta, nunca se da por vencido. */
-    | 'unverifiable';
+    | 'unverifiable'
+    /** #514: depósito dentro del margen; el cliente aún puede reportar el pago. */
+    | 'cash_claim_window';
   /** Caducidad de la solicitud. */
   expires_at: string;
   /** Desde cuándo se estima que se puede reembolsar (plazo del contrato, aprox.). */
