@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { SecureScreen } from '../lib/secureScreen';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 /**
  * Revela la llave secreta Stellar para que el usuario la anote.
@@ -35,16 +38,12 @@ interface SecretKeyBackupModalProps {
 
 const CONFIRM_CHARS = 4;
 
-const DEFAULT_REASON =
-  'Anótala en papel y guárdala fuera del teléfono. Es la única forma de recuperar tu ' +
-  'cuenta. Quien la tenga controla tus fondos.';
-
 export default function SecretKeyBackupModal({
   secretKey,
   onClose,
   onConfirmed,
   requireConfirmation = true,
-  reason = DEFAULT_REASON,
+  reason = tr('backupModal.defaultReason'),
 }: SecretKeyBackupModalProps) {
   const [revealed, setRevealed] = useState(false);
   const [input, setInput] = useState('');
@@ -64,7 +63,7 @@ export default function SecretKeyBackupModal({
 
   const handleConfirm = () => {
     if (input.trim().toUpperCase() !== expected.toUpperCase()) {
-      setError('No coincide. Revisa los últimos 4 caracteres de tu llave.');
+      setError(tr('backupModal.mismatch'));
       return;
     }
     setError(null);
@@ -79,18 +78,18 @@ export default function SecretKeyBackupModal({
           <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3 text-red-500">
             <span className="material-symbols-outlined text-3xl">key</span>
           </div>
-          <h2 className="text-lg font-extrabold text-[#0B1E26]">Respalda tu llave secreta</h2>
+          <h2 className="text-lg font-extrabold text-[#0B1E26]">{tr('backupModal.title')}</h2>
           <p className="text-sm text-[#67808C] mt-2 leading-relaxed">{reason}</p>
         </div>
 
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold text-red-800 uppercase tracking-wider">
-              Tu llave secreta
+              {tr('backupModal.yourKey')}
             </span>
             <span className="text-[11px] text-red-700 flex items-center gap-1">
               <span className="material-symbols-outlined text-sm">screenshot_monitor</span>
-              Capturas bloqueadas
+              {tr('backupModal.screenshotsBlocked')}
             </span>
           </div>
 
@@ -101,11 +100,11 @@ export default function SecretKeyBackupModal({
           ) : (
             <button
               onClick={() => setRevealed(true)}
-              aria-label="Mostrar la llave secreta"
+              aria-label={tr('backupModal.showKeyLabel')}
               className="w-full bg-red-100 hover:bg-red-200 text-red-800 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
             >
               <span className="material-symbols-outlined text-base">visibility</span>
-              Mostrar llave
+              {tr('backupModal.showKey')}
             </button>
           )}
         </div>
@@ -116,7 +115,7 @@ export default function SecretKeyBackupModal({
               htmlFor="secret-confirm"
               className="block text-xs font-semibold text-[#0B1E26] mb-2"
             >
-              Para confirmar que la anotaste, escribe sus últimos {CONFIRM_CHARS} caracteres:
+              {tr('backupModal.confirmPrompt', { count: CONFIRM_CHARS })}
             </label>
             <input
               id="secret-confirm"
@@ -142,7 +141,7 @@ export default function SecretKeyBackupModal({
               disabled={input.trim().length < CONFIRM_CHARS}
               className="w-full bg-[#00694C] text-white font-bold py-3.5 rounded-2xl transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Ya la anoté
+              {tr('backupModal.wroteIt')}
             </button>
           ) : (
             revealed && (
@@ -150,7 +149,7 @@ export default function SecretKeyBackupModal({
                 onClick={onClose}
                 className="w-full bg-[#00694C] text-white font-bold py-3.5 rounded-2xl transition-all active:scale-[0.98]"
               >
-                Listo
+                {tr('backupModal.done')}
               </button>
             )
           )}
@@ -158,7 +157,7 @@ export default function SecretKeyBackupModal({
             onClick={onClose}
             className="w-full text-[#67808C] font-semibold py-2.5 rounded-2xl hover:bg-[#EFF6FA] transition-colors"
           >
-            {revealed && requireConfirmation ? 'Ahora no' : 'Cerrar'}
+            {revealed && requireConfirmation ? tr('backupModal.notNow') : tr('backupModal.close')}
           </button>
         </div>
       </div>

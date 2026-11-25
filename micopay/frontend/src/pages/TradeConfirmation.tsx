@@ -7,6 +7,9 @@ import {
 import { MAX_EFFECTIVE_FEE_PERCENT } from '../services/api';
 import { getEscrowAssetOption } from '../constants/escrowAssets';
 import { formatEstimateUnits, useEscrowAssetEstimate } from '../hooks/useEscrowAssetEstimate';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 export interface TradeConfirmationPageProps {
   merchantName: string;
@@ -113,7 +116,7 @@ export default function TradeConfirmationPage({
           type="button"
           onClick={onBack}
           className="min-h-12 min-w-12 p-2 rounded-sm hover:bg-surface-container-low text-verde transition-colors"
-          aria-label="Volver al mapa"
+          aria-label={tr('tradeConfirmText.backToMap')}
         >
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -133,7 +136,7 @@ export default function TradeConfirmationPage({
                 onClick={async () => { onCreateNewInstead(); await onConfirm(); }}
                 className="mt-3 w-full min-h-12 rounded-sm border-2 border-tinta bg-papel px-4 font-bold text-tinta"
               >
-                Crear otra operación
+                {tr('tradeConfirmText.createAnother')}
               </button>
             ) : null}
             {errorAction === 'verify_identity' && onVerifyIdentity ? (
@@ -142,7 +145,7 @@ export default function TradeConfirmationPage({
                 onClick={onVerifyIdentity}
                 className="mt-3 w-full min-h-12 rounded-sm bg-verde px-4 font-bold text-papel"
               >
-                Verificar mi identidad
+                {tr('tradeConfirmText.verifyIdentity')}
               </button>
             ) : null}
           </div>

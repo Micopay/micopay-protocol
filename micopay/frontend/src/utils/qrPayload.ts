@@ -11,6 +11,9 @@
 
 import { IS_DEMO_MODE } from './demoMode';
 import { isHex64, isUuid } from './qrValidation';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 export interface QRPayloadRelease {
   type: 'release';
@@ -58,7 +61,7 @@ export type QRParseResult = QRParseSuccess | QRParseError;
  */
 export function parseQRPayload(raw: string | null | undefined): QRParseResult {
   if (!raw || raw.trim().length === 0) {
-    return { ok: false, error: 'El código QR está vacío' };
+    return { ok: false, error: tr('qrErrors.empty') };
   }
 
   const trimmed = raw.trim();
@@ -75,18 +78,18 @@ export function parseQRPayload(raw: string | null | undefined): QRParseResult {
         const claimToken = url.searchParams.get('claim_token');
 
         if (!tradeId) {
-          return { ok: false, error: 'El QR no contiene un ID de trade válido' };
+          return { ok: false, error: tr('qrErrors.noTradeId') };
         }
         if (!isUuid(tradeId)) {
-          return { ok: false, error: 'El ID de trade no tiene un formato UUID válido' };
+          return { ok: false, error: tr('qrErrors.badUuid') };
         }
         if (!claimToken) {
-          return { ok: false, error: 'El QR no contiene el código de cobro' };
+          return { ok: false, error: tr('qrErrors.noCode') };
         }
         if (!isHex64(claimToken)) {
           return {
             ok: false,
-            error: 'El código de cobro debe ser una cadena hexadecimal de 64 caracteres',
+            error: tr('qrErrors.badCode'),
           };
         }
 
@@ -99,17 +102,17 @@ export function parseQRPayload(raw: string | null | undefined): QRParseResult {
       if (action === 'confirm') {
         const tradeId = url.searchParams.get('trade_id');
         if (!tradeId) {
-          return { ok: false, error: 'El QR no contiene un ID de trade válido' };
+          return { ok: false, error: tr('qrErrors.noTradeId') };
         }
         if (!isUuid(tradeId)) {
-          return { ok: false, error: 'El ID de trade no tiene un formato UUID válido' };
+          return { ok: false, error: tr('qrErrors.badUuid') };
         }
         return { ok: true, payload: { type: 'confirm', tradeId } };
       }
 
-      return { ok: false, error: `Acción QR no reconocida: "${action}"` };
+      return { ok: false, error: tr('qrErrors.unknownAction', { action }) };
     } catch {
-      return { ok: false, error: 'No se pudo analizar el enlace del QR' };
+      return { ok: false, error: tr('qrErrors.badLink') };
     }
   }
 
@@ -118,7 +121,7 @@ export function parseQRPayload(raw: string | null | undefined): QRParseResult {
     if (!IS_DEMO_MODE) {
       return {
         ok: false,
-        error: 'El formato legacy MICOPAY ya no es compatible. Usa un QR micopay:// válido.',
+        error: tr('qrErrors.legacy'),
       };
     }
 
@@ -136,5 +139,5 @@ export function parseQRPayload(raw: string | null | undefined): QRParseResult {
     return { ok: false, error: 'Formato MICOPAY incompleto' };
   }
 
-  return { ok: false, error: 'Código QR no reconocido. Se espera un QR de MicoPay válido.' };
+  return { ok: false, error: tr('qrErrors.unrecognized') };
 }

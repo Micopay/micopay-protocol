@@ -9,6 +9,7 @@
 
 import { strictEqual } from "assert";
 import db from "../db/schema.js";
+import { DEFAULT_DEPOSIT_GRACE_MINUTES, parseGraceMinutes } from "../config.js";
 import { getTradeDetailForParticipant, openCashClaim, sweepPendingRefunds } from "../services/trade.service.js";
 
 const fakeRequest = {
@@ -38,6 +39,8 @@ async function insertTrade(opts: {
   status: string;
   expired: boolean;
   revealed?: boolean;
+  /** #514: cuantos minutos hace que vencio (por defecto 1). */
+  expiredMinutesAgo?: number;
 }): Promise<string> {
   seq++;
   const cashout = opts.flow === "cashout";
@@ -55,7 +58,7 @@ async function insertTrade(opts: {
       `wp5_${seq}_${Math.random()}`,
       opts.status,
       `mock_lock_${seq}`,
-      new Date(Date.now() + (opts.expired ? -60_000 : 2 * 60 * 60 * 1000)).toISOString(),
+      new Date(Date.now() + (opts.expired ? -(opts.expiredMinutesAgo ?? 1) * 60_000 : 2 * 60 * 60 * 1000)).toISOString(),
       opts.revealed ? new Date().toISOString() : null,
     ],
   );
@@ -67,8 +70,24 @@ async function statusOf(id: string) {
   return (await db.getOne<{ status: string }>("SELECT status FROM trades WHERE id = $1", [id]))?.status;
 }
 
+// #514 · casilla 1. Un margen negativo adelantaria el reembolso y uno mal
+// escrito ("15m") no debe leerse a medias: los dos caen al valor por defecto.
+function testGraceMinutesParsing() {
+  strictEqual(DEFAULT_DEPOSIT_GRACE_MINUTES, 15, "el margen por defecto es 15 minutos");
+  strictEqual(parseGraceMinutes(undefined), 15, "sin variable: 15");
+  strictEqual(parseGraceMinutes(""), 15, "vacia: 15");
+  strictEqual(parseGraceMinutes("-5"), 15, "negativo: 15");
+  strictEqual(parseGraceMinutes("abc"), 15, "no numerico: 15");
+  strictEqual(parseGraceMinutes("15m"), 15, "con unidad: 15, no se lee a medias");
+  strictEqual(parseGraceMinutes("2.5"), 15, "decimal: 15");
+  strictEqual(parseGraceMinutes(" 30 "), 30, "entero valido: se respeta");
+  strictEqual(parseGraceMinutes("0"), 0, "cero es valido: sin margen");
+  console.log("  ✓ #514 margen: invalido o negativo usa 15");
+}
+
 async function main() {
   console.log("\n  WP5 barrido de vencidas:\n");
+  testGraceMinutesParsing();
   const client = await createUser("cli");
   const provider = await createUser("prov");
 
@@ -84,10 +103,33 @@ async function main() {
     [cashoutHandoff, provider, "hash"],
   );
 
+  // #514 · casilla 2: el deposito espera el margen; el cash-out no.
+  const depositFiveMin = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "locked", expired: true, expiredMinutesAgo: 5 });
+  const depositSixteenMin = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "locked", expired: true, expiredMinutesAgo: 16 });
+  const depositCancelledFiveMin = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "cancelled", expired: true, expiredMinutesAgo: 5 });
+
+  // #514 · casilla 3: lo que la conciliacion marco para soporte no entra al
+  // barrido, aunque ya haya pasado el margen o sea un cash-out.
+  const cashoutInReview = await insertTrade({ flow: "cashout", clientId: client, providerId: provider, status: "locked", expired: true });
+  const depositInReview = await insertTrade({ flow: "deposit", clientId: client, providerId: provider, status: "cancelled", expired: true, expiredMinutesAgo: 30 });
+  for (const id of [cashoutInReview, depositInReview]) {
+    await db.execute("UPDATE trades SET chain_review_reason = $2 WHERE id = $1", [id, "escrow_mismatch"]);
+  }
+
   await sweepPendingRefunds(fakeRequest);
+
+  strictEqual(await statusOf(cashoutInReview), "locked", "cash-out en revision: queda para soporte");
+  strictEqual(await statusOf(depositInReview), "cancelled", "deposito en revision: queda para soporte");
+  console.log("  ✓ #514 con chain_review_reason no se reembolsa");
+  strictEqual(await statusOf(depositFiveMin), "locked", "deposito vencido hace 5 min: el cliente aun puede reclamar");
+  strictEqual(await statusOf(depositCancelledFiveMin), "cancelled", "deposito cancelado vencido hace 5 min: tambien espera");
+  console.log("  ✓ #514 deposito vencido hace 5 min: no se reembolsa");
+  strictEqual(await statusOf(depositSixteenMin), "refunded", "deposito vencido hace 16 min: ya paso el margen");
+  console.log("  ✓ #514 deposito vencido hace 16 min: se reembolsa");
 
   strictEqual(await statusOf(lockedExpired), "refunded", "locked vencida sin constancia regresa sola");
   console.log("  ✓ locked vencida sin constancia: regresa sola");
+  console.log("  ✓ #514 cash-out vencido hace 1 min: se reembolsa sin esperar el margen");
   strictEqual(await statusOf(revealingCashoutExpired), "refunded", "retiro con QR generado pero sin escaneo regresa solo");
   console.log("  ✓ revealing de retiro sin escaneo: regresa sola");
   strictEqual(await statusOf(lockedLive), "locked", "no vencida: no se toca");
