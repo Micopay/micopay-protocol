@@ -1612,5 +1612,8 @@
     "unsupportedSigned": "la firma devolvio una tx no soportada",
     "swapFailed": "No se pudo completar el swap USDC→CETES; solicita una cotización nueva y revisa tu saldo.",
     "accountMismatch": "la cuenta cargada no coincide con el retiro"
+  },
+  "incomingAlert": {
+    "title": "Nueva solicitud"
   }
 }
