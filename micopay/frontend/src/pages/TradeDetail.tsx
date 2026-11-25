@@ -24,10 +24,12 @@ import { errorMessages } from '../constants/errorMessages';
 import { readJSON } from '../services/secureStorage';
 import { useCountdown } from '../hooks/useCountdown';
 import { buildTxUrl } from '../utils/stellarExplorer';
-import { mapApiError } from '../utils/apiError';
+import { localizeServerMessage, mapApiError } from '../utils/apiError';
 import { parseTradeState, type TradeState } from '../components/TradeStateBadge';
 import { resolveTradeActor, type TradeActor } from '../utils/tradeActor';
 import { canConfirmCashReceived, confirmCashReceived, cashConfirmErrorMessage } from '../utils/cashConfirm';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 type TradeDetailData = TradeDetailResponse['trade'] & {
   platform_fee_mxn?: number;
@@ -396,6 +398,40 @@ function lockedBody(actor?: TradeActor): string {
   return t('tradeDetail.s26');
 }
 
+/**
+ * #514: en un depósito vencido, cuánto le queda al cliente para avisar "Pagué
+ * y no me confirmaron" antes de que el barrido le devuelva la cripto al
+ * agente. El plazo lo manda el servidor (`cash_claim_deadline`); aquí no se
+ * repite el margen. Solo se pinta ya vencida la operación y mientras quede
+ * tiempo.
+ */
+export function CashClaimCountdown({ expiresAt, deadline }: { expiresAt: string | null; deadline: string | null }) {
+  const { expired: requestExpired } = useCountdown(deadline ? expiresAt : null);
+  const { label, expired: deadlineExpired } = useCountdown(deadline);
+  if (!deadline || !requestExpired || deadlineExpired || !label) return null;
+  return (
+    <p role="status" className="w-full mb-4 p-3 border-2 border-naranja bg-naranja-suave text-tinta text-sm font-bold rounded-sm">
+      {tr('tradeDetail.cashClaimCountdown', { time: label })}
+    </p>
+  );
+}
+
+/**
+ * #514: el agente de un depósito vencido, dentro del margen. Sin esto veía la
+ * operación bloqueada sin saber por qué no le salía "Recuperar fondos". La hora
+ * la manda el servidor (`refund_available_at` ya trae el margen).
+ */
+export function AgentCashClaimWindow({ eligibility, isProvider }: { eligibility: RefundEligibility | null; isProvider: boolean }) {
+  const inWindow = isProvider && eligibility?.reason === 'cash_claim_window';
+  const { label, expired } = useCountdown(inWindow ? eligibility?.refund_available_at ?? null : null);
+  if (!inWindow || expired || !label) return null;
+  return (
+    <p role="status" className="w-full mb-4 p-3 border-2 border-tinta bg-naranja-suave text-tinta text-sm font-bold rounded-sm">
+      {tr('tradeDetail.agentClaimWindow', { time: label })}
+    </p>
+  );
+}
+
 /** #5: con fondos bloqueados, cancelar detiene el flujo; no devuelve fondos. */
 function LockedCancel({ allowed, mustPauseFirst, cancelling, error, onCancel }: LockedCancelProps) {
   return (
@@ -459,7 +495,7 @@ function ReleaseAfterHandoffView({ trade, token, onComplete, onOpenChat }: { tra
           check_circle
         </span>
       </div>
-      <h2 className="text-2xl font-bold text-on-surface mb-2">Entrega registrada</h2>
+      <h2 className="text-2xl font-bold text-on-surface mb-2">{tr('tradeDetail.handoffRecorded')}</h2>
       <p className="text-on-surface-variant mb-6">{t('tradeDetail.s31')}</p>
       {error && (
         <p role="alert" className="w-full mb-4 p-3 bg-red-50 border border-red-200 rounded-sm text-red-700 text-sm font-medium">
@@ -1025,7 +1061,7 @@ function RefundConfirmDialog({
             <span className="num text-sm text-on-surface">${fee} MXN</span>
           </div>
           <div className="flex justify-between items-center pt-2 border-t border-linea">
-            <span className="text-sm font-semibold text-on-surface-variant">Total devuelto</span>
+            <span className="text-sm font-semibold text-on-surface-variant">{tr('tradeDetail.totalReturned')}</span>
             <span className="num font-bold text-primary">${amount} MXN</span>
           </div>
           <p className="mt-3 text-xs text-on-surface-variant">{t('tradeDetail.s63')}
@@ -1091,6 +1127,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
   const [declineAvailable, setDeclineAvailable] = useState(false);
   const [refundKind, setRefundKind] = useState<'decline' | 'timeout' | null>(null);
   const [cashHandoffConfirmed, setCashHandoffConfirmed] = useState(false);
+  const [cashClaimDeadline, setCashClaimDeadline] = useState<string | null>(null);
   const [merchantUnavailable, setMerchantUnavailable] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -1105,14 +1142,22 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       if (!effectiveToken) return;
       try {
         const eligibility = await fetchRefundEligibility(trade.id, effectiveToken);
-        if (!cancelled) setRefundEligibility(eligibility);
+        if (cancelled) return;
+        setRefundEligibility(eligibility);
+        // #514: el estado no cambia cuando vence el plazo (sigue `locked`), así
+        // que sin esto el botón no salía hasta recargar la pantalla.
+        if (!eligibility.eligible && eligibility.seconds_remaining > 0) {
+          retry = setTimeout(load, (eligibility.seconds_remaining + 2) * 1000);
+        }
       } catch {
         // Sin elegibilidad no se inventa un CTA: se deja como estaba.
       }
     };
+    let retry: ReturnType<typeof setTimeout> | undefined;
     load();
     return () => {
       cancelled = true;
+      clearTimeout(retry);
     };
   }, [trade?.id, trade?.status, token]);
 
@@ -1140,6 +1185,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       setDeclineAvailable(Boolean(data.decline_available));
       setRefundKind(data.refund_kind ?? null);
       setCashHandoffConfirmed(Boolean(data.cash_handoff_confirmed));
+      setCashClaimDeadline(data.cash_claim_deadline ?? null);
       setMerchantUnavailable(Boolean(data.merchant_unavailable));
       setError(null);
     } catch (e: any) {
@@ -1213,7 +1259,10 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
       await lockTrade(trade.id, effectiveToken);
       fetchTrade(); // Refresh to get locked state
     } catch (e: any) {
-      setLockError(e?.response?.data?.message || e?.message || t('tradeDetail.s68'));
+      setLockError(
+        (e?.response?.data?.message && localizeServerMessage(e.response.data.code, e.response.data.message))
+        || e?.message || t('tradeDetail.s68'),
+      );
     } finally {
       setIsLocking(false);
     }
@@ -1480,7 +1529,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
               onRefund={handleRefundClick}
               refunding={isRefunding}
               trade={trade}
-              title="Reembolso pendiente"
+              title={tr('tradeDetail.refundPending')}
               description={cancelledRefundCopy(refundEligibility)}
             />
           );
@@ -1546,6 +1595,8 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
           <p role="status" className="mb-4 border-2 border-tinta bg-naranja-suave p-3 text-sm font-bold">{t('tradeDetail.s80')}
           </p>
         )}
+        <CashClaimCountdown expiresAt={trade.expires_at ?? null} deadline={cashClaimDeadline} />
+        <AgentCashClaimWindow eligibility={refundEligibility} isProvider={actor.party === 'provider'} />
         {renderStateView()}
 
         {/* Support link visible in all states */}

@@ -1,6 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { AvatarPlaceholder } from '../components/AvatarPlaceholder';
 import { Logo } from '../components/Logo';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 interface ExploreProps {
     onBack?: () => void;
@@ -52,7 +55,7 @@ const Explore = ({ onBack, onNavigate, cetesAvailable = true, blendAvailable = t
                         Glifo local, cero peticiones. */}
                     <div className="w-10 h-10 rounded-sm border-2 border-tinta bg-papel flex items-center justify-center">
                         <span aria-hidden="true" className="material-symbols-outlined text-verde text-xl">person</span>
-                        <span className="sr-only">Perfil de usuario</span>
+                        <span className="sr-only">{tr('exploreText.userProfile')}</span>
                 </div>
             </header>
 

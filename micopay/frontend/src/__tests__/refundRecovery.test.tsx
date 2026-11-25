@@ -119,6 +119,23 @@ describe('CASH-6 · el CTA de recuperación', () => {
     expect(screen.queryByRole('button', { name: /recuperar fondos/i })).toBeNull();
   });
 
+  it('#514: aparece solo cuando termina el plazo, sin recargar la pantalla', async () => {
+    // El estado sigue `locked` al vencer el plazo: sin volver a preguntar, el
+    // botón no salía hasta recargar.
+    mockEligibility
+      .mockResolvedValueOnce({ ...notYet, reason: 'cash_claim_window', seconds_remaining: 1 })
+      .mockResolvedValue(eligible);
+    renderDetail();
+
+    await waitFor(() => expect(mockEligibility).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('button', { name: /recuperar fondos/i })).toBeNull();
+    await waitFor(
+      () => expect(screen.getByRole('button', { name: /recuperar fondos/i })).toBeInTheDocument(),
+      { timeout: 5000 },
+    );
+    expect(mockEligibility).toHaveBeenCalledTimes(2);
+  }, 10_000);
+
   it('si el servidor no responde, no se inventa el CTA', async () => {
     mockEligibility.mockRejectedValue(new Error('network'));
     renderDetail();

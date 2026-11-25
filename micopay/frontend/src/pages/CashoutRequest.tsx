@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AmountField } from '../components/ui';
 import AssetSelector from '../components/AssetSelector';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 export interface CashoutRequestProps {
   onBack: () => void;
@@ -22,7 +25,7 @@ const CashoutRequest = ({ onBack, onSearch, assetKey, onAssetChange }: CashoutRe
           <div className="flex items-center gap-4">
             <button
               onClick={onBack}
-              aria-label="Volver"
+              aria-label={tr('cashoutRequestText.back')}
               className="min-h-12 min-w-12 text-primary active:translate-x-[2px] active:translate-y-[2px] duration-200 p-2 hover:bg-primary/10 rounded-sm focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <span aria-hidden="true" className="material-symbols-outlined font-bold">arrow_back</span>
@@ -99,7 +102,7 @@ const CashoutRequest = ({ onBack, onSearch, assetKey, onAssetChange }: CashoutRe
         <div className="mt-auto pt-10 pb-6">
           <button
             onClick={() => onSearch(Number(amount))}
-            aria-label="Buscar ofertas de efectivo"
+            aria-label={tr('cashoutRequestText.searchOffers')}
             className="w-full bg-naranja text-papel border-2 border-tinta shadow-solida font-body font-semibold py-4 rounded-sm active:translate-x-[2px] active:translate-y-[2px] duration-200 transition-all flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <span>{t('cashout.search')}</span>
