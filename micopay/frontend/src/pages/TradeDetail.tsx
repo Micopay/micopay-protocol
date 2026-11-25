@@ -416,6 +416,22 @@ export function CashClaimCountdown({ expiresAt, deadline }: { expiresAt: string 
   );
 }
 
+/**
+ * #514: el agente de un depósito vencido, dentro del margen. Sin esto veía la
+ * operación bloqueada sin saber por qué no le salía "Recuperar fondos". La hora
+ * la manda el servidor (`refund_available_at` ya trae el margen).
+ */
+export function AgentCashClaimWindow({ eligibility, isProvider }: { eligibility: RefundEligibility | null; isProvider: boolean }) {
+  const inWindow = isProvider && eligibility?.reason === 'cash_claim_window';
+  const { label, expired } = useCountdown(inWindow ? eligibility?.refund_available_at ?? null : null);
+  if (!inWindow || expired || !label) return null;
+  return (
+    <p role="status" className="w-full mb-4 p-3 border-2 border-tinta bg-naranja-suave text-tinta text-sm font-bold rounded-sm">
+      {tr('tradeDetail.agentClaimWindow', { time: label })}
+    </p>
+  );
+}
+
 /** #5: con fondos bloqueados, cancelar detiene el flujo; no devuelve fondos. */
 function LockedCancel({ allowed, mustPauseFirst, cancelling, error, onCancel }: LockedCancelProps) {
   return (
@@ -1580,6 +1596,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
           </p>
         )}
         <CashClaimCountdown expiresAt={trade.expires_at ?? null} deadline={cashClaimDeadline} />
+        <AgentCashClaimWindow eligibility={refundEligibility} isProvider={actor.party === 'provider'} />
         {renderStateView()}
 
         {/* Support link visible in all states */}
