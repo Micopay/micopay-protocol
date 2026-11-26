@@ -168,7 +168,7 @@ const QRReveal = ({ activeTrade, token, viewerId, counterpartyName, ownName, onB
             {/* Top Navigation */}
             <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-4 pt-[max(1rem,env(safe-area-inset-top))] bg-papel border-b-2 border-tinta">
                 <div className="flex items-center gap-3">
-                    <button onClick={onBack} aria-label="Volver" className="min-h-12 min-w-12 min-h-12 min-w-12 flex items-center justify-center rounded-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary">
+                    <button onClick={onBack} aria-label={tr('a11y.back')} className="min-h-12 min-w-12 min-h-12 min-w-12 flex items-center justify-center rounded-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary">
                         <span aria-hidden="true" className="material-symbols-outlined text-verde">arrow_back</span>
                     </button>
                     <div className="flex flex-col">

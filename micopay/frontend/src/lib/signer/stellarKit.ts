@@ -35,6 +35,9 @@ async function walletModules(): Promise<ModuleInterface[]> {
       // se entera de que la APK aprobo.
       signClientOptions: { customStoragePrefix: 'micopay-kit' },
     });
+    // En la lista del Kit sale como "WalletConnect"; quien usa la APK no sabe
+    // que esa es la opcion de MicoPay.
+    walletConnectModule.productName = tr('walletLogin.apkOption');
     modules.push(walletConnectModule);
   }
   return modules;

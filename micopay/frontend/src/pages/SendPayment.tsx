@@ -190,7 +190,7 @@ const SendPayment = ({ onBack, onDone, onSent }: SendPaymentProps) => {
                   onClick={() => setAmount(String(available))}
                   className="min-h-12 shrink-0 rounded-sm border-2 border-tinta bg-papel px-3 text-xs font-bold text-tinta active:translate-x-[2px] active:translate-y-[2px]"
                 >
-                  MÁX
+                  {tr('send.max')}
                 </button>
               </div>
               {overBalance && <p className="num text-[11px] text-error mt-1">{t('send.insufficientBalance')}</p>}

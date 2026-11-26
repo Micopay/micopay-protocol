@@ -30,7 +30,8 @@
       "cancelled": "Cancelled",
       "refunded": "Refunded"
     },
-    "seeAllActivity": "See all activity"
+    "seeAllActivity": "See all activity",
+    "bankWithdraw": "Withdraw to bank"
   },
   "pay": {
     "title": "Pay",
@@ -72,7 +73,8 @@
     "viewExplorer": "View on explorer",
     "done": "Done",
     "retry": "Retry",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "max": "MAX"
   },
   "receive": {
     "title": "Receive",
@@ -123,7 +125,8 @@
     "importConfirm": "Import",
     "importCancel": "Cancel",
     "accountDeleted": "Account deleted successfully.",
-    "noKeyGenerated": "No key generated"
+    "noKeyGenerated": "No key generated",
+    "networkTitle": "MicoPay Network"
   },
   "cashout": {
     "title": "Convert to cash",
@@ -498,7 +501,10 @@
     "depositWaitingLockTitle": "Waiting for the agent to lock the funds",
     "depositWaitingLockDesc": "There is no escrow yet. Do NOT hand over the cash until this notice turns green.",
     "stateFallbackLabel": "Trade in progress",
-    "stateFallbackNext": "We're checking the status with the server."
+    "stateFallbackNext": "We're checking the status with the server.",
+    "you": "You",
+    "client": "Client",
+    "agent": "Agent"
   },
   "qrReveal": {
     "verified": "Verified",
@@ -739,7 +745,9 @@
       "gettingLocation": "Getting your location…",
       "locationError": "Couldn't get your location. Check your GPS permissions.",
       "noLocationWarning": "Without a location set you won't appear on the map. Go to Settings to set it."
-    }
+    },
+    "resume": "Resume",
+    "pause": "Pause"
   },
   "signatureApproval": {
     "title": "Signature Approval",
@@ -861,6 +869,9 @@
     "backupPhrase": "Keep your wallet's recovery phrase safe. If you forget its password, only that phrase gets your account back: MicoPay can't recover it.",
     "waiting": "Waiting for your wallet…",
     "connect": "Connect wallet",
+    "apkOption": "MicoPay app (WalletConnect)",
+    "apkTitle": "Do you use the MicoPay app on your phone?",
+    "apkSteps": "You can use that same account here. Tap “Connect wallet”, choose “MicoPay app (WalletConnect)”, and in the app go to Profile → Web connections → Scan the web QR. Approve and sign on your phone.",
     "username": "Username",
     "phone": "Phone",
     "optional": "(optional)",
@@ -1014,7 +1025,17 @@
     "cancelledReturnsAt": "The trade was cancelled. The funds are still in the contract and go back on their own to whoever locked them from {{at}}.",
     "handoffRecorded": "Handoff recorded",
     "totalReturned": "Total returned",
-    "refundPending": "Refund pending"
+    "refundPending": "Refund pending",
+    "cashClaimCountdown": "If you already handed over the cash and it wasn't confirmed, you have {{time}} left to report it with “I paid and they didn't confirm”. After that, the escrow goes back to the agent.",
+    "agentClaimWindow": "The client can still report that they already paid. If nobody reports it, you can recover your funds in {{time}}.",
+    "scanAtHandoffBody": "Ask the client to show you their code and keep the scanner open. Scan it at the very moment you hand over the cash; don't let go of the cash without scanning it. The funds are released to your account when the handoff is confirmed.",
+    "cashoutShowQrBody": "Your crypto is held in escrow. Show the code to the agent; once they hand you the cash and scan it, the trade closes.",
+    "depositWaitClientBody": "Your crypto is held in escrow. The client will confirm once they've handed you the cash; then the funds move to their account.",
+    "expiredRecoverBody": "Nobody completed the handoff in time. Your funds are still in the contract and you can recover them now.",
+    "cancelledAuthorizeRefundBody": "The trade was cancelled. Authorize the immediate return to the owner of the funds now, without waiting for the deadline.",
+    "expiredBody": "The time to complete this trade has expired.",
+    "dateLabel": "Date",
+    "processing": "Processing…"
   },
   "profileText": {
     "s1": "Your session expired. Sign in again.",
@@ -1058,7 +1079,13 @@
     "s9": "It will be able to ask you for signatures. Each signature asks for your confirmation and your key never leaves this phone.",
     "s10": "This signature only opens your session. It doesn't move money.",
     "s11": "Sends",
-    "s12": "Sign in"
+    "s12": "Sign in",
+    "site": "Site",
+    "account": "Account",
+    "amount": "Amount",
+    "asset": "Asset",
+    "receives": "Receives",
+    "contract": "Contract"
   },
   "webScan": {
     "s1": "The browser didn't allow the camera. Turn it on next to the page address.",
@@ -1088,7 +1115,8 @@
     "s16": "The agent confirmed they received your cash.",
     "s17": "The button turns on when the agent scans your code.",
     "s18": "Report sent. The funds stay in escrow and support will review the case.",
-    "s19": "I paid and they didn't confirm"
+    "s19": "I paid and they didn't confirm",
+    "receiveAssets": "Receive my assets"
   },
   "homeText": {
     "s1": "Error loading the balance"
@@ -1099,7 +1127,28 @@
     "s3": "No transactions",
     "s4": "We didn't find transactions matching your current filter.",
     "s5": "Page",
-    "loading": "Loading history..."
+    "loading": "Loading history...",
+    "status": {
+      "completed": "Completed",
+      "locked": "Locked",
+      "revealing": "Revealing",
+      "pending": "Pending",
+      "cancelled": "Cancelled",
+      "expired": "Expired",
+      "refunded": "Refunded"
+    },
+    "filter": {
+      "all": "All",
+      "transfers": "Transfers",
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "expired": "Expired",
+      "refunded": "Refunded"
+    },
+    "from": "From {{who}}",
+    "to": "To {{who}}",
+    "received": "Received",
+    "sent": "Sent"
   },
   "qrRevealText": {
     "s1": "Open chat with the agent",
@@ -1607,5 +1656,15 @@
     "unsupportedSigned": "signing returned an unsupported tx",
     "swapFailed": "The USDC→CETES swap couldn't be completed; request a new quote and check your balance.",
     "accountMismatch": "the loaded account doesn't match the withdrawal"
+  },
+  "incomingAlert": {
+    "title": "New request"
+  },
+  "webShell": {
+    "groupOperation": "Operations",
+    "groupAccount": "Account"
+  },
+  "connection": {
+    "reconnecting": "Reconnecting…"
   }
 }

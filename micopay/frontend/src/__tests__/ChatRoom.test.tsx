@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import ChatRoom from '../pages/ChatRoom';
-import '../i18n';
+import i18n from '../i18n';
 
 const mockGetTrade = vi.fn();
 const mockUseChatMessages = vi.fn();
@@ -125,5 +125,26 @@ describe('ChatRoom — prueba local 2.7', () => {
     renderChatRoom({ isProvider: false });
     expect(await screen.findByText('Tú')).toBeInTheDocument();
     expect(screen.getAllByText('Farmacia Guadalupe').length).toBeGreaterThan(1);
+  });
+
+  // #510: "Tú", "Cliente" y "Agente" salían en español con la app en inglés.
+  it('en inglés firma los mensajes como You y Agent', async () => {
+    mockUseChatMessages.mockReturnValue({
+      ...defaultChatMessages,
+      messages: [
+        { id: 'm1', body: 'hola', isOwn: false, createdAt: '2026-11-01T10:00:00Z' },
+        { id: 'm2', body: 'ya voy', isOwn: true, createdAt: '2026-11-01T10:01:00Z' },
+      ],
+    });
+    await i18n.changeLanguage('en');
+    try {
+      renderChatRoom({ isProvider: false, counterpartyName: undefined });
+      expect(await screen.findByText('You')).toBeInTheDocument();
+      expect(screen.getAllByText('Agent').length).toBeGreaterThanOrEqual(1);
+      expect(screen.queryByText('Tú')).toBeNull();
+      expect(screen.queryByText('Agente')).toBeNull();
+    } finally {
+      await i18n.changeLanguage('es');
+    }
   });
 });

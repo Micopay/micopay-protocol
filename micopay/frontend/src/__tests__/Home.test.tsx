@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { render, screen, waitFor } from '@testing-library/react';
 import Home from '../pages/Home';
+import i18n from '../i18n';
 import * as api from '../services/api';
 import { useWalletBalance } from '../hooks/useWalletBalance';
 
@@ -265,5 +266,34 @@ describe('el orden de Inicio pone la acción antes que el registro', () => {
     // Sin tope volvería a empujar hacia abajo lo que venga después.
     expect(source).toContain('HOME_HISTORY_LIMIT');
     expect(source).toMatch(/trades\.slice\(0, HOME_HISTORY_LIMIT\)/);
+  });
+});
+
+// #510: el botón "Retirar a banco" no tenía clave en en.json y salía en
+// español con la app en inglés.
+describe('Home en inglés', () => {
+  it('el botón de retiro a banco dice "Withdraw to bank"', async () => {
+    vi.clearAllMocks();
+    mockUseWalletBalance.mockReturnValue({
+      xlmBalance: '250.00',
+      stellarAddress: 'GA7ABCDEF12345',
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+      tokens: [{ code: 'XLM', balance: 250 }],
+      usdMxnRate: 17.5,
+    });
+    mockGetTradeHistory.mockResolvedValue([]);
+    mockGetCurrentUser.mockResolvedValue({ verification_status: 'verified' } as any);
+    mockGetMerchantTrades.mockResolvedValue([]);
+    mockGetXlmMxnRate.mockResolvedValue({ rate: 18.42, source: 'coingecko', fetchedAt: '2026-06-25T12:00:00Z' });
+    await i18n.changeLanguage('en');
+    try {
+      render(<Home {...createProps({ onNavigateBankWithdraw: vi.fn() })} />);
+      expect(await screen.findByRole('button', { name: 'Withdraw to bank' })).toBeInTheDocument();
+      expect(screen.queryByText('Retirar a banco')).toBeNull();
+    } finally {
+      await i18n.changeLanguage('es');
+    }
   });
 });

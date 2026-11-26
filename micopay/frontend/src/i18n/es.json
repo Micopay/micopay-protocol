@@ -30,7 +30,8 @@
       "cancelled": "Cancelado",
       "refunded": "Reembolsado"
     },
-    "seeAllActivity": "Ver todo el historial"
+    "seeAllActivity": "Ver todo el historial",
+    "bankWithdraw": "Retirar a banco"
   },
   "pay": {
     "title": "Pagar",
@@ -72,7 +73,8 @@
     "viewExplorer": "Ver en el explorador",
     "done": "Listo",
     "retry": "Reintentar",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "max": "MÁX"
   },
   "receive": {
     "title": "Recibir",
@@ -123,7 +125,8 @@
     "importConfirm": "Importar",
     "importCancel": "Cancelar",
     "accountDeleted": "Cuenta eliminada correctamente.",
-    "noKeyGenerated": "Sin clave generada"
+    "noKeyGenerated": "Sin clave generada",
+    "networkTitle": "Red MicoPay"
   },
   "cashout": {
     "title": "Convertir a efectivo",
@@ -498,7 +501,10 @@
     "depositWaitingLockTitle": "Esperando que el agente bloquee los fondos",
     "depositWaitingLockDesc": "Todavía no hay garantía. NO entregues el efectivo hasta que este aviso cambie a verde.",
     "stateFallbackLabel": "Operación en curso",
-    "stateFallbackNext": "Estamos verificando el estado con el servidor."
+    "stateFallbackNext": "Estamos verificando el estado con el servidor.",
+    "you": "Tú",
+    "client": "Cliente",
+    "agent": "Agente"
   },
   "qrReveal": {
     "verified": "Verificado",
@@ -739,7 +745,9 @@
       "gettingLocation": "Obteniendo tu ubicación…",
       "locationError": "No se pudo obtener tu ubicación. Verifica los permisos de GPS.",
       "noLocationWarning": "Sin ubicación fijada no apareces en el mapa. Ve a Ajustes para fijarla."
-    }
+    },
+    "resume": "Reanudar",
+    "pause": "Pausar"
   },
   "signatureApproval": {
     "title": "Aprobación de Firma",
@@ -861,6 +869,9 @@
     "backupPhrase": "Guarda la frase de recuperación de tu billetera. Si olvidas su contraseña, solo esa frase te devuelve la cuenta: MicoPay no puede recuperarla.",
     "waiting": "Esperando tu billetera…",
     "connect": "Conectar billetera",
+    "apkOption": "App MicoPay (WalletConnect)",
+    "apkTitle": "¿Usas la app MicoPay en tu teléfono?",
+    "apkSteps": "Puedes usar esa misma cuenta aquí. Toca «Conectar billetera», elige «App MicoPay (WalletConnect)» y en la app ve a Perfil → Conexiones web → Escanear QR de la web. Aprueba y firma en tu teléfono.",
     "username": "Nombre de usuario",
     "phone": "Teléfono",
     "optional": "(opcional)",
@@ -1014,7 +1025,17 @@
     "cancelledReturnsAt": "La operación fue cancelada. Los fondos siguen en el contrato y regresan solos a quien los bloqueó a partir del {{at}}.",
     "handoffRecorded": "Entrega registrada",
     "totalReturned": "Total devuelto",
-    "refundPending": "Reembolso pendiente"
+    "refundPending": "Reembolso pendiente",
+    "cashClaimCountdown": "Si ya entregaste el efectivo y no te lo confirmaron, te quedan {{time}} para avisar con “Pagué y no me confirmaron”. Después, la garantía regresa al agente.",
+    "agentClaimWindow": "El cliente todavía puede reportar que ya pagó. Si nadie lo reporta, podrás recuperar tus fondos en {{time}}.",
+    "scanAtHandoffBody": "Pide al cliente que te muestre su código y ten el escáner abierto. Escanéalo en el mismo momento en que le entregas el efectivo; no sueltes el efectivo sin haberlo escaneado. Los fondos se liberan a tu cuenta al confirmar la entrega.",
+    "cashoutShowQrBody": "Tu cripto está en garantía. Muestra el código al agente; cuando te entregue el efectivo y lo escanee, la operación se cierra.",
+    "depositWaitClientBody": "Tu cripto está en garantía. El cliente confirmará cuando te haya entregado el efectivo; entonces los fondos pasan a su cuenta.",
+    "expiredRecoverBody": "Nadie completó la entrega a tiempo. Tus fondos siguen en el contrato y puedes recuperarlos ahora.",
+    "cancelledAuthorizeRefundBody": "La operación fue cancelada. Autoriza ahora la devolución inmediata al dueño de los fondos, sin esperar el vencimiento.",
+    "expiredBody": "El tiempo para completar esta operación ha expirado.",
+    "dateLabel": "Fecha",
+    "processing": "Procesando…"
   },
   "profileText": {
     "s1": "Tu sesión expiró. Vuelve a iniciar sesión.",
@@ -1058,7 +1079,13 @@
     "s9": "Podrá pedirte firmas. Cada firma te pedirá confirmación y tu llave nunca sale de este teléfono.",
     "s10": "Esta firma solo abre tu sesión. No mueve dinero.",
     "s11": "Envía",
-    "s12": "Iniciar sesión"
+    "s12": "Iniciar sesión",
+    "site": "Sitio",
+    "account": "Cuenta",
+    "amount": "Monto",
+    "asset": "Activo",
+    "receives": "Recibe",
+    "contract": "Contrato"
   },
   "webScan": {
     "s1": "El navegador no dio permiso para usar la cámara. Actívalo junto a la dirección de la página.",
@@ -1088,7 +1115,8 @@
     "s16": "El agente confirmó que recibió tu efectivo.",
     "s17": "El botón se activa cuando el agente escanea tu código.",
     "s18": "Reporte enviado. Los fondos se quedan en garantía y soporte revisará el caso.",
-    "s19": "Pagué y no me confirmaron"
+    "s19": "Pagué y no me confirmaron",
+    "receiveAssets": "Recibir mis activos"
   },
   "homeText": {
     "s1": "Error al cargar el balance"
@@ -1099,7 +1127,28 @@
     "s3": "Sin transacciones",
     "s4": "No encontramos transacciones que coincidan con tu filtro actual.",
     "s5": "Página",
-    "loading": "Cargando historial..."
+    "loading": "Cargando historial...",
+    "status": {
+      "completed": "Completado",
+      "locked": "Bloqueado",
+      "revealing": "Revelando",
+      "pending": "Pendiente",
+      "cancelled": "Cancelado",
+      "expired": "Expirado",
+      "refunded": "Reembolsado"
+    },
+    "filter": {
+      "all": "Todos",
+      "transfers": "Transferencias",
+      "completed": "Completados",
+      "cancelled": "Cancelados",
+      "expired": "Expirados",
+      "refunded": "Reembolsados"
+    },
+    "from": "De {{who}}",
+    "to": "A {{who}}",
+    "received": "Recibido",
+    "sent": "Enviado"
   },
   "qrRevealText": {
     "s1": "Abrir chat con el agente",
@@ -1607,5 +1656,15 @@
     "unsupportedSigned": "la firma devolvio una tx no soportada",
     "swapFailed": "No se pudo completar el swap USDC→CETES; solicita una cotización nueva y revisa tu saldo.",
     "accountMismatch": "la cuenta cargada no coincide con el retiro"
+  },
+  "incomingAlert": {
+    "title": "Nueva solicitud"
+  },
+  "webShell": {
+    "groupOperation": "Operación",
+    "groupAccount": "Cuenta"
+  },
+  "connection": {
+    "reconnecting": "Reconectando…"
   }
 }

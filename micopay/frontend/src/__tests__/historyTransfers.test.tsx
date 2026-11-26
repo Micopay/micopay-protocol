@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import History from '../pages/History';
+import i18n from '../i18n';
 import * as api from '../services/api';
 
 vi.mock('../services/api', () => ({
@@ -94,5 +95,36 @@ describe('Historial con transferencias', () => {
     renderHistory();
     await screen.findByText('seller-a…');
     expect(screen.getByText(/No pudimos cargar tus transferencias/)).toBeInTheDocument();
+  });
+});
+
+// #510: filtros, estados, "Recibido"/"Enviado", "De"/"A" y las fechas salían
+// en español con la app en inglés.
+describe('Historial en inglés', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockTrades.mockResolvedValue([trade]);
+    mockPayments.mockResolvedValue([received, sent]);
+    await i18n.changeLanguage('en');
+  });
+
+  it('pinta filtros, estados, transferencias y fechas en inglés', async () => {
+    try {
+      renderHistory();
+      await screen.findByText('From @agente_demo_rgjo');
+      for (const label of ['All', 'Transfers', 'Completed', 'Cancelled', 'Expired', 'Refunded']) {
+        expect(screen.getAllByText(label).length).toBeGreaterThanOrEqual(1);
+      }
+      expect(screen.getByText('Received')).toBeInTheDocument();
+      expect(screen.getByText('Sent')).toBeInTheDocument();
+      expect(screen.getByText(/^To G/)).toBeInTheDocument();
+      // Fecha con mes en inglés: "Oct", no "oct".
+      expect(screen.getAllByText(/Oct/).length).toBeGreaterThanOrEqual(1);
+      for (const es of ['Todos', 'Transferencias', 'Recibido', 'Enviado', 'Completado']) {
+        expect(screen.queryByText(es)).toBeNull();
+      }
+    } finally {
+      await i18n.changeLanguage('es');
+    }
   });
 });

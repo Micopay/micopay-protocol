@@ -3,6 +3,9 @@ import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Logo } from './Logo';
 import NetworkBanner from './NetworkBanner';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 /* Armazon de la web en PC, con el esquema de MicoPay Cafe: barra lateral de
    tinta a la izquierda y contenido con ancho limitado.
@@ -100,8 +103,8 @@ export default function WebShell({
         <aside className="hidden w-64 shrink-0 flex-col overflow-y-auto bg-tinta text-papel md:flex">
           <div className="border-b-2 border-tinta-3 px-5 py-5"><Logo tone="oscuro" /></div>
           <nav aria-label={t('a11y.mainNav')} className="flex flex-col py-2">
-            <Grupo titulo="Operación" items={operation} actual={currentPage} onNavigate={onNavigate} />
-            <Grupo titulo="Cuenta" items={account} actual={currentPage} onNavigate={onNavigate} />
+            <Grupo titulo={tr('webShell.groupOperation')} items={operation} actual={currentPage} onNavigate={onNavigate} />
+            <Grupo titulo={tr('webShell.groupAccount')} items={account} actual={currentPage} onNavigate={onNavigate} />
           </nav>
           <div className="mt-auto border-t-2 border-tinta-3 px-5 py-4">
             <div className="truncate text-[15px] font-bold">{username}</div>
