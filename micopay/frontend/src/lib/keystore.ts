@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
 import { readJSON, writeJSON, removeKey } from '../services/secureStorage';
-import { requireUserPresence, type PresenceReason } from './userPresence';
+import { requireUserPresence, PresenceDeniedError, type PresenceReason } from './userPresence';
 import { StellarKeyVault, type NativeVaultStatus } from './nativeKeyVault';
 import { IS_EXTERNAL_SIGNER } from './signer/mode';
 
@@ -99,11 +99,50 @@ export async function keypairExists(): Promise<boolean> {
     return stored !== null && !!stored.secretKey;
 }
 
-export async function signChallenge(challenge: string): Promise<string> {
+/**
+ * ¿Firmar con la llave ya pide huella o PIN por si solo?
+ *
+ * En Android si: la llave vive en la boveda nativa, cifrada con una clave del
+ * Android Keystore que exige autenticacion del sistema, y la boveda muestra el
+ * dialogo en CADA firma. Pedir `requireUserPresence` antes seria una segunda
+ * huella seguida por el mismo toque, que es lo que la ventana de gracia de
+ * `userPresence.ts` existe para evitar: enseña a confirmar sin leer.
+ *
+ * Fuera de Android (web) la firma no pregunta nada, y quien llama decide.
+ */
+export function signingAsksForPresence(): boolean {
+    return usesNativeVault();
+}
+
+/**
+ * La boveda rechaza con `AUTH_CANCELLED` cuando la persona cierra el dialogo.
+ * Se traduce al mismo error que `requireUserPresence`, para que Login y
+ * Register lo traten igual en web y en Android: mensaje claro y reintentar.
+ */
+function asPresenceDenied(err: unknown): unknown {
+    const code = (err as { code?: unknown } | null)?.code;
+    return code === 'AUTH_CANCELLED' ? new PresenceDeniedError() : err;
+}
+
+/**
+ * Firma el reto de inicio de sesion.
+ *
+ * @param reason `'login'` cuando la persona esta entrando a su cuenta: en
+ *   Android el dialogo dice "Confirma que eres tú para entrar" en lugar del
+ *   texto generico de firma.
+ */
+export async function signChallenge(
+    challenge: string,
+    reason: 'sign_request' | 'login' = 'sign_request',
+): Promise<string> {
     assertLocalKeysAllowed();
     if (usesNativeVault()) {
         await ensureNativeMigration();
-        return (await StellarKeyVault.signChallenge({ challenge, reason: 'sign_request' })).signature;
+        try {
+            return (await StellarKeyVault.signChallenge({ challenge, reason })).signature;
+        } catch (err) {
+            throw asPresenceDenied(err);
+        }
     }
     const stored = await readJSON<StoredKeypair>(KEYPAIR_KEY);
     if (!stored?.secretKey) throw new Error('No keypair — call generateAndStoreKeypair first');

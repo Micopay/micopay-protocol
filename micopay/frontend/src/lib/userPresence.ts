@@ -37,7 +37,8 @@ export type PresenceReason =
   | 'payment'
   | 'reveal_key'
   | 'sign_request'
-  | 'web_auth';
+  | 'web_auth'
+  | 'login';
 
 const PROMPTS: Record<PresenceReason, string> = {
   lock: 'Confirma para bloquear tu dinero en garantía',
@@ -47,6 +48,7 @@ const PROMPTS: Record<PresenceReason, string> = {
   reveal_key: 'Confirma para ver tu llave secreta',
   sign_request: 'Confirma para autorizar esta operación',
   web_auth: 'Confirma para iniciar sesión en la web',
+  login: 'Confirma que eres tú para entrar',
 };
 
 export class PresenceDeniedError extends Error {

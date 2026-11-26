@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { UserData, getAuthToken, getCurrentUser } from '../services/api';
 import { writeJSON } from '../services/secureStorage';
-import { keypairExists, importKeypair } from '../lib/keystore';
+import { keypairExists, importKeypair, signingAsksForPresence } from '../lib/keystore';
+import { requireUserPresence, PresenceDeniedError } from '../lib/userPresence';
 
 const USERS_STORAGE_KEY = 'micopay_user';
+const PRESENCE_DENIED_MSG = 'Necesitamos confirmar que eres tú para entrar.';
 
 interface LoginProps {
   onLoginSuccess: (buyer: UserData, seller: UserData | null) => void;
@@ -27,13 +29,23 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       if (!await keypairExists()) {
         throw new Error('WALLET_NOT_FOUND');
       }
-      const token = await getAuthToken();
+      // Cerrar sesion no borra la llave, asi que sin esto volver a entrar era
+      // un solo toque para quien tuviera el telefono. En Android la boveda ya
+      // pide huella al firmar el reto (y lo dice: 'login'); preguntar antes
+      // seria una segunda huella seguida. Donde la firma no pregunta, se
+      // pregunta aqui. `force`: una firma reciente no debe saltarse esto.
+      if (!signingAsksForPresence()) await requireUserPresence('login', true);
+      const token = await getAuthToken('login');
       const profile = await getCurrentUser(token);
       const user: UserData = { id: profile.id, username: profile.username, token };
       await writeJSON(USERS_STORAGE_KEY, user);
       onLoginSuccess(user, null);
       navigate(from, { replace: true });
     } catch (e: unknown) {
+      if (e instanceof PresenceDeniedError) {
+        setError(PRESENCE_DENIED_MSG);
+        return;
+      }
       const msg = e instanceof Error ? e.message : 'Error al iniciar sesión';
       if (msg.includes('WALLET_NOT_FOUND') || msg.includes('404') || msg.includes('USER_NOT_FOUND') || msg.includes('no encontrado')) {
         setError('No encontré tu cuenta en este dispositivo. Si cambiaste de teléfono o reinstalaste la app, usa "Restaurar con llave secreta".');

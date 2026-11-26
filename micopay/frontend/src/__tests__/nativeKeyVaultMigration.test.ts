@@ -36,7 +36,8 @@ vi.mock('../services/secureStorage', () => ({
   removeKey: mocks.removeKey,
 }));
 
-vi.mock('../lib/userPresence', () => ({
+vi.mock('../lib/userPresence', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/userPresence')>()),
   requireUserPresence: mocks.requireUserPresence,
 }));
 
@@ -144,5 +145,50 @@ describe('Android native key vault migration', () => {
   it('refuses the internal seed export route on Android', async () => {
     const { exportSecretKey } = await freshKeystore();
     await expect(exportSecretKey()).rejects.toThrow(/no se puede exportar/i);
+  });
+});
+
+/**
+ * AUTH-1 en Android: la huella al entrar es la de la boveda (`signChallenge`).
+ * Si la persona cierra el dialogo, la boveda rechaza con `AUTH_CANCELLED`, y
+ * Login solo sabe mostrar "Necesitamos confirmar que eres tú para entrar" ante
+ * `PresenceDeniedError`. Sin la traduccion salia "Error: No se autorizó la
+ * operación." (visto en APK, 2026-11-23).
+ */
+describe('signChallenge con la bóveda nativa', () => {
+  beforeEach(() => {
+    mocks.status.mockResolvedValue({ exists: true, publicKey: 'G_NATIVE', securityLevel: 'tee' });
+    mocks.readJSON.mockResolvedValue(null);
+  });
+
+  it('cancelar el diálogo se traduce a PresenceDeniedError', async () => {
+    mocks.signChallenge.mockRejectedValue(Object.assign(new Error('No se autorizó la operación.'), { code: 'AUTH_CANCELLED' }));
+    const { signChallenge } = await freshKeystore();
+    const { PresenceDeniedError } = await import('../lib/userPresence');
+
+    await expect(signChallenge('reto', 'login')).rejects.toBeInstanceOf(PresenceDeniedError);
+  });
+
+  it('otros fallos de la bóveda no se disfrazan de cancelación', async () => {
+    const failure = Object.assign(new Error('La operación criptográfica falló.'), { code: 'CRYPTO_OPERATION_FAILED' });
+    mocks.signChallenge.mockRejectedValue(failure);
+    const { signChallenge } = await freshKeystore();
+
+    await expect(signChallenge('reto', 'login')).rejects.toBe(failure);
+  });
+
+  it('pasa el motivo a la bóveda para que el diálogo diga para qué es', async () => {
+    mocks.signChallenge.mockResolvedValue({ signature: 'SIG' });
+    const { signChallenge } = await freshKeystore();
+
+    await expect(signChallenge('reto', 'login')).resolves.toBe('SIG');
+    expect(mocks.signChallenge).toHaveBeenCalledWith({ challenge: 'reto', reason: 'login' });
+    await signChallenge('reto');
+    expect(mocks.signChallenge).toHaveBeenLastCalledWith({ challenge: 'reto', reason: 'sign_request' });
+  });
+
+  it('en Android la firma ya pide huella, así que Login no pregunta aparte', async () => {
+    const { signingAsksForPresence } = await freshKeystore();
+    expect(signingAsksForPresence()).toBe(true);
   });
 });
