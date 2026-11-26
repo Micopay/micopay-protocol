@@ -36,6 +36,7 @@ import DepositQR from "./pages/DepositQR";
 import SuccessScreen, { receiptFromServer, type SuccessReceipt } from "./pages/SuccessScreen";
 import Explore from "./pages/Explore";
 import ComingSoon from "./pages/ComingSoon";
+import Boveda from "./pages/Boveda";
 import { CETES_AVAILABLE, BLEND_AVAILABLE, DEFI_TRADING_ENABLED, SPEI_RAMP_ENABLED, BANK_WITHDRAW_ENABLED } from "./constants/features";
 import BankWithdrawScreen from "./pages/BankWithdrawScreen";
 import History from "./pages/History";
@@ -1695,6 +1696,8 @@ function App() {
               <Routes>
                 <Route path="/login" element={IS_EXTERNAL_SIGNER ? <WalletLogin onLoginSuccess={handleLoginSuccess} /> : <Login onLoginSuccess={handleLoginSuccess} />} />
                 <Route path="/register" element={IS_EXTERNAL_SIGNER ? <Navigate to="/login" replace /> : <Register onLoginSuccess={handleLoginSuccess} />} />
+                {/* Reto Bóveda (Ship It): pagina publica, sin sesion de MicoPay. */}
+                <Route path="/boveda" element={<Boveda />} />
                 <Route path="/" element={<ProtectedRoute><HomeRoute /></ProtectedRoute>} />
                 <Route path="/history" element={<ProtectedRoute><HistoryRoute /></ProtectedRoute>} />
                 <Route path="/trade/:id" element={<ProtectedRoute><TradeDetailRoute /></ProtectedRoute>} />
