@@ -250,7 +250,7 @@ const SuccessScreen = ({ type, trade, viewerId, agentName, onHome }: SuccessScre
 
                 <div className="flex justify-between items-center">
                     <span className="text-on-surface-variant text-xs">{t('success.status')}</span>
-                    <span className="text-xs font-semibold text-on-surface capitalize">{trade.status}</span>
+                    <span className="text-xs font-semibold text-on-surface">{t(Object.prototype.hasOwnProperty.call(i18n.getResource(i18n.resolvedLanguage ?? i18n.language, 'translation', 'home.status') ?? {}, trade.status) ? `home.status.${trade.status}` : 'home.status.unknown')}</span>
                 </div>
 
                 {lockTxHash && (
