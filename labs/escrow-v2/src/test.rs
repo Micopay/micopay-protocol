@@ -680,3 +680,97 @@ fn test_e2_new_cap_does_not_touch_open_trades() {
     escrow.release(&trade_id, &secret);
     assert_eq!(token_client.balance(&platform_wallet), 10_000);
 }
+
+// ── labs (E7): pausa de emergencia ───────────────────────────────────────────
+
+fn tagged_hash(env: &Env, tag: &[u8]) -> (Bytes, BytesN<32>) {
+    let secret = Bytes::from_slice(env, tag);
+    let hash: BytesN<32> = env.crypto().sha256(&secret).into();
+    (secret, hash)
+}
+
+#[test]
+fn test_e7_pause_blocks_lock_only() {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+
+    // Tres trades abiertos antes de la pausa.
+    let (secret_a, hash_a) = tagged_hash(&env, b"a");
+    let (_, hash_b) = tagged_hash(&env, b"b");
+    let (_, hash_c) = tagged_hash(&env, b"c");
+    let a = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash_a, &1u32);
+    let b = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash_b, &1u32);
+    let c = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash_c, &1u32);
+
+    escrow.pause();
+    assert!(escrow.is_paused());
+
+    // No entra un trade nuevo, y no se mueve dinero.
+    let before = token_client.balance(&seller);
+    let (_, hash_d) = tagged_hash(&env, b"d");
+    assert_eq!(
+        escrow.try_lock(&seller, &buyer, &1_000i128, &0i128, &hash_d, &1u32),
+        Err(Ok(EscrowError::Paused)),
+    );
+    assert_eq!(token_client.balance(&seller), before);
+
+    // Las tres salidas siguen funcionando en pausa.
+    escrow.release(&a, &secret_a);
+    escrow.decline(&b);
+    let current = env.ledger().get();
+    env.ledger().set(LedgerInfo {
+        sequence_number: current.sequence_number + 20,
+        ..current
+    });
+    escrow.refund(&c);
+    assert_eq!(escrow.get_trade(&a).status, TradeStatus::Released);
+    assert_eq!(escrow.get_trade(&b).status, TradeStatus::Declined);
+    assert_eq!(escrow.get_trade(&c).status, TradeStatus::Refunded);
+    assert_eq!(token_client.balance(&contract_id), 0);
+}
+
+#[test]
+fn test_e7_unpause_reopens_lock() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    assert!(!escrow.is_paused());
+    escrow.pause();
+    escrow.unpause();
+    assert!(!escrow.is_paused());
+    let (_, hash) = tagged_hash(&env, b"despues");
+    escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &1u32);
+}
+
+#[test]
+fn test_e7_only_admin_pauses_and_unpauses() {
+    let (env, contract_id, admin, seller, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let pause = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "pause",
+        args: ().into_val(&env),
+        sub_invokes: &[],
+    };
+    let unpause = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "unpause",
+        args: ().into_val(&env),
+        sub_invokes: &[],
+    };
+
+    env.mock_auths(&[MockAuth { address: &seller, invoke: &pause }]);
+    assert!(escrow.try_pause().is_err());
+    assert!(!escrow.is_paused());
+
+    env.mock_auths(&[MockAuth { address: &admin, invoke: &pause }]);
+    escrow.pause();
+
+    env.mock_auths(&[MockAuth { address: &seller, invoke: &unpause }]);
+    assert!(escrow.try_unpause().is_err());
+    assert!(escrow.is_paused());
+
+    env.mock_auths(&[MockAuth { address: &admin, invoke: &unpause }]);
+    escrow.unpause();
+    assert!(!escrow.is_paused());
+}

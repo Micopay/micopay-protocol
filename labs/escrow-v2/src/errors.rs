@@ -23,4 +23,6 @@ pub enum EscrowError {
     LedgerOverflow = 14,
     /// labs (E2): la comision de MicoPay pasa el tope (`fee_cap_bps`).
     FeeAboveCap = 15,
+    /// labs (E7): el contrato esta en pausa y no acepta trades nuevos.
+    Paused = 16,
 }
