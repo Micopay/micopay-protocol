@@ -774,3 +774,110 @@ fn test_e7_only_admin_pauses_and_unpauses() {
     escrow.unpause();
     assert!(!escrow.is_paused());
 }
+
+// ── labs (E9): cambio de admin en dos pasos ──────────────────────────────────
+
+fn auth_for<'a>(
+    who: &'a Address,
+    invoke: &'a MockAuthInvoke<'a>,
+) -> MockAuth<'a> {
+    MockAuth { address: who, invoke }
+}
+
+#[test]
+fn test_e9_admin_changes_only_after_accept() {
+    let (env, contract_id, admin, _, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let new_admin = Address::generate(&env);
+
+    escrow.propose_admin(&new_admin);
+    // Mientras no acepta, el admin sigue siendo el de antes y puede actuar.
+    assert_eq!(escrow.admin(), admin);
+    assert_eq!(escrow.pending_admin(), Some(new_admin.clone()));
+    escrow.set_fee_cap(&200u32);
+
+    escrow.accept_admin();
+    assert_eq!(escrow.admin(), new_admin);
+    assert_eq!(escrow.pending_admin(), None);
+    // Ya no hay nada que aceptar.
+    assert_eq!(escrow.try_accept_admin(), Err(Ok(EscrowError::NoPendingAdmin)));
+}
+
+#[test]
+fn test_e9_accept_without_proposal_fails() {
+    let (env, contract_id, _, _, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    assert_eq!(escrow.try_accept_admin(), Err(Ok(EscrowError::NoPendingAdmin)));
+}
+
+#[test]
+fn test_e9_only_admin_proposes() {
+    let (env, contract_id, admin, seller, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let candidate = Address::generate(&env);
+    let invoke = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "propose_admin",
+        args: (candidate.clone(),).into_val(&env),
+        sub_invokes: &[],
+    };
+
+    env.mock_auths(&[auth_for(&seller, &invoke)]);
+    assert!(escrow.try_propose_admin(&candidate).is_err());
+    assert_eq!(escrow.pending_admin(), None);
+
+    env.mock_auths(&[auth_for(&admin, &invoke)]);
+    escrow.propose_admin(&candidate);
+    assert_eq!(escrow.pending_admin(), Some(candidate));
+}
+
+#[test]
+fn test_e9_wrong_candidate_cannot_accept_and_new_proposal_replaces() {
+    let (env, contract_id, admin, _, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let first = Address::generate(&env);
+    let second = Address::generate(&env);
+    escrow.propose_admin(&first);
+    escrow.propose_admin(&second);
+    assert_eq!(escrow.pending_admin(), Some(second.clone()));
+
+    let accept = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "accept_admin",
+        args: ().into_val(&env),
+        sub_invokes: &[],
+    };
+    // El primero ya no fue el elegido, y el admin actual tampoco puede aceptar por el.
+    for wrong in [&first, &admin] {
+        env.mock_auths(&[auth_for(wrong, &accept)]);
+        assert!(escrow.try_accept_admin().is_err());
+        assert_eq!(escrow.admin(), admin);
+    }
+
+    env.mock_auths(&[auth_for(&second, &accept)]);
+    escrow.accept_admin();
+    assert_eq!(escrow.admin(), second);
+}
+
+#[test]
+fn test_e9_old_admin_loses_permissions() {
+    let (env, contract_id, admin, _, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let new_admin = Address::generate(&env);
+    escrow.propose_admin(&new_admin);
+    escrow.accept_admin();
+
+    let pause = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "pause",
+        args: ().into_val(&env),
+        sub_invokes: &[],
+    };
+    env.mock_auths(&[auth_for(&admin, &pause)]);
+    assert!(escrow.try_pause().is_err());
+    assert!(!escrow.is_paused());
+
+    env.mock_auths(&[auth_for(&new_admin, &pause)]);
+    escrow.pause();
+    assert!(escrow.is_paused());
+}
