@@ -1,11 +1,16 @@
 # agent-tier — reputación privada de agentes con ZK
 
-> **Prototipo para revisión del team.** No toca el escrow, el backend ni la app. No mueve fondos.
+> **Prototipo de labs, solo testnet.** No toca el escrow, el backend ni la app. No mueve fondos.
+>
+> Trabajo de Raúl Vallejo (#533, 630f26b). Se mudó a `labs/agent-tier/` en R1 sin cambiar el circuito ni el contrato.
 
 Un agente demuestra **"soy Plata"** (o Bronce/Oro) **sin revelar** cuántas operaciones tiene ni su % de cumplimiento, y un contrato Soroban lo verifica.
 
-- Circuito Noir: [`micopay/circuits/agent_tier_v1`](../../circuits/agent_tier_v1/src/main.nr)
-- Contrato: `AgentTierRegistry` ([`src/lib.rs`](src/lib.rs)), verificador UltraHonk sobre BN254 (Protocol 25)
+| Carpeta | Qué es |
+|---|---|
+| [`circuit/`](circuit/src/main.nr) | Circuito Noir `agent_tier_v1`, bench de navegador y toolchain Docker |
+| [`contract/`](contract/src/lib.rs) | Contrato `AgentTierRegistry` (crate `micopay-labs-agent-tier`), verificador UltraHonk sobre BN254 (Protocol 25) |
+| [`scripts/`](scripts/demo.sh) | Demo completa, prueba real e IDs de demo |
 
 ## Cómo funciona
 
@@ -25,8 +30,10 @@ Un agente demuestra **"soy Plata"** (o Bronce/Oro) **sin revelar** cuántas oper
 Requiere Docker. Desde la raíz del repo:
 
 ```bash
-bash micopay/circuits/agent_tier_v1/scripts/demo.sh
+bash labs/agent-tier/scripts/demo.sh
 ```
+
+Solo el contrato, sin Docker: `cd labs/agent-tier/contract && cargo test`. El CI de labs corre esto en cada PR; el circuito (nargo) todavía no está en el CI.
 
 Arma la imagen `micopay-zk-toolchain` (nargo 1.0.0-beta.9 + bb 0.87.0, las versiones que pide el verificador), corre los tests del circuito, genera una prueba real, la verifica off-chain y corre los tests del contrato contra **esa** prueba.
 
@@ -40,7 +47,7 @@ Lo que se intentó y falla: presumir un tier más alto, pedir un umbral a la med
 
 ## Testnet
 
-`AgentTierRegistry`: [`CAAZZOYORT5NP6YMTY2PFGWXJ7MJHTF43YU7OYTQ2T7LTALNTUQ2UKR5`](https://stellar.expert/explorer/testnet/contract/CAAZZOYORT5NP6YMTY2PFGWXJ7MJHTF43YU7OYTQ2T7LTALNTUQ2UKR5) (misma VK que `fixtures/vk`).
+`AgentTierRegistry`: [`CAAZZOYORT5NP6YMTY2PFGWXJ7MJHTF43YU7OYTQ2T7LTALNTUQ2UKR5`](https://stellar.expert/explorer/testnet/contract/CAAZZOYORT5NP6YMTY2PFGWXJ7MJHTF43YU7OYTQ2T7LTALNTUQ2UKR5) (misma VK que `contract/fixtures/vk`).
 
 - Prueba verificada (Lupe, tier Plata): [tx `5a2afab3…`](https://stellar.expert/explorer/testnet/tx/5a2afab3bb9424b0c0749e5d726a5a7a70d3e2597fdb0997b6d7b4d49ce862df)
 - Simulados y rechazados: Oro y Bronce con la prueba de Plata (`#5`), tier 4 o 30 (`#6`), reuso (`#4`), otra cuenta (`#5`).
@@ -48,7 +55,7 @@ Lo que se intentó y falla: presumir un tier más alto, pedir un umbral a la med
 
 ## En el teléfono
 
-[`circuits/agent_tier_v1/bench`](../../circuits/agent_tier_v1/bench/README.md) genera la prueba en el navegador con `noir_js` + `bb.js` (el mismo motor que el WebView de Capacitor).
+[`circuit/bench`](circuit/bench/README.md) genera la prueba en el navegador con `noir_js` + `bb.js` (el mismo motor que el WebView de Capacitor).
 
 | Dispositivo | Hilos | Generar prueba | Todo, primera vez |
 |---|---|---|---|
@@ -70,11 +77,18 @@ Con un solo hilo es el peor caso; con hilos no está medido. 15–30 s en medio 
 2. **Maleabilidad de codificación** (test `sondeo_maleabilidad`): el verificador ignora los bytes altos de relleno de los limbs G1, así que hay variantes de bytes de la misma prueba que pasan. No rompe la seguridad (alterar bits reales siempre falla) y el anti-reuso es el nullifier. Regla: nunca usar `hash(proof)` como id.
 3. **Pedersen** porque nargo beta.9 no exporta Poseidon; Protocol 25 ya trae Poseidon nativo. Migrarlo es opcional.
 4. **TTL de nullifiers**: ~180 días por llamada; para anti-reuso permanente hace falta extenderlos.
-5. Las cuentas de `demo/agents.json` son deterministas, sin fondos, **solo demo**.
+5. Las cuentas de `circuit/demo/agents.json` son deterministas, sin fondos, **solo demo**.
+6. **La configuración puede archivarse.** `prove_tier` y `publish_root` no extienden el TTL del almacenamiento de instancia (admin, VK, raíz, época). Si el contrato pasa tiempo sin uso, la red lo archiva y hay que restaurarlo.
 
-## Pendiente (fuera de este PR)
+## Pendiente
 
-- Contexto por época en vez de por trade.
+En labs (plan `PLAN_LABS_ESCROW_V2_Y_TIERS`):
+- **R2:** contexto por época en vez de por trade.
+- **R3:** guardar el tier del agente con su época.
+- **R4:** `get_tier(agent)` para leerlo.
+- Extender el TTL de la instancia (caveat 6).
+
+Fuera de labs:
 - Backend: job que arma el árbol y publica la raíz; endpoint con la ruta Merkle del agente.
 - App: generar la prueba (`noir_js` + `bb.js`) y mostrar "Plata ✓ verificado en Stellar".
 - Decisión de producto: dejar de devolver `trades_completed` / `completion_rate` exactos en `/merchants/available`.

@@ -1,2 +1,3 @@
 # IDs de los contratos de labs/ desplegados en testnet, uno por linea.
 # labs/ci/guard.sh falla si la app o su despliegue mencionan alguno.
+CAAZZOYORT5NP6YMTY2PFGWXJ7MJHTF43YU7OYTQ2T7LTALNTUQ2UKR5
