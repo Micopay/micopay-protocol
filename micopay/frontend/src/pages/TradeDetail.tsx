@@ -1487,7 +1487,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
               onGoToScanner={() => navigate('/inbox', { state: { autoScan: true } })}
               cancel={{
                 allowed: actor.party === 'client' || (actor.party === 'provider' && merchantUnavailable),
-                mustPauseFirst: actor.party === 'provider' && !merchantUnavailable,
+                mustPauseFirst: actor.party === 'provider' && !merchantUnavailable && !canDeclineNow,
                 cancelling: isCancelling,
                 error: cancelError,
                 onCancel: handleCancel,
@@ -1538,7 +1538,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
             {actor.flow === 'cashout' && !cashHandoffConfirmed && (
               <LockedCancel
                 allowed={actor.party === 'client' || (actor.party === 'provider' && merchantUnavailable)}
-                mustPauseFirst={actor.party === 'provider' && !merchantUnavailable}
+                mustPauseFirst={actor.party === 'provider' && !merchantUnavailable && !canDeclineNow}
                 cancelling={isCancelling}
                 error={cancelError}
                 onCancel={handleCancel}

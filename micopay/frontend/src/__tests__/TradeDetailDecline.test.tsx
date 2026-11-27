@@ -74,6 +74,13 @@ describe('TradeDetail: el agente rechaza y devuelve', () => {
     await waitFor(() => expect(mockDecline).toHaveBeenCalledWith('trade-123', 'mock-token'));
   });
 
+  it('no pide pausarse cuando puede rechazar y devolver', async () => {
+    mockDetail.mockResolvedValue(detail());
+    renderPage();
+    await screen.findByRole('button', { name: 'Rechazar y devolver al cliente' });
+    expect(screen.queryByText(/ponte en pausa/)).toBeNull();
+  });
+
   it('no aparece si el servidor no ofrece decline', async () => {
     mockDetail.mockResolvedValue(detail({ decline_available: false }));
     renderPage();
