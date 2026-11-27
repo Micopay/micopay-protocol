@@ -64,7 +64,7 @@ export interface EscrowRequestSummary {
   kind: 'secret_hash' | 'trade_id';
 }
 
-const EXPECTED_ARGS: Record<EscrowAction, number> = { lock: 6, release: 2, decline: 1 };
+const EXPECTED_ARGS: Record<EscrowAction, number> = { lock: 6, release: 2, decline: 1, refund: 1, report_paid: 1 };
 
 export function chainIdForPassphrase(isPublic: boolean): string {
   return isPublic ? 'stellar:pubnet' : 'stellar:testnet';

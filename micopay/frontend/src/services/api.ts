@@ -280,9 +280,26 @@ export async function cancelTradeRequest(tradeId: string, buyerToken: string): P
 }
 
 /** D4: el cliente de un depósito reporta que pagó y el agente no confirmó. */
+/**
+ * D4: "Pagué y no me confirmaron". Si el contrato de la operacion tiene
+ * report_paid(), el cliente firma la constancia de pago en su telefono y queda
+ * en cadena; si no, el reclamo se guarda sin firma.
+ */
 export async function openCashClaim(tradeId: string, token: string, note?: string): Promise<void> {
   try {
-    await http.post(`/trades/${tradeId}/cash-claim`, note ? { note } : {}, authHeaders(token));
+    const prepareRes = await http.post(`/trades/${tradeId}/cash-claim/prepare`, {}, authHeaders(token));
+    const prepared = prepareRes.data as { onchain: false } | { onchain: true; xdr: string; network_passphrase: string };
+    let signedXdr: string | undefined;
+    if (prepared.onchain) {
+      const trade = await getTrade(tradeId, token);
+      await validatePreparedEscrowTx(prepared.xdr, prepared.network_passphrase, trade, 'report_paid');
+      signedXdr = await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'report_paid');
+    }
+    await http.post(
+      `/trades/${tradeId}/cash-claim`,
+      { ...(note ? { note } : {}), ...(signedXdr ? { signed_xdr: signedXdr } : {}) },
+      authHeaders(token),
+    );
   } catch (e: unknown) {
     throw toApiError(extractApiErrorPayload(e));
   }
@@ -600,9 +617,18 @@ export interface RefundTradeResponse {
   refund_tx_hash: string;
 }
 
+/** refund() lo firma el participante en su telefono; el contrato lo acepta de cualquiera. */
 export async function refundTradeRequest(tradeId: string, token: string): Promise<RefundTradeResponse> {
   try {
-    const res = await http.post(`/trades/${tradeId}/refund`, {}, authHeaders(token));
+    const prepareRes = await http.post(`/trades/${tradeId}/refund/prepare`, {}, authHeaders(token));
+    const prepared = prepareRes.data as { mock: true } | { xdr: string; network_passphrase: string };
+    let signedXdr: string | undefined;
+    if (!('mock' in prepared)) {
+      const trade = await getTrade(tradeId, token);
+      await validatePreparedEscrowTx(prepared.xdr, prepared.network_passphrase, trade, 'refund');
+      signedXdr = await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'refund');
+    }
+    const res = await http.post(`/trades/${tradeId}/refund`, signedXdr ? { signed_xdr: signedXdr } : {}, authHeaders(token));
     return res.data as RefundTradeResponse;
   } catch (e: unknown) {
     const { message } = extractApiErrorPayload(e);
@@ -1095,6 +1121,26 @@ export interface MerchantConfirmResult {
   /** CASH-4: true si esta llamada reanudó una entrega ya confirmada. */
   resumed: boolean;
   handoff_confirmed_at: string;
+}
+
+/**
+ * Retiro: el agente deja en cadena la constancia de entrega (report_paid)
+ * antes de liberar. Devuelve el hash, o null si el contrato no la tiene o ya
+ * se dejo.
+ */
+export async function reportCashDelivery(tradeId: string, token: string): Promise<string | null> {
+  try {
+    const prepareRes = await http.post(`/trades/${tradeId}/delivery-report/prepare`, {}, authHeaders(token));
+    const prepared = prepareRes.data as { onchain: false } | { onchain: true; xdr: string; network_passphrase: string };
+    if (!prepared.onchain) return null;
+    const trade = await getTrade(tradeId, token);
+    await validatePreparedEscrowTx(prepared.xdr, prepared.network_passphrase, trade, 'report_paid');
+    const signedXdr = await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'report_paid');
+    const res = await http.post(`/trades/${tradeId}/delivery-report`, { signed_xdr: signedXdr }, authHeaders(token));
+    return (res.data as { paid_report_tx_hash: string | null }).paid_report_tx_hash;
+  } catch (e: unknown) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
 }
 
 /**

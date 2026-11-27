@@ -211,6 +211,11 @@ const ESCROW_DECLINE_CONTRACT_IDS = (process.env.ESCROW_DECLINE_CONTRACT_IDS || 
   .map((value) => value.trim())
   .filter(Boolean);
 
+const ESCROW_PAID_REPORT_CONTRACT_IDS = (process.env.ESCROW_PAID_REPORT_CONTRACT_IDS || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   databaseUrl: process.env.DATABASE_URL || 'postgresql://localhost:5432/micopay_dev',
@@ -232,6 +237,8 @@ export const config = {
   escrowAssetIssuers: ESCROW_ASSET_ISSUERS as Readonly<Record<string, string>>,
   /** Contract IDs deployed with buyer-authorized decline(). */
   escrowDeclineContractIds: ESCROW_DECLINE_CONTRACT_IDS as readonly string[],
+  /** Contract IDs deployed with buyer-authorized report_paid() (constancia de pago). */
+  escrowPaidReportContractIds: ESCROW_PAID_REPORT_CONTRACT_IDS as readonly string[],
   /** Activo por defecto de las operaciones nuevas (ver assetRate.service). */
   escrowAsset: ESCROW_ASSET_ENV,
   /**
@@ -439,6 +446,11 @@ export function validateConfig() {
     for (const contractId of config.escrowDeclineContractIds) {
       if (!/^C[A-Z2-7]{55}$/.test(contractId)) {
         errors.push(`ESCROW_DECLINE_CONTRACT_IDS contains an invalid contract ID: ${contractId}`);
+      }
+    }
+    for (const contractId of config.escrowPaidReportContractIds) {
+      if (!/^C[A-Z2-7]{55}$/.test(contractId)) {
+        errors.push(`ESCROW_PAID_REPORT_CONTRACT_IDS contains an invalid contract ID: ${contractId}`);
       }
     }
 

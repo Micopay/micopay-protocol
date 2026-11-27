@@ -6,6 +6,7 @@ import { useCountdown } from '../hooks/useCountdown';
 import {
   getMerchantTrades,
   merchantConfirmScan,
+  reportCashDelivery,
   completeTrade,
   type MerchantTrade,
   type MerchantConfirmResult,
@@ -81,6 +82,14 @@ function TradeConfirmationCard({
     setReleasing(true);
     setReleaseError(null);
     try {
+      // Primero la constancia de entrega en cadena: si la liberacion falla o
+      // tarda, el cliente no puede reembolsarse en 24 horas. Si la constancia
+      // falla, se libera igual: liberar es lo que le paga al agente.
+      try {
+        await reportCashDelivery(data.trade_id, token);
+      } catch (reportError) {
+        console.warn('[inbox] delivery report failed', reportError);
+      }
       const { release_tx_hash } = await completeTrade(data.trade_id, token);
       // Éxito solo con un hash real persistido, nunca antes (criterio de #70).
       if (!release_tx_hash) {

@@ -34,6 +34,8 @@ export type PresenceReason =
   | 'lock'
   | 'release'
   | 'decline'
+  | 'refund'
+  | 'report_paid'
   | 'payment'
   | 'reveal_key'
   | 'sign_request'
@@ -43,6 +45,8 @@ const PROMPTS: Record<PresenceReason, string> = {
   lock: 'Confirma para bloquear tu dinero en garantía',
   release: 'Confirma para liberar el dinero',
   decline: 'Confirma para devolver los fondos',
+  refund: 'Confirma para recuperar tus fondos',
+  report_paid: 'Confirma para dejar tu constancia de pago',
   payment: 'Confirma para enviar el pago',
   reveal_key: 'Confirma para ver tu llave secreta',
   sign_request: 'Confirma para autorizar esta operación',

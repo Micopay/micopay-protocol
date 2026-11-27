@@ -1141,6 +1141,8 @@
     "s1": "Lock funds in escrow",
     "s2": "Release funds",
     "s3": "Return funds",
+    "refund": "Recover funds",
+    "reportPaid": "Record your payment",
     "s4": "No data",
     "s5": "Couldn't complete it",
     "s6": "Connect this page?",

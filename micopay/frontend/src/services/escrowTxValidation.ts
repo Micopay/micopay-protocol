@@ -15,7 +15,7 @@ import i18n from '../i18n';
 
 const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
-export type EscrowAction = 'lock' | 'release' | 'decline';
+export type EscrowAction = 'lock' | 'release' | 'decline' | 'refund' | 'report_paid';
 
 const LOCK_TIMEOUT_MINUTES = 120;
 const MAX_ESCROW_FEE_STROOPS = BigInt(import.meta.env.VITE_MAX_ESCROW_FEE_STROOPS || '5000000');
@@ -100,7 +100,7 @@ export async function validatePreparedEscrowTx(
   const secretHash = Buffer.from(requiredTradeField(trade.secret_hash, 'hash secreto'), 'hex');
   const tradeId = hash(secretHash);
 
-  if (action === 'decline') {
+  if (action === 'decline' || action === 'refund' || action === 'report_paid') {
     if (args.length !== 1 || !bytesEqual(args[0], tradeId)) {
       throw new EscrowTxMismatchError(tr('txValidation.tradeIdChanged'));
     }

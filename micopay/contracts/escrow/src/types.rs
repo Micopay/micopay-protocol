@@ -26,4 +26,6 @@ pub enum DataKey {
     TokenId,
     PlatformWallet,
     Trade(BytesN<32>),
+    /// Constancia de pago del cliente: ledger hasta el que frena `refund`.
+    PaidReport(BytesN<32>),
 }

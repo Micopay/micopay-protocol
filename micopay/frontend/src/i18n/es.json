@@ -1141,6 +1141,8 @@
     "s1": "Bloquear fondos en garantía",
     "s2": "Liberar fondos",
     "s3": "Devolver fondos",
+    "refund": "Recuperar fondos",
+    "reportPaid": "Dejar constancia de pago",
     "s4": "Sin dato",
     "s5": "No se pudo completar",
     "s6": "¿Conectar esta página?",

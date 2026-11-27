@@ -17,6 +17,8 @@ const ACTION_KEYS: Record<EscrowIntent['action'], string> = {
   lock: 'walletRequest.s1',
   release: 'walletRequest.s2',
   decline: 'walletRequest.s3',
+  refund: 'walletRequest.refund',
+  report_paid: 'walletRequest.reportPaid',
 };
 
 const short = (address: string | null) => (address ? `${address.slice(0, 6)}…${address.slice(-6)}` : tr('walletRequest.s4'));

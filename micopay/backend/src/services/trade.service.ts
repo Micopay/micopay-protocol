@@ -22,12 +22,12 @@ import pino from 'pino';
 import { generateTradeSecret, encryptSecret, decryptSecret } from './secret.service.js';
 import { createHash, randomBytes } from 'crypto';
 import type { FastifyRequest } from 'fastify';
-import { prepareLockTx, submitLockTx, prepareReleaseTx, submitReleaseTx, prepareDeclineTx, submitDeclineTx, callRefundOnChain, verifyLockOnChain, assertNotReplayed, readEscrowTrade } from './stellar.service.js';
+import { prepareLockTx, submitLockTx, prepareReleaseTx, submitReleaseTx, prepareDeclineTx, submitDeclineTx, callRefundOnChain, prepareRefundTx, submitRefundTx, preparePaidReportTx, submitPaidReportTx, verifyLockOnChain, assertNotReplayed, readEscrowTrade } from './stellar.service.js';
 import {
   recordLockSubmission, clearLockAttempt, markLockConfirmed, resolveSubmittedLock, contractTradeIdFor, LockConfirmingError,
   lockAttemptMayHaveLanded,
 } from './lockAttempt.service.js';
-import { escrowContractForTrade, escrowContractSupportsDecline } from './escrowContract.js';
+import { escrowContractForTrade, escrowContractSupportsDecline, escrowContractSupportsPaidReport } from './escrowContract.js';
 import { assertReceiverCanReceive } from './receiverReadiness.service.js';
 import { assertEscrowCollectable } from './escrowCollectable.service.js';
 import { fundsRefundTiming, tradeDeadline } from './fundsDeadline.service.js';
@@ -1807,14 +1807,19 @@ async function executeRefundOnChain(
   trade: { status: string; secret_hash: string; asset_code?: string | null; escrow_contract_id?: string | null },
   actorUserId: string,
   extraMetadata: Record<string, unknown> = {},
+  /** Firmada en la app por el participante; sin ella firma la plataforma (barrido). */
+  signed?: { xdr: string; callerAddress: string },
 ): Promise<RefundTradeResult> {
   let refundTxHash: string;
 
   if (!config.mockStellar) {
     const secretHashBytes = Buffer.from(trade.secret_hash, 'hex');
     const tradeIdBytes = createHash('sha256').update(secretHashBytes).digest();
+    const contractId = escrowContractForTrade(trade);
 
-    const result = await callRefundOnChain({ request, contractId: escrowContractForTrade(trade), tradeIdBytes });
+    const result = signed
+      ? await submitRefundTx({ request, contractId, signedXdr: signed.xdr, callerAddress: signed.callerAddress, tradeIdBytes })
+      : await callRefundOnChain({ request, contractId, tradeIdBytes });
     refundTxHash = result.txHash;
   } else {
     refundTxHash = `mock_refund_${Date.now()}_${randomBytes(4).toString('hex')}`;
@@ -1968,85 +1973,126 @@ export async function getRefundEligibility(
   return { ...withTiming, eligible: true, reason: 'eligible' };
 }
 
+/**
+ * Las mismas revisiones para armar el reembolso y para enviarlo: la app no
+ * firma algo que la accion luego rechace.
+ */
+async function getRefundableTrade(tradeId: string, userId: string, onLoad?: (status: string) => void) {
+  const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (!trade) throw new NotFoundError('Trade not found');
+  onLoad?.(trade.status);
+
+  // Either participant may trigger the refund — the contract's refund() is
+  // permissionless and always pays out to trade.seller (whoever locked the
+  // funds), so it doesn't matter which side of the trade calls this. This
+  // matters most for the cashout flow, where the caller who locked their
+  // own crypto is `seller_id`, not `buyer_id`.
+  if (trade.seller_id !== userId && trade.buyer_id !== userId) {
+    throw new ForbiddenError('Not a participant of this trade');
+  }
+
+  if (!trade.lock_tx_hash) {
+    throw new ConflictError('No hay fondos en cadena para reembolsar en este intercambio');
+  }
+
+  // 'cancelled' is deliberately allowed through here: cancelling a
+  // locked/revealing trade (see cancelTrade below) no longer implies the
+  // on-chain funds have been settled — it only stops the app-level flow.
+  // Only 'completed' (buyer already released) and 'refunded' (already
+  // settled) are terminal on-chain states that make a refund() call moot.
+  if (['completed', 'refunded'].includes(trade.status)) {
+    throw new ConflictError(`No se puede reembolsar un intercambio en estado ${trade.status}`);
+  }
+
+  // D2 (decision de producto 2026-10-29): con la entrega de efectivo
+  // confirmada, quien bloqueo la cripto ya recibio el efectivo. MicoPay no le
+  // devuelve tambien la cripto por su cuenta; el caso va a soporte. El
+  // contrato sigue aceptando un refund directo: esto no lo impide, solo
+  // evita que la app lo ofrezca.
+  if (await hasCashConfirmation(trade)) {
+    throw new ConflictError(
+      'CASH_HANDOFF_CONFIRMED',
+      'La entrega de efectivo ya fue confirmada. Este intercambio lo revisa soporte.',
+      `Trade ${tradeId} has a confirmed cash handoff; refund goes to support`,
+    );
+  }
+  // D4: el reclamo del cliente pesa igual que una constancia hasta que
+  // soporte lo resuelva.
+  if (await getOpenCashClaim(tradeId)) {
+    throw new ConflictError(
+      'CASH_CLAIM_OPEN',
+      'El cliente reportó que ya pagó. Este intercambio lo revisa soporte.',
+      `Trade ${tradeId} has an open cash claim; refund goes to support`,
+    );
+  }
+
+  // WP3: el contrato solo acepta `refund` cuando su ledger llega a
+  // `timeout_ledger`, que corre desde el lock. Antes se miraba `expires_at`
+  // (desde la creacion) y el reembolso fallaba en cadena.
+  const timing = await fundsRefundTiming(trade);
+  if (!timing.reached) {
+    throw new TradeStateError(
+      'TRADE_NOT_EXPIRED',
+      'El intercambio aún no ha expirado. Espera a que venza el tiempo.',
+      `Trade ${tradeId}: on-chain timeout not reached (est. ${timing.availableAt.toISOString()})`,
+    );
+  }
+
+  // #514: el agente es quien se queda con el efectivo y la cripto si el
+  // boton se salta el margen. Un deposito vencido espera igual que en el
+  // barrido.
+  const graceEndsAt = depositGraceEndsAt(trade);
+  if (graceEndsAt && graceEndsAt > new Date()) {
+    throw new TradeStateError(
+      'CASH_CLAIM_WINDOW',
+      `El cliente todavía puede reportar el pago; podrás recuperar los fondos a las ${formatTimeMx(graceEndsAt)}.`,
+      `Trade ${tradeId}: deposit grace until ${graceEndsAt.toISOString()}`,
+    );
+  }
+  return trade;
+}
+
+/** Arma refund() para que lo firme el participante en su telefono. */
+export async function prepareRefundTrade(request: FastifyRequest, tradeId: string, userId: string) {
+  const trade = await getRefundableTrade(tradeId, userId);
+  if (config.mockStellar) return { mock: true as const };
+
+  const caller = await db.getOne<{ stellar_address: string }>(
+    'SELECT stellar_address FROM users WHERE id = $1',
+    [userId],
+  );
+  if (!caller) throw new NotFoundError('User not found');
+
+  const tradeIdBytes = createHash('sha256').update(Buffer.from(trade.secret_hash, 'hex')).digest();
+  const { xdr, networkPassphrase } = await prepareRefundTx({
+    request,
+    contractId: escrowContractForTrade(trade),
+    callerAddress: caller.stellar_address,
+    tradeIdBytes,
+  });
+  return { xdr, network_passphrase: networkPassphrase };
+}
+
 export async function refundTrade(
   request: FastifyRequest,
   tradeId: string,
   userId: string,
+  signedXdr?: string,
 ): Promise<RefundTradeResult> {
   request.log.info({ trade_id: tradeId, user_id: userId, category: 'trade.lifecycle' }, '[trade] Refunding trade');
   let fromState = UNKNOWN_STATE;
 
   try {
-    const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
-    if (!trade) throw new NotFoundError('Trade not found');
-    fromState = trade.status;
+    const trade = await getRefundableTrade(tradeId, userId, (status) => { fromState = status; });
 
-    // Either participant may trigger the refund — the contract's refund() is
-    // permissionless and always pays out to trade.seller (whoever locked the
-    // funds), so it doesn't matter which side of the trade calls this. This
-    // matters most for the cashout flow, where the caller who locked their
-    // own crypto is `seller_id`, not `buyer_id`.
-    if (trade.seller_id !== userId && trade.buyer_id !== userId) {
-      throw new ForbiddenError('Not a participant of this trade');
-    }
-
-    if (!trade.lock_tx_hash) {
-      throw new ConflictError('No hay fondos en cadena para reembolsar en este intercambio');
-    }
-
-    // 'cancelled' is deliberately allowed through here: cancelling a
-    // locked/revealing trade (see cancelTrade below) no longer implies the
-    // on-chain funds have been settled — it only stops the app-level flow.
-    // Only 'completed' (buyer already released) and 'refunded' (already
-    // settled) are terminal on-chain states that make a refund() call moot.
-    if (['completed', 'refunded'].includes(trade.status)) {
-      throw new ConflictError(`No se puede reembolsar un intercambio en estado ${trade.status}`);
-    }
-
-    // D2 (decision de producto 2026-10-29): con la entrega de efectivo
-    // confirmada, quien bloqueo la cripto ya recibio el efectivo. MicoPay no le
-    // devuelve tambien la cripto por su cuenta; el caso va a soporte. El
-    // contrato sigue aceptando un refund directo: esto no lo impide, solo
-    // evita que la app lo ofrezca.
-    if (await hasCashConfirmation(trade)) {
-      throw new ConflictError(
-        'CASH_HANDOFF_CONFIRMED',
-        'La entrega de efectivo ya fue confirmada. Este intercambio lo revisa soporte.',
-        `Trade ${tradeId} has a confirmed cash handoff; refund goes to support`,
+    let signed: { xdr: string; callerAddress: string } | undefined;
+    if (signedXdr && !config.mockStellar) {
+      const caller = await db.getOne<{ stellar_address: string }>(
+        'SELECT stellar_address FROM users WHERE id = $1',
+        [userId],
       );
-    }
-    // D4: el reclamo del cliente pesa igual que una constancia hasta que
-    // soporte lo resuelva.
-    if (await getOpenCashClaim(tradeId)) {
-      throw new ConflictError(
-        'CASH_CLAIM_OPEN',
-        'El cliente reportó que ya pagó. Este intercambio lo revisa soporte.',
-        `Trade ${tradeId} has an open cash claim; refund goes to support`,
-      );
-    }
-
-    // WP3: el contrato solo acepta `refund` cuando su ledger llega a
-    // `timeout_ledger`, que corre desde el lock. Antes se miraba `expires_at`
-    // (desde la creacion) y el reembolso fallaba en cadena.
-    const timing = await fundsRefundTiming(trade);
-    if (!timing.reached) {
-      throw new TradeStateError(
-        'TRADE_NOT_EXPIRED',
-        'El intercambio aún no ha expirado. Espera a que venza el tiempo.',
-        `Trade ${tradeId}: on-chain timeout not reached (est. ${timing.availableAt.toISOString()})`,
-      );
-    }
-
-    // #514: el agente es quien se queda con el efectivo y la cripto si el
-    // boton se salta el margen. Un deposito vencido espera igual que en el
-    // barrido.
-    const graceEndsAt = depositGraceEndsAt(trade);
-    if (graceEndsAt && graceEndsAt > new Date()) {
-      throw new TradeStateError(
-        'CASH_CLAIM_WINDOW',
-        `El cliente todavía puede reportar el pago; podrás recuperar los fondos a las ${formatTimeMx(graceEndsAt)}.`,
-        `Trade ${tradeId}: deposit grace until ${graceEndsAt.toISOString()}`,
-      );
+      if (!caller) throw new NotFoundError('User not found');
+      signed = { xdr: signedXdr, callerAddress: caller.stellar_address };
     }
 
     // #514: la decision final con la fila tomada, igual que el barrido. Si el
@@ -2059,7 +2105,7 @@ export async function refundTrade(
       );
     }
     try {
-      return await executeRefundOnChain(request, tradeId, trade, userId);
+      return await executeRefundOnChain(request, tradeId, trade, userId, signed ? { signed_by: 'participant' } : {}, signed);
     } catch (err) {
       // No se completo: se quita la marca para que el cliente pueda reclamar.
       await clearRefundDecision(tradeId).catch(() => {});
@@ -2320,6 +2366,92 @@ export async function getCashHandoff(tradeId: string): Promise<CashHandoff | nul
 }
 
 /**
+ * Retiro: el agente (buyer del escrow) ya entrego el efectivo y lo deja en
+ * cadena con report_paid(), antes de liberar. Si la liberacion falla o tarda,
+ * el contrato no deja que el cliente se reembolse en 24 horas. Devuelve la
+ * operacion solo si la constancia aplica y todavia no se dejo.
+ */
+async function getDeliveryReportTarget(tradeId: string, userId: string) {
+  const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (!trade) throw new NotFoundError('TRADE_NOT_FOUND', 'El intercambio no existe', 'Trade not found');
+  if (trade.flow !== 'cashout' || trade.buyer_id !== userId || trade.provider_id !== userId) {
+    throw new ForbiddenError(
+      'DELIVERY_REPORT_NOT_ALLOWED',
+      'Solo el agente de un retiro puede dejar la constancia de entrega.',
+      `User ${userId} cannot report delivery on trade ${tradeId}`,
+    );
+  }
+  if (trade.status !== 'revealing' || trade.release_tx_hash) return null;
+  const handoff = await getCashHandoff(tradeId);
+  if (!handoff || handoff.provider_id !== userId) {
+    throw new ConflictError(
+      'CASH_HANDOFF_REQUIRED',
+      'Escanea el código del cliente antes de dejar la constancia.',
+      `Trade ${tradeId} is a cashout with no confirmed cash handoff`,
+    );
+  }
+  if (!escrowContractSupportsPaidReport(trade)) return null;
+  const reported = await db.getOne(
+    `SELECT id FROM audit_log WHERE trade_id = $1 AND metadata->>'paid_report_tx_hash' IS NOT NULL`,
+    [tradeId],
+  );
+  return reported ? null : trade;
+}
+
+/** Arma report_paid() para que lo firme el agente. `{ onchain: false }` si no aplica. */
+export async function prepareDeliveryReport(request: FastifyRequest, tradeId: string, userId: string) {
+  const trade = await getDeliveryReportTarget(tradeId, userId);
+  if (!trade) return { onchain: false as const };
+  const agent = await db.getOne<{ stellar_address: string }>(
+    'SELECT stellar_address FROM users WHERE id = $1',
+    [userId],
+  );
+  if (!agent) throw new NotFoundError('User not found');
+  const tradeIdBytes = createHash('sha256').update(Buffer.from(trade.secret_hash, 'hex')).digest();
+  const { xdr, networkPassphrase } = await preparePaidReportTx({
+    request,
+    contractId: escrowContractForTrade(trade),
+    buyerAddress: agent.stellar_address,
+    tradeIdBytes,
+  });
+  return { onchain: true as const, xdr, network_passphrase: networkPassphrase };
+}
+
+/** Envia la constancia de entrega firmada por el agente y la registra. */
+export async function recordDeliveryReport(
+  request: FastifyRequest,
+  tradeId: string,
+  userId: string,
+  signedXdr: string,
+): Promise<{ paid_report_tx_hash: string | null }> {
+  const trade = await getDeliveryReportTarget(tradeId, userId);
+  if (!trade) return { paid_report_tx_hash: null };
+  const agent = await db.getOne<{ stellar_address: string }>(
+    'SELECT stellar_address FROM users WHERE id = $1',
+    [userId],
+  );
+  if (!agent) throw new NotFoundError('User not found');
+  const tradeIdBytes = createHash('sha256').update(Buffer.from(trade.secret_hash, 'hex')).digest();
+  const { txHash } = await submitPaidReportTx({
+    request,
+    contractId: escrowContractForTrade(trade),
+    signedXdr,
+    buyerAddress: agent.stellar_address,
+    tradeIdBytes,
+  });
+  await assertNotReplayed(txHash, 'trade/delivery-report', userId);
+  await insertTradeAuditEvent({
+    tradeId,
+    fromState: trade.status,
+    toState: trade.status,
+    actor: userId,
+    requestId: getRequestId(request),
+    metadata: { success: true, delivery_reported: true, paid_report_tx_hash: txHash },
+  });
+  return { paid_report_tx_hash: txHash };
+}
+
+/**
  * Constancia de que el efectivo ya cambio de manos (D2, D4). Con ella la app no
  * cancela, no ofrece decline y no reembolsa: el caso va a soporte.
  *
@@ -2468,16 +2600,103 @@ export async function getOpenCashClaim(tradeId: string): Promise<CashClaim | nul
 }
 
 /**
+ * Revisiones previas del reclamo, fuera del lock de la fila: deciden si hay
+ * que dejar la constancia en cadena antes de registrarlo. La decision final
+ * se repite dentro de `openCashClaim`.
+ */
+async function getPaidReportTarget(tradeId: string, userId: string) {
+  const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (!trade) throw new NotFoundError('TRADE_NOT_FOUND', 'El intercambio no existe', 'Trade not found');
+  if (trade.flow !== 'deposit' || trade.buyer_id !== userId) {
+    throw new ForbiddenError(
+      'CASH_CLAIM_NOT_ALLOWED',
+      'Solo el cliente de un depósito puede reportar que ya pagó.',
+      `User ${userId} cannot open a cash claim on trade ${tradeId}`,
+    );
+  }
+  if (!trade.lock_tx_hash || trade.release_tx_hash || !['locked', 'revealing', 'cancelled'].includes(trade.status)) {
+    throw new ConflictError(
+      'CASH_CLAIM_NOT_ALLOWED',
+      'Esta operación ya no tiene fondos en garantía que revisar.',
+      `Trade ${tradeId} is ${trade.status}; no locked funds to hold`,
+    );
+  }
+  const needsChain = escrowContractSupportsPaidReport(trade) && !(await getOpenCashClaim(tradeId));
+  return { trade, needsChain };
+}
+
+/**
+ * Arma report_paid() para que el cliente lo firme. `{ onchain: false }` si el
+ * contrato de la operacion no lo tiene o el reclamo ya existe: la app manda el
+ * reclamo sin firma.
+ */
+export async function prepareCashClaim(request: FastifyRequest, tradeId: string, userId: string) {
+  const { trade, needsChain } = await getPaidReportTarget(tradeId, userId);
+  if (!needsChain) return { onchain: false as const };
+
+  const buyer = await db.getOne<{ stellar_address: string }>(
+    'SELECT stellar_address FROM users WHERE id = $1',
+    [userId],
+  );
+  if (!buyer) throw new NotFoundError('Buyer not found');
+  const tradeIdBytes = createHash('sha256').update(Buffer.from(trade.secret_hash, 'hex')).digest();
+  const { xdr, networkPassphrase } = await preparePaidReportTx({
+    request,
+    contractId: escrowContractForTrade(trade),
+    buyerAddress: buyer.stellar_address,
+    tradeIdBytes,
+  });
+  return { onchain: true as const, xdr, network_passphrase: networkPassphrase };
+}
+
+/**
  * D4: "Pagué y no me confirmaron". Solo el cliente de un deposito con fondos
  * bloqueados. No mueve fondos: deja la palabra del cliente, bloquea el
  * reembolso por la app y avisa a soporte. Repetirlo devuelve el mismo reclamo.
+ * Si el contrato tiene report_paid(), la constancia queda tambien en cadena y
+ * frena refund() 24 horas para cualquiera, no solo para la app.
  */
 export async function openCashClaim(
   request: FastifyRequest,
   tradeId: string,
   userId: string,
   note?: string,
+  signedXdr?: string,
 ): Promise<CashClaim> {
+  let paidReportTxHash: string | null = null;
+  const { trade: target, needsChain } = await getPaidReportTarget(tradeId, userId);
+  if (needsChain) {
+    if (target.refund_started_at) {
+      throw new ConflictError(
+        'CASH_CLAIM_NOT_ALLOWED',
+        'Esta operación ya no tiene fondos en garantía que revisar.',
+        `Trade ${tradeId} refund already started by the sweep`,
+      );
+    }
+    if (!signedXdr) {
+      throw new BadRequestError(
+        'SIGNED_XDR_REQUIRED',
+        'Falta la constancia de pago firmada.',
+        'signed_xdr is required for escrow contracts with report_paid',
+      );
+    }
+    const buyer = await db.getOne<{ stellar_address: string }>(
+      'SELECT stellar_address FROM users WHERE id = $1',
+      [userId],
+    );
+    if (!buyer) throw new NotFoundError('Buyer not found');
+    const tradeIdBytes = createHash('sha256').update(Buffer.from(target.secret_hash, 'hex')).digest();
+    const result = await submitPaidReportTx({
+      request,
+      contractId: escrowContractForTrade(target),
+      signedXdr,
+      buyerAddress: buyer.stellar_address,
+      tradeIdBytes,
+    });
+    await assertNotReplayed(result.txHash, 'trade/paid-report', userId);
+    paidReportTxHash = result.txHash;
+  }
+
   // #514: la decision se toma con la fila del trade bloqueada, la misma que
   // toma el barrido antes de reembolsar (ver `withTradeRowLock`). Dentro del
   // lock todo es secuencial: un doble toque espera y devuelve el mismo reclamo.
@@ -2536,7 +2755,11 @@ export async function openCashClaim(
     toState: trade.status,
     actor: userId,
     requestId: getRequestId(request),
-    metadata: { success: true, cash_claim_opened: true },
+    metadata: {
+      success: true,
+      cash_claim_opened: true,
+      ...(paidReportTxHash ? { paid_report_tx_hash: paidReportTxHash } : {}),
+    },
   });
   request.log.warn(
     { trade_id: tradeId, user_id: userId, category: 'trade.support' },

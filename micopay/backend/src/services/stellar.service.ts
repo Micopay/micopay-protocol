@@ -469,6 +469,157 @@ export async function submitDeclineTx(params: {
 }
 
 /**
+ * Build and simulate a one-argument escrow call (`trade_id`) for local signing.
+ * Used by refund() from the app (any participant may send it) and by
+ * report_paid() (the buyer authorizes it).
+ */
+async function prepareTradeIdCallTx(params: {
+  request: Pick<FastifyRequest, 'log'>;
+  contractId: string;
+  sourceAddress: string;
+  functionName: 'refund' | 'report_paid';
+  tradeIdBytes: Buffer;
+}): Promise<{ xdr: string; networkPassphrase: string }> {
+  const { Contract, TransactionBuilder, Networks, nativeToScVal } = await import('@stellar/stellar-sdk');
+  const networkPassphrase = getNetworkPassphrase(Networks);
+  const account = await rpcRead(config.stellarRpcUrl, (s) => s.getAccount(params.sourceAddress));
+  const contract = new Contract(params.contractId);
+
+  const tx = new TransactionBuilder(account, { fee: '1000000', networkPassphrase })
+    .addOperation(
+      contract.call(params.functionName, nativeToScVal(params.tradeIdBytes, { type: 'bytes' })),
+    )
+    .setTimeout(180)
+    .build();
+
+  try {
+    const prepared = await rpcRead(config.stellarRpcUrl, (s) => s.prepareTransaction(tx));
+    return { xdr: prepared.toXDR(), networkPassphrase };
+  } catch (err: any) {
+    if (err instanceof AppError) throw err;
+    params.request.log.error({ err: err.message, category: 'stellar.tx' }, `[Stellar] ${params.functionName} simulation failed`);
+    throw new BadRequestError(
+      'STELLAR_SIMULATION_FAILED',
+      'La red rechazó la operación. Revisa el estado del intercambio.',
+      `${params.functionName} simulation failed: ${err.message}`,
+    );
+  }
+}
+
+/** Submit a locally signed one-argument escrow call after checking the exact contract call. */
+async function submitTradeIdCallTx(params: {
+  request: Pick<FastifyRequest, 'log'>;
+  contractId: string;
+  signedXdr: string;
+  sourceAddress: string;
+  functionName: 'refund' | 'report_paid';
+  tradeIdBytes: Buffer;
+  messages: { failed: string; timeout: string };
+}): Promise<{ txHash: string }> {
+  const { TransactionBuilder, Networks } = await import('@stellar/stellar-sdk');
+  const networkPassphrase = getNetworkPassphrase(Networks);
+  const tx = TransactionBuilder.fromXDR(params.signedXdr, networkPassphrase);
+
+  await assertInvocationMatches(tx, {
+    sourceAccount: params.sourceAddress,
+    contractId: params.contractId,
+    functionName: params.functionName,
+    args: [params.tradeIdBytes],
+  });
+
+  const code = params.functionName.toUpperCase();
+  const sendResult = await submitSignedTx(config.stellarRpcUrl, tx);
+  if (sendResult.status === 'ERROR') {
+    params.request.log.error({ detail: sendResult.errorResult, category: 'stellar.tx' }, `[Stellar] ${params.functionName} send failed`);
+    throw new BadRequestError(`STELLAR_${code}_SEND_FAILED`, params.messages.failed, `${params.functionName} send failed: ${JSON.stringify(sendResult.errorResult)}`);
+  }
+
+  return pollForConfirmation(
+    params.request,
+    sendResult.hash,
+    params.functionName,
+    `STELLAR_${code}_FAILED`,
+    `STELLAR_${code}_TIMEOUT`,
+    params.messages.failed,
+    params.messages.timeout,
+  );
+}
+
+/** refund() signed by the participant's own key (the contract lets anyone call it). */
+export async function prepareRefundTx(params: {
+  request: Pick<FastifyRequest, 'log'>;
+  contractId: string;
+  callerAddress: string;
+  tradeIdBytes: Buffer;
+}) {
+  return prepareTradeIdCallTx({
+    request: params.request,
+    contractId: params.contractId,
+    sourceAddress: params.callerAddress,
+    functionName: 'refund',
+    tradeIdBytes: params.tradeIdBytes,
+  });
+}
+
+export async function submitRefundTx(params: {
+  request: Pick<FastifyRequest, 'log'>;
+  contractId: string;
+  signedXdr: string;
+  callerAddress: string;
+  tradeIdBytes: Buffer;
+}) {
+  return submitTradeIdCallTx({
+    request: params.request,
+    contractId: params.contractId,
+    signedXdr: params.signedXdr,
+    sourceAddress: params.callerAddress,
+    functionName: 'refund',
+    tradeIdBytes: params.tradeIdBytes,
+    messages: {
+      failed: 'La transacción de reembolso falló en la blockchain.',
+      timeout: 'La transacción de reembolso está tardando más de lo esperado.',
+    },
+  });
+}
+
+/** report_paid(): the buyer's payment record, authorized by the buyer's key. */
+export async function preparePaidReportTx(params: {
+  request: Pick<FastifyRequest, 'log'>;
+  contractId: string;
+  buyerAddress: string;
+  tradeIdBytes: Buffer;
+}) {
+  return prepareTradeIdCallTx({
+    request: params.request,
+    contractId: params.contractId,
+    sourceAddress: params.buyerAddress,
+    functionName: 'report_paid',
+    tradeIdBytes: params.tradeIdBytes,
+  });
+}
+
+export async function submitPaidReportTx(params: {
+  request: Pick<FastifyRequest, 'log'>;
+  contractId: string;
+  signedXdr: string;
+  buyerAddress: string;
+  tradeIdBytes: Buffer;
+}) {
+  return submitTradeIdCallTx({
+    request: params.request,
+    contractId: params.contractId,
+    signedXdr: params.signedXdr,
+    sourceAddress: params.buyerAddress,
+    functionName: 'report_paid',
+    tradeIdBytes: params.tradeIdBytes,
+    messages: {
+      failed: 'La constancia de pago fue rechazada por la red.',
+      timeout: 'La constancia de pago está tardando más de lo esperado.',
+    },
+  });
+}
+
+/**
  * Call the escrow contract's refund() function.
  * No require_auth() in the contract for refund — anyone may call it
  * after timeout, so the platform key remains a valid signer here.

@@ -308,3 +308,149 @@ fn test_lock_rejects_reused_secret_hash() {
     assert_eq!(token_client.balance(&buyer), amount);
     assert_eq!(token_client.balance(&contract_id), 0);
 }
+
+fn advance(env: &Env, ledgers: u32) {
+    let current = env.ledger().get();
+    env.ledger().set(LedgerInfo {
+        timestamp: current.timestamp + u64::from(ledgers) * 5,
+        sequence_number: current.sequence_number + ledgers,
+        ..current
+    });
+}
+
+fn lock_one(env: &Env, escrow: &EscrowFactoryClient, seller: &Address, buyer: &Address) -> BytesN<32> {
+    let (_, secret_hash) = make_secret(env);
+    escrow.lock(seller, buyer, &1_500_000_000, &12_000_000, &secret_hash, &1u32)
+}
+
+#[test]
+fn test_report_paid_blocks_refund_for_24h() {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+    let before = token_client.balance(&seller);
+
+    let trade_id = lock_one(&env, &escrow, &seller, &buyer);
+    let reported_at = env.ledger().sequence();
+    let until = escrow.report_paid(&trade_id);
+    assert_eq!(until, reported_at + 17_280);
+    assert_eq!(escrow.paid_report(&trade_id), Some(until));
+
+    // Ya paso el timeout, pero la constancia sigue vigente.
+    advance(&env, 20);
+    assert_eq!(escrow.try_refund(&trade_id), Err(Ok(EscrowError::PaymentReported)));
+
+    // Un ledger antes del plazo, todavia no.
+    advance(&env, until - env.ledger().sequence() - 1);
+    assert_eq!(escrow.try_refund(&trade_id), Err(Ok(EscrowError::PaymentReported)));
+
+    // Desde el plazo, el reembolso vuelve a funcionar.
+    advance(&env, 1);
+    escrow.refund(&trade_id);
+    assert_eq!(token_client.balance(&seller), before);
+    assert_eq!(escrow.get_trade(&trade_id).status, TradeStatus::Refunded);
+}
+
+#[test]
+fn test_report_paid_does_not_block_release() {
+    let (env, contract_id, _, seller, buyer, platform_wallet, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+
+    let (secret, _) = make_secret(&env);
+    let trade_id = lock_one(&env, &escrow, &seller, &buyer);
+    escrow.report_paid(&trade_id);
+    advance(&env, 20);
+    escrow.release(&trade_id, &secret);
+
+    assert_eq!(token_client.balance(&buyer), 1_500_000_000);
+    assert_eq!(token_client.balance(&platform_wallet), 12_000_000);
+    assert_eq!(escrow.get_trade(&trade_id).status, TradeStatus::Released);
+}
+
+#[test]
+fn test_report_paid_does_not_block_decline() {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+    let before = token_client.balance(&seller);
+
+    let trade_id = lock_one(&env, &escrow, &seller, &buyer);
+    escrow.report_paid(&trade_id);
+    escrow.decline(&trade_id);
+    assert_eq!(token_client.balance(&seller), before);
+}
+
+#[test]
+fn test_report_paid_only_once() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+
+    let trade_id = lock_one(&env, &escrow, &seller, &buyer);
+    let until = escrow.report_paid(&trade_id);
+    advance(&env, 100);
+    assert_eq!(escrow.try_report_paid(&trade_id), Err(Ok(EscrowError::AlreadyReported)));
+    // Repetirla no alarga el plazo.
+    assert_eq!(escrow.paid_report(&trade_id), Some(until));
+}
+
+#[test]
+fn test_report_paid_rejected_when_not_locked() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+
+    let (secret, _) = make_secret(&env);
+    let trade_id = lock_one(&env, &escrow, &seller, &buyer);
+    escrow.release(&trade_id, &secret);
+    assert_eq!(escrow.try_report_paid(&trade_id), Err(Ok(EscrowError::TradeNotLocked)));
+
+    let missing = BytesN::from_array(&env, &[7u8; 32]);
+    assert_eq!(escrow.try_report_paid(&missing), Err(Ok(EscrowError::TradeNotFound)));
+}
+
+#[test]
+fn test_report_paid_after_refund_is_rejected() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+
+    let trade_id = lock_one(&env, &escrow, &seller, &buyer);
+    advance(&env, 20);
+    escrow.refund(&trade_id);
+    assert_eq!(escrow.try_report_paid(&trade_id), Err(Ok(EscrowError::TradeNotLocked)));
+}
+
+#[test]
+fn test_report_paid_keeps_later_timeout() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+
+    // Timeout de 2 dias: la constancia no adelanta el reembolso.
+    let (_, secret_hash) = make_secret(&env);
+    let trade_id = escrow.lock(&seller, &buyer, &1_500_000_000, &12_000_000, &secret_hash, &2_880u32);
+    let timeout = escrow.get_trade(&trade_id).timeout_ledger;
+    assert_eq!(escrow.report_paid(&trade_id), timeout);
+}
+
+#[test]
+fn test_report_paid_requires_buyer_auth() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let trade_id = lock_one(&env, &escrow, &seller, &buyer);
+
+    escrow.report_paid(&trade_id);
+    let auths = env.auths();
+    assert_eq!(auths.len(), 1);
+    assert_eq!(auths[0].0, buyer);
+}
+
+#[test]
+fn test_report_paid_without_buyer_auth_fails() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let trade_id = lock_one(&env, &escrow, &seller, &buyer);
+
+    // Sin autorizaciones, nadie puede dejar la constancia por el cliente.
+    env.set_auths(&[]);
+    assert!(escrow.try_report_paid(&trade_id).is_err());
+    assert_eq!(escrow.paid_report(&trade_id), None);
+}

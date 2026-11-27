@@ -15,4 +15,8 @@ pub enum EscrowError {
     InsufficientAmount = 9,
     TradeAlreadyExists = 10,
     AmountOverflow = 11,
+    /// El cliente ya dejo su constancia de pago en esta operacion.
+    AlreadyReported = 12,
+    /// Hay constancia de pago y su plazo no ha terminado.
+    PaymentReported = 13,
 }

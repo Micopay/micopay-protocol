@@ -27,6 +27,8 @@ final class EscrowSigningPolicy {
                 expected = 2;
                 break;
             case "decline":
+            case "refund":
+            case "report_paid":
                 expected = 1;
                 break;
             default:
