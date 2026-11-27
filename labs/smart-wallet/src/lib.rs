@@ -22,6 +22,7 @@ use soroban_sdk::{
 
 const TTL_MIN: u32 = 17_280;
 const TTL_EXTEND: u32 = 518_400;
+
 /// Etiqueta que va al inicio de todo mensaje firmado.
 pub const DOMAIN: &[u8] = b"micopay-labs-wallet-v1";
 /// Modo de la firma. Solo existe el dueno en esta fase; la sesion (1) llega con W20.
@@ -181,6 +182,25 @@ impl SmartWallet {
         env.storage().instance().set(&DataKey::Signers, &map);
         bump(&env);
         Ok(id)
+    }
+
+    /// W4. Quita un firmante. No deja la wallet sin firmantes ni bajo el umbral.
+    pub fn remove_signer(env: Env, id: BytesN<32>) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        let mut map = signers(&env)?;
+        if !map.contains_key(id.clone()) {
+            return Err(WalletError::UnknownSigner);
+        }
+        if map.len() == 1 {
+            return Err(WalletError::LastSigner);
+        }
+        map.remove(id);
+        if total_weight(&map)? < threshold(&env)? {
+            return Err(WalletError::ThresholdUnreachable);
+        }
+        env.storage().instance().set(&DataKey::Signers, &map);
+        bump(&env);
+        Ok(())
     }
 
     /// W5. Cambia el umbral. Tiene que ser alcanzable con los pesos actuales.
