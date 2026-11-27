@@ -2052,3 +2052,132 @@ fn test_e6_stats_are_per_address() {
     assert_eq!(escrow.stats(&buyer), stats_of(1, 0, 0, 0, 0));
     assert_eq!(escrow.stats(&other_buyer), stats_of(1, 0, 0, 0, 0));
 }
+
+// ── labs (E10): eventos de lo nuevo ──────────────────────────────────────────
+
+/// Los eventos que emitio el escrow en la ultima llamada (sin los del token).
+fn escrow_events(env: &Env, escrow: &EscrowFactoryClient) -> soroban_sdk::testutils::ContractEvents {
+    use soroban_sdk::testutils::Events as _;
+    env.events().all().filter_by_contract(&escrow.address)
+}
+
+fn one_event<T, D>(env: &Env, escrow: &EscrowFactoryClient, topics: T, data: D) -> soroban_sdk::Vec<(Address, soroban_sdk::Vec<soroban_sdk::Val>, soroban_sdk::Val)>
+where
+    T: IntoVal<Env, soroban_sdk::Vec<soroban_sdk::Val>>,
+    D: IntoVal<Env, soroban_sdk::Val>,
+{
+    soroban_sdk::vec![env, (escrow.address.clone(), topics.into_val(env), data.into_val(env))]
+}
+
+#[test]
+fn test_e10_disputed_carries_the_real_deadline() {
+    let (env, escrow, _, _, buyer, id, _, t) = trade_at_t(b"ev-disputa");
+    go_to(&env, t + 5);
+    let d = escrow.report_paid(&id);
+    assert_eq!(d, t + 5 + DISPUTE);
+    assert_eq!(
+        escrow_events(&env, &escrow),
+        one_event(&env, &escrow, (symbol_short!("disputed"),), (id.clone(), buyer, d)),
+    );
+}
+
+#[test]
+fn test_e10_resolved_carries_real_recipient_and_fee() {
+    let (env, escrow, _, _, buyer, arbiter, id, _, _, _) = disputed_with_arbiter(b"ev-comprador");
+    escrow.resolve(&id, &true);
+    assert_eq!(
+        escrow_events(&env, &escrow),
+        one_event(
+            &env,
+            &escrow,
+            (symbol_short!("resolved"),),
+            (id.clone(), arbiter, buyer, 1_000i128, 8i128),
+        ),
+    );
+
+    let (env, escrow, _, seller, _, arbiter, id, _, _, _) = disputed_with_arbiter(b"ev-vendedor");
+    escrow.resolve(&id, &false);
+    assert_eq!(
+        escrow_events(&env, &escrow),
+        one_event(
+            &env,
+            &escrow,
+            (symbol_short!("resolved"),),
+            (id.clone(), arbiter, seller, 1_008i128, 0i128),
+        ),
+    );
+}
+
+#[test]
+fn test_e10_admin_events() {
+    let (env, contract_id, admin, _, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let unit = ();
+    escrow.pause();
+    assert_eq!(escrow_events(&env, &escrow), one_event(&env, &escrow, (symbol_short!("paused"),), unit));
+    escrow.unpause();
+    assert_eq!(escrow_events(&env, &escrow), one_event(&env, &escrow, (symbol_short!("unpaused"),), unit));
+
+    let arbiter = Address::generate(&env);
+    escrow.set_arbiter(&arbiter);
+    assert_eq!(
+        escrow_events(&env, &escrow),
+        one_event(&env, &escrow, (symbol_short!("arbiter"),), arbiter),
+    );
+
+    let next = Address::generate(&env);
+    escrow.propose_admin(&next);
+    assert_eq!(
+        escrow_events(&env, &escrow),
+        one_event(&env, &escrow, (symbol_short!("adm_prop"),), next.clone()),
+    );
+    escrow.accept_admin();
+    // Lleva al admin anterior real, que la llamada no recibe como argumento.
+    assert_eq!(
+        escrow_events(&env, &escrow),
+        one_event(&env, &escrow, (symbol_short!("adm_acc"),), (admin, next)),
+    );
+}
+
+#[test]
+fn test_e10_trade_events() {
+    let (env, contract_id, _, seller, buyer, platform_wallet, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let (secret, hash) = tagged_hash(&env, b"ev-trade");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &8i128, &hash, &1u32);
+    let t = escrow.get_trade(&id).timeout_ledger;
+
+    escrow.accept(&id);
+    assert_eq!(
+        escrow_events(&env, &escrow),
+        one_event(&env, &escrow, (symbol_short!("accepted"),), (id.clone(), buyer.clone())),
+    );
+    escrow.extend(&id, &(t + 60));
+    assert_eq!(
+        escrow_events(&env, &escrow),
+        one_event(&env, &escrow, (symbol_short!("extended"),), (id.clone(), t, t + 60)),
+    );
+
+    escrow.release(&id, &secret);
+    // Lo cobrado es lo acumulado, no un monto que mande quien llama.
+    escrow.claim_fees(&platform_wallet);
+    assert_eq!(
+        escrow_events(&env, &escrow),
+        one_event(&env, &escrow, (symbol_short!("fees"),), (platform_wallet.clone(), 8i128)),
+    );
+    // Sin nada que cobrar no hay evento.
+    escrow.claim_fees(&platform_wallet);
+    assert_eq!(escrow_events(&env, &escrow).events().len(), 0);
+}
+
+#[test]
+fn test_e10_failed_call_leaves_no_event() {
+    let (env, escrow, _, _, _, id, _, t) = trade_at_t(b"ev-falla");
+    go_to(&env, t - 1);
+    assert!(escrow.try_report_paid(&id).is_err());
+    assert_eq!(escrow_events(&env, &escrow).events().len(), 0);
+    assert!(escrow.try_extend(&id, &(t - 2)).is_err());
+    assert_eq!(escrow_events(&env, &escrow).events().len(), 0);
+    assert!(escrow.try_resolve(&id, &true).is_err());
+    assert_eq!(escrow_events(&env, &escrow).events().len(), 0);
+}
