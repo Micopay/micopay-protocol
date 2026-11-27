@@ -40,7 +40,7 @@ Arma la imagen `micopay-zk-toolchain` (nargo 1.0.0-beta.9 + bb 0.87.0, las versi
 | | Resultado |
 |---|---|
 | Circuito | 9/9 tests |
-| Contrato | 18/18 tests (+1 ignorado: `sondeo_maleabilidad`); 13 de #533, 3 de R2 y 2 de R3 |
+| Contrato | 21/21 tests (+1 ignorado: `sondeo_maleabilidad`); 13 de #533, 3 de R2, 2 de R3 y 3 de R4 |
 | Prueba | 14,592 bytes |
 
 Lo que se intentó y falla: presumir un tier más alto, pedir un umbral a la medida, inventar números, usar la prueba de otra cuenta, reusarla en el mismo trade o en otro, usarla tras una raíz nueva, alterar bits de la prueba, publicar raíz sin el admin.
@@ -86,11 +86,12 @@ Con un solo hilo es el peor caso; con hilos no está medido. 15–30 s en medio 
 |---|---|
 | R2 | **Raíz por época.** Cada `publish_root` guarda la raíz con su fecha y su ledger en `root_at(epoca)`. Las épocas van en orden (1, 2, 3…) y una ya publicada nunca se reescribe. `publish_root` devuelve `Result` (`EpochOverflow` si se acabaran los números). Además, `publish_root` y `prove_tier` extienden el TTL de la instancia |
 | R3 | **Prueba por época y tier guardado.** `prove_tier(agent, tier, nullifier, proof)` ya no recibe un contexto: el contrato usa la época vigente (`context_for(epoca)`, el número como campo). Una prueba vale para una época y se rehace cuando se publica otra raíz, aunque sea igual. El tier probado queda guardado como `Tier(agent) → (tier, epoca)` y se lee con `tier_record`. La prueba de `contract/fixtures` se regeneró para la época 1; la VK no cambió |
+| R4 | **Consulta de tier.** `get_tier(agent)` da `(tier, epoca)` solo si la prueba es de la época vigente. Sin prueba, sin raíz publicada o con una prueba de una época vieja (vencida), da `None`. `tier_record` sigue mostrando el último registro aunque esté vencido |
 
 ## Pendiente
 
 En labs (plan `PLAN_LABS_ESCROW_V2_Y_TIERS`):
-- **R4:** `get_tier(agent)` para leerlo.
+- **X1:** que `escrow-v2` pida un participante con tier (vía `get_tier`) en los trades grandes.
 
 Fuera de labs:
 - Backend: job que arma el árbol y publica la raíz; endpoint con la ruta Merkle del agente.
