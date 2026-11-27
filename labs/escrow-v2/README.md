@@ -24,6 +24,7 @@ El escrow libera a quien debe (el comprador, con el secreto) o regresa el dinero
 | L1 | Nuevo estado `Resolved`, reservado para `resolve` (E5). Todavía ninguna función lo usa |
 | E1 | `lock` rechaza un `timeout_minutes` fuera de [mínimo, máximo] (`TimeoutOutOfRange`). Nace con 1 min y 24 h; el admin los cambia con `set_timeout_bounds` y se leen con `timeout_bounds`. El máximo no puede llegar al TTL de un trade (~30 días). El vencimiento se calcula con aritmética comprobada: un valor enorme da error en vez de abortar. Producción acepta 0 y aborta con valores enormes |
 | E2 | `lock` rechaza una comisión de MicoPay mayor que el tope (`FeeAboveCap`): piso de `monto × fee_cap_bps / 10000`. Nace con 100 bps (1 %); el admin lo cambia con `set_fee_cap` (0 a 10000) y se lee con `fee_cap`. Solo afecta a locks futuros. **La comisión del agente no se toca:** va dentro del precio y el contrato no la ve. Producción no tiene tope en cadena |
+| E7 | Pausa de emergencia: `pause` y `unpause` (solo el admin), `is_paused` para leerla. En pausa, `lock` falla con `Paused` (y `extend`, cuando exista E8). **Las salidas siguen**: `release`, `decline` y `refund` funcionan en pausa, para que nadie quede con su dinero atrapado. Producción no tiene pausa |
 
 Las siguientes funciones (E1–E12) están en el plan de labs.
 
@@ -37,9 +38,9 @@ Las siguientes funciones (E1–E12) están en el plan de labs.
 cargo test
 ```
 
-28 pruebas: las 9 de producción, 5 de L1, 7 de E1 y 7 de E2. Las de firmas usan **firmas reales**, sin `mock_all_auths()`:
+31 pruebas: las 9 de producción, 5 de L1, 7 de E1, 7 de E2 y 3 de E7. Las de firmas usan **firmas reales**, sin `mock_all_auths()`:
 - el constructor falla sin la firma del admin, y la registra cuando la hay;
 - `decline` falla si solo firma el vendedor;
 - `release` falla si lo firma el vendedor, aunque tenga el secreto;
 - `refund` y `decline` terminan en estados distintos.
-- solo el admin cambia los límites de tiempo (E1) y el tope de comisión (E2).
+- solo el admin cambia los límites de tiempo (E1) y el tope de comisión (E2), y pausa o quita la pausa (E7).

@@ -108,6 +108,30 @@ impl EscrowFactory {
         env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
     }
 
+    /// labs (E7): pausa de emergencia. Solo bloquea `lock` (y `extend`, E8, cuando
+    /// exista). Las salidas siguen: nadie queda con su dinero atrapado por una pausa.
+    pub fn pause(env: Env) -> Result<(), EscrowError> {
+        read_admin(&env)?.require_auth();
+        env.storage().instance().set(&DataKey::Paused, &true);
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.events().publish((symbol_short!("paused"),), ());
+        Ok(())
+    }
+
+    /// labs (E7): quita la pausa. Solo el admin.
+    pub fn unpause(env: Env) -> Result<(), EscrowError> {
+        read_admin(&env)?.require_auth();
+        env.storage().instance().remove(&DataKey::Paused);
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.events().publish((symbol_short!("unpaused"),), ());
+        Ok(())
+    }
+
+    /// labs (E7): si el contrato esta en pausa.
+    pub fn is_paused(env: Env) -> bool {
+        env.storage().instance().has(&DataKey::Paused)
+    }
+
     /// labs (E2): el admin fija el tope de la comision de MicoPay, en puntos base
     /// del monto (0 a 10000). Solo afecta a los `lock` futuros.
     pub fn set_fee_cap(env: Env, fee_cap_bps: u32) -> Result<(), EscrowError> {
@@ -176,6 +200,11 @@ impl EscrowFactory {
     ) -> Result<BytesN<32>, EscrowError> {
         // Require seller authorization
         seller.require_auth();
+
+        // labs (E7): en pausa no entran trades nuevos.
+        if Self::is_paused(env.clone()) {
+            return Err(EscrowError::Paused);
+        }
 
         if amount <= 0 || platform_fee < 0 {
             return Err(EscrowError::InsufficientAmount);

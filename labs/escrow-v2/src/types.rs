@@ -42,4 +42,6 @@ pub enum DataKey {
     TimeoutBounds,
     /// labs (E2): tope de la comision de MicoPay, en puntos base del monto.
     FeeCapBps,
+    /// labs (E7): pausa de emergencia. Sin la llave, no hay pausa.
+    Paused,
 }
