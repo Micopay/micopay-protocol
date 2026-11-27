@@ -1011,3 +1011,65 @@ fn test_e11_contract_balance_matches_open_trades_plus_fees() {
     check(&[]);
     assert_eq!(token_client.balance(&contract_id), 0);
 }
+
+// ── labs (E12): el comprador acepta ──────────────────────────────────────────
+
+#[test]
+fn test_e12_buyer_accepts_once() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let (_, hash) = tagged_hash(&env, b"acepta");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &120u32);
+    assert!(!escrow.get_trade(&id).accepted);
+
+    escrow.accept(&id);
+    assert_eq!(env.auths()[0].0, buyer);
+    assert!(escrow.get_trade(&id).accepted);
+    assert_eq!(escrow.try_accept(&id), Err(Ok(EscrowError::AlreadyAccepted)));
+}
+
+#[test]
+fn test_e12_only_buyer_accepts() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let (_, hash) = tagged_hash(&env, b"solo-comprador");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &120u32);
+    let invoke = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "accept",
+        args: (id.clone(),).into_val(&env),
+        sub_invokes: &[],
+    };
+
+    // El vendedor no puede aceptar por el comprador (asi se inflaria su propia reputacion).
+    env.mock_auths(&[auth_for(&seller, &invoke)]);
+    assert!(escrow.try_accept(&id).is_err());
+    assert!(!escrow.get_trade(&id).accepted);
+
+    env.mock_auths(&[auth_for(&buyer, &invoke)]);
+    escrow.accept(&id);
+    assert!(escrow.get_trade(&id).accepted);
+}
+
+#[test]
+fn test_e12_unaccepted_trade_works_the_same() {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+    let (secret, hash) = tagged_hash(&env, b"sin-aceptar");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &120u32);
+    escrow.release(&id, &secret);
+    assert_eq!(token_client.balance(&buyer), 1_000);
+    assert!(!escrow.get_trade(&id).accepted);
+}
+
+#[test]
+fn test_e12_closed_trade_cannot_be_accepted() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let (_, hash) = tagged_hash(&env, b"cerrado");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &120u32);
+    escrow.decline(&id);
+    assert_eq!(escrow.try_accept(&id), Err(Ok(EscrowError::TradeNotLocked)));
+    assert!(!escrow.get_trade(&id).accepted);
+}

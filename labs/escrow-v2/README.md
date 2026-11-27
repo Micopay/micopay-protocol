@@ -27,6 +27,7 @@ El escrow libera a quien debe (el comprador, con el secreto) o regresa el dinero
 | E7 | Pausa de emergencia: `pause` y `unpause` (solo el admin), `is_paused` para leerla. En pausa, `lock` falla con `Paused` (y `extend`, cuando exista E8). **Las salidas siguen**: `release`, `decline` y `refund` funcionan en pausa, para que nadie quede con su dinero atrapado. Producción no tiene pausa |
 | E9 | Cambio de admin en dos pasos: `propose_admin(nuevo)` (firma el admin actual) y `accept_admin()` (firma el nuevo). El admin actual conserva todos sus permisos hasta que el nuevo acepta, y una propuesta nueva reemplaza a la anterior. Se leen con `admin` y `pending_admin`. Así el contrato nunca queda en manos de una dirección que nadie controla. Producción no puede cambiar de admin |
 | E11 | Comisiones acumuladas: `release` ya no manda la comisión a la billetera de MicoPay; la suma a un saldo interno (`accrued_fees`). `claim_fees(to)` (solo el admin) la cobra aparte. Así, si la billetera de MicoPay está congelada o sin trustline, **al comprador sí se le paga**. En producción, ese `release` fallaría. Siempre se cumple: saldo del contrato = Σ(monto + comisión de los trades abiertos) + comisiones acumuladas |
+| E12 | El comprador acepta: `accept(trade_id)`, con su firma y mientras el trade siga abierto, marca `accepted` en el trade. No cambia cómo se libera ni a quién se paga; sirve para que solo los trades aceptados cuenten en las estadísticas (E6). Así nadie infla o ensucia una reputación con trades entre cuentas propias o con un comprador que nunca firmó |
 
 Las siguientes funciones (E1–E12) están en el plan de labs.
 
@@ -40,7 +41,7 @@ Las siguientes funciones (E1–E12) están en el plan de labs.
 cargo test
 ```
 
-40 pruebas: las 9 de producción, 5 de L1, 7 de E1, 7 de E2, 3 de E7, 5 de E9 y 4 de E11. Las de firmas usan **firmas reales**, sin `mock_all_auths()`:
+44 pruebas: las 9 de producción, 5 de L1, 7 de E1, 7 de E2, 3 de E7, 5 de E9, 4 de E11 y 4 de E12. Las de firmas usan **firmas reales**, sin `mock_all_auths()`:
 - el constructor falla sin la firma del admin, y la registra cuando la hay;
 - `decline` falla si solo firma el vendedor;
 - `release` falla si lo firma el vendedor, aunque tenga el secreto;
@@ -48,3 +49,4 @@ cargo test
 - solo el admin cambia los límites de tiempo (E1) y el tope de comisión (E2), y pausa o quita la pausa (E7);
 - solo el admin propone a otro, solo el propuesto acepta, y el admin anterior pierde sus permisos (E9).
 - solo el admin cobra las comisiones acumuladas (E11).
+- solo el comprador acepta su trade, no el vendedor (E12).

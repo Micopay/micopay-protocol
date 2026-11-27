@@ -27,4 +27,6 @@ pub enum EscrowError {
     Paused = 16,
     /// labs (E9): no hay un admin propuesto que pueda aceptar.
     NoPendingAdmin = 17,
+    /// labs (E12): el comprador ya acepto este trade.
+    AlreadyAccepted = 18,
 }

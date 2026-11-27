@@ -327,6 +327,7 @@ impl EscrowFactory {
             secret_hash,
             timeout_ledger,
             status: TradeStatus::Locked,
+            accepted: false,
         };
 
         env.storage()
@@ -519,6 +520,38 @@ impl EscrowFactory {
             (trade_id, trade.seller.clone()),
         );
 
+        Ok(())
+    }
+
+    /// labs (E12): el comprador firma que el trade es suyo, mientras siga abierto.
+    /// No cambia como se libera ni a quien se paga: solo marca el trade para que
+    /// cuente en las estadisticas. Asi nadie infla o ensucia una reputacion con
+    /// trades entre cuentas propias o con un comprador que nunca firmo.
+    pub fn accept(env: Env, trade_id: BytesN<32>) -> Result<(), EscrowError> {
+        let mut trade: TradeEscrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Trade(trade_id.clone()))
+            .ok_or(EscrowError::TradeNotFound)?;
+        if trade.status != TradeStatus::Locked {
+            return Err(EscrowError::TradeNotLocked);
+        }
+        trade.buyer.require_auth();
+        if trade.accepted {
+            return Err(EscrowError::AlreadyAccepted);
+        }
+        trade.accepted = true;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Trade(trade_id.clone()), &trade);
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Trade(trade_id.clone()),
+            TTL_MIN,
+            TTL_EXTEND,
+        );
+        env.events()
+            .publish((symbol_short!("accepted"),), (trade_id, trade.buyer));
         Ok(())
     }
 
