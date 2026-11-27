@@ -4,13 +4,49 @@ mod errors;
 mod types;
 
 use errors::EscrowError;
-use types::{DataKey, TradeEscrow, TradeStatus};
+use types::{DataKey, TimeoutBounds, TradeEscrow, TradeStatus};
 
 use soroban_sdk::{contract, contractimpl, log, symbol_short, token, Address, Bytes, BytesN, Env};
 
 // TTL constants (~5s per ledger on mainnet)
 const TTL_MIN: u32 = 17_280; // ~1 day — extend if below this
 const TTL_EXTEND: u32 = 518_400; // ~30 days — extend to this
+
+// labs (E1): ~12 ledgers por minuto (5 s por ledger). Los plazos son en ledgers.
+const LEDGERS_PER_MINUTE: u32 = 12;
+// Limites con los que nace el contrato. Produccion usa 120 min.
+const DEFAULT_MIN_TIMEOUT_MINUTES: u32 = 1;
+const DEFAULT_MAX_TIMEOUT_MINUTES: u32 = 1_440; // 24 h
+
+/// Un trade no puede vivir mas que el TTL que el contrato le extiende: si no, se
+/// archivaria con el dinero adentro antes de vencer.
+fn validate_timeout_bounds(min_minutes: u32, max_minutes: u32) -> Result<(), EscrowError> {
+    if min_minutes == 0 || min_minutes > max_minutes {
+        return Err(EscrowError::InvalidConfig);
+    }
+    let max_ledgers = max_minutes
+        .checked_mul(LEDGERS_PER_MINUTE)
+        .ok_or(EscrowError::InvalidConfig)?;
+    if max_ledgers >= TTL_EXTEND {
+        return Err(EscrowError::InvalidConfig);
+    }
+    Ok(())
+}
+
+/// Ledger de vencimiento con aritmetica comprobada: nunca aborta.
+fn timeout_ledger_for(sequence: u32, timeout_minutes: u32) -> Result<u32, EscrowError> {
+    timeout_minutes
+        .checked_mul(LEDGERS_PER_MINUTE)
+        .and_then(|ledgers| sequence.checked_add(ledgers))
+        .ok_or(EscrowError::LedgerOverflow)
+}
+
+fn read_admin(env: &Env) -> Result<Address, EscrowError> {
+    env.storage()
+        .instance()
+        .get(&DataKey::Admin)
+        .ok_or(EscrowError::NotInitialized)
+}
 
 fn compute_trade_id(
     env: &Env,
@@ -39,7 +75,47 @@ impl EscrowFactory {
         env.storage()
             .instance()
             .set(&DataKey::PlatformWallet, &platform_wallet);
+        env.storage().instance().set(
+            &DataKey::TimeoutBounds,
+            &TimeoutBounds {
+                min_minutes: DEFAULT_MIN_TIMEOUT_MINUTES,
+                max_minutes: DEFAULT_MAX_TIMEOUT_MINUTES,
+            },
+        );
         env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+    }
+
+    /// labs (E1): el admin fija el minimo y el maximo de `timeout_minutes`.
+    /// Exige 0 < minimo <= maximo, y que el maximo quepa en el TTL de un trade.
+    /// Solo afecta a los `lock` futuros.
+    pub fn set_timeout_bounds(
+        env: Env,
+        min_minutes: u32,
+        max_minutes: u32,
+    ) -> Result<(), EscrowError> {
+        read_admin(&env)?.require_auth();
+        validate_timeout_bounds(min_minutes, max_minutes)?;
+        env.storage().instance().set(
+            &DataKey::TimeoutBounds,
+            &TimeoutBounds {
+                min_minutes,
+                max_minutes,
+            },
+        );
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.events().publish(
+            (symbol_short!("tbounds"),),
+            (min_minutes, max_minutes),
+        );
+        Ok(())
+    }
+
+    /// labs (E1): limites vigentes de `timeout_minutes`.
+    pub fn timeout_bounds(env: Env) -> Result<TimeoutBounds, EscrowError> {
+        env.storage()
+            .instance()
+            .get(&DataKey::TimeoutBounds)
+            .ok_or(EscrowError::NotInitialized)
     }
 
     /// Lock funds in escrow. Called by the SELLER.
@@ -78,16 +154,20 @@ impl EscrowFactory {
             return Err(EscrowError::TradeAlreadyExists);
         }
 
+        // labs (E1): el tiempo tiene que estar dentro de los limites del admin, y el
+        // ledger de vencimiento se calcula con aritmetica comprobada (nunca aborta).
+        let bounds = Self::timeout_bounds(env.clone())?;
+        if timeout_minutes < bounds.min_minutes || timeout_minutes > bounds.max_minutes {
+            return Err(EscrowError::TimeoutOutOfRange);
+        }
+        let timeout_ledger = timeout_ledger_for(env.ledger().sequence(), timeout_minutes)?;
+
         // Transfer total (amount + platform_fee) from seller to this contract
         let total = amount
             .checked_add(platform_fee)
             .ok_or(EscrowError::AmountOverflow)?;
         let token_client = token::Client::new(&env, &token_id);
         token_client.transfer(&seller, &env.current_contract_address(), &total);
-
-        // Calculate timeout as absolute ledger number
-        // ~12 ledgers per minute (5s per ledger)
-        let timeout_ledger = env.ledger().sequence() + (timeout_minutes * 12);
 
         let trade = TradeEscrow {
             seller: seller.clone(),
