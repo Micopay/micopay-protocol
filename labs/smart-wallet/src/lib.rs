@@ -1,7 +1,7 @@
 //! Smart wallet de labs: una cuenta de contrato (`C…`) con varios firmantes ed25519,
 //! cada uno con su peso, y un umbral. Es la fase W0–W5 de PLAN_SMART_WALLET.md.
 //!
-//! Solo testnet. Todavia no tiene passkey, guardianes, limites ni sesiones.
+//! Solo testnet. Todavia no tiene passkey, guardianes ni sesiones.
 //!
 //! Reglas de esta fase:
 //! - el contrato deriva el id de cada firmante (`sha256(0x00 ‖ pubkey)`), asi una llave
@@ -9,7 +9,10 @@
 //! - cada firma es sobre `sha256(DOMINIO ‖ XDR de la direccion de la wallet ‖ modo ‖ payload)`,
 //!   asi una firma para una wallet no sirve en otra;
 //! - agregar, quitar firmantes y cambiar el umbral pide la firma de la propia wallet,
-//!   es decir, el umbral vigente.
+//!   es decir, el umbral vigente;
+//! - limites por token y escrows registrados (W17–W19): subir un limite o registrar un
+//!   escrow espera `DELAY_LEDGERS`; bajar o quitar aplica ya. Las reglas que los hacen
+//!   cumplir dentro de `__check_auth` llegan con W19.
 #![no_std]
 
 use soroban_sdk::{
@@ -33,6 +36,12 @@ const KIND_ED25519: u8 = 0;
 pub const MAX_SIGNERS: u32 = 10;
 /// Etiqueta de la prueba de posesion que firma una llave nueva en `add_signer`.
 pub const ADD_SIGNER_TAG: &[u8] = b"add-signer";
+/// Espera para subir un limite o registrar un escrow (~10 min). Fija en esta fase: la
+/// decision D5 (plazos configurables) sigue abierta.
+pub const DELAY_LEDGERS: u32 = 120;
+/// Periodo del limite de gasto (~1 dia). Ventana fija desde el primer gasto: cerca del
+/// cambio de periodo pueden salir hasta dos limites seguidos.
+pub const PERIOD_LEDGERS: u32 = 17_280;
 
 #[contracttype]
 #[derive(Clone)]
@@ -40,6 +49,25 @@ enum DataKey {
     /// `Map<id, Signer>`
     Signers,
     Threshold,
+    Limit(Address),
+    PendingLimit(Address),
+    Spent(Address),
+}
+
+/// Subida de limite pendiente: el valor nuevo y desde que ledger se puede aplicar.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingLimit {
+    pub per_period: i128,
+    pub ready_ledger: u32,
+}
+
+/// Gasto del periodo en curso de un token.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Spent {
+    pub period_start: u32,
+    pub amount: i128,
 }
 
 #[contracttype]
@@ -80,6 +108,9 @@ pub enum WalletError {
     TooManySigners = 11,
     Overflow = 12,
     TooManyProofs = 13,
+    InvalidLimit = 14,
+    NothingPending = 16,
+    NotReady = 17,
 }
 
 /// Id de un firmante ed25519: `sha256(0x00 ‖ pubkey)`.
@@ -124,6 +155,13 @@ fn threshold(env: &Env) -> Result<u32, WalletError> {
         .instance()
         .get(&DataKey::Threshold)
         .ok_or(WalletError::NotInitialized)
+}
+
+fn ready_at(env: &Env) -> Result<u32, WalletError> {
+    env.ledger()
+        .sequence()
+        .checked_add(DELAY_LEDGERS)
+        .ok_or(WalletError::Overflow)
 }
 
 fn total_weight(map: &Map<BytesN<32>, Signer>) -> Result<u32, WalletError> {
@@ -215,6 +253,62 @@ impl SmartWallet {
         env.storage().instance().set(&DataKey::Threshold, &threshold);
         bump(&env);
         Ok(())
+    }
+
+    /// W17. Pone el limite de gasto por periodo de un token. Bajarlo (o ponerlo por primera
+    /// vez) aplica ya; subirlo queda pendiente `DELAY_LEDGERS` y lo aplica `apply_limit`.
+    /// Devuelve `true` si ya quedo aplicado.
+    pub fn set_limit(env: Env, token: Address, per_period: i128) -> Result<bool, WalletError> {
+        env.current_contract_address().require_auth();
+        if per_period < 0 {
+            return Err(WalletError::InvalidLimit);
+        }
+        let st = env.storage().instance();
+        let current: Option<i128> = st.get(&DataKey::Limit(token.clone()));
+        let applied = match current {
+            Some(c) if per_period > c => {
+                let ready_ledger = ready_at(&env)?;
+                st.set(&DataKey::PendingLimit(token), &PendingLimit { per_period, ready_ledger });
+                false
+            }
+            _ => {
+                st.set(&DataKey::Limit(token.clone()), &per_period);
+                st.remove(&DataKey::PendingLimit(token));
+                true
+            }
+        };
+        bump(&env);
+        Ok(applied)
+    }
+
+    /// W17. Aplica una subida de limite pendiente, ya cumplida la espera. Cualquiera la
+    /// puede llamar: solo ejecuta lo que la wallet ya aprobo.
+    pub fn apply_limit(env: Env, token: Address) -> Result<(), WalletError> {
+        let st = env.storage().instance();
+        let p: PendingLimit = st
+            .get(&DataKey::PendingLimit(token.clone()))
+            .ok_or(WalletError::NothingPending)?;
+        if env.ledger().sequence() < p.ready_ledger {
+            return Err(WalletError::NotReady);
+        }
+        st.set(&DataKey::Limit(token.clone()), &p.per_period);
+        st.remove(&DataKey::PendingLimit(token));
+        bump(&env);
+        Ok(())
+    }
+
+    /// Lectura: limite vigente de un token (`None` = sin limite).
+    pub fn limit(env: Env, token: Address) -> Option<i128> {
+        env.storage().instance().get(&DataKey::Limit(token))
+    }
+
+    /// Lectura: gasto del periodo en curso de un token.
+    pub fn spent(env: Env, token: Address) -> i128 {
+        let s: Option<Spent> = env.storage().instance().get(&DataKey::Spent(token));
+        match s {
+            Some(s) if env.ledger().sequence() < s.period_start.saturating_add(PERIOD_LEDGERS) => s.amount,
+            _ => 0,
+        }
     }
 
     /// Lectura: firmantes por id.
