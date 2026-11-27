@@ -1,0 +1,7 @@
+[package]
+name = "agent_tier_v1"
+type = "bin"
+authors = ["MicoPay"]
+compiler_version = ">=1.0.0"
+
+[dependencies]
