@@ -4,7 +4,7 @@ mod errors;
 mod types;
 
 use errors::EscrowError;
-use types::{DataKey, TierGate, TierRecord, TimeoutBounds, TradeEscrow, TradeStatus};
+use types::{DataKey, Stats, TierGate, TierRecord, TimeoutBounds, TradeEscrow, TradeStatus};
 
 use soroban_sdk::{
     contract, contractclient, contractimpl, log, symbol_short, token, Address, Bytes, BytesN, Env,
@@ -125,6 +125,25 @@ fn compute_trade_id(
 /// Si las salidas solo aceptaran `Locked`, una disputa dejaria el dinero atorado.
 fn is_open(trade: &TradeEscrow) -> bool {
     matches!(trade.status, TradeStatus::Locked | TradeStatus::Disputed)
+}
+
+/// labs (E6): suma a las estadisticas de una direccion. Nunca aborta: si un contador
+/// llegara a u32::MAX, se queda ahi en vez de impedir que el trade se cierre.
+fn bump_stats(env: &Env, who: &Address, add: fn(&mut Stats) -> &mut u32) {
+    let key = DataKey::Stats(who.clone());
+    let mut stats: Stats = env.storage().persistent().get(&key).unwrap_or_default();
+    let counter = add(&mut stats);
+    *counter = counter.saturating_add(1);
+    env.storage().persistent().set(&key, &stats);
+    env.storage().persistent().extend_ttl(&key, TTL_MIN, TTL_EXTEND);
+}
+
+/// labs (E6): suma a las dos partes, solo si el comprador acepto el trade (E12).
+fn bump_both(env: &Env, trade: &TradeEscrow, add: fn(&mut Stats) -> &mut u32) {
+    if trade.accepted {
+        bump_stats(env, &trade.seller, add);
+        bump_stats(env, &trade.buyer, add);
+    }
 }
 
 #[contract]
@@ -611,6 +630,9 @@ impl EscrowFactory {
             env.storage().instance().set(&DataKey::AccruedFees, &accrued);
         }
 
+        // labs (E6)
+        bump_both(&env, &trade, |s| &mut s.completed);
+
         // Update status
         trade.status = TradeStatus::Released;
         env.storage()
@@ -675,6 +697,8 @@ impl EscrowFactory {
             .ok_or(EscrowError::AmountOverflow)?;
         token_client.transfer(&env.current_contract_address(), &trade.seller, &total);
 
+        // labs (E6): tambien el de D sin resolve; no cuenta como disputa perdida.
+        bump_both(&env, &trade, |s| &mut s.refunded);
         trade.status = TradeStatus::Refunded;
         env.storage()
             .persistent()
@@ -724,6 +748,7 @@ impl EscrowFactory {
         let token_client = token::Client::new(&env, &token_id);
         token_client.transfer(&env.current_contract_address(), &trade.seller, &total);
 
+        bump_both(&env, &trade, |s| &mut s.declined); // labs (E6)
         trade.status = TradeStatus::Declined;
         env.storage()
             .persistent()
@@ -830,6 +855,7 @@ impl EscrowFactory {
             .ok_or(EscrowError::LedgerOverflow)?
             .max(grace);
 
+        bump_both(&env, &trade, |s| &mut s.disputes_opened); // labs (E6)
         trade.status = TradeStatus::Disputed;
         trade.dispute_deadline = deadline;
         env.storage()
@@ -894,6 +920,11 @@ impl EscrowFactory {
             (trade.seller.clone(), total, 0i128)
         };
 
+        // labs (E6): pierde la parte contra la que se resolvio.
+        if trade.accepted {
+            let loser = if to_buyer { &trade.seller } else { &trade.buyer };
+            bump_stats(&env, loser, |s| &mut s.disputes_lost);
+        }
         trade.status = TradeStatus::Resolved;
         env.storage()
             .persistent()
@@ -941,6 +972,15 @@ impl EscrowFactory {
         env.events()
             .publish((symbol_short!("accepted"),), (trade_id, trade.buyer));
         Ok(())
+    }
+
+    /// labs (E6): operaciones de `address` en trades aceptados. Una direccion sin
+    /// trades da todo en 0.
+    pub fn stats(env: Env, address: Address) -> Stats {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Stats(address))
+            .unwrap_or_default()
     }
 
     /// Read trade state (view function).
