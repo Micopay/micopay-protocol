@@ -23,6 +23,9 @@ pub struct TradeEscrow {
     pub secret_hash: BytesN<32>,
     pub timeout_ledger: u32,
     pub status: TradeStatus,
+    /// labs (E12): el comprador firmo que el trade es suyo. Sin esto el trade
+    /// funciona igual, pero no contara en las estadisticas (E6).
+    pub accepted: bool,
 }
 
 /// labs (E1): limites del tiempo de bloqueo, en minutos. Los fija el admin.
