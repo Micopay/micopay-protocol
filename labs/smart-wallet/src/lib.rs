@@ -30,6 +30,8 @@ pub const MODE_OWNER: u8 = 0;
 const KIND_ED25519: u8 = 0;
 /// Tope de firmantes, para acotar el costo de `__check_auth`.
 pub const MAX_SIGNERS: u32 = 10;
+/// Etiqueta de la prueba de posesion que firma una llave nueva en `add_signer`.
+pub const ADD_SIGNER_TAG: &[u8] = b"add-signer";
 
 #[contracttype]
 #[derive(Clone)]
@@ -95,6 +97,16 @@ pub fn message(env: &Env, wallet: &Address, mode: u8, payload: &Hash<32>) -> Byt
     env.crypto().sha256(&b).into()
 }
 
+/// Lo que firma una llave nueva para probar que existe quien la tiene:
+/// `sha256(DOMINIO ‖ XDR(ScVal de la wallet) ‖ "add-signer" ‖ id)`.
+pub fn possession_message(env: &Env, wallet: &Address, id: &BytesN<32>) -> BytesN<32> {
+    let mut b = Bytes::from_slice(env, DOMAIN);
+    b.append(&wallet.clone().to_xdr(env));
+    b.append(&Bytes::from_slice(env, ADD_SIGNER_TAG));
+    b.append(&id.clone().into());
+    env.crypto().sha256(&b).into()
+}
+
 fn bump(env: &Env) {
     env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
 }
@@ -113,6 +125,14 @@ fn threshold(env: &Env) -> Result<u32, WalletError> {
         .ok_or(WalletError::NotInitialized)
 }
 
+fn total_weight(map: &Map<BytesN<32>, Signer>) -> Result<u32, WalletError> {
+    let mut total: u32 = 0;
+    for s in map.values() {
+        total = total.checked_add(s.weight).ok_or(WalletError::Overflow)?;
+    }
+    Ok(total)
+}
+
 #[contract]
 pub struct SmartWallet;
 
@@ -127,6 +147,40 @@ impl SmartWallet {
         env.storage().instance().set(&DataKey::Signers, &map);
         env.storage().instance().set(&DataKey::Threshold, &1u32);
         bump(&env);
+    }
+
+    /// W3. Agrega un firmante ed25519. El id lo deriva el contrato. Devuelve el id.
+    ///
+    /// `possession` es la firma de la llave nueva sobre `possession_message`. Sin ella, el
+    /// umbral podria pasar a depender de una llave que nadie tiene y la wallet quedaria
+    /// bloqueada para siempre (no se podria ni quitar esa llave).
+    pub fn add_signer(
+        env: Env,
+        key: BytesN<32>,
+        weight: u32,
+        possession: BytesN<64>,
+    ) -> Result<BytesN<32>, WalletError> {
+        let wallet = env.current_contract_address();
+        wallet.require_auth();
+        if weight == 0 {
+            return Err(WalletError::InvalidWeight);
+        }
+        let mut map = signers(&env)?;
+        let id = signer_id(&env, &key);
+        // Aborta si la llave nueva no firmo.
+        env.crypto()
+            .ed25519_verify(&key, &possession_message(&env, &wallet, &id).into(), &possession);
+        if map.contains_key(id.clone()) {
+            return Err(WalletError::KeyUsed);
+        }
+        if map.len() >= MAX_SIGNERS {
+            return Err(WalletError::TooManySigners);
+        }
+        map.set(id.clone(), Signer { key, weight });
+        total_weight(&map)?;
+        env.storage().instance().set(&DataKey::Signers, &map);
+        bump(&env);
+        Ok(id)
     }
 
     /// Lectura: firmantes por id.

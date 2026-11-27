@@ -2,7 +2,9 @@
 
 use super::*;
 use ed25519_dalek::{Signer as _, SigningKey};
-use soroban_sdk::{testutils::BytesN as _, vec, Address, BytesN, Env, IntoVal, InvokeError, String};
+use soroban_sdk::{
+    testutils::BytesN as _, vec, xdr::{ScErrorCode, ScErrorType}, Address, BytesN, Env, Error, IntoVal, InvokeError, String,
+};
 
 fn key(n: u8) -> SigningKey {
     SigningKey::from_bytes(&[n; 32])
@@ -28,11 +30,20 @@ fn proof(env: &Env, wallet: &Address, k: &SigningKey, payload: &Hash<32>) -> Pro
 }
 
 /// Prueba de posesion de `k` para agregarla a `wallet` (W3).
+fn pop(env: &Env, wallet: &Address, k: &SigningKey) -> BytesN<64> {
+    let msg = possession_message(env, wallet, &signer_id(env, &pk(env, k)));
+    BytesN::from_array(env, &k.sign(&msg.to_array()).to_bytes())
+}
+
 fn check(env: &Env, wallet: &Address, payload: &Hash<32>, proofs: Vec<Proof>) -> Result<(), Result<WalletError, soroban_sdk::InvokeError>> {
     env.try_invoke_contract_check_auth::<WalletError>(wallet, &payload.to_bytes(), proofs.into_val(env), &vec![env])
 }
 
 /// Lo que devuelve el cliente cuando falta la firma de la wallet: `Error(Auth, InvalidAction)`.
+fn auth_error() -> InvokeError {
+    Error::from_type_and_code(ScErrorType::Auth, ScErrorCode::InvalidAction).into()
+}
+
 fn payload(env: &Env) -> Hash<32> {
     env.crypto().sha256(&BytesN::<32>::random(env).into())
 }
@@ -189,3 +200,75 @@ fn w2_vector_compartido_rust_js() {
 // Bytes calculados con scripts/demo.mjs --vector.
 const VECTOR_MSG: [u8; 32] = [234, 124, 192, 223, 9, 210, 223, 21, 37, 7, 244, 101, 75, 224, 56, 160, 47, 108, 220, 24, 121, 178, 32, 152, 134, 149, 250, 143, 238, 141, 201, 135];
 const VECTOR_ID: [u8; 32] = [197, 244, 45, 76, 158, 13, 224, 53, 80, 246, 173, 157, 79, 216, 2, 139, 111, 43, 80, 12, 220, 65, 190, 193, 155, 254, 17, 173, 41, 167, 11, 159];
+
+// ---------- W3: add_signer ----------
+
+#[test]
+fn w3_agrega_y_deriva_el_id() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let id = c.add_signer(&pk(&env, &key(2)), &3, &pop(&env, &c.address, &key(2)));
+    assert_eq!(id, signer_id(&env, &pk(&env, &key(2))));
+    assert_eq!(c.signers().get(id).unwrap().weight, 3);
+}
+
+#[test]
+fn w3_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    let (_, c) = setup(&env, &key(1));
+    let r = c.try_add_signer(&pk(&env, &key(2)), &1, &pop(&env, &c.address, &key(2)));
+    assert_eq!(r.err(), Some(Err(auth_error())));
+    assert_eq!(c.signers().len(), 1);
+}
+
+#[test]
+fn w3_sin_prueba_de_posesion_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    // Una llave que nadie tiene no puede dar la prueba: no entra y no puede bloquear la wallet.
+    let fantasma = BytesN::from_array(&env, &[0xffu8; 32]);
+    let firma_cualquiera = pop(&env, &c.address, &key(2));
+    assert_eq!(c.try_add_signer(&fantasma, &5, &firma_cualquiera), Err(Err(InvokeError::Abort)));
+    // La prueba de la llave correcta, pero hecha para otra wallet, tampoco sirve.
+    let (_, otra) = setup(&env, &key(1));
+    let de_otra = pop(&env, &otra.address, &key(2));
+    assert_eq!(c.try_add_signer(&pk(&env, &key(2)), &1, &de_otra), Err(Err(InvokeError::Abort)));
+    assert_eq!(c.signers().len(), 1);
+}
+
+#[test]
+fn w3_llave_ya_usada_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    assert_eq!(c.try_add_signer(&pk(&env, &key(1)), &1, &pop(&env, &c.address, &key(1))), Err(Ok(WalletError::KeyUsed)));
+}
+
+#[test]
+fn w3_peso_0_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    assert_eq!(c.try_add_signer(&pk(&env, &key(2)), &0, &pop(&env, &c.address, &key(2))), Err(Ok(WalletError::InvalidWeight)));
+}
+
+#[test]
+fn w3_desbordar_el_peso_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    assert_eq!(c.try_add_signer(&pk(&env, &key(2)), &u32::MAX, &pop(&env, &c.address, &key(2))), Err(Ok(WalletError::Overflow)));
+}
+
+#[test]
+fn w3_tope_de_firmantes() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    for n in 2..=(MAX_SIGNERS as u8) {
+        c.add_signer(&pk(&env, &key(n)), &1, &pop(&env, &c.address, &key(n)));
+    }
+    assert_eq!(c.try_add_signer(&pk(&env, &key(200)), &1, &pop(&env, &c.address, &key(200))), Err(Ok(WalletError::TooManySigners)));
+}
