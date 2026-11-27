@@ -163,7 +163,14 @@ async function main() {
     log('\nC. FALLO: el escrow acepto una firma de otra llave');
     process.exitCode = 1;
   } catch (e) {
-    log('\nC. lock con otra llave rechazado:', String(e.message).slice(0, 90));
+    // Solo cuenta el rechazo de la autorizacion; un fallo de red o de RPC no prueba nada.
+    const msg = String(e.message);
+    if (msg.includes('Error(Auth, InvalidAction)')) {
+      log('\nC. lock con otra llave rechazado:', msg.slice(0, 90));
+    } else {
+      log('\nC. FALLO: error inesperado, no el rechazo de la firma:', msg.slice(0, 200));
+      process.exitCode = 1;
+    }
   }
   log('\nsaldo C… final', fmt(await balance(smart)));
 }
