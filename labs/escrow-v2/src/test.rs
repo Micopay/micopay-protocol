@@ -46,6 +46,9 @@ fn setup_env() -> (
     )
 }
 
+/// labs (E3): margen con el que nace el contrato (15 min), en ledgers.
+const MARGIN: u32 = 15 * 12;
+
 fn make_secret(env: &Env) -> (Bytes, BytesN<32>) {
     let secret = Bytes::from_slice(env, b"test_secret_32_bytes_long_pad__!!");
     let hash: BytesN<32> = env.crypto().sha256(&secret).into();
@@ -129,7 +132,7 @@ fn test_refund_after_timeout() {
     let current = env.ledger().get();
     env.ledger().set(LedgerInfo {
         timestamp: current.timestamp + 120,
-        sequence_number: current.sequence_number + 20,
+        sequence_number: current.sequence_number + 20 + MARGIN,
         ..current
     });
 
@@ -191,7 +194,7 @@ fn test_decline_after_timeout_still_requires_buyer_and_succeeds() {
     let current = env.ledger().get();
     env.ledger().set(LedgerInfo {
         timestamp: current.timestamp + 120,
-        sequence_number: current.sequence_number + 20,
+        sequence_number: current.sequence_number + 20 + MARGIN,
         ..current
     });
 
@@ -429,7 +432,7 @@ fn test_refund_and_decline_end_in_different_states() {
 
     let current = env.ledger().get();
     env.ledger().set(LedgerInfo {
-        sequence_number: current.sequence_number + 20,
+        sequence_number: current.sequence_number + 20 + MARGIN,
         ..current
     });
 
@@ -515,7 +518,8 @@ fn test_e1_invalid_config_is_rejected() {
     let (env, contract_id, _, _, _, _, _) = setup_env();
     let escrow = EscrowFactoryClient::new(&env, &contract_id);
     let ttl_minutes = 518_400 / 12; // un trade no puede vivir mas que su TTL
-    for (min, max) in [(0u32, 10u32), (20, 10), (1, ttl_minutes), (1, u32::MAX)] {
+    // labs (E3): la vida cuenta el margen de 15 min.
+    for (min, max) in [(0u32, 10u32), (20, 10), (1, ttl_minutes), (1, ttl_minutes - 15), (1, u32::MAX)] {
         assert_eq!(
             escrow.try_set_timeout_bounds(&min, &max),
             Err(Ok(EscrowError::InvalidConfig)),
@@ -525,7 +529,7 @@ fn test_e1_invalid_config_is_rejected() {
     // Lo rechazado no cambia nada.
     assert_eq!(escrow.timeout_bounds().max_minutes, 1_440);
     // Justo debajo del TTL si se acepta, y min = max tambien.
-    escrow.set_timeout_bounds(&1u32, &(ttl_minutes - 1));
+    escrow.set_timeout_bounds(&1u32, &(ttl_minutes - 15 - 1));
     escrow.set_timeout_bounds(&60u32, &60u32);
 }
 
@@ -725,7 +729,7 @@ fn test_e7_pause_blocks_lock_only() {
     escrow.decline(&b);
     let current = env.ledger().get();
     env.ledger().set(LedgerInfo {
-        sequence_number: current.sequence_number + 20,
+        sequence_number: current.sequence_number + 20 + MARGIN,
         ..current
     });
     escrow.refund(&c);
@@ -1002,7 +1006,7 @@ fn test_e11_contract_balance_matches_open_trades_plus_fees() {
     check(&[&t3]);
     let current = env.ledger().get();
     env.ledger().set(LedgerInfo {
-        sequence_number: current.sequence_number + 20,
+        sequence_number: current.sequence_number + 20 + MARGIN,
         ..current
     });
     escrow.refund(&t3);
@@ -1207,7 +1211,7 @@ fn test_e8_extended_trade_refunds_only_at_new_timeout() {
     assert_eq!(escrow.try_refund(&id), Err(Ok(EscrowError::TimeoutNotReached)));
     let current = env.ledger().get();
     env.ledger().set(LedgerInfo {
-        sequence_number: t + 120,
+        sequence_number: t + 120 + MARGIN,
         ..current
     });
     escrow.refund(&id);
@@ -1399,4 +1403,127 @@ fn test_x1_gate_config() {
     env.mock_all_auths();
     escrow.clear_tier_gate();
     assert_eq!(escrow.tier_gate(), None);
+}
+
+// ── labs (E3): margen antes del reembolso ────────────────────────────────────
+
+fn go_to(env: &Env, sequence: u32) {
+    let current = env.ledger().get();
+    env.ledger().set(LedgerInfo {
+        sequence_number: sequence,
+        ..current
+    });
+}
+
+#[test]
+fn test_e3_default_margin_is_15_minutes() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    assert_eq!(escrow.claim_margin(), 15);
+    let (_, hash) = tagged_hash(&env, b"margen");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &1u32);
+    assert_eq!(escrow.get_trade(&id).margin_ledgers, MARGIN);
+}
+
+#[test]
+fn test_e3_refund_waits_until_grace() {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+    let before = token_client.balance(&seller);
+    let (_, hash) = tagged_hash(&env, b"g");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &8i128, &hash, &1u32);
+    let t = escrow.get_trade(&id).timeout_ledger;
+    let g = t + MARGIN;
+
+    go_to(&env, t - 1);
+    assert_eq!(escrow.try_refund(&id), Err(Ok(EscrowError::TimeoutNotReached)));
+    go_to(&env, t);
+    assert_eq!(escrow.try_refund(&id), Err(Ok(EscrowError::ClaimWindowOpen)));
+    go_to(&env, g - 1);
+    assert_eq!(escrow.try_refund(&id), Err(Ok(EscrowError::ClaimWindowOpen)));
+    go_to(&env, g);
+    escrow.refund(&id);
+    assert_eq!(escrow.get_trade(&id).status, TradeStatus::Refunded);
+    assert_eq!(token_client.balance(&seller), before);
+}
+
+#[test]
+fn test_e3_release_and_decline_work_inside_the_margin() {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+    let (secret, hash) = tagged_hash(&env, b"cobra");
+    let paid = escrow.lock(&seller, &buyer, &1_000i128, &8i128, &hash, &1u32);
+    let (_, hash2) = tagged_hash(&env, b"rechaza");
+    let declined = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash2, &1u32);
+    let t = escrow.get_trade(&paid).timeout_ledger;
+
+    // Ya vencio, pero sigue el margen: el comprador cobra con el secreto.
+    go_to(&env, t + MARGIN - 1);
+    escrow.release(&paid, &secret);
+    assert_eq!(token_client.balance(&buyer), 1_000);
+    escrow.decline(&declined);
+    assert_eq!(escrow.get_trade(&declined).status, TradeStatus::Declined);
+    // Y despues de cobrar, el reembolso ya no puede llevarse el dinero.
+    go_to(&env, t + MARGIN);
+    assert_eq!(escrow.try_refund(&paid), Err(Ok(EscrowError::TradeNotLocked)));
+}
+
+#[test]
+fn test_e3_margin_config() {
+    let (env, contract_id, admin, seller, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    // Margen 0, o tan grande que el trade viviria mas que su TTL.
+    assert_eq!(escrow.try_set_claim_margin(&0), Err(Ok(EscrowError::InvalidConfig)));
+    let too_long = 518_400 / 12 - 1_440;
+    assert_eq!(escrow.try_set_claim_margin(&too_long), Err(Ok(EscrowError::InvalidConfig)));
+    escrow.set_claim_margin(&(too_long - 1));
+    // Con ese margen, un maximo mas largo ya no cabe.
+    assert_eq!(
+        escrow.try_set_timeout_bounds(&1, &1_441),
+        Err(Ok(EscrowError::InvalidConfig)),
+    );
+    escrow.set_claim_margin(&30);
+    assert_eq!(escrow.claim_margin(), 30);
+
+    let invoke = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "set_claim_margin",
+        args: (60u32,).into_val(&env),
+        sub_invokes: &[],
+    };
+    env.mock_auths(&[auth_for(&seller, &invoke)]);
+    assert!(escrow.try_set_claim_margin(&60).is_err());
+    assert_eq!(escrow.claim_margin(), 30);
+    env.mock_auths(&[auth_for(&admin, &invoke)]);
+    escrow.set_claim_margin(&60);
+    assert_eq!(escrow.claim_margin(), 60);
+}
+
+#[test]
+fn test_e3_new_margin_does_not_touch_open_trades() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let (_, hash) = tagged_hash(&env, b"viejo");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &1u32);
+    let t = escrow.get_trade(&id).timeout_ledger;
+    escrow.set_claim_margin(&60);
+    assert_eq!(escrow.get_trade(&id).margin_ledgers, MARGIN);
+    go_to(&env, t + MARGIN);
+    escrow.refund(&id);
+}
+
+#[test]
+fn test_e3_extended_trade_keeps_its_margin() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let (_, hash) = tagged_hash(&env, b"extendido");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &1u32);
+    let t = escrow.get_trade(&id).timeout_ledger;
+    escrow.extend(&id, &(t + 120));
+    go_to(&env, t + 120 + MARGIN - 1);
+    assert_eq!(escrow.try_refund(&id), Err(Ok(EscrowError::ClaimWindowOpen)));
+    go_to(&env, t + 120 + MARGIN);
+    escrow.refund(&id);
 }
