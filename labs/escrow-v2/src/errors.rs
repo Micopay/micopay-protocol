@@ -29,4 +29,8 @@ pub enum EscrowError {
     NoPendingAdmin = 17,
     /// labs (E12): el comprador ya acepto este trade.
     AlreadyAccepted = 18,
+    /// labs (E8): el nuevo vencimiento no es posterior al actual.
+    InvalidExtension = 19,
+    /// labs (E8): el nuevo vencimiento pasa el tope de vida que se guardo al bloquear.
+    ExtensionAboveCap = 20,
 }

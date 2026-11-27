@@ -1073,3 +1073,143 @@ fn test_e12_closed_trade_cannot_be_accepted() {
     assert_eq!(escrow.try_accept(&id), Err(Ok(EscrowError::TradeNotLocked)));
     assert!(!escrow.get_trade(&id).accepted);
 }
+
+// ── labs (E8): extender el plazo ─────────────────────────────────────────────
+
+fn extend_auths<'a>(
+    env: &Env,
+    contract_id: &'a Address,
+    trade_id: &BytesN<32>,
+    new_timeout_ledger: u32,
+) -> MockAuthInvoke<'a> {
+    MockAuthInvoke {
+        contract: contract_id,
+        fn_name: "extend",
+        args: (trade_id.clone(), new_timeout_ledger).into_val(env),
+        sub_invokes: &[],
+    }
+}
+
+#[test]
+fn test_e8_extend_needs_both_signatures() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let (_, hash) = tagged_hash(&env, b"extender");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &120u32);
+    let t = escrow.get_trade(&id).timeout_ledger;
+    let new_t = t + 60 * 12;
+    let invoke = extend_auths(&env, &contract_id, &id, new_t);
+
+    // Con una sola firma, de cualquiera de los dos, no se extiende.
+    for who in [&seller, &buyer] {
+        env.mock_auths(&[auth_for(who, &invoke)]);
+        assert!(escrow.try_extend(&id, &new_t).is_err());
+        assert_eq!(escrow.get_trade(&id).timeout_ledger, t);
+    }
+
+    env.mock_auths(&[auth_for(&seller, &invoke), auth_for(&buyer, &invoke)]);
+    escrow.extend(&id, &new_t);
+    assert_eq!(escrow.get_trade(&id).timeout_ledger, new_t);
+}
+
+#[test]
+fn test_e8_signature_is_for_one_new_timeout() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let (_, hash) = tagged_hash(&env, b"una-firma");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &120u32);
+    let t = escrow.get_trade(&id).timeout_ledger;
+    let agreed = extend_auths(&env, &contract_id, &id, t + 100);
+
+    // Las dos firmaron t + 100: con esas firmas no se puede pedir t + 500.
+    env.mock_auths(&[auth_for(&seller, &agreed), auth_for(&buyer, &agreed)]);
+    assert!(escrow.try_extend(&id, &(t + 500)).is_err());
+    assert_eq!(escrow.get_trade(&id).timeout_ledger, t);
+}
+
+#[test]
+fn test_e8_new_timeout_must_be_later() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let (_, hash) = tagged_hash(&env, b"posterior");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &120u32);
+    let t = escrow.get_trade(&id).timeout_ledger;
+    for new_t in [t, t - 1] {
+        assert_eq!(escrow.try_extend(&id, &new_t), Err(Ok(EscrowError::InvalidExtension)));
+    }
+}
+
+#[test]
+fn test_e8_cap_is_counted_from_lock_and_kept_per_trade() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    escrow.set_timeout_bounds(&1u32, &180u32); // vida maxima: 180 min
+    let (_, hash) = tagged_hash(&env, b"tope");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &60u32);
+    let trade = escrow.get_trade(&id);
+    assert_eq!(trade.max_total_ledgers, 180 * 12);
+    let cap = trade.lock_ledger + 180 * 12;
+
+    // Dos extensiones dentro del tope pasan; la ultima justo en el tope.
+    escrow.extend(&id, &(trade.lock_ledger + 120 * 12));
+    escrow.extend(&id, &cap);
+    assert_eq!(escrow.get_trade(&id).timeout_ledger, cap);
+
+    // Si el admin sube el maximo despues, este trade conserva su tope.
+    escrow.set_timeout_bounds(&1u32, &1_440u32);
+    assert_eq!(escrow.try_extend(&id, &(cap + 1)), Err(Ok(EscrowError::ExtensionAboveCap)));
+}
+
+#[test]
+fn test_e8_expired_closed_or_paused_cannot_extend() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let (_, h1) = tagged_hash(&env, b"vencido");
+    let (_, h2) = tagged_hash(&env, b"cerrado");
+    let (_, h3) = tagged_hash(&env, b"pausa");
+    let expired = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &h1, &1u32);
+    let closed = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &h2, &120u32);
+    let paused = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &h3, &120u32);
+
+    escrow.decline(&closed);
+    let t_closed = escrow.get_trade(&closed).timeout_ledger;
+    assert_eq!(escrow.try_extend(&closed, &(t_closed + 12)), Err(Ok(EscrowError::TradeNotLocked)));
+
+    escrow.pause();
+    let t_paused = escrow.get_trade(&paused).timeout_ledger;
+    assert_eq!(escrow.try_extend(&paused, &(t_paused + 12)), Err(Ok(EscrowError::Paused)));
+    escrow.unpause();
+    escrow.extend(&paused, &(t_paused + 12));
+
+    let t = escrow.get_trade(&expired).timeout_ledger;
+    let current = env.ledger().get();
+    env.ledger().set(LedgerInfo {
+        sequence_number: t,
+        ..current
+    });
+    assert_eq!(escrow.try_extend(&expired, &(t + 12)), Err(Ok(EscrowError::TimeoutReached)));
+}
+
+#[test]
+fn test_e8_extended_trade_refunds_only_at_new_timeout() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let (_, hash) = tagged_hash(&env, b"reembolso");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &1u32);
+    let t = escrow.get_trade(&id).timeout_ledger;
+    escrow.extend(&id, &(t + 120));
+
+    let current = env.ledger().get();
+    env.ledger().set(LedgerInfo {
+        sequence_number: t,
+        ..current
+    });
+    assert_eq!(escrow.try_refund(&id), Err(Ok(EscrowError::TimeoutNotReached)));
+    let current = env.ledger().get();
+    env.ledger().set(LedgerInfo {
+        sequence_number: t + 120,
+        ..current
+    });
+    escrow.refund(&id);
+    assert_eq!(escrow.get_trade(&id).status, TradeStatus::Refunded);
+}

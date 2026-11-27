@@ -26,6 +26,12 @@ pub struct TradeEscrow {
     /// labs (E12): el comprador firmo que el trade es suyo. Sin esto el trade
     /// funciona igual, pero no contara en las estadisticas (E6).
     pub accepted: bool,
+    /// labs (E8): ledger en el que se bloqueo.
+    pub lock_ledger: u32,
+    /// labs (E8): vida maxima del trade en ledgers, contada desde `lock_ledger`.
+    /// Se copia del maximo de E1 al bloquear: si el admin lo cambia despues, este
+    /// trade conserva el suyo.
+    pub max_total_ledgers: u32,
 }
 
 /// labs (E1): limites del tiempo de bloqueo, en minutos. Los fija el admin.
