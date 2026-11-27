@@ -1105,7 +1105,12 @@
     "cancelledAuthorizeRefundBody": "The trade was cancelled. Authorize the immediate return to the owner of the funds now, without waiting for the deadline.",
     "expiredBody": "The time to complete this trade has expired.",
     "dateLabel": "Date",
-    "processing": "Processing…"
+    "processing": "Processing…",
+    "declineNow": "Decline and return to the client",
+    "declineNowConfirm": "Yes, return",
+    "declineNowBack": "Back",
+    "declineNowSigning": "Signing…",
+    "declineNowHint": "The client gets their funds back right away. You sign once and the trade ends."
   },
   "profileText": {
     "s1": "Your session expired. Sign in again.",

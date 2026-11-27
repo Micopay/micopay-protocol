@@ -11,7 +11,7 @@ const CSP = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: blob: https://*.basemaps.cartocdn.com https://explorer-api.walletconnect.com",
-  "connect-src 'self' https://api.micopay.app https://horizon-testnet.stellar.org https://soroban-testnet.stellar.org https://*.basemaps.cartocdn.com https://rpc.walletconnect.org https://verify.walletconnect.org wss://relay.walletconnect.org https://relay.walletconnect.org",
+  "connect-src 'self' https://api.micopay.app https://horizon.stellar.org https://mainnet.sorobanrpc.com https://*.basemaps.cartocdn.com https://rpc.walletconnect.org https://verify.walletconnect.org wss://relay.walletconnect.org https://relay.walletconnect.org",
   "worker-src 'self' blob:",
   "frame-src https://verify.walletconnect.org",
   "frame-ancestors 'none'",

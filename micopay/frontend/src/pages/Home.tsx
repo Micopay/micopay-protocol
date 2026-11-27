@@ -15,7 +15,7 @@ import { mapApiError, type MappedApiError } from '../utils/apiError';
 import { useWalletBalance } from '../hooks/useWalletBalance';
 import BetaBanner from '../components/BetaBanner';
 import { getPendingSignatureRequests, SignatureRequest } from '../services/signRequestService';
-import { STELLAR_NETWORK_LABEL } from '../utils/stellarExplorer';
+import { STELLAR_NETWORK_LABEL, buildTxUrl } from '../utils/stellarExplorer';
 import i18n from '../i18n';
 
 // Textos que no pasan por el hook: el arbol se vuelve a pintar al cambiar de idioma.
@@ -23,7 +23,6 @@ const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, optio
 // Saldos y fechas en el idioma activo, no siempre en es-MX.
 const displayLocale = () => (i18n.language === 'en' ? 'en-US' : 'es-MX');
 
-const EXPLORER = "https://stellar.expert/explorer/testnet/tx";
 
 /**
  * Cuantas operaciones se ven en Inicio. El resto vive en /history.
@@ -536,7 +535,7 @@ const Home = ({
                       {trade.lock_tx_hash &&
                         !trade.lock_tx_hash.startsWith("mock") && (
                           <a
-                            href={`${EXPLORER}/${trade.lock_tx_hash}`}
+                            href={buildTxUrl(trade.lock_tx_hash)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-[11px] text-primary font-mono flex items-center gap-1 hover:underline"
@@ -553,7 +552,7 @@ const Home = ({
                       {trade.release_tx_hash &&
                         !trade.release_tx_hash.startsWith("mock") && (
                           <a
-                            href={`${EXPLORER}/${trade.release_tx_hash}`}
+                            href={buildTxUrl(trade.release_tx_hash)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-[11px] text-verde-claro font-mono flex items-center gap-1 hover:underline"

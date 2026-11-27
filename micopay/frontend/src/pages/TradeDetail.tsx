@@ -432,6 +432,50 @@ export function AgentCashClaimWindow({ eligibility, isProvider }: { eligibility:
   );
 }
 
+/**
+ * El agente de un retiro rechaza la operacion y el cliente recupera sus fondos
+ * al momento: firma decline() sin cancelar ni pausarse antes. Pide un segundo
+ * toque porque devuelve los fondos y ya no se puede atender.
+ */
+function DeclineNow({ declining, error, onDecline }: { declining: boolean; error: string | null; onDecline: () => void }) {
+  const [asking, setAsking] = useState(false);
+  return (
+    <div className="w-full mt-4">
+      {error && (
+        <p role="alert" className="w-full mb-3 p-3 bg-red-50 border border-red-200 rounded-sm text-red-700 text-sm font-medium">
+          {error}
+        </p>
+      )}
+      {asking ? (
+        <div className="flex gap-3">
+          <button
+            onClick={() => setAsking(false)}
+            disabled={declining}
+            className="min-h-12 flex-1 rounded-sm border-2 border-tinta font-bold text-tinta disabled:opacity-40"
+          >
+            {tr('tradeDetail.declineNowBack')}
+          </button>
+          <button
+            onClick={onDecline}
+            disabled={declining}
+            className="min-h-12 flex-1 rounded-sm bg-rojo font-bold text-papel disabled:opacity-40"
+          >
+            {declining ? tr('tradeDetail.declineNowSigning') : tr('tradeDetail.declineNowConfirm')}
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAsking(true)}
+          className="w-full min-h-12 py-3 rounded-sm border-2 border-tinta text-tinta font-bold"
+        >
+          {tr('tradeDetail.declineNow')}
+        </button>
+      )}
+      <p className="text-xs text-gris mt-2">{tr('tradeDetail.declineNowHint')}</p>
+    </div>
+  );
+}
+
 /** #5: con fondos bloqueados, cancelar detiene el flujo; no devuelve fondos. */
 function LockedCancel({ allowed, mustPauseFirst, cancelling, error, onCancel }: LockedCancelProps) {
   return (
@@ -1394,6 +1438,9 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
   // Render state-specific view
   // CASH-5B: el papel se deriva de ESTA operación, no de la sesión.
   const actor = resolveTradeActor(userId, trade);
+  // El servidor decide si hay decline (quien recibiria los fondos, contrato
+  // con decline, sin entrega registrada); aqui solo se ofrece al agente.
+  const canDeclineNow = declineAvailable && actor.party === 'provider' && !cashHandoffConfirmed;
 
   const renderStateView = () => {
     switch (trade.status) {
@@ -1440,7 +1487,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
               onGoToScanner={() => navigate('/inbox', { state: { autoScan: true } })}
               cancel={{
                 allowed: actor.party === 'client' || (actor.party === 'provider' && merchantUnavailable),
-                mustPauseFirst: actor.party === 'provider' && !merchantUnavailable,
+                mustPauseFirst: actor.party === 'provider' && !merchantUnavailable && !canDeclineNow,
                 cancelling: isCancelling,
                 error: cancelError,
                 onCancel: handleCancel,
@@ -1452,6 +1499,7 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
                 onConfirm: handleConfirmCash,
               }}
             />
+            {canDeclineNow && <DeclineNow declining={isRefunding} error={refundError} onDecline={handleDeclineNow} />}
           </>
         );
       case 'revealing':
@@ -1490,12 +1538,13 @@ function TradeDetailContent({ token, userId, onBack }: TradeDetailProps) {
             {actor.flow === 'cashout' && !cashHandoffConfirmed && (
               <LockedCancel
                 allowed={actor.party === 'client' || (actor.party === 'provider' && merchantUnavailable)}
-                mustPauseFirst={actor.party === 'provider' && !merchantUnavailable}
+                mustPauseFirst={actor.party === 'provider' && !merchantUnavailable && !canDeclineNow}
                 cancelling={isCancelling}
                 error={cancelError}
                 onCancel={handleCancel}
               />
             )}
+            {canDeclineNow && <DeclineNow declining={isRefunding} error={refundError} onDecline={handleDeclineNow} />}
           </>
         );
       case 'completed':
