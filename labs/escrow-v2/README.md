@@ -40,6 +40,32 @@ Las siguientes funciones (E1–E12) están en el plan de labs.
 
 **Asimetría:** si el árbitro no actúa, o el trade no tiene árbitro, la salida en D favorece al vendedor: "ya pagué" solo retrasa el reembolso; no protege al comprador.
 
+## Testnet
+
+`EscrowFactory` (labs): [`CCHYYI3MJNSIBDRXJDXNBV6OQEACS46CVBHMHR7JK7EBBMYATNKO3DWN`](https://stellar.expert/explorer/testnet/contract/CCHYYI3MJNSIBDRXJDXNBV6OQEACS46CVBHMHR7JK7EBBMYATNKO3DWN). Token: XLM nativo de testnet (SAC `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`). Desplegado el 2026-11-27 desde `main` (f4347c9), con cuentas solo de testnet. Registro de tiers: [`CDQO4V75GDUYM6BPX666LGHKDQA7QBV5CFBHINQNABL7OJCAKPCMINCS`](https://stellar.expert/explorer/testnet/contract/CDQO4V75GDUYM6BPX666LGHKDQA7QBV5CFBHINQNABL7OJCAKPCMINCS) (ver `labs/agent-tier`).
+
+Recorrido real, en orden:
+
+| Paso | Transacciones |
+|---|---|
+| Despliegue (constructor con firma del admin, L1) | [`ba152e36…`](https://stellar.expert/explorer/testnet/tx/ba152e36459e4b0efe8fef1f340a68d01610eb80c680bbcf590cef85fca08f61) |
+| `set_arbiter` (E5) | [`6095360e…`](https://stellar.expert/explorer/testnet/tx/6095360e79650e260ba44a2557e4e0893792140962db7adc8686d79df97d0137) |
+| `set_tier_gate`: desde 1000 XLM, Plata (X1) | [`8c8db0ef…`](https://stellar.expert/explorer/testnet/tx/8c8db0ef41eb9a068c3aa010ad99c573a6dc4179bb741a19f38fe27be236229c) |
+| A: `lock` 10 XLM → `accept` (E12) → `release`; la comisión se acumula (E11) | [`8c67fb40…`](https://stellar.expert/explorer/testnet/tx/8c67fb409433f889b4a78b62b8b425854494ca1ee7336dcbf989560b17d68837) · [`ec424b76…`](https://stellar.expert/explorer/testnet/tx/ec424b766a746f43a47e9c6adca9c9d309b693b9fadedc64849bc898440f053b) · [`2a22e4eb…`](https://stellar.expert/explorer/testnet/tx/2a22e4eb9669c3f5692a9647e787516585423ce603bdc00ae93e8ce0cc97ce82) |
+| B: `lock` → `accept` → `decline`, queda `Declined` (L1) | [`c7f357d9…`](https://stellar.expert/explorer/testnet/tx/c7f357d9a973fc03383b0fccc6f1e5d75114d252525c4aec3afcaea37d71e3f7) · [`805eff09…`](https://stellar.expert/explorer/testnet/tx/805eff0906f5668356daf7bcd26ec35227b66518aa7eee386cf2302bd0a411c1) · [`1896c242…`](https://stellar.expert/explorer/testnet/tx/1896c242a1b4276cd9bc8bdeb0593706368e0099e3b9adceca39b6ab53b6586b) |
+| C: `lock` 1 min → `accept` → en T, `report_paid` fija D a 7 días (E4) → `resolve` a favor del comprador (E5). Un `refund` antes de D se rechazó con `#24` (`DisputeOpen`) | [`7be8b46b…`](https://stellar.expert/explorer/testnet/tx/7be8b46b53d58fb98fdedae3d23312b5ccbd68759afe942b5a38feb062b9e9f9) · [`41c605fb…`](https://stellar.expert/explorer/testnet/tx/41c605fb2ddccd82d7bb50e29491d4b9d2f6171274fdaad50aa03428f3425526) · [`0ef36b7d…`](https://stellar.expert/explorer/testnet/tx/0ef36b7d4490d54bce839c426a331ad17b32cf0e57f1cfc8ace80b06ad386c85) · [`4ee740db…`](https://stellar.expert/explorer/testnet/tx/4ee740db7bc513a6da6e987ba67e8436f60e8335482748ca86aa891882b96504) |
+| X1: `lock` de 1000 XLM de Lupe, con Plata probada por ZK en el registro real → `release`. El mismo `lock` de un vendedor sin tier se rechazó con `#21` (`TierRequired`) | [`0a9f4c58…`](https://stellar.expert/explorer/testnet/tx/0a9f4c5840c8b2d7ce5879d4d89170b947392a4c80430a606d412551c2ee041a) · [`412d8729…`](https://stellar.expert/explorer/testnet/tx/412d8729d1c412bf6d8ddf3255854c284e19302968905b9c254f10e3cca717e5) |
+| E7: `pause` → un `lock` se rechazó con `#16` (`Paused`) → `unpause` | [`d39bc3fb…`](https://stellar.expert/explorer/testnet/tx/d39bc3fbae320833e7c2116ef436b8daa4ed81871d92a1e8258d1cdeaac85a02) · [`cdbad438…`](https://stellar.expert/explorer/testnet/tx/cdbad438320266d229aeadfd4fd997643946d5d749a4a8b5d3282fd2abc18cce) |
+| E11: `claim_fees` cobra 0.96 XLM (0.08 de A + 0.08 de C + 0.8 de X1) | [`febfa062…`](https://stellar.expert/explorer/testnet/tx/febfa062a5dda969276303aff626fb5c4b4145613aeedadb71cf99929807511c) |
+| E8: `lock` → `extend` +60 min con **las firmas del vendedor y del comprador** (script con el SDK de JS: el CLI solo firma por la cuenta de origen) → `decline` | [`dba4ac7e…`](https://stellar.expert/explorer/testnet/tx/dba4ac7ec403e47a8ce48dd9e27cd5c0babb381fc455d583b49c51dae52db83f) · [`6051fddd…`](https://stellar.expert/explorer/testnet/tx/6051fddddb2168623abb6c932db07f2c0578348558e660d2f4dcc9cb2ec60e8f) · [`fcd39c51…`](https://stellar.expert/explorer/testnet/tx/fcd39c517bde6ded50d61a58ecc172a4212fbdc717d4dd31000426d64d202649) |
+| R: `lock` 1 min → `accept` → `refund` en G − 8 se rechazó con `#22` (`ClaimWindowOpen`, E3) → `refund` en G pasa | [`5401fd47…`](https://stellar.expert/explorer/testnet/tx/5401fd4729c59db992c6628d3c74e37334e870c4e024b2dc7c0fe0c1d6aaa8bc) · [`17f1c411…`](https://stellar.expert/explorer/testnet/tx/17f1c41109e9df44d07883fd5d88bc4d15321742ff2c3a538b60a529d579f019) · [`b21722c5…`](https://stellar.expert/explorer/testnet/tx/b21722c5859107196e1caff45f16d9c3f14fea8def3cd099537f6a186fea1b38) |
+
+Al final:
+- `stats` del vendedor: 1 completada, 1 reembolsada, 1 rechazada, 1 disputa abierta, 1 perdida; del comprador, igual, sin disputa perdida (E6). Los trades de Lupe y de E8 no se aceptaron y no cuentan;
+- **saldo del contrato: 0**. Todos los trades cerrados y las comisiones cobradas.
+
+No se probó en cadena el `refund` desde D (7 días). Ese caso lo cubre `test_state_table`.
+
 ## Plazos en ledgers, no en reloj
 
 `timeout_minutes`, el margen de E3 y el plazo de disputa de E4 se convierten en ledgers a razón de **12 por minuto** (5 s por ledger). Si la red va más rápida o más lenta, el vencimiento real cambia: el contrato solo ve ledgers.
