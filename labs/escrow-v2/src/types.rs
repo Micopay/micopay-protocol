@@ -40,4 +40,6 @@ pub enum DataKey {
     PlatformWallet,
     Trade(BytesN<32>),
     TimeoutBounds,
+    /// labs (E2): tope de la comision de MicoPay, en puntos base del monto.
+    FeeCapBps,
 }

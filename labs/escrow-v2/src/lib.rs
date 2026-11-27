@@ -18,6 +18,26 @@ const LEDGERS_PER_MINUTE: u32 = 12;
 const DEFAULT_MIN_TIMEOUT_MINUTES: u32 = 1;
 const DEFAULT_MAX_TIMEOUT_MINUTES: u32 = 1_440; // 24 h
 
+// labs (E2): tope de la comision de MicoPay, en puntos base (100 = 1 %).
+// Produccion cobra 0.8 % fijo, que el backend calcula. La comision del agente va
+// dentro del precio y el contrato no la ve: este tope no la toca.
+const BPS_DENOMINATOR: i128 = 10_000;
+const DEFAULT_FEE_CAP_BPS: u32 = 100;
+
+/// Comision maxima para un monto: piso de amount * bps / 10000. Se parte en
+/// cociente y resto para que ningun monto valido desborde.
+fn max_platform_fee(amount: i128, fee_cap_bps: u32) -> Result<i128, EscrowError> {
+    let bps = fee_cap_bps as i128;
+    let whole = (amount / BPS_DENOMINATOR)
+        .checked_mul(bps)
+        .ok_or(EscrowError::AmountOverflow)?;
+    let rest = (amount % BPS_DENOMINATOR)
+        .checked_mul(bps)
+        .ok_or(EscrowError::AmountOverflow)?
+        / BPS_DENOMINATOR;
+    whole.checked_add(rest).ok_or(EscrowError::AmountOverflow)
+}
+
 /// Un trade no puede vivir mas que el TTL que el contrato le extiende: si no, se
 /// archivaria con el dinero adentro antes de vencer.
 fn validate_timeout_bounds(min_minutes: u32, max_minutes: u32) -> Result<(), EscrowError> {
@@ -82,7 +102,32 @@ impl EscrowFactory {
                 max_minutes: DEFAULT_MAX_TIMEOUT_MINUTES,
             },
         );
+        env.storage()
+            .instance()
+            .set(&DataKey::FeeCapBps, &DEFAULT_FEE_CAP_BPS);
         env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+    }
+
+    /// labs (E2): el admin fija el tope de la comision de MicoPay, en puntos base
+    /// del monto (0 a 10000). Solo afecta a los `lock` futuros.
+    pub fn set_fee_cap(env: Env, fee_cap_bps: u32) -> Result<(), EscrowError> {
+        read_admin(&env)?.require_auth();
+        if fee_cap_bps as i128 > BPS_DENOMINATOR {
+            return Err(EscrowError::InvalidConfig);
+        }
+        env.storage().instance().set(&DataKey::FeeCapBps, &fee_cap_bps);
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.events()
+            .publish((symbol_short!("feecap"),), fee_cap_bps);
+        Ok(())
+    }
+
+    /// labs (E2): tope vigente de la comision de MicoPay, en puntos base.
+    pub fn fee_cap(env: Env) -> Result<u32, EscrowError> {
+        env.storage()
+            .instance()
+            .get(&DataKey::FeeCapBps)
+            .ok_or(EscrowError::NotInitialized)
     }
 
     /// labs (E1): el admin fija el minimo y el maximo de `timeout_minutes`.
@@ -161,6 +206,11 @@ impl EscrowFactory {
             return Err(EscrowError::TimeoutOutOfRange);
         }
         let timeout_ledger = timeout_ledger_for(env.ledger().sequence(), timeout_minutes)?;
+
+        // labs (E2): la comision de MicoPay no pasa el tope vigente.
+        if platform_fee > max_platform_fee(amount, Self::fee_cap(env.clone())?)? {
+            return Err(EscrowError::FeeAboveCap);
+        }
 
         // Transfer total (amount + platform_fee) from seller to this contract
         let total = amount

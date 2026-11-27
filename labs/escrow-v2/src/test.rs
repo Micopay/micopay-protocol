@@ -560,3 +560,123 @@ fn test_e1_new_bounds_do_not_touch_open_trades() {
     escrow.release(&trade_id, &secret);
     assert_eq!(escrow.get_trade(&trade_id).status, TradeStatus::Released);
 }
+
+// ── labs (E2): tope de la comision de MicoPay ────────────────────────────────
+
+fn lock_with_fee(
+    env: &Env,
+    escrow: &EscrowFactoryClient,
+    seller: &Address,
+    buyer: &Address,
+    tag: &[u8],
+    amount: i128,
+    fee: i128,
+) -> Result<BytesN<32>, EscrowError> {
+    let hash: BytesN<32> = env.crypto().sha256(&Bytes::from_slice(env, tag)).into();
+    match escrow.try_lock(seller, buyer, &amount, &fee, &hash, &120u32) {
+        Ok(Ok(id)) => Ok(id),
+        Err(Ok(e)) => Err(e),
+        other => panic!("resultado inesperado: {:?}", other),
+    }
+}
+
+#[test]
+fn test_e2_default_cap() {
+    let (env, contract_id, _, _, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    assert_eq!(escrow.fee_cap(), 100);
+}
+
+#[test]
+fn test_e2_fee_at_cap_passes_and_above_fails() {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+    escrow.set_fee_cap(&80u32); // 0.8 %, la comision de produccion
+    let amount: i128 = 1_500_000_000;
+    let cap = amount * 80 / 10_000; // 12_000_000
+
+    let before = token_client.balance(&seller);
+    assert_eq!(
+        lock_with_fee(&env, &escrow, &seller, &buyer, b"tope+1", amount, cap + 1),
+        Err(EscrowError::FeeAboveCap),
+    );
+    assert_eq!(token_client.balance(&seller), before);
+
+    lock_with_fee(&env, &escrow, &seller, &buyer, b"tope", amount, cap).unwrap();
+    lock_with_fee(&env, &escrow, &seller, &buyer, b"cero", amount, 0).unwrap();
+    assert_eq!(token_client.balance(&seller), before - (amount + cap) - amount);
+}
+
+#[test]
+fn test_e2_small_amount_rounds_cap_down() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    // 1 % de 99 stroops es 0.99: el tope redondea hacia abajo, a 0.
+    assert_eq!(
+        lock_with_fee(&env, &escrow, &seller, &buyer, b"chico", 99, 1),
+        Err(EscrowError::FeeAboveCap),
+    );
+    lock_with_fee(&env, &escrow, &seller, &buyer, b"chico-0", 99, 0).unwrap();
+    // 100 stroops ya permiten 1.
+    lock_with_fee(&env, &escrow, &seller, &buyer, b"cien", 100, 1).unwrap();
+}
+
+#[test]
+fn test_e2_max_fee_never_overflows() {
+    assert_eq!(max_platform_fee(0, 10_000), Ok(0));
+    assert_eq!(max_platform_fee(12_345, 0), Ok(0));
+    assert_eq!(max_platform_fee(1_500_000_000, 80), Ok(12_000_000));
+    assert_eq!(max_platform_fee(19_999, 1), Ok(1));
+    // El monto mas grande posible, con el tope mas alto: exacto, sin desbordar.
+    assert_eq!(max_platform_fee(i128::MAX, 10_000), Ok(i128::MAX));
+    assert_eq!(max_platform_fee(i128::MAX, 5_000), Ok(i128::MAX / 2));
+}
+
+#[test]
+fn test_e2_invalid_cap_is_rejected() {
+    let (env, contract_id, _, _, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    assert_eq!(
+        escrow.try_set_fee_cap(&10_001u32),
+        Err(Ok(EscrowError::InvalidConfig)),
+    );
+    assert_eq!(escrow.fee_cap(), 100);
+    escrow.set_fee_cap(&10_000u32);
+    escrow.set_fee_cap(&0u32);
+    assert_eq!(escrow.fee_cap(), 0);
+}
+
+#[test]
+fn test_e2_only_admin_sets_cap() {
+    let (env, contract_id, admin, seller, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let invoke = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "set_fee_cap",
+        args: (500u32,).into_val(&env),
+        sub_invokes: &[],
+    };
+
+    env.mock_auths(&[MockAuth { address: &seller, invoke: &invoke }]);
+    assert!(escrow.try_set_fee_cap(&500u32).is_err());
+    assert_eq!(escrow.fee_cap(), 100);
+
+    env.mock_auths(&[MockAuth { address: &admin, invoke: &invoke }]);
+    escrow.set_fee_cap(&500u32);
+    assert_eq!(escrow.fee_cap(), 500);
+}
+
+#[test]
+fn test_e2_new_cap_does_not_touch_open_trades() {
+    let (env, contract_id, _, seller, buyer, platform_wallet, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+    let (secret, secret_hash) = make_secret(&env);
+    let trade_id = escrow.lock(&seller, &buyer, &1_000_000i128, &10_000i128, &secret_hash, &120u32);
+
+    // Bajar el tope a 0 no le quita la comision a un trade ya bloqueado.
+    escrow.set_fee_cap(&0u32);
+    escrow.release(&trade_id, &secret);
+    assert_eq!(token_client.balance(&platform_wallet), 10_000);
+}
