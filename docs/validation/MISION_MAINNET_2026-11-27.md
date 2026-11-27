@@ -103,7 +103,15 @@ Nadie firma por el usuario: cada función la firma quien el contrato exige.
   - App: [`TradeDetail.tsx:1385`](../../micopay/frontend/src/pages/TradeDetail.tsx#L1385) (`handleRefundClick`) y [`:1355`](../../micopay/frontend/src/pages/TradeDetail.tsx#L1355)
   - Firma: [`api.ts:621`](../../micopay/frontend/src/services/api.ts#L621) (`refundTradeRequest`)
   - Backend: [`stellar.service.ts:549`](../../micopay/backend/src/services/stellar.service.ts#L549)
-- **Transacción:** PENDIENTE
+- **Transacción:** [`cd4c3f99…`](https://stellar.expert/explorer/public/tx/cd4c3f99f0b67057bae1acdd89e7fae2137499870621eb877caad998b977575f)
+  (lock de esa operación: [`373c03e2…`](https://stellar.expert/explorer/public/tx/373c03e21db652c493d1c9db6f867e3e4bb986649753102ebe3e868c7a181aa0))
+
+> Nota: el backend tiene un barrido que reembolsa solo, con la llave de
+> plataforma, las operaciones vencidas. Para que este `refund` lo firmara el
+> cliente desde la app, por unos minutos bajamos el plazo del lock a 10 minutos
+> y apagamos el barrido; luego volvimos a 2 horas con el barrido encendido. Un
+> primer reembolso de prueba ([`ab00a5c9…`](https://stellar.expert/explorer/public/tx/ab00a5c9bbd215d90b76f4b2491f2657745416a1ce9f6f1035336200fdd11b2e))
+> lo hizo el barrido y no cuenta como invocación desde la app.
 
 ## Lo que agregamos para la misión
 
