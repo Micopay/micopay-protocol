@@ -12,7 +12,7 @@ pub enum TradeStatus {
     Refunded,
     /// El comprador rechazo el trade (`decline`). En produccion queda como `Refunded`.
     Declined,
-    /// Lo cerro el arbitro (`resolve`, E5). Todavia no hay funcion que lo use.
+    /// labs (E5): lo cerro el arbitro con `resolve`.
     Resolved,
 }
 
@@ -43,6 +43,9 @@ pub struct TradeEscrow {
     /// labs (E4): D, el ledger desde el que `refund` vuelve a funcionar en una
     /// disputa. 0 mientras no haya reporte.
     pub dispute_deadline: u32,
+    /// labs (E5): arbitro vigente al bloquear. Un arbitro nuevo no toca este trade.
+    /// Sin arbitro, nadie resuelve y la salida es `refund` desde D.
+    pub arbiter: Option<Address>,
 }
 
 /// labs (E1): limites del tiempo de bloqueo, en minutos. Los fija el admin.
@@ -95,4 +98,6 @@ pub enum DataKey {
     ClaimMargin,
     /// labs (E4): plazo de disputa, en minutos.
     DisputeWindow,
+    /// labs (E5): arbitro para los trades futuros. Sin la llave, no hay arbitro.
+    Arbiter,
 }
