@@ -25,4 +25,6 @@ pub enum EscrowError {
     FeeAboveCap = 15,
     /// labs (E7): el contrato esta en pausa y no acepta trades nuevos.
     Paused = 16,
+    /// labs (E9): no hay un admin propuesto que pueda aceptar.
+    NoPendingAdmin = 17,
 }

@@ -44,4 +44,6 @@ pub enum DataKey {
     FeeCapBps,
     /// labs (E7): pausa de emergencia. Sin la llave, no hay pausa.
     Paused,
+    /// labs (E9): admin propuesto que todavia no acepta.
+    PendingAdmin,
 }

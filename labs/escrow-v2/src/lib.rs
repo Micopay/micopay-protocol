@@ -108,6 +108,45 @@ impl EscrowFactory {
         env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
     }
 
+    /// labs (E9): el admin propone a su reemplazo. El admin actual sigue con todos
+    /// sus permisos hasta que el nuevo acepta. Una propuesta nueva reemplaza a la anterior.
+    pub fn propose_admin(env: Env, new_admin: Address) -> Result<(), EscrowError> {
+        read_admin(&env)?.require_auth();
+        env.storage().instance().set(&DataKey::PendingAdmin, &new_admin);
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.events()
+            .publish((symbol_short!("adm_prop"),), new_admin);
+        Ok(())
+    }
+
+    /// labs (E9): el admin propuesto acepta con su firma y queda como admin.
+    /// Asi nunca se entrega el contrato a una direccion que nadie controla.
+    pub fn accept_admin(env: Env) -> Result<(), EscrowError> {
+        let new_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingAdmin)
+            .ok_or(EscrowError::NoPendingAdmin)?;
+        new_admin.require_auth();
+        let old_admin = read_admin(&env)?;
+        env.storage().instance().set(&DataKey::Admin, &new_admin);
+        env.storage().instance().remove(&DataKey::PendingAdmin);
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.events()
+            .publish((symbol_short!("adm_acc"),), (old_admin, new_admin));
+        Ok(())
+    }
+
+    /// labs (E9): admin vigente.
+    pub fn admin(env: Env) -> Result<Address, EscrowError> {
+        read_admin(&env)
+    }
+
+    /// labs (E9): admin propuesto que todavia no acepta, si lo hay.
+    pub fn pending_admin(env: Env) -> Option<Address> {
+        env.storage().instance().get(&DataKey::PendingAdmin)
+    }
+
     /// labs (E7): pausa de emergencia. Solo bloquea `lock` (y `extend`, E8, cuando
     /// exista). Las salidas siguen: nadie queda con su dinero atrapado por una pausa.
     pub fn pause(env: Env) -> Result<(), EscrowError> {
