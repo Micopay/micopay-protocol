@@ -40,7 +40,7 @@ Arma la imagen `micopay-zk-toolchain` (nargo 1.0.0-beta.9 + bb 0.87.0, las versi
 | | Resultado |
 |---|---|
 | Circuito | 9/9 tests |
-| Contrato | 16/16 tests (+1 ignorado: `sondeo_maleabilidad`); 13 de #533 y 3 de R2 |
+| Contrato | 18/18 tests (+1 ignorado: `sondeo_maleabilidad`); 13 de #533, 3 de R2 y 2 de R3 |
 | Prueba | 14,592 bytes |
 
 Lo que se intentó y falla: presumir un tier más alto, pedir un umbral a la medida, inventar números, usar la prueba de otra cuenta, reusarla en el mismo trade o en otro, usarla tras una raíz nueva, alterar bits de la prueba, publicar raíz sin el admin.
@@ -63,7 +63,7 @@ Lo que se intentó y falla: presumir un tier más alto, pedir un umbral a la med
 | PC | 1 | 2.6 s | 4.9 s |
 | OPPO Reno6 Lite (Snapdragon 680) | 1 | **15.5 s** | 38 s |
 
-Con un solo hilo es el peor caso; con hilos no está medido. 15–30 s en medio de un trade es demasiado, por eso la propuesta es que el contexto sea la **época de la raíz** y no el trade: la app del agente genera la prueba en segundo plano cuando se publica una raíz nueva, y en el trade solo se consulta el `TierProven` ya registrado. **Este contrato todavía usa `context = trade`; el cambio a época es chico y está pendiente.**
+Con un solo hilo es el peor caso; con hilos no está medido. 15–30 s en medio de un trade es demasiado, por eso la propuesta es que el contexto sea la **época de la raíz** y no el trade: la app del agente genera la prueba en segundo plano cuando se publica una raíz nueva, y en el trade solo se consulta el `TierProven` ya registrado. **Hecho en R3:** el contexto ya es la época de la raíz.
 
 ## Lo que ZK no resuelve
 
@@ -85,11 +85,11 @@ Con un solo hilo es el peor caso; con hilos no está medido. 15–30 s en medio 
 | ID | Cambio |
 |---|---|
 | R2 | **Raíz por época.** Cada `publish_root` guarda la raíz con su fecha y su ledger en `root_at(epoca)`. Las épocas van en orden (1, 2, 3…) y una ya publicada nunca se reescribe. `publish_root` devuelve `Result` (`EpochOverflow` si se acabaran los números). Además, `publish_root` y `prove_tier` extienden el TTL de la instancia |
+| R3 | **Prueba por época y tier guardado.** `prove_tier(agent, tier, nullifier, proof)` ya no recibe un contexto: el contrato usa la época vigente (`context_for(epoca)`, el número como campo). Una prueba vale para una época y se rehace cuando se publica otra raíz, aunque sea igual. El tier probado queda guardado como `Tier(agent) → (tier, epoca)` y se lee con `tier_record`. La prueba de `contract/fixtures` se regeneró para la época 1; la VK no cambió |
 
 ## Pendiente
 
 En labs (plan `PLAN_LABS_ESCROW_V2_Y_TIERS`):
-- **R3:** contexto por época en vez de por trade, y guardar el tier del agente con su época.
 - **R4:** `get_tier(agent)` para leerlo.
 
 Fuera de labs:

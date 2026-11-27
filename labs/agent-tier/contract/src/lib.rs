@@ -7,7 +7,9 @@
 //!   * arma los inputs publicos EL MISMO con la raiz guardada on-chain (no acepta
 //!     una raiz que mande el cliente);
 //!   * deriva el agent_id de la `Address` del agente (la prueba no se presta);
-//!   * quema el nullifier por contexto (una prueba por trade, sin replay).
+//!   * quema el nullifier por contexto (una prueba por epoca, sin replay);
+//!   * labs (R3): el contexto es la epoca de la raiz vigente, no un trade, y el tier
+//!     probado queda guardado con su epoca.
 //! No mueve fondos: no toca el invariante no custodial del escrow.
 
 use soroban_sdk::{
@@ -69,6 +71,16 @@ enum Key {
     Nullifier(BytesN<32>),
     /// labs (R2): historial de raices, una por epoca. Nunca se reescribe.
     RootAt(u32),
+    /// labs (R3): ultimo tier probado por un agente.
+    Tier(Address),
+}
+
+/// labs (R3): tier probado y la epoca de la raiz contra la que se probo.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TierRecord {
+    pub tier: u32,
+    pub epoch: u32,
 }
 
 /// labs (R2): una raiz publicada, con su fecha.
@@ -92,7 +104,6 @@ pub struct TierProven {
     #[topic]
     pub agent: Address,
     pub tier: u32,
-    pub context: BytesN<32>,
     pub epoch: u32,
 }
 
@@ -188,9 +199,12 @@ impl AgentTierRegistry {
         to_field(&env, &Bytes::from_slice(&env, &buf[..s.len() as usize]))
     }
 
-    /// context = sha256(trade_id) con el primer byte en 0.
-    pub fn context_of(env: Env, trade_id: Bytes) -> BytesN<32> {
-        to_field(&env, &trade_id)
+    /// labs (R3): contexto de una epoca = el numero de epoca como campo. El prover lo
+    /// usa como input publico y para su nullifier.
+    pub fn context_for(env: Env, epoch: u32) -> BytesN<32> {
+        let mut b = [0u8; 32];
+        b[28..].copy_from_slice(&epoch.to_be_bytes());
+        BytesN::from_array(&env, &b)
     }
 
     pub fn is_used(env: Env, nullifier: BytesN<32>) -> bool {
@@ -204,16 +218,18 @@ impl AgentTierRegistry {
 
     /// Verifica que `agent` alcanza `tier` (1 Bronce, 2 Plata, 3 Oro) segun la raiz
     /// vigente, sin conocer sus numeros, y quema el nullifier del contexto.
+    /// labs (R3): el contexto lo pone el contrato (la epoca vigente), y el tier queda
+    /// guardado como `Tier(agent) -> (tier, epoca)`. Una prueba por agente y epoca.
     pub fn prove_tier(
         env: Env,
         agent: Address,
         tier: u32,
-        context: BytesN<32>,
         nullifier: BytesN<32>,
         proof: Bytes,
     ) -> Result<(), Error> {
         let (min_trades, min_rate) = tier_thresholds(tier).ok_or(Error::InvalidTier)?;
         let (root, epoch) = Self::root(env.clone())?;
+        let context = Self::context_for(env.clone(), epoch);
         let nkey = Key::Nullifier(nullifier.clone());
         if env.storage().persistent().has(&nkey) {
             return Err(Error::NullifierAlreadyUsed);
@@ -238,8 +254,21 @@ impl AgentTierRegistry {
         env.storage()
             .instance()
             .extend_ttl(INSTANCE_TTL_MIN, INSTANCE_TTL_EXTEND);
-        TierProven { agent, tier, context, epoch }.publish(&env);
+        let tier_key = Key::Tier(agent.clone());
+        env.storage()
+            .persistent()
+            .set(&tier_key, &TierRecord { tier, epoch });
+        env.storage()
+            .persistent()
+            .extend_ttl(&tier_key, NULLIFIER_TTL / 2, NULLIFIER_TTL);
+        TierProven { agent, tier, epoch }.publish(&env);
         Ok(())
+    }
+
+    /// labs (R3): ultimo tier probado por `agent` y su epoca, aunque ya no sea la
+    /// vigente. `get_tier` (R4) es la consulta que solo acepta la epoca vigente.
+    pub fn tier_record(env: Env, agent: Address) -> Option<TierRecord> {
+        env.storage().persistent().get(&Key::Tier(agent))
     }
 }
 
