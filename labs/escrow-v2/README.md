@@ -22,6 +22,7 @@ El escrow libera a quien debe (el comprador, con el secreto) o regresa el dinero
 | L1 | El constructor exige la firma del admin. En producción se guarda sin firma |
 | L1 | `decline` deja el trade en `Declined`, no en `Refunded`. Así se distingue un rechazo de un reembolso por vencimiento |
 | L1 | Nuevo estado `Resolved`, reservado para `resolve` (E5). Todavía ninguna función lo usa |
+| E1 | `lock` rechaza un `timeout_minutes` fuera de [mínimo, máximo] (`TimeoutOutOfRange`). Nace con 1 min y 24 h; el admin los cambia con `set_timeout_bounds` y se leen con `timeout_bounds`. El máximo no puede llegar al TTL de un trade (~30 días). El vencimiento se calcula con aritmética comprobada: un valor enorme da error en vez de abortar. Producción acepta 0 y aborta con valores enormes |
 
 Las siguientes funciones (E1–E12) están en el plan de labs.
 
@@ -35,8 +36,9 @@ Las siguientes funciones (E1–E12) están en el plan de labs.
 cargo test
 ```
 
-14 pruebas: las 9 de producción, más 5 de L1 que usan **firmas reales**, sin `mock_all_auths()`:
+21 pruebas: las 9 de producción, 5 de L1 y 7 de E1. Las de firmas usan **firmas reales**, sin `mock_all_auths()`:
 - el constructor falla sin la firma del admin, y la registra cuando la hay;
 - `decline` falla si solo firma el vendedor;
 - `release` falla si lo firma el vendedor, aunque tenga el secreto;
 - `refund` y `decline` terminan en estados distintos.
+- solo el admin cambia los límites de tiempo (E1).
