@@ -323,5 +323,34 @@ fn una_prueba_fallida_no_guarda_tier() {
     assert_eq!(c.client.tier_record(&c.lupe), None);
 }
 
+// ---- labs (R4): consulta de tier ----
+
+#[test]
+fn get_tier_sin_prueba_o_sin_raiz_da_none() {
+    let c = setup(false);
+    assert_eq!(c.client.get_tier(&c.lupe), None);
+    c.client.publish_root(&c.root);
+    assert_eq!(c.client.get_tier(&c.lupe), None);
+}
+
+#[test]
+fn get_tier_con_prueba_da_su_tier() {
+    let c = setup(true);
+    c.client.prove_tier(&c.lupe, &PLATA, &c.nullifier, &c.proof);
+    assert_eq!(c.client.get_tier(&c.lupe), Some(TierRecord { tier: PLATA, epoch: 1 }));
+    // Otro agente sin prueba sigue sin tier.
+    assert_eq!(c.client.get_tier(&Address::from_str(&c.env, BETO)), None);
+}
+
+#[test]
+fn get_tier_vence_con_una_epoca_nueva() {
+    let c = setup(true);
+    c.client.prove_tier(&c.lupe, &PLATA, &c.nullifier, &c.proof);
+    c.client.publish_root(&root_n(&c.env, 7));
+    // Epoca 2 sin prueba nueva: vencido, aunque el registro de la 1 sigue ahi.
+    assert_eq!(c.client.get_tier(&c.lupe), None);
+    assert_eq!(c.client.tier_record(&c.lupe), Some(TierRecord { tier: PLATA, epoch: 1 }));
+}
+
 #[allow(dead_code)]
 fn _unused(_s: String) {}

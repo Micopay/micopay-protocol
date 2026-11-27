@@ -270,6 +270,14 @@ impl AgentTierRegistry {
     pub fn tier_record(env: Env, agent: Address) -> Option<TierRecord> {
         env.storage().persistent().get(&Key::Tier(agent))
     }
+
+    /// labs (R4): tier vigente de `agent`: el que probo contra la raiz de la epoca
+    /// actual. Sin prueba, sin raiz publicada o con una prueba de una epoca vieja
+    /// (vencida), da `None`. Es la consulta que usaria otro contrato (X1).
+    pub fn get_tier(env: Env, agent: Address) -> Option<TierRecord> {
+        let current: u32 = env.storage().instance().get(&Key::Epoch).unwrap_or(0);
+        Self::tier_record(env, agent).filter(|record| current > 0 && record.epoch == current)
+    }
 }
 
 #[cfg(test)]
