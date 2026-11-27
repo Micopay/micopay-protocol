@@ -1,0 +1,17 @@
+{
+  "name": "agent-tier-bench",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mide en el navegador (o el WebView de la app) cuanto tarda generar la prueba agent_tier_v1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite"
+  },
+  "dependencies": {
+    "@aztec/bb.js": "0.87.0",
+    "@noir-lang/noir_js": "1.0.0-beta.9"
+  },
+  "devDependencies": {
+    "vite": "^6.4.6"
+  }
+}

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MicoPay · ZK en el teléfono</title>
+<style>
+  body{font-family:system-ui,sans-serif;background:#f6f1e7;color:#1b1b1b;margin:0;padding:16px;max-width:640px}
+  h1{font-size:20px;margin:0 0 4px}
+  p{margin:4px 0 12px;font-size:14px}
+  button{font:600 16px system-ui;padding:12px 18px;border:2px solid #1b1b1b;background:#ff6a1a;color:#1b1b1b;border-radius:4px;width:100%}
+  button:disabled{opacity:.5}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px}
+  td{padding:6px 4px;border-bottom:1px solid #d9cfbd}
+  td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  pre{white-space:pre-wrap;word-break:break-all;font-size:12px;background:#fff;border:1px solid #d9cfbd;padding:8px}
+  .ok{color:#14733a}.bad{color:#b3261e}
+</style>
+</head>
+<body>
+<h1>ZK en el teléfono · prueba de tier</h1>
+<p>Genera en este dispositivo la prueba "Lupe es Plata" (circuito <code>agent_tier_v1</code>, la misma VK que el contrato en testnet) y mide cuánto tarda.</p>
+<button id="go">Generar prueba</button>
+<table id="t"></table>
+<pre id="out"></pre>
+<script type="module" src="/main.js"></script>
+</body>
+</html>
