@@ -64,7 +64,25 @@ Al final:
 - `stats` del vendedor: 1 completada, 1 reembolsada, 1 rechazada, 1 disputa abierta, 1 perdida; del comprador, igual, sin disputa perdida (E6). Los trades de Lupe y de E8 no se aceptaron y no cuentan;
 - **saldo del contrato: 0**. Todos los trades cerrados y las comisiones cobradas.
 
-No se probó en cadena el `refund` desde D (7 días). Ese caso lo cubre `test_state_table`.
+Segunda vuelta, con plazos cortos para probar el reembolso desde D y dar transacción a las funciones que faltaban:
+
+| Paso | Transacciones |
+|---|---|
+| E3/E4: `set_claim_margin` 1 min y `set_dispute_window` 1 min, para no esperar 7 días | [`7775f369…`](https://stellar.expert/explorer/testnet/tx/7775f369e0ba91b4f86a5f5cba9fe505b5c21a204753cfaaa5e219dd684f495c) · [`540db248…`](https://stellar.expert/explorer/testnet/tx/540db24859ef15a1845b1efa391f05400509e95cf11f407bf6f57fcdb92074f2) |
+| D1: `lock` 1 min → `accept` → en T, `report_paid` → el árbitro **no actúa** → `refund` antes de D se rechazó con `#24` → **`refund` desde D pasa** | [`ad11219e…`](https://stellar.expert/explorer/testnet/tx/ad11219e8c73d2520171d1b9befc5a30c28fa7e1edc6271319278568974a4f4a) · [`63698d49…`](https://stellar.expert/explorer/testnet/tx/63698d49b0a825a0ca43293b857ace5786350ef5b5940374e100be4cafb0005b) · [`ef53d265…`](https://stellar.expert/explorer/testnet/tx/ef53d265bfa7523f9b2a0130f4cca7824357a14242eec510e8f8b93a9e0ef527) · [`3a709317…`](https://stellar.expert/explorer/testnet/tx/3a70931726bb0028c7bab5e742742746757e8044e0e762c8e3a27d6bdce5cf9c) |
+| D2: `lock` 1 min → `accept` → `report_paid` → `resolve` **a favor del vendedor** (le regresa monto + comisión) | [`6481998a…`](https://stellar.expert/explorer/testnet/tx/6481998a731091d6c7ba801bb26867e4c47e0745a3d75750d67bfd2260ff806e) · [`562479fd…`](https://stellar.expert/explorer/testnet/tx/562479fd1b094a5b3554e5d7d0ac7e9d3bae0b42643b6eec4354a57f1fd880d0) · [`94ebd915…`](https://stellar.expert/explorer/testnet/tx/94ebd915d88dca9ed6cf15574cda348968f42dbc28f889deb3f6cbd0ac9603e3) · [`d3154ea1…`](https://stellar.expert/explorer/testnet/tx/d3154ea178d46e2b6f8833a55cd264d9c6c3e030204eeebad129f1d47c47eb2b) |
+| E2: `set_fee_cap` a 80 bps y de regreso a 100 | [`8ed14358…`](https://stellar.expert/explorer/testnet/tx/8ed14358568da2eb0863cdfaf13e3a12957ef519049e752adcf09617bb0ff7c7) · [`18616bec…`](https://stellar.expert/explorer/testnet/tx/18616bec13494db883ee26af54631fefabef2b67da8216955219f733755b3946) |
+| E1: `set_timeout_bounds` a 1–720 min y de regreso a 1–1440 | [`fc578f7d…`](https://stellar.expert/explorer/testnet/tx/fc578f7dcebf49bc7a3d3e1bdb55cf76d31b5e07c12a28067b07a5a6c10d6671) · [`d9f80269…`](https://stellar.expert/explorer/testnet/tx/d9f80269229b69185ed7170ad9b9a39fdb49e260526a8756ab0eff2f9e76ef2f) |
+| X1: `clear_tier_gate` y `set_tier_gate` de regreso | [`5f43b443…`](https://stellar.expert/explorer/testnet/tx/5f43b44321747b7628bd9e46a853964c200b12829f01e62ae7692073e6736704) · [`fe382e22…`](https://stellar.expert/explorer/testnet/tx/fe382e2282d273b7fbd16f1c4de3c6fca0d888df121d1a0b23a6374c7af1fa64) |
+| E9: `propose_admin` → `accept_admin` firmado por el nuevo admin (`GCW5DEX6…OTHL`). Después, `set_fee_cap` ya pedía la firma del nuevo, no la del anterior, y no se mandó. Luego el admin regresó, también en dos pasos | [`94891a0d…`](https://stellar.expert/explorer/testnet/tx/94891a0dc69bc27adb3c5571af1739569c76ee1414d2c709c1ac3662eab3693c) · [`b10f7136…`](https://stellar.expert/explorer/testnet/tx/b10f7136fca4e83297f2289ce994064f4b2cc6c6599c9a97b14e46b711dfbaaa) · [`29b2db21…`](https://stellar.expert/explorer/testnet/tx/29b2db2114296955c96cd64cc41df6416ff79f64730da54784b2a7817409e330) · [`5a33d155…`](https://stellar.expert/explorer/testnet/tx/5a33d15578da1c6a2e5b99fa9c9da19edacba7288103538249d6646b02a62bc0) |
+| E3/E4: margen de regreso a 15 min y plazo de disputa a 7 días | [`2741b37b…`](https://stellar.expert/explorer/testnet/tx/2741b37bf183bf5832a6ba670f15f30412013cb910d28885b8001ec1f6894b1a) · [`9f74d6f2…`](https://stellar.expert/explorer/testnet/tx/9f74d6f233051fbeca92040a15b58eff8be993db67b1a7d2f490a12e389e16cd) |
+
+Al final de las dos vueltas:
+- `stats` del vendedor: 1 completada, 2 reembolsadas, 1 rechazada, 3 disputas abiertas, 1 perdida (la de C). Del comprador: lo mismo, y su disputa perdida es la de D2;
+- admin, margen (15 min) y plazo (7 días) como al principio;
+- **saldo del contrato: 0**, sin comisiones pendientes.
+
+Cada función nueva que escribe tiene por lo menos una transacción en testnet.
 
 ## Plazos en ledgers, no en reloj
 
