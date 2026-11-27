@@ -519,7 +519,16 @@ fn test_e1_invalid_config_is_rejected() {
     let escrow = EscrowFactoryClient::new(&env, &contract_id);
     let ttl_minutes = 518_400 / 12; // un trade no puede vivir mas que su TTL
     // labs (E3): la vida cuenta el margen de 15 min.
-    for (min, max) in [(0u32, 10u32), (20, 10), (1, ttl_minutes), (1, ttl_minutes - 15), (1, u32::MAX)] {
+    // labs (E4): y el plazo de disputa de 7 dias.
+    let dispute = 7 * 24 * 60;
+    for (min, max) in [
+        (0u32, 10u32),
+        (20, 10),
+        (1, ttl_minutes),
+        (1, ttl_minutes - 15),
+        (1, ttl_minutes - 15 - dispute),
+        (1, u32::MAX),
+    ] {
         assert_eq!(
             escrow.try_set_timeout_bounds(&min, &max),
             Err(Ok(EscrowError::InvalidConfig)),
@@ -529,7 +538,7 @@ fn test_e1_invalid_config_is_rejected() {
     // Lo rechazado no cambia nada.
     assert_eq!(escrow.timeout_bounds().max_minutes, 1_440);
     // Justo debajo del TTL si se acepta, y min = max tambien.
-    escrow.set_timeout_bounds(&1u32, &(ttl_minutes - 15 - 1));
+    escrow.set_timeout_bounds(&1u32, &(ttl_minutes - 15 - dispute - 1));
     escrow.set_timeout_bounds(&60u32, &60u32);
 }
 
@@ -1476,7 +1485,7 @@ fn test_e3_margin_config() {
     let escrow = EscrowFactoryClient::new(&env, &contract_id);
     // Margen 0, o tan grande que el trade viviria mas que su TTL.
     assert_eq!(escrow.try_set_claim_margin(&0), Err(Ok(EscrowError::InvalidConfig)));
-    let too_long = 518_400 / 12 - 1_440;
+    let too_long = 518_400 / 12 - 1_440 - 7 * 24 * 60; // E4: cuenta la disputa
     assert_eq!(escrow.try_set_claim_margin(&too_long), Err(Ok(EscrowError::InvalidConfig)));
     escrow.set_claim_margin(&(too_long - 1));
     // Con ese margen, un maximo mas largo ya no cabe.
@@ -1526,4 +1535,213 @@ fn test_e3_extended_trade_keeps_its_margin() {
     assert_eq!(escrow.try_refund(&id), Err(Ok(EscrowError::ClaimWindowOpen)));
     go_to(&env, t + 120 + MARGIN);
     escrow.refund(&id);
+}
+
+// ── labs (E4): "ya pague" ─────────────────────────────────────────────────────
+
+const DISPUTE: u32 = 7 * 24 * 60 * 12;
+
+fn trade_at_t(tag: &[u8]) -> (Env, EscrowFactoryClient<'static>, Address, Address, Address, BytesN<32>, Bytes, u32) {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let (secret, hash) = tagged_hash(&env, tag);
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &8i128, &hash, &1u32);
+    let t = escrow.get_trade(&id).timeout_ledger;
+    (env, escrow, contract_id, seller, buyer, id, secret, t)
+}
+
+#[test]
+fn test_e4_default_window_is_7_days() {
+    let (_, escrow, _, _, _, id, _, _) = trade_at_t(b"siete");
+    assert_eq!(escrow.dispute_window(), 7 * 24 * 60);
+    let trade = escrow.get_trade(&id);
+    assert_eq!(trade.dispute_ledgers, DISPUTE);
+    assert_eq!(trade.dispute_deadline, 0);
+}
+
+#[test]
+fn test_e4_only_between_t_and_g() {
+    let (env, escrow, _, _, _, id, _, t) = trade_at_t(b"ventana");
+    go_to(&env, t - 1);
+    assert_eq!(escrow.try_report_paid(&id), Err(Ok(EscrowError::TimeoutNotReached)));
+    go_to(&env, t + MARGIN);
+    assert_eq!(escrow.try_report_paid(&id), Err(Ok(EscrowError::ClaimWindowClosed)));
+    assert_eq!(escrow.get_trade(&id).status, TradeStatus::Locked);
+    go_to(&env, t);
+    assert_eq!(escrow.report_paid(&id), t + DISPUTE);
+    let trade = escrow.get_trade(&id);
+    assert_eq!(trade.status, TradeStatus::Disputed);
+    assert_eq!(trade.dispute_deadline, t + DISPUTE);
+}
+
+#[test]
+fn test_e4_only_the_buyer_reports() {
+    let (env, escrow, contract_id, seller, buyer, id, _, t) = trade_at_t(b"firma");
+    go_to(&env, t);
+    let invoke = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "report_paid",
+        args: (id.clone(),).into_val(&env),
+        sub_invokes: &[],
+    };
+    env.mock_auths(&[auth_for(&seller, &invoke)]);
+    assert!(escrow.try_report_paid(&id).is_err());
+    assert_eq!(escrow.get_trade(&id).status, TradeStatus::Locked);
+    env.mock_auths(&[auth_for(&buyer, &invoke)]);
+    escrow.report_paid(&id);
+    assert_eq!(escrow.get_trade(&id).status, TradeStatus::Disputed);
+}
+
+#[test]
+fn test_e4_cannot_report_twice() {
+    let (env, escrow, _, _, _, id, _, t) = trade_at_t(b"dos");
+    go_to(&env, t);
+    escrow.report_paid(&id);
+    go_to(&env, t + 1);
+    assert_eq!(escrow.try_report_paid(&id), Err(Ok(EscrowError::TradeNotLocked)));
+    assert_eq!(escrow.get_trade(&id).dispute_deadline, t + DISPUTE);
+}
+
+#[test]
+fn test_e4_race_with_refund_at_g_minus_1() {
+    // Reporte primero: el reembolso ya no puede.
+    let (env, escrow, _, _, _, id, _, t) = trade_at_t(b"g1-a");
+    go_to(&env, t + MARGIN - 1);
+    escrow.report_paid(&id);
+    assert_eq!(escrow.try_refund(&id), Err(Ok(EscrowError::DisputeOpen)));
+
+    // Reembolso primero: falla por el margen, y el reporte si entra.
+    let (env2, escrow2, _, _, _, id2, _, t2) = trade_at_t(b"g1-b");
+    go_to(&env2, t2 + MARGIN - 1);
+    assert_eq!(escrow2.try_refund(&id2), Err(Ok(EscrowError::ClaimWindowOpen)));
+    escrow2.report_paid(&id2);
+    assert_eq!(escrow2.get_trade(&id2).status, TradeStatus::Disputed);
+}
+
+#[test]
+fn test_e4_race_with_refund_at_g() {
+    // En G el margen termino: el reporte llega tarde y el reembolso pasa.
+    let (env, escrow, _, _, _, id, _, t) = trade_at_t(b"g-a");
+    go_to(&env, t + MARGIN);
+    assert_eq!(escrow.try_report_paid(&id), Err(Ok(EscrowError::ClaimWindowClosed)));
+    escrow.refund(&id);
+    assert_eq!(escrow.get_trade(&id).status, TradeStatus::Refunded);
+
+    let (env2, escrow2, _, _, _, id2, _, t2) = trade_at_t(b"g-b");
+    go_to(&env2, t2 + MARGIN);
+    escrow2.refund(&id2);
+    assert_eq!(escrow2.try_report_paid(&id2), Err(Ok(EscrowError::TradeNotLocked)));
+}
+
+#[test]
+fn test_e4_refund_waits_until_d() {
+    let (env, escrow, _, seller, _, id, _, t) = trade_at_t(b"d");
+    let token_client = token::Client::new(&env, &escrow_token(&env, &escrow, &id));
+    let before = token_client.balance(&seller);
+    let report = t + MARGIN - 1;
+    go_to(&env, report);
+    let d = escrow.report_paid(&id);
+    assert_eq!(d, report + DISPUTE);
+    go_to(&env, d - 1);
+    assert_eq!(escrow.try_refund(&id), Err(Ok(EscrowError::DisputeOpen)));
+    // Desde D, si nadie resolvio, el vendedor recupera monto + comision.
+    go_to(&env, d);
+    escrow.refund(&id);
+    assert_eq!(escrow.get_trade(&id).status, TradeStatus::Refunded);
+    assert_eq!(token_client.balance(&seller), before + 1_008);
+}
+
+#[test]
+fn test_e4_deadline_never_before_g() {
+    // Con un plazo de disputa mas corto que el margen, D se queda en G.
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    escrow.set_claim_margin(&60);
+    escrow.set_dispute_window(&1);
+    let (_, hash) = tagged_hash(&env, b"corto");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &1u32);
+    let t = escrow.get_trade(&id).timeout_ledger;
+    go_to(&env, t);
+    assert_eq!(escrow.report_paid(&id), t + 60 * 12);
+    go_to(&env, t + 60 * 12 - 1);
+    assert_eq!(escrow.try_refund(&id), Err(Ok(EscrowError::DisputeOpen)));
+}
+
+#[test]
+fn test_e4_buyer_can_still_release_or_decline_in_dispute() {
+    let (env, escrow, _, _, buyer, id, secret, t) = trade_at_t(b"cobra-disputa");
+    go_to(&env, t);
+    escrow.report_paid(&id);
+    escrow.release(&id, &secret);
+    assert_eq!(escrow.get_trade(&id).status, TradeStatus::Released);
+    assert_eq!(token::Client::new(&env, &escrow_token(&env, &escrow, &id)).balance(&buyer), 1_000);
+    assert_eq!(escrow.accrued_fees(), 8);
+
+    let (env2, escrow2, _, _, _, id2, _, t2) = trade_at_t(b"rechaza-disputa");
+    go_to(&env2, t2);
+    escrow2.report_paid(&id2);
+    escrow2.accept(&id2);
+    escrow2.decline(&id2);
+    assert_eq!(escrow2.get_trade(&id2).status, TradeStatus::Declined);
+}
+
+#[test]
+fn test_e4_disputed_trade_cannot_be_extended_and_reports_in_pause() {
+    let (env, escrow, _, _, _, id, _, t) = trade_at_t(b"pausa");
+    escrow.pause();
+    go_to(&env, t);
+    escrow.report_paid(&id);
+    escrow.unpause();
+    assert_eq!(escrow.try_extend(&id, &(t + 120)), Err(Ok(EscrowError::TradeNotLocked)));
+}
+
+#[test]
+fn test_e4_report_keeps_the_trade_alive_until_d() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+    let (env, escrow, contract_id, _, _, id, _, t) = trade_at_t(b"vida");
+    go_to(&env, t);
+    let d = escrow.report_paid(&id);
+    let ttl = env.as_contract(&contract_id, || {
+        env.storage().persistent().get_ttl(&DataKey::Trade(id.clone()))
+    });
+    assert!(t + ttl > d, "el trade se archivaria antes de D");
+    // El reporte deja al trade con la vida completa (~30 dias), no con lo que le
+    // quedaba del lock.
+    assert_eq!(ttl, 518_400);
+}
+
+#[test]
+fn test_e4_new_window_does_not_touch_open_trades() {
+    let (env, escrow, _, _, _, id, _, t) = trade_at_t(b"plazo-viejo");
+    escrow.set_dispute_window(&60);
+    go_to(&env, t);
+    assert_eq!(escrow.report_paid(&id), t + DISPUTE);
+}
+
+#[test]
+fn test_e4_window_config() {
+    let (env, contract_id, admin, seller, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    assert_eq!(escrow.try_set_dispute_window(&0), Err(Ok(EscrowError::InvalidConfig)));
+    let too_long = 518_400 / 12 - 1_440 - 15;
+    assert_eq!(escrow.try_set_dispute_window(&too_long), Err(Ok(EscrowError::InvalidConfig)));
+    escrow.set_dispute_window(&(too_long - 1));
+
+    let invoke = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "set_dispute_window",
+        args: (60u32,).into_val(&env),
+        sub_invokes: &[],
+    };
+    env.mock_auths(&[auth_for(&seller, &invoke)]);
+    assert!(escrow.try_set_dispute_window(&60).is_err());
+    env.mock_auths(&[auth_for(&admin, &invoke)]);
+    escrow.set_dispute_window(&60);
+    assert_eq!(escrow.dispute_window(), 60);
+}
+
+fn escrow_token(env: &Env, escrow: &EscrowFactoryClient, _id: &BytesN<32>) -> Address {
+    env.as_contract(&escrow.address, || {
+        env.storage().instance().get::<_, Address>(&DataKey::TokenId).unwrap()
+    })
 }
