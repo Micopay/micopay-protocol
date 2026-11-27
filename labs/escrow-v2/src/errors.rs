@@ -21,4 +21,6 @@ pub enum EscrowError {
     InvalidConfig = 13,
     /// labs (E1): el ledger de vencimiento no cabe en u32.
     LedgerOverflow = 14,
+    /// labs (E2): la comision de MicoPay pasa el tope (`fee_cap_bps`).
+    FeeAboveCap = 15,
 }
