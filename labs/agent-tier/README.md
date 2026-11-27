@@ -53,6 +53,13 @@ Lo que se intentó y falla: presumir un tier más alto, pedir un umbral a la med
 - Simulados y rechazados: Oro y Bronce con la prueba de Plata (`#5`), tier 4 o 30 (`#6`), reuso (`#4`), otra cuenta (`#5`).
 - **Costo:** 95.3 M de 400 M instrucciones por tx (~24 %; el límite es igual en mainnet), ~0.05 XLM.
 
+**Versión de labs (R2–R4)**, desplegada el 2026-11-27 desde `main` (f4347c9): [`CDQO4V75GDUYM6BPX666LGHKDQA7QBV5CFBHINQNABL7OJCAKPCMINCS`](https://stellar.expert/explorer/testnet/contract/CDQO4V75GDUYM6BPX666LGHKDQA7QBV5CFBHINQNABL7OJCAKPCMINCS). Es otro contrato: el de arriba es el de #533.
+- Despliegue: [`8e4e736a…`](https://stellar.expert/explorer/testnet/tx/8e4e736ad8336a5129df79ed5e5262b585165e83e49c7535bf80113570cbe5fb).
+- `publish_root`, época 1 (R2): [`a0e90131…`](https://stellar.expert/explorer/testnet/tx/a0e901315c6476fa8784bb6a866a7d04a4f15e45a25b1d73ebf58808ea5a91c4).
+- `prove_tier` de Lupe, Plata, con la prueba de `contract/fixtures` para la época 1 (R3): [`dc2c22ed…`](https://stellar.expert/explorer/testnet/tx/dc2c22edf591e8a92739085c52f34400b4f76de877ff75e4b49eaede4f49b4f2).
+- `get_tier(Lupe)` = Plata en la época 1, y `None` para una cuenta sin prueba (R4).
+- El escrow de labs lo consultó en un `lock` de 1000 XLM (X1, ver `labs/escrow-v2`).
+
 ## En el teléfono
 
 [`circuit/bench`](circuit/bench/README.md) genera la prueba en el navegador con `noir_js` + `bb.js` (el mismo motor que el WebView de Capacitor).
