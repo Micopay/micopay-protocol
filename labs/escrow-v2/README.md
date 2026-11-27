@@ -24,10 +24,11 @@ El escrow libera a quien debe (el comprador, con el secreto) o regresa el dinero
 | L1 | Nuevo estado `Resolved`, reservado para `resolve` (E5). Todavía ninguna función lo usa |
 | E1 | `lock` rechaza un `timeout_minutes` fuera de [mínimo, máximo] (`TimeoutOutOfRange`). Nace con 1 min y 24 h; el admin los cambia con `set_timeout_bounds` y se leen con `timeout_bounds`. El máximo no puede llegar al TTL de un trade (~30 días). El vencimiento se calcula con aritmética comprobada: un valor enorme da error en vez de abortar. Producción acepta 0 y aborta con valores enormes |
 | E2 | `lock` rechaza una comisión de MicoPay mayor que el tope (`FeeAboveCap`): piso de `monto × fee_cap_bps / 10000`. Nace con 100 bps (1 %); el admin lo cambia con `set_fee_cap` (0 a 10000) y se lee con `fee_cap`. Solo afecta a locks futuros. **La comisión del agente no se toca:** va dentro del precio y el contrato no la ve. Producción no tiene tope en cadena |
-| E7 | Pausa de emergencia: `pause` y `unpause` (solo el admin), `is_paused` para leerla. En pausa, `lock` falla con `Paused` (y `extend`, cuando exista E8). **Las salidas siguen**: `release`, `decline` y `refund` funcionan en pausa, para que nadie quede con su dinero atrapado. Producción no tiene pausa |
+| E7 | Pausa de emergencia: `pause` y `unpause` (solo el admin), `is_paused` para leerla. En pausa, `lock` y `extend` (E8) fallan con `Paused`. **Las salidas siguen**: `release`, `decline` y `refund` funcionan en pausa, para que nadie quede con su dinero atrapado. Producción no tiene pausa |
 | E9 | Cambio de admin en dos pasos: `propose_admin(nuevo)` (firma el admin actual) y `accept_admin()` (firma el nuevo). El admin actual conserva todos sus permisos hasta que el nuevo acepta, y una propuesta nueva reemplaza a la anterior. Se leen con `admin` y `pending_admin`. Así el contrato nunca queda en manos de una dirección que nadie controla. Producción no puede cambiar de admin |
 | E11 | Comisiones acumuladas: `release` ya no manda la comisión a la billetera de MicoPay; la suma a un saldo interno (`accrued_fees`). `claim_fees(to)` (solo el admin) la cobra aparte. Así, si la billetera de MicoPay está congelada o sin trustline, **al comprador sí se le paga**. En producción, ese `release` fallaría. Siempre se cumple: saldo del contrato = Σ(monto + comisión de los trades abiertos) + comisiones acumuladas |
 | E12 | El comprador acepta: `accept(trade_id)`, con su firma y mientras el trade siga abierto, marca `accepted` en el trade. No cambia cómo se libera ni a quién se paga; sirve para que solo los trades aceptados cuenten en las estadísticas (E6). Así nadie infla o ensucia una reputación con trades entre cuentas propias o con un comprador que nunca firmó |
+| E8 | Extender el plazo: `extend(trade_id, nuevo_vencimiento)`, con **la firma de las dos partes** sobre el mismo nuevo vencimiento. Solo en `Locked`, antes de vencer y fuera de pausa. El nuevo vencimiento tiene que ser posterior al actual y no pasar el tope de vida del trade: al bloquear, el trade guarda `lock_ledger` y `max_total_ledgers` (el máximo de E1 en ese momento), así que si el admin cambia los límites después, el trade conserva los suyos. Producción no puede extender |
 
 Las siguientes funciones (E1–E12) están en el plan de labs.
 
@@ -41,7 +42,7 @@ Las siguientes funciones (E1–E12) están en el plan de labs.
 cargo test
 ```
 
-44 pruebas: las 9 de producción, 5 de L1, 7 de E1, 7 de E2, 3 de E7, 5 de E9, 4 de E11 y 4 de E12. Las de firmas usan **firmas reales**, sin `mock_all_auths()`:
+50 pruebas: las 9 de producción, 5 de L1, 7 de E1, 7 de E2, 3 de E7, 5 de E9, 4 de E11, 4 de E12 y 6 de E8. Las de firmas usan **firmas reales**, sin `mock_all_auths()`:
 - el constructor falla sin la firma del admin, y la registra cuando la hay;
 - `decline` falla si solo firma el vendedor;
 - `release` falla si lo firma el vendedor, aunque tenga el secreto;
@@ -50,3 +51,4 @@ cargo test
 - solo el admin propone a otro, solo el propuesto acepta, y el admin anterior pierde sus permisos (E9).
 - solo el admin cobra las comisiones acumuladas (E11).
 - solo el comprador acepta su trade, no el vendedor (E12).
+- `extend` necesita las dos firmas, y una firma sobre un vencimiento no sirve para otro (E8).
