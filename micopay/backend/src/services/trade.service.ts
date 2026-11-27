@@ -2366,6 +2366,92 @@ export async function getCashHandoff(tradeId: string): Promise<CashHandoff | nul
 }
 
 /**
+ * Retiro: el agente (buyer del escrow) ya entrego el efectivo y lo deja en
+ * cadena con report_paid(), antes de liberar. Si la liberacion falla o tarda,
+ * el contrato no deja que el cliente se reembolse en 24 horas. Devuelve la
+ * operacion solo si la constancia aplica y todavia no se dejo.
+ */
+async function getDeliveryReportTarget(tradeId: string, userId: string) {
+  const trade = await db.getOne('SELECT * FROM trades WHERE id = $1', [tradeId]);
+  if (!trade) throw new NotFoundError('TRADE_NOT_FOUND', 'El intercambio no existe', 'Trade not found');
+  if (trade.flow !== 'cashout' || trade.buyer_id !== userId || trade.provider_id !== userId) {
+    throw new ForbiddenError(
+      'DELIVERY_REPORT_NOT_ALLOWED',
+      'Solo el agente de un retiro puede dejar la constancia de entrega.',
+      `User ${userId} cannot report delivery on trade ${tradeId}`,
+    );
+  }
+  if (trade.status !== 'revealing' || trade.release_tx_hash) return null;
+  const handoff = await getCashHandoff(tradeId);
+  if (!handoff || handoff.provider_id !== userId) {
+    throw new ConflictError(
+      'CASH_HANDOFF_REQUIRED',
+      'Escanea el código del cliente antes de dejar la constancia.',
+      `Trade ${tradeId} is a cashout with no confirmed cash handoff`,
+    );
+  }
+  if (!escrowContractSupportsPaidReport(trade)) return null;
+  const reported = await db.getOne(
+    `SELECT id FROM audit_log WHERE trade_id = $1 AND metadata->>'paid_report_tx_hash' IS NOT NULL`,
+    [tradeId],
+  );
+  return reported ? null : trade;
+}
+
+/** Arma report_paid() para que lo firme el agente. `{ onchain: false }` si no aplica. */
+export async function prepareDeliveryReport(request: FastifyRequest, tradeId: string, userId: string) {
+  const trade = await getDeliveryReportTarget(tradeId, userId);
+  if (!trade) return { onchain: false as const };
+  const agent = await db.getOne<{ stellar_address: string }>(
+    'SELECT stellar_address FROM users WHERE id = $1',
+    [userId],
+  );
+  if (!agent) throw new NotFoundError('User not found');
+  const tradeIdBytes = createHash('sha256').update(Buffer.from(trade.secret_hash, 'hex')).digest();
+  const { xdr, networkPassphrase } = await preparePaidReportTx({
+    request,
+    contractId: escrowContractForTrade(trade),
+    buyerAddress: agent.stellar_address,
+    tradeIdBytes,
+  });
+  return { onchain: true as const, xdr, network_passphrase: networkPassphrase };
+}
+
+/** Envia la constancia de entrega firmada por el agente y la registra. */
+export async function recordDeliveryReport(
+  request: FastifyRequest,
+  tradeId: string,
+  userId: string,
+  signedXdr: string,
+): Promise<{ paid_report_tx_hash: string | null }> {
+  const trade = await getDeliveryReportTarget(tradeId, userId);
+  if (!trade) return { paid_report_tx_hash: null };
+  const agent = await db.getOne<{ stellar_address: string }>(
+    'SELECT stellar_address FROM users WHERE id = $1',
+    [userId],
+  );
+  if (!agent) throw new NotFoundError('User not found');
+  const tradeIdBytes = createHash('sha256').update(Buffer.from(trade.secret_hash, 'hex')).digest();
+  const { txHash } = await submitPaidReportTx({
+    request,
+    contractId: escrowContractForTrade(trade),
+    signedXdr,
+    buyerAddress: agent.stellar_address,
+    tradeIdBytes,
+  });
+  await assertNotReplayed(txHash, 'trade/delivery-report', userId);
+  await insertTradeAuditEvent({
+    tradeId,
+    fromState: trade.status,
+    toState: trade.status,
+    actor: userId,
+    requestId: getRequestId(request),
+    metadata: { success: true, delivery_reported: true, paid_report_tx_hash: txHash },
+  });
+  return { paid_report_tx_hash: txHash };
+}
+
+/**
  * Constancia de que el efectivo ya cambio de manos (D2, D4). Con ella la app no
  * cancela, no ofrece decline y no reembolsa: el caso va a soporte.
  *

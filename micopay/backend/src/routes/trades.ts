@@ -349,6 +349,29 @@ export async function tradeRoutes(app: FastifyInstance) {
    * and transitions the trade to 'refunded' status. Returns `{ status, refund_tx_hash }`.
    * Errors use `{ error, message }` via the global Fastify error handler.
    */
+  /** Agente de un retiro: arma report_paid() (constancia de entrega) para firmarlo. */
+  app.post('/trades/:id/delivery-report/prepare', async (request) => {
+    const { id } = request.params as { id: string };
+    return tradeService.prepareDeliveryReport(request, id, request.user.id);
+  });
+
+  app.post('/trades/:id/delivery-report', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['signed_xdr'],
+        properties: {
+          signed_xdr: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request) => {
+    const { id } = request.params as { id: string };
+    const { signed_xdr } = request.body as { signed_xdr: string };
+    return tradeService.recordDeliveryReport(request, id, request.user.id, signed_xdr);
+  });
+
   app.post('/trades/:id/refund/prepare', async (request) => {
     const { id } = request.params as { id: string };
     return tradeService.prepareRefundTrade(request, id, request.user.id);

@@ -1124,6 +1124,26 @@ export interface MerchantConfirmResult {
 }
 
 /**
+ * Retiro: el agente deja en cadena la constancia de entrega (report_paid)
+ * antes de liberar. Devuelve el hash, o null si el contrato no la tiene o ya
+ * se dejo.
+ */
+export async function reportCashDelivery(tradeId: string, token: string): Promise<string | null> {
+  try {
+    const prepareRes = await http.post(`/trades/${tradeId}/delivery-report/prepare`, {}, authHeaders(token));
+    const prepared = prepareRes.data as { onchain: false } | { onchain: true; xdr: string; network_passphrase: string };
+    if (!prepared.onchain) return null;
+    const trade = await getTrade(tradeId, token);
+    await validatePreparedEscrowTx(prepared.xdr, prepared.network_passphrase, trade, 'report_paid');
+    const signedXdr = await signTransactionXdr(prepared.xdr, prepared.network_passphrase, 'report_paid');
+    const res = await http.post(`/trades/${tradeId}/delivery-report`, { signed_xdr: signedXdr }, authHeaders(token));
+    return (res.data as { paid_report_tx_hash: string | null }).paid_report_tx_hash;
+  } catch (e: unknown) {
+    throw toApiError(extractApiErrorPayload(e));
+  }
+}
+
+/**
  * Merchant scans a QR containing a trade_id and calls the backend to validate
  * that the trade exists, the merchant is a participant, and the trade state is valid.
  */
