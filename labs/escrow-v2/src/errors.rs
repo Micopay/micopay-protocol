@@ -35,4 +35,6 @@ pub enum EscrowError {
     ExtensionAboveCap = 20,
     /// labs (X1): trade grande y ningun participante tiene el tier minimo vigente.
     TierRequired = 21,
+    /// labs (E3): el trade ya vencio, pero sigue el margen del comprador (antes de G).
+    ClaimWindowOpen = 22,
 }

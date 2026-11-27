@@ -32,6 +32,9 @@ pub struct TradeEscrow {
     /// Se copia del maximo de E1 al bloquear: si el admin lo cambia despues, este
     /// trade conserva el suyo.
     pub max_total_ledgers: u32,
+    /// labs (E3): margen en ledgers despues del vencimiento. `refund` espera hasta
+    /// G = `timeout_ledger` + este margen. Se copia al bloquear.
+    pub margin_ledgers: u32,
 }
 
 /// labs (E1): limites del tiempo de bloqueo, en minutos. Los fija el admin.
@@ -80,4 +83,6 @@ pub enum DataKey {
     AccruedFees,
     /// labs (X1): regla de tier para trades grandes. Sin la llave, no hay regla.
     TierGate,
+    /// labs (E3): margen antes del reembolso, en minutos.
+    ClaimMargin,
 }

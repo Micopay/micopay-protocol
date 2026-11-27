@@ -32,6 +32,8 @@ const LEDGERS_PER_MINUTE: u32 = 12;
 // Limites con los que nace el contrato. Produccion usa 120 min.
 const DEFAULT_MIN_TIMEOUT_MINUTES: u32 = 1;
 const DEFAULT_MAX_TIMEOUT_MINUTES: u32 = 1_440; // 24 h
+// labs (E3): margen con el que nace el contrato (decidido el 2026-11-27).
+const DEFAULT_CLAIM_MARGIN_MINUTES: u32 = 15;
 
 // labs (E2): tope de la comision de MicoPay, en puntos base (100 = 1 %).
 // Produccion cobra 0.8 % fijo, que el backend calcula. La comision del agente va
@@ -55,17 +57,31 @@ fn max_platform_fee(amount: i128, fee_cap_bps: u32) -> Result<i128, EscrowError>
 
 /// Un trade no puede vivir mas que el TTL que el contrato le extiende: si no, se
 /// archivaria con el dinero adentro antes de vencer.
-fn validate_timeout_bounds(min_minutes: u32, max_minutes: u32) -> Result<(), EscrowError> {
-    if min_minutes == 0 || min_minutes > max_minutes {
+/// labs (E3): la vida que cuenta es el maximo de E1 mas el margen.
+fn validate_timeout_bounds(
+    min_minutes: u32,
+    max_minutes: u32,
+    margin_minutes: u32,
+) -> Result<(), EscrowError> {
+    if min_minutes == 0 || min_minutes > max_minutes || margin_minutes == 0 {
         return Err(EscrowError::InvalidConfig);
     }
-    let max_ledgers = max_minutes
-        .checked_mul(LEDGERS_PER_MINUTE)
+    let lifetime = max_minutes
+        .checked_add(margin_minutes)
+        .and_then(|minutes| minutes.checked_mul(LEDGERS_PER_MINUTE))
         .ok_or(EscrowError::InvalidConfig)?;
-    if max_ledgers >= TTL_EXTEND {
+    if lifetime >= TTL_EXTEND {
         return Err(EscrowError::InvalidConfig);
     }
     Ok(())
+}
+
+/// labs (E3): G, el ledger desde el que `refund` funciona.
+fn grace_ledger(trade: &TradeEscrow) -> Result<u32, EscrowError> {
+    trade
+        .timeout_ledger
+        .checked_add(trade.margin_ledgers)
+        .ok_or(EscrowError::LedgerOverflow)
 }
 
 /// Ledger de vencimiento con aritmetica comprobada: nunca aborta.
@@ -120,7 +136,34 @@ impl EscrowFactory {
         env.storage()
             .instance()
             .set(&DataKey::FeeCapBps, &DEFAULT_FEE_CAP_BPS);
+        env.storage()
+            .instance()
+            .set(&DataKey::ClaimMargin, &DEFAULT_CLAIM_MARGIN_MINUTES);
         env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+    }
+
+    /// labs (E3): el admin fija el margen, en minutos, entre el vencimiento y el
+    /// reembolso. En ese margen el comprador todavia puede cobrar con el secreto y
+    /// nadie puede reembolsar. No puede ser 0. Solo afecta a los `lock` futuros.
+    pub fn set_claim_margin(env: Env, margin_minutes: u32) -> Result<(), EscrowError> {
+        read_admin(&env)?.require_auth();
+        let bounds = Self::timeout_bounds(env.clone())?;
+        validate_timeout_bounds(bounds.min_minutes, bounds.max_minutes, margin_minutes)?;
+        env.storage()
+            .instance()
+            .set(&DataKey::ClaimMargin, &margin_minutes);
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.events()
+            .publish((symbol_short!("margin"),), margin_minutes);
+        Ok(())
+    }
+
+    /// labs (E3): margen vigente, en minutos.
+    pub fn claim_margin(env: Env) -> Result<u32, EscrowError> {
+        env.storage()
+            .instance()
+            .get(&DataKey::ClaimMargin)
+            .ok_or(EscrowError::NotInitialized)
     }
 
     /// labs (E11): comisiones acumuladas que todavia no se cobran.
@@ -287,7 +330,7 @@ impl EscrowFactory {
         max_minutes: u32,
     ) -> Result<(), EscrowError> {
         read_admin(&env)?.require_auth();
-        validate_timeout_bounds(min_minutes, max_minutes)?;
+        validate_timeout_bounds(min_minutes, max_minutes, Self::claim_margin(env.clone())?)?;
         env.storage().instance().set(
             &DataKey::TimeoutBounds,
             &TimeoutBounds {
@@ -371,6 +414,13 @@ impl EscrowFactory {
             return Err(EscrowError::TimeoutOutOfRange);
         }
         let timeout_ledger = timeout_ledger_for(env.ledger().sequence(), timeout_minutes)?;
+        // labs (E3): el trade guarda su margen; G tambien tiene que caber en u32.
+        let margin_ledgers = Self::claim_margin(env.clone())?
+            .checked_mul(LEDGERS_PER_MINUTE)
+            .ok_or(EscrowError::LedgerOverflow)?;
+        timeout_ledger
+            .checked_add(margin_ledgers)
+            .ok_or(EscrowError::LedgerOverflow)?;
 
         // labs (E2): la comision de MicoPay no pasa el tope vigente.
         if platform_fee > max_platform_fee(amount, Self::fee_cap(env.clone())?)? {
@@ -398,6 +448,7 @@ impl EscrowFactory {
                 .max_minutes
                 .checked_mul(LEDGERS_PER_MINUTE)
                 .ok_or(EscrowError::LedgerOverflow)?,
+            margin_ledgers,
         };
 
         env.storage()
@@ -493,6 +544,7 @@ impl EscrowFactory {
     }
 
     /// Refund seller after timeout. Can be called by anyone.
+    /// labs (E3): solo desde G = vencimiento + margen.
     pub fn refund(env: Env, trade_id: BytesN<32>) -> Result<(), EscrowError> {
         let mut trade: TradeEscrow = env
             .storage()
@@ -507,6 +559,10 @@ impl EscrowFactory {
         // Check that timeout HAS been reached
         if env.ledger().sequence() < trade.timeout_ledger {
             return Err(EscrowError::TimeoutNotReached);
+        }
+        // labs (E3): despues de vencer, el comprador conserva un margen para cobrar.
+        if env.ledger().sequence() < grace_ledger(&trade)? {
+            return Err(EscrowError::ClaimWindowOpen);
         }
 
         let token_id: Address = env
@@ -627,6 +683,9 @@ impl EscrowFactory {
         if lifetime > trade.max_total_ledgers {
             return Err(EscrowError::ExtensionAboveCap);
         }
+        new_timeout_ledger
+            .checked_add(trade.margin_ledgers)
+            .ok_or(EscrowError::LedgerOverflow)?;
 
         let old_timeout_ledger = trade.timeout_ledger;
         trade.timeout_ledger = new_timeout_ledger;

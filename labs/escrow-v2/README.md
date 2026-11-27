@@ -29,13 +29,14 @@ El escrow libera a quien debe (el comprador, con el secreto) o regresa el dinero
 | E11 | Comisiones acumuladas: `release` ya no manda la comisión a la billetera de MicoPay; la suma a un saldo interno (`accrued_fees`). `claim_fees(to)` (solo el admin) la cobra aparte. Así, si la billetera de MicoPay está congelada o sin trustline, **al comprador sí se le paga**. En producción, ese `release` fallaría. Siempre se cumple: saldo del contrato = Σ(monto + comisión de los trades abiertos) + comisiones acumuladas |
 | E12 | El comprador acepta: `accept(trade_id)`, con su firma y mientras el trade siga abierto, marca `accepted` en el trade. No cambia cómo se libera ni a quién se paga; sirve para que solo los trades aceptados cuenten en las estadísticas (E6). Así nadie infla o ensucia una reputación con trades entre cuentas propias o con un comprador que nunca firmó |
 | E8 | Extender el plazo: `extend(trade_id, nuevo_vencimiento)`, con **la firma de las dos partes** sobre el mismo nuevo vencimiento. Solo en `Locked`, antes de vencer y fuera de pausa. El nuevo vencimiento tiene que ser posterior al actual y no pasar el tope de vida del trade: al bloquear, el trade guarda `lock_ledger` y `max_total_ledgers` (el máximo de E1 en ese momento), así que si el admin cambia los límites después, el trade conserva los suyos. Producción no puede extender |
+| E3 | **Margen antes del reembolso.** Después del vencimiento T, el comprador conserva un margen para cobrar con el secreto: `refund` falla con `ClaimWindowOpen` hasta G = T + margen, y desde G funciona. `release` y `decline` siguen funcionando dentro del margen. Nace con **15 minutos**; el admin lo cambia con `set_claim_margin` (no puede ser 0) y se lee con `claim_margin`. Cada trade guarda su margen al bloquear (`margin_ledgers`), así que un cambio solo afecta a trades nuevos. La vida máxima de un trade ahora cuenta el máximo de E1 más el margen, y tiene que quedar debajo del TTL (~30 días). En producción, `refund` funciona justo al vencer |
 | X1 | **Trade grande con un participante con tier.** El admin fija una regla con `set_tier_gate(registry, umbral, tier_minimo)` (se quita con `clear_tier_gate`, se lee con `tier_gate`). Desde el umbral, en unidades del token, `lock` consulta `get_tier` del registro de `labs/agent-tier`: si el vendedor tiene el tier mínimo vigente, pasa (ya firmó); si no, y el comprador lo tiene, el comprador también tiene que firmar; si nadie lo tiene, falla con `TierRequired`. Abajo del umbral no se consulta. Si el registro falla, el `lock` falla. Nace sin regla. Garantiza "firmó un participante con tier", no "el agente": el contrato no sabe quién es el agente |
 
 Las siguientes funciones (E1–E12) están en el plan de labs.
 
 ## Plazos en ledgers, no en reloj
 
-`timeout_minutes` se convierte en ledgers a razón de **12 por minuto** (5 s por ledger). Si la red va más rápida o más lenta, el vencimiento real cambia: el contrato solo ve ledgers.
+`timeout_minutes` y el margen de E3 se convierten en ledgers a razón de **12 por minuto** (5 s por ledger). Si la red va más rápida o más lenta, el vencimiento real cambia: el contrato solo ve ledgers.
 
 ## Pruebas
 
@@ -43,7 +44,7 @@ Las siguientes funciones (E1–E12) están en el plan de labs.
 cargo test
 ```
 
-57 pruebas: las 9 de producción, 5 de L1, 7 de E1, 7 de E2, 3 de E7, 5 de E9, 4 de E11, 4 de E12, 6 de E8 y 7 de X1. Las de X1 usan un registro de tiers simulado (`MockTierRegistry`): `labs/agent-tier` usa otra versión del SDK y su verificación necesita la prueba ZK. Las de firmas usan **firmas reales**, sin `mock_all_auths()`:
+63 pruebas: las 9 de producción, 5 de L1, 7 de E1, 7 de E2, 3 de E7, 5 de E9, 4 de E11, 4 de E12, 6 de E8, 7 de X1 y 6 de E3. Desde E3, las pruebas de producción que reembolsan esperan también el margen. Las de X1 usan un registro de tiers simulado (`MockTierRegistry`): `labs/agent-tier` usa otra versión del SDK y su verificación necesita la prueba ZK. Las de firmas usan **firmas reales**, sin `mock_all_auths()`:
 - el constructor falla sin la firma del admin, y la registra cuando la hay;
 - `decline` falla si solo firma el vendedor;
 - `release` falla si lo firma el vendedor, aunque tenga el secreto;
@@ -54,3 +55,4 @@ cargo test
 - solo el comprador acepta su trade, no el vendedor (E12).
 - `extend` necesita las dos firmas, y una firma sobre un vencimiento no sirve para otro (E8).
 - en un trade grande, si solo el comprador tiene tier, tiene que firmar el `lock` (X1); solo el admin fija la regla.
+- solo el admin cambia el margen antes del reembolso (E3).
