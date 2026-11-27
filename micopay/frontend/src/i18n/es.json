@@ -1105,7 +1105,12 @@
     "cancelledAuthorizeRefundBody": "La operación fue cancelada. Autoriza ahora la devolución inmediata al dueño de los fondos, sin esperar el vencimiento.",
     "expiredBody": "El tiempo para completar esta operación ha expirado.",
     "dateLabel": "Fecha",
-    "processing": "Procesando…"
+    "processing": "Procesando…",
+    "declineNow": "Rechazar y devolver al cliente",
+    "declineNowConfirm": "Sí, devolver",
+    "declineNowBack": "Volver",
+    "declineNowSigning": "Firmando…",
+    "declineNowHint": "El cliente recupera sus fondos al momento. Firmas una vez y la operación termina."
   },
   "profileText": {
     "s1": "Tu sesión expiró. Vuelve a iniciar sesión.",
