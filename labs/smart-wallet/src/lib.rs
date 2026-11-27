@@ -13,13 +13,23 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, Bytes, BytesN, Env, Map,
+    auth::{Context, CustomAccountInterface},
+    contract, contracterror, contractimpl, contracttype,
+    crypto::Hash,
+    xdr::ToXdr,
+    Address, Bytes, BytesN, Env, Map, Vec,
 };
 
 const TTL_MIN: u32 = 17_280;
 const TTL_EXTEND: u32 = 518_400;
+/// Etiqueta que va al inicio de todo mensaje firmado.
+pub const DOMAIN: &[u8] = b"micopay-labs-wallet-v1";
+/// Modo de la firma. Solo existe el dueno en esta fase; la sesion (1) llega con W20.
+pub const MODE_OWNER: u8 = 0;
 /// Prefijo del id de un firmante ed25519. El passkey (W6) usara 0x01.
 const KIND_ED25519: u8 = 0;
+/// Tope de firmantes, para acotar el costo de `__check_auth`.
+pub const MAX_SIGNERS: u32 = 10;
 
 #[contracttype]
 #[derive(Clone)]
@@ -34,6 +44,20 @@ enum DataKey {
 pub struct Signer {
     pub key: BytesN<32>,
     pub weight: u32,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Ed25519Proof {
+    pub id: BytesN<32>,
+    pub sig: BytesN<64>,
+}
+
+/// Una prueba de firma. `#[contracttype]` solo admite variantes de tupla.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Proof {
+    Ed25519(Ed25519Proof),
 }
 
 #[contracterror]
@@ -59,6 +83,15 @@ pub enum WalletError {
 pub fn signer_id(env: &Env, key: &BytesN<32>) -> BytesN<32> {
     let mut b = Bytes::from_array(env, &[KIND_ED25519]);
     b.append(&key.clone().into());
+    env.crypto().sha256(&b).into()
+}
+
+/// Mensaje que firma cada llave: `sha256(DOMINIO ‖ XDR(ScVal de la wallet) ‖ modo ‖ payload)`.
+pub fn message(env: &Env, wallet: &Address, mode: u8, payload: &Hash<32>) -> BytesN<32> {
+    let mut b = Bytes::from_slice(env, DOMAIN);
+    b.append(&wallet.clone().to_xdr(env));
+    b.push_back(mode);
+    b.append(&payload.to_bytes().into());
     env.crypto().sha256(&b).into()
 }
 
@@ -104,6 +137,52 @@ impl SmartWallet {
     /// Lectura: umbral vigente.
     pub fn threshold(env: Env) -> Result<u32, WalletError> {
         threshold(&env)
+    }
+}
+
+#[contractimpl]
+impl CustomAccountInterface for SmartWallet {
+    type Signature = Vec<Proof>;
+    type Error = WalletError;
+
+    /// W2. Soroban la llama cuando un contrato pide `require_auth` de esta wallet.
+    /// Suma el peso de firmantes distintos con firma valida; tiene que llegar al umbral.
+    #[allow(non_snake_case)]
+    fn __check_auth(
+        env: Env,
+        signature_payload: Hash<32>,
+        signatures: Vec<Proof>,
+        _auth_contexts: Vec<Context>,
+    ) -> Result<(), WalletError> {
+        if signatures.is_empty() {
+            return Err(WalletError::NoProofs);
+        }
+        if signatures.len() > MAX_SIGNERS {
+            return Err(WalletError::TooManyProofs);
+        }
+        let map = signers(&env)?;
+        let msg: Bytes = message(&env, &env.current_contract_address(), MODE_OWNER, &signature_payload).into();
+        let mut seen: Vec<BytesN<32>> = Vec::new(&env);
+        let mut weight: u32 = 0;
+        for proof in signatures.iter() {
+            match proof {
+                Proof::Ed25519(p) => {
+                    if seen.contains(&p.id) {
+                        return Err(WalletError::DuplicateProof);
+                    }
+                    let signer = map.get(p.id.clone()).ok_or(WalletError::UnknownSigner)?;
+                    // Aborta si la firma no es valida.
+                    env.crypto().ed25519_verify(&signer.key, &msg, &p.sig);
+                    seen.push_back(p.id);
+                    weight = weight.checked_add(signer.weight).ok_or(WalletError::Overflow)?;
+                }
+            }
+        }
+        if weight < threshold(&env)? {
+            return Err(WalletError::InsufficientWeight);
+        }
+        bump(&env);
+        Ok(())
     }
 }
 
