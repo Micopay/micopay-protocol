@@ -50,7 +50,7 @@ Las siguientes funciones (E1–E12) están en el plan de labs.
 cargo test
 ```
 
-96 pruebas: las 9 de producción, 5 de L1, 7 de E1, 7 de E2, 3 de E7, 5 de E9, 4 de E11, 4 de E12, 6 de E8, 7 de X1, 6 de E3, 13 de E4, 9 de E5, 6 de E6 y 5 de E10. Desde E3, las pruebas de producción que reembolsan esperan también el margen. Las de X1 usan un registro de tiers simulado (`MockTierRegistry`): `labs/agent-tier` usa otra versión del SDK y su verificación necesita la prueba ZK. Las de firmas usan **firmas reales**, sin `mock_all_auths()`:
+97 pruebas: las 9 de producción, 5 de L1, 7 de E1, 7 de E2, 3 de E7, 5 de E9, 4 de E11, 4 de E12, 6 de E8, 7 de X1, 6 de E3, 13 de E4, 9 de E5, 6 de E6, 5 de E10 y **la tabla de estados completa** (`test_state_table`). La tabla recorre 9 estados y momentos × 6 funciones, con y sin pausa (108 casos). Cada caso usa un trade nuevo y revisa el resultado, el estado después y que el saldo del contrato = monto + comisión de los trades abiertos + comisiones acumuladas. Desde E3, las pruebas de producción que reembolsan esperan también el margen. Las de X1 usan un registro de tiers simulado (`MockTierRegistry`): `labs/agent-tier` usa otra versión del SDK y su verificación necesita la prueba ZK. Las de firmas usan **firmas reales**, sin `mock_all_auths()`:
 - el constructor falla sin la firma del admin, y la registra cuando la hay;
 - `decline` falla si solo firma el vendedor;
 - `release` falla si lo firma el vendedor, aunque tenga el secreto;

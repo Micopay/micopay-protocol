@@ -2181,3 +2181,221 @@ fn test_e10_failed_call_leaves_no_event() {
     assert!(escrow.try_resolve(&id, &true).is_err());
     assert_eq!(escrow_events(&env, &escrow).events().len(), 0);
 }
+
+// ── Tabla de estados completa (plan, antes de desplegar E3–E5) ───────────────
+//
+// Cada celda usa un trade nuevo: estado y momento (fila) x funcion (columna), con y
+// sin pausa. En cada celda se revisa el resultado, el estado del trade despues y
+// que el saldo del contrato = monto + comision de los trades abiertos + comisiones
+// acumuladas (regla de E11).
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Row {
+    LockedBeforeT,
+    LockedBeforeG,
+    LockedFromG,
+    DisputedBeforeD,
+    DisputedFromD,
+    Released,
+    Refunded,
+    Declined,
+    Resolved,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Call {
+    Release,
+    Decline,
+    Refund,
+    ReportPaid,
+    Extend,
+    Resolve,
+}
+
+const ROWS: [Row; 9] = [
+    Row::LockedBeforeT,
+    Row::LockedBeforeG,
+    Row::LockedFromG,
+    Row::DisputedBeforeD,
+    Row::DisputedFromD,
+    Row::Released,
+    Row::Refunded,
+    Row::Declined,
+    Row::Resolved,
+];
+
+const CALLS: [Call; 6] = [
+    Call::Release,
+    Call::Decline,
+    Call::Refund,
+    Call::ReportPaid,
+    Call::Extend,
+    Call::Resolve,
+];
+
+/// Lo que dice la tabla del plan para cada celda.
+fn expected(row: Row, call: Call, paused: bool) -> Result<(), EscrowError> {
+    use Call::*;
+    use EscrowError as E;
+    use Row::*;
+    if matches!(row, Released | Refunded | Declined | Resolved) {
+        // Cerrado: nada funciona. `extend` revisa la pausa antes que el estado.
+        return if call == Extend && paused { Err(E::Paused) } else { Err(E::TradeNotLocked) };
+    }
+    if call == Extend && paused {
+        return Err(E::Paused);
+    }
+    match (row, call) {
+        (_, Release) | (_, Decline) => Ok(()),
+
+        (LockedBeforeT, Refund) => Err(E::TimeoutNotReached),
+        (LockedBeforeT, ReportPaid) => Err(E::TimeoutNotReached),
+        (LockedBeforeT, Extend) => Ok(()),
+        (LockedBeforeT, Resolve) => Err(E::NotDisputed),
+
+        (LockedBeforeG, Refund) => Err(E::ClaimWindowOpen),
+        (LockedBeforeG, ReportPaid) => Ok(()),
+        (LockedBeforeG, Extend) => Err(E::TimeoutReached),
+        (LockedBeforeG, Resolve) => Err(E::NotDisputed),
+
+        (LockedFromG, Refund) => Ok(()),
+        (LockedFromG, ReportPaid) => Err(E::ClaimWindowClosed),
+        (LockedFromG, Extend) => Err(E::TimeoutReached),
+        (LockedFromG, Resolve) => Err(E::NotDisputed),
+
+        (DisputedBeforeD, Refund) => Err(E::DisputeOpen),
+        (DisputedFromD, Refund) => Ok(()),
+        (DisputedBeforeD, ReportPaid) | (DisputedFromD, ReportPaid) => Err(E::TradeNotLocked),
+        (DisputedBeforeD, Extend) | (DisputedFromD, Extend) => Err(E::TradeNotLocked),
+        (DisputedBeforeD, Resolve) | (DisputedFromD, Resolve) => Ok(()),
+
+        _ => unreachable!("{:?} {:?}", row, call),
+    }
+}
+
+/// Estado del trade despues de una llamada que paso.
+fn status_after(call: Call, before: TradeStatus) -> TradeStatus {
+    match call {
+        Call::Release => TradeStatus::Released,
+        Call::Decline => TradeStatus::Declined,
+        Call::Refund => TradeStatus::Refunded,
+        Call::ReportPaid => TradeStatus::Disputed,
+        Call::Extend => before,
+        Call::Resolve => TradeStatus::Resolved,
+    }
+}
+
+struct Cell {
+    env: Env,
+    escrow: EscrowFactoryClient<'static>,
+    token: token::Client<'static>,
+    id: BytesN<32>,
+    other: BytesN<32>,
+    secret: Bytes,
+}
+
+/// Arma el trade en el estado y el momento de la fila. Hay otro trade abierto al
+/// lado (`other`), para que el saldo no cuadre por casualidad.
+fn cell(row: Row) -> Cell {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token = token::Client::new(&env, &token_id);
+    escrow.set_arbiter(&Address::generate(&env));
+    let (secret, hash) = tagged_hash(&env, b"celda");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &8i128, &hash, &1u32);
+    escrow.accept(&id);
+    let (_, hash2) = tagged_hash(&env, b"al-lado");
+    let other = escrow.lock(&seller, &buyer, &500i128, &4i128, &hash2, &60u32);
+    let t = escrow.get_trade(&id).timeout_ledger;
+    match row {
+        Row::LockedBeforeT => {}
+        Row::LockedBeforeG => go_to(&env, t),
+        Row::LockedFromG => go_to(&env, t + MARGIN),
+        Row::DisputedBeforeD => {
+            go_to(&env, t);
+            escrow.report_paid(&id);
+            go_to(&env, t + 1);
+        }
+        Row::DisputedFromD => {
+            go_to(&env, t);
+            let d = escrow.report_paid(&id);
+            go_to(&env, d);
+        }
+        Row::Released => escrow.release(&id, &secret),
+        Row::Refunded => {
+            go_to(&env, t + MARGIN);
+            escrow.refund(&id);
+        }
+        Row::Declined => escrow.decline(&id),
+        Row::Resolved => {
+            go_to(&env, t);
+            escrow.report_paid(&id);
+            escrow.resolve(&id, &true);
+        }
+    }
+    Cell { env, escrow, token, id, other, secret }
+}
+
+fn run_call(c: &Cell, call: Call) -> Result<(), EscrowError> {
+    fn flat<T, C>(r: Result<Result<T, C>, Result<EscrowError, soroban_sdk::InvokeError>>) -> Result<(), EscrowError> {
+        match r {
+            Ok(Ok(_)) => Ok(()),
+            Err(Ok(e)) => Err(e),
+            _ => panic!("la llamada abortó en vez de devolver un error del contrato"),
+        }
+    }
+    let t = c.escrow.get_trade(&c.id).timeout_ledger;
+    match call {
+        Call::Release => flat(c.escrow.try_release(&c.id, &c.secret)),
+        Call::Decline => flat(c.escrow.try_decline(&c.id)),
+        Call::Refund => flat(c.escrow.try_refund(&c.id)),
+        Call::ReportPaid => flat(c.escrow.try_report_paid(&c.id)),
+        Call::Extend => flat(c.escrow.try_extend(&c.id, &(t + 12))),
+        Call::Resolve => flat(c.escrow.try_resolve(&c.id, &true)),
+    }
+}
+
+fn check_balance(c: &Cell) {
+    let mut held = c.escrow.accrued_fees();
+    for id in [&c.id, &c.other] {
+        let trade = c.escrow.get_trade(id);
+        if matches!(trade.status, TradeStatus::Locked | TradeStatus::Disputed) {
+            held += trade.amount + trade.platform_fee;
+        }
+    }
+    assert_eq!(c.token.balance(&c.escrow.address), held);
+}
+
+#[test]
+fn test_state_table() {
+    let mut cells = 0;
+    for paused in [false, true] {
+        for row in ROWS {
+            for call in CALLS {
+                let c = cell(row);
+                if paused {
+                    c.escrow.pause();
+                }
+                let before = c.escrow.get_trade(&c.id);
+                let want = expected(row, call, paused);
+                let got = run_call(&c, call);
+                assert_eq!(got, want, "fila {:?}, llamada {:?}, pausa {}", row, call, paused);
+
+                let after = c.escrow.get_trade(&c.id);
+                if got.is_ok() {
+                    assert_eq!(after.status, status_after(call, before.status.clone()), "{:?} {:?}", row, call);
+                    if call == Call::Extend {
+                        assert_eq!(after.timeout_ledger, before.timeout_ledger + 12);
+                    }
+                } else {
+                    assert_eq!(after, before, "una llamada fallida cambio el trade: {:?} {:?}", row, call);
+                }
+                check_balance(&c);
+                // El trade de al lado nunca se toca.
+                assert_eq!(c.escrow.get_trade(&c.other).status, TradeStatus::Locked);
+                cells += 1;
+            }
+        }
+    }
+    assert_eq!(cells, 9 * 6 * 2);
+}
