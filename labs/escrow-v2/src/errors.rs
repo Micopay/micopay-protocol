@@ -15,4 +15,10 @@ pub enum EscrowError {
     InsufficientAmount = 9,
     TradeAlreadyExists = 10,
     AmountOverflow = 11,
+    /// labs (E1): `timeout_minutes` fuera de los limites que fijo el admin.
+    TimeoutOutOfRange = 12,
+    /// labs (E1): configuracion invalida (minimo 0, minimo > maximo o maximo demasiado largo).
+    InvalidConfig = 13,
+    /// labs (E1): el ledger de vencimiento no cabe en u32.
+    LedgerOverflow = 14,
 }

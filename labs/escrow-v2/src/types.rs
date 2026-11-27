@@ -25,10 +25,19 @@ pub struct TradeEscrow {
     pub status: TradeStatus,
 }
 
+/// labs (E1): limites del tiempo de bloqueo, en minutos. Los fija el admin.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TimeoutBounds {
+    pub min_minutes: u32,
+    pub max_minutes: u32,
+}
+
 #[contracttype]
 pub enum DataKey {
     Admin,
     TokenId,
     PlatformWallet,
     Trade(BytesN<32>),
+    TimeoutBounds,
 }

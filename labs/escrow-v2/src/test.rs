@@ -210,7 +210,7 @@ fn test_decline_is_terminal_against_release_and_refund() {
         &1_000_000_000i128,
         &0i128,
         &secret_hash,
-        &0u32,
+        &1u32,
     );
 
     escrow.decline(&trade_id);
@@ -434,4 +434,129 @@ fn test_refund_and_decline_end_in_different_states() {
     escrow.decline(&declined);
     assert_eq!(escrow.get_trade(&refunded).status, TradeStatus::Refunded);
     assert_eq!(escrow.get_trade(&declined).status, TradeStatus::Declined);
+}
+
+// ── labs (E1): limites del tiempo de bloqueo ─────────────────────────────────
+
+fn lock_with_timeout(
+    env: &Env,
+    escrow: &EscrowFactoryClient,
+    seller: &Address,
+    buyer: &Address,
+    tag: &[u8],
+    timeout_minutes: u32,
+) -> Result<BytesN<32>, EscrowError> {
+    let hash: BytesN<32> = env.crypto().sha256(&Bytes::from_slice(env, tag)).into();
+    match escrow.try_lock(seller, buyer, &1_000i128, &0i128, &hash, &timeout_minutes) {
+        Ok(Ok(id)) => Ok(id),
+        Err(Ok(e)) => Err(e),
+        other => panic!("resultado inesperado: {:?}", other),
+    }
+}
+
+#[test]
+fn test_e1_default_bounds() {
+    let (env, contract_id, _, _, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let bounds = escrow.timeout_bounds();
+    assert_eq!(bounds.min_minutes, 1);
+    assert_eq!(bounds.max_minutes, 1_440);
+}
+
+#[test]
+fn test_e1_lock_respects_bounds() {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+    escrow.set_timeout_bounds(&30u32, &180u32);
+    let before = token_client.balance(&seller);
+
+    for (tag, minutes) in [(b"cero".as_slice(), 0u32), (b"min-1", 29), (b"max+1", 181)] {
+        assert_eq!(
+            lock_with_timeout(&env, &escrow, &seller, &buyer, tag, minutes),
+            Err(EscrowError::TimeoutOutOfRange),
+        );
+    }
+    // Un rechazo no mueve dinero.
+    assert_eq!(token_client.balance(&seller), before);
+
+    let start = env.ledger().sequence();
+    let at_min = lock_with_timeout(&env, &escrow, &seller, &buyer, b"min", 30).unwrap();
+    let at_max = lock_with_timeout(&env, &escrow, &seller, &buyer, b"max", 180).unwrap();
+    assert_eq!(escrow.get_trade(&at_min).timeout_ledger, start + 30 * 12);
+    assert_eq!(escrow.get_trade(&at_max).timeout_ledger, start + 180 * 12);
+}
+
+#[test]
+fn test_e1_huge_timeout_is_an_error_not_an_abort() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    // En produccion, u32::MAX * 12 desborda y aborta. Aqui es un error normal.
+    assert_eq!(
+        lock_with_timeout(&env, &escrow, &seller, &buyer, b"enorme", u32::MAX),
+        Err(EscrowError::TimeoutOutOfRange),
+    );
+}
+
+// El host de Soroban no deja llegar a un ledger tan alto (su propio TTL
+// desborda antes), asi que el calculo se prueba directo.
+#[test]
+fn test_e1_ledger_overflow_is_an_error() {
+    assert_eq!(timeout_ledger_for(100, 30), Ok(100 + 30 * 12));
+    assert_eq!(timeout_ledger_for(u32::MAX - 10, 1), Err(EscrowError::LedgerOverflow));
+    assert_eq!(timeout_ledger_for(0, u32::MAX), Err(EscrowError::LedgerOverflow));
+}
+
+#[test]
+fn test_e1_invalid_config_is_rejected() {
+    let (env, contract_id, _, _, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let ttl_minutes = 518_400 / 12; // un trade no puede vivir mas que su TTL
+    for (min, max) in [(0u32, 10u32), (20, 10), (1, ttl_minutes), (1, u32::MAX)] {
+        assert_eq!(
+            escrow.try_set_timeout_bounds(&min, &max),
+            Err(Ok(EscrowError::InvalidConfig)),
+            "min={min} max={max}",
+        );
+    }
+    // Lo rechazado no cambia nada.
+    assert_eq!(escrow.timeout_bounds().max_minutes, 1_440);
+    // Justo debajo del TTL si se acepta, y min = max tambien.
+    escrow.set_timeout_bounds(&1u32, &(ttl_minutes - 1));
+    escrow.set_timeout_bounds(&60u32, &60u32);
+}
+
+#[test]
+fn test_e1_only_admin_sets_bounds() {
+    let (env, contract_id, admin, seller, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let invoke = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "set_timeout_bounds",
+        args: (10u32, 20u32).into_val(&env),
+        sub_invokes: &[],
+    };
+
+    env.mock_auths(&[MockAuth { address: &seller, invoke: &invoke }]);
+    assert!(escrow.try_set_timeout_bounds(&10u32, &20u32).is_err());
+    assert_eq!(escrow.timeout_bounds().min_minutes, 1);
+
+    env.mock_auths(&[MockAuth { address: &admin, invoke: &invoke }]);
+    escrow.set_timeout_bounds(&10u32, &20u32);
+    assert_eq!(escrow.timeout_bounds().min_minutes, 10);
+}
+
+#[test]
+fn test_e1_new_bounds_do_not_touch_open_trades() {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let (secret, _) = make_secret(&env);
+    let hash: BytesN<32> = env.crypto().sha256(&secret).into();
+    let trade_id = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &120u32);
+    let timeout_ledger = escrow.get_trade(&trade_id).timeout_ledger;
+
+    escrow.set_timeout_bounds(&200u32, &300u32);
+    assert_eq!(escrow.get_trade(&trade_id).timeout_ledger, timeout_ledger);
+    escrow.release(&trade_id, &secret);
+    assert_eq!(escrow.get_trade(&trade_id).status, TradeStatus::Released);
 }
