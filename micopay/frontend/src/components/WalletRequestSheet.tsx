@@ -11,10 +11,12 @@ import i18n from '../i18n';
 // Textos que no pasan por el hook: el arbol se vuelve a pintar al cambiar de idioma.
 const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
-const ACTIONS: Record<EscrowIntent['action'], string> = {
-  lock: tr('walletRequest.s1'),
-  release: tr('walletRequest.s2'),
-  decline: tr('walletRequest.s3'),
+// Se traduce al pintar, no al cargar el modulo: como constante quedaba en el
+// idioma con el que arranco la app aunque despues se cambiara a ingles.
+const ACTION_KEYS: Record<EscrowIntent['action'], string> = {
+  lock: 'walletRequest.s1',
+  release: 'walletRequest.s2',
+  decline: 'walletRequest.s3',
 };
 
 const short = (address: string | null) => (address ? `${address.slice(0, 6)}…${address.slice(-6)}` : tr('walletRequest.s4'));
@@ -49,11 +51,13 @@ export default function WalletRequestSheet() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/50" role="dialog" aria-modal="true">
-      <div className="w-full bg-papel text-tinta border-t-2 border-tinta p-5 space-y-3">
+      {/* El padding inferior deja libre la barra de gestos o botones de Android,
+          igual que BottomNav: sin el, Aprobar quedaba debajo de esa barra. */}
+      <div className="w-full max-h-[90vh] overflow-y-auto bg-papel text-tinta border-t-2 border-tinta p-5 pb-[max(3rem,calc(env(safe-area-inset-bottom)+1.5rem))] space-y-3">
         <h2 className="text-lg font-bold">
           {item.kind === 'proposal' && tr('walletRequest.s6')}
           {item.kind === 'webAuth' && tr('walletRequest.s7')}
-          {item.kind === 'request' && ACTIONS[item.intent.action]}
+          {item.kind === 'request' && tr(ACTION_KEYS[item.intent.action])}
         </h2>
         <Row label={tr('walletRequest.s8')} value={item.origin} />
         {item.kind === 'proposal' && (
@@ -62,18 +66,18 @@ export default function WalletRequestSheet() {
         )}
         {item.kind === 'webAuth' && (
           <>
-            <Row label="Sitio" value={item.homeDomain} />
-            <Row label="Cuenta" value={short(item.account)} />
+            <Row label={tr('walletRequest.site')} value={item.homeDomain} />
+            <Row label={tr('walletRequest.account')} value={short(item.account)} />
             <p className="text-sm">{tr('walletRequest.s10')}</p>
           </>
         )}
         {item.kind === 'request' && (
           <>
-            <Row label="Monto" value={`$${item.intent.amountMxn} MXN`} />
-            <Row label="Activo" value={item.intent.assetCode ?? tr('walletRequest.s4')} />
+            <Row label={tr('walletRequest.amount')} value={`$${item.intent.amountMxn} MXN`} />
+            <Row label={tr('walletRequest.asset')} value={item.intent.assetCode ?? tr('walletRequest.s4')} />
             <Row label={tr('walletRequest.s11')} value={short(item.intent.seller)} />
-            <Row label="Recibe" value={short(item.intent.buyer)} />
-            <Row label="Contrato" value={short(item.intent.contractId)} />
+            <Row label={tr('walletRequest.receives')} value={short(item.intent.buyer)} />
+            <Row label={tr('walletRequest.contract')} value={short(item.intent.contractId)} />
           </>
         )}
         {error && <p className="text-sm text-rojo" role="alert">{error}</p>}

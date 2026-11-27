@@ -12,9 +12,16 @@ import {
 } from "../services/api";
 import { setLanguage } from "../i18n";
 import i18n from '../i18n';
+import { localizeServerMessage } from '../utils/apiError';
 
 // Textos que no pasan por el hook: el arbol se vuelve a pintar al cambiar de idioma.
 const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
+
+/** Mensaje del servidor, en el idioma activo si su codigo tiene clave (#512). */
+function serverMessage(err: any): string | undefined {
+  const data = err?.response?.data;
+  return typeof data?.message === 'string' ? localizeServerMessage(data.code, data.message) : undefined;
+}
 
 /** Deterministic avatar gradient seeded by the Stellar address (no external images). */
 const TIER_STYLE: Record<string, { bg: string; text: string; icon: string }> = {
@@ -93,7 +100,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
             if (!cancelled) setError(tr('profileText.s1'));
           }
         } else {
-          setError(err?.response?.data?.message ?? tr('profileText.s2'));
+          setError(serverMessage(err) ?? tr('profileText.s2'));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -155,7 +162,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
         onDeleted();
       }, 800);
     } catch (err: any) {
-      setError(err?.response?.data?.message ?? tr('profileText.s3'));
+      setError(serverMessage(err) ?? tr('profileText.s3'));
     } finally {
       setDeleting(false);
     }
@@ -240,7 +247,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
               <>
                 {!IS_EXTERNAL_SIGNER && (
                   <a href="#/conexiones-web" className="block bg-papel rounded-sm p-4 border-2 border-tinta text-sm font-bold">
-                    Conexiones web
+                    {tr('profileText.webConnections')}
                   </a>
                 )}
                 <section className="bg-verde-suave rounded-sm p-5 border-2 border-tinta ">
@@ -264,7 +271,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                               style={{ backgroundColor: s.bg, color: s.text }}
                             >
                               <span className="material-symbols-outlined text-[12px]" style={{ fontVariationSettings: '"FILL" 1' }}>{s.icon}</span>
-                              {tier}
+                              {tr(`tier.${tier}`, { defaultValue: tier })}
                             </span>
                           );
                         })()}
@@ -340,8 +347,8 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                     <div className="flex items-center gap-3 rounded-sm bg-verde-suave p-4">
                       <span className="material-symbols-outlined text-verde">verified_user</span>
                       <div>
-                        <p className="font-bold text-tinta">Identidad verificada</p>
-                        <p className="text-sm text-gris">Nivel {profile.kyc_level}{tr('profileText.s8')}</p>
+                        <p className="font-bold text-tinta">{tr('profileText.identityVerified')}</p>
+                        <p className="text-sm text-gris">{tr('profileText.level', { level: profile.kyc_level })}{tr('profileText.s8')}</p>
                       </div>
                     </div>
                   ) : (
@@ -353,7 +360,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                         onClick={onNavigateKyc}
                         className="w-full min-h-12 bg-verde text-papel font-bold rounded-sm"
                       >
-                        Verificar mi identidad
+                        {tr('profileText.verifyIdentity')}
                       </button>
                     </>
                   )}
@@ -417,7 +424,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                     no segun haya sesion. Quien no es agente ve una invitacion;
                     quien lo es, su interruptor de disponibilidad. */}
                 <section className="bg-papel rounded-sm p-5 border-2 border-tinta/60">
-                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-gris mb-3">Red MicoPay</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-gris mb-3">{tr('profile.networkTitle')}</p>
 
                   {(providerStatus == null || providerStatus === 'not_enrolled') && (
                     <>
@@ -434,14 +441,14 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
 
                   {providerStatus === 'pending_verification' && (
                     <>
-                      <p className="text-sm text-tinta mb-1 font-bold">Alta a medias</p>
+                      <p className="text-sm text-tinta mb-1 font-bold">{tr('profileText.halfSignup')}</p>
                       <p className="text-sm text-gris mb-4">{tr('profileText.s14')}
                       </p>
                       <button
                         onClick={onNavigateJoinNetwork}
                         className="w-full min-h-12 border-2 border-verde text-verde font-bold rounded-sm"
                       >
-                        Continuar mi alta
+                        {tr('profileText.continueSignup')}
                       </button>
                     </>
                   )}
@@ -464,7 +471,7 @@ const Profile = ({ token, username, devicePublicKey, onBack, onDeleted, onLogout
                             : 'bg-verde text-papel'
                         }`}
                       >
-                        {availability === 'online' ? 'Ponerme en pausa' : 'Ponerme disponible'}
+                        {availability === 'online' ? tr('profileText.pauseMe') : tr('profileText.makeAvailable')}
                       </button>
                       {onNavigateMerchantSettings && (
                         <button

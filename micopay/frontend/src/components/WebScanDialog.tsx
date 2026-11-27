@@ -106,7 +106,7 @@ function Dialog() {
       <div role="dialog" aria-modal="true" aria-labelledby="web-scan-title" className="w-full max-w-md rounded-sm border-2 border-tinta bg-papel shadow-solida">
         <div className="flex items-center justify-between bg-tinta px-5 py-3 text-papel">
           <h2 id="web-scan-title" className="text-[12px] font-bold uppercase tracking-[.14em]">{tr('webScan.s3')}</h2>
-          <button type="button" onClick={() => finishWebScan(null)} aria-label="Cerrar" className="flex min-h-8 min-w-8 items-center justify-center">
+          <button type="button" onClick={() => finishWebScan(null)} aria-label={tr('a11y.close')} className="flex min-h-8 min-w-8 items-center justify-center">
             <span aria-hidden="true" className="material-symbols-outlined">close</span>
           </button>
         </div>

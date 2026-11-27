@@ -13,10 +13,13 @@ type Props = {
 
 export default function SupportLink({ tradeId, state }: Props) {
   const subject = encodeURIComponent(
-    `Soporte — ${tradeId ? `Operación ${tradeId.slice(0, 8)}…` : 'operación sin ID'} — ${state}`
+    tr('supportLink.mailSubject', {
+      trade: tradeId ? tr('supportLink.mailSubjectTrade', { id: tradeId.slice(0, 8) }) : tr('supportLink.mailSubjectNoTrade'),
+      state,
+    })
   );
   const body = encodeURIComponent(
-    `Hola,\n\nNecesito ayuda.\n\nEstado: ${state}\nOperación ID: ${tradeId || 'N/D'}\n\nGracias.`
+    tr('supportLink.mailBody', { state, id: tradeId || tr('supportLink.mailNoId') })
   );
   const href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
   // #11: en PC `mailto:` abre una pestaña vacía si no hay cliente de correo.
@@ -69,7 +72,7 @@ export default function SupportLink({ tradeId, state }: Props) {
         {label}
       </a>
       <button type="button" onClick={copy} className="min-h-12 text-sm text-gris underline">
-        {copied ? 'Copiado' : `Copiar ${SUPPORT_EMAIL}`}
+        {copied ? tr('supportLink.copied') : tr('supportLink.copyEmail', { email: SUPPORT_EMAIL })}
       </button>
     </span>
   );

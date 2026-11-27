@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AmountField } from '../components/ui';
 import AssetSelector from '../components/AssetSelector';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 export interface DepositRequestProps {
   onBack: () => void;
@@ -22,7 +25,7 @@ const DepositRequest = ({ onBack, onSearch, assetKey, onAssetChange }: DepositRe
           <div className="flex items-center gap-4">
             <button
               onClick={onBack}
-              aria-label="Volver"
+              aria-label={tr('a11y.back')}
               className="min-h-12 min-w-12 text-verde hover:opacity-80 transition-opacity active:translate-x-[2px] active:translate-y-[2px] duration-200 focus:outline-none focus:ring-2 focus:ring-primary rounded-sm p-1"
             >
               <span aria-hidden="true" className="material-symbols-outlined">arrow_back</span>
@@ -86,7 +89,7 @@ const DepositRequest = ({ onBack, onSearch, assetKey, onAssetChange }: DepositRe
           <div className="pt-8">
             <button
               onClick={() => onSearch(amount)}
-              aria-label="Buscar agentes"
+              aria-label={tr('depositRequestText.searchAgents')}
               className="w-full bg-naranja text-papel border-2 border-tinta shadow-solida h-[56px] rounded-sm font-headline font-bold text-lg active:translate-x-[2px] active:translate-y-[2px] transition-all duration-200 flex items-center justify-center space-x-2 focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <span>{t('deposit.search')}</span>

@@ -36,7 +36,8 @@ import DepositQR from "./pages/DepositQR";
 import SuccessScreen, { receiptFromServer, type SuccessReceipt } from "./pages/SuccessScreen";
 import Explore from "./pages/Explore";
 import ComingSoon from "./pages/ComingSoon";
-import { CETES_AVAILABLE, BLEND_AVAILABLE, DEFI_TRADING_ENABLED, SPEI_RAMP_ENABLED, BANK_WITHDRAW_ENABLED } from "./constants/features";
+import Boveda from "./pages/Boveda";
+import { CETES_AVAILABLE, BLEND_AVAILABLE, DEFI_TRADING_ENABLED, SPEI_RAMP_ENABLED, BANK_WITHDRAW_ENABLED, ASSISTANT_ENABLED } from "./constants/features";
 import BankWithdrawScreen from "./pages/BankWithdrawScreen";
 import History from "./pages/History";
 import TradeDetail from "./pages/TradeDetail";
@@ -53,12 +54,15 @@ import Terms from "./pages/Terms";
 import Profile from "./pages/Profile";
 import WalletConnections from "./pages/WalletConnections";
 import WalletRequestSheet from "./components/WalletRequestSheet";
+import IncomingTradeAlert from "./hooks/useIncomingTradeAlert";
 import { startWalletConnect, stopWalletRequests } from "./services/walletConnect";
 import { SignatureApproval } from "./pages/SignatureApproval";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import MerchantSettings from "./pages/MerchantSettings";
 import BottomNav from "./components/BottomNav";
+import AssistantFab from "./components/AssistantFab";
+import Assistant from "./pages/Assistant";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import DebugOverlay from "./components/DebugOverlay";
 import SecretKeyBackupModal from "./components/SecretKeyBackupModal";
@@ -209,6 +213,11 @@ function HomeRoute() {
           username={sessionUser?.username ?? null}
       />
   );
+}
+
+function AssistantRoute() {
+  const { sessionUser } = useAppCtx();
+  return <Assistant token={sessionUser?.token ?? null} />;
 }
 
 function HistoryRoute() {
@@ -970,6 +979,7 @@ const HIDE_BOTTOMNAV_ROUTES = new Set([
   "/privacy",
   "/terms",
   "/sign-request",
+  "/assistant",
 ]);
 
 // The signing screen is a standalone deep-link UI.
@@ -1003,6 +1013,20 @@ function BottomNavAdapter() {
           showProviderTab={providerStatus === 'active'}
       />
   );
+}
+
+// El asistente vive en su propia pantalla; el boton flotante es la entrada.
+// Se oculta en los flujos a pantalla completa, donde ya hay una accion primaria.
+function AssistantFabAdapter() {
+  const location = useLocation();
+  const { sessionUser } = useAppCtx();
+
+  if (!ASSISTANT_ENABLED || !sessionUser) return null;
+  if (location.pathname === '/assistant') return null;
+  if (HIDE_BOTTOMNAV_ROUTES.has(location.pathname)) return null;
+  if (HIDE_BOTTOMNAV_PREFIX.some((prefix) => location.pathname.startsWith(prefix))) return null;
+
+  return <AssistantFab />;
 }
 
 // ── Armazon de la web en PC ──────────────────────────────────────────────────
@@ -1687,9 +1711,15 @@ function App() {
               {/* Se oculta solo cuando hay conexión y no hay nada pendiente. */}
               <OfflineQueueStatus token={sessionUser?.token ?? null} />
               <PushNotificationsBridge />
+              {/* WP8: en la PC no hay push; el agente se entera por sonido y por el titulo. */}
+              {IS_EXTERNAL_SIGNER && sessionUser && providerStatus === 'active' && (
+                <IncomingTradeAlert token={sessionUser.token} />
+              )}
               <Routes>
                 <Route path="/login" element={IS_EXTERNAL_SIGNER ? <WalletLogin onLoginSuccess={handleLoginSuccess} /> : <Login onLoginSuccess={handleLoginSuccess} />} />
                 <Route path="/register" element={IS_EXTERNAL_SIGNER ? <Navigate to="/login" replace /> : <Register onLoginSuccess={handleLoginSuccess} />} />
+                {/* Reto Bóveda (Ship It): pagina publica, sin sesion de MicoPay. */}
+                <Route path="/boveda" element={<Boveda />} />
                 <Route path="/" element={<ProtectedRoute><HomeRoute /></ProtectedRoute>} />
                 <Route path="/history" element={<ProtectedRoute><HistoryRoute /></ProtectedRoute>} />
                 <Route path="/trade/:id" element={<ProtectedRoute><TradeDetailRoute /></ProtectedRoute>} />
@@ -1724,6 +1754,7 @@ function App() {
                 <Route path="/welcome" element={<ProtectedRoute><WelcomeRoute /></ProtectedRoute>} />
                 <Route path="/join-network" element={<ProtectedRoute><ProviderOnboardingRoute /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><ProfileRoute /></ProtectedRoute>} />
+                {ASSISTANT_ENABLED && <Route path="/assistant" element={<ProtectedRoute><AssistantRoute /></ProtectedRoute>} />}
                 {!IS_EXTERNAL_SIGNER && <Route path="/conexiones-web" element={<ProtectedRoute><WalletConnections /></ProtectedRoute>} />}
                 <Route path="/privacy" element={<ProtectedRoute><PrivacyRoute /></ProtectedRoute>} />
                 <Route path="/terms" element={<ProtectedRoute><TermsRoute /></ProtectedRoute>} />
@@ -1732,6 +1763,7 @@ function App() {
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
               <BottomNavAdapter />
+              <AssistantFabAdapter />
               <WalletRequestSheet />
 
               {showBackupPrompt && backupSecret && (

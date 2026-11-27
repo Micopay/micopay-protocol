@@ -2,6 +2,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { getMerchantsAvailable, type AvailableMerchant } from '../services/api';
+import i18n from '../i18n';
+
+const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
 
 /** Una posición de hace unos minutos sirve igual para un radio de kilómetros. */
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
@@ -104,7 +107,7 @@ export function useMerchantsAvailable(options: Options): {
               if (!cancelled) {
                 setState({
                   status: 'location_denied',
-                  error: 'Permiso de ubicación denegado. Actívalo en Ajustes para ver agentes cercanos.',
+                  error: tr('locationErrors.denied'),
                 });
               }
               return;
@@ -154,8 +157,8 @@ export function useMerchantsAvailable(options: Options): {
               setState({
                 status: isPermissionDenied ? 'location_denied' : 'error',
                 error: isPermissionDenied
-                  ? 'Permiso de ubicación denegado. Actívalo en Ajustes para ver agentes cercanos.'
-                  : 'No se pudo obtener tu ubicación. Intenta de nuevo.',
+                  ? tr('locationErrors.denied')
+                  : tr('locationErrors.retry'),
               });
             }
             return;
@@ -166,7 +169,7 @@ export function useMerchantsAvailable(options: Options): {
           setState({
             status: 'error',
             error:
-              'No pudimos ubicarte. Sal un momento al exterior o revisa que la ubicación esté activada.',
+              tr('locationErrors.cantLocate'),
           });
           return;
         }
@@ -197,7 +200,7 @@ export function useMerchantsAvailable(options: Options): {
             status: 'error',
             // Distinto del fallo de ubicación a propósito: son dos causas que
             // la pantalla mostraba igual, y confundirlas cuesta horas.
-            error: 'No se pudo contactar al servidor de ofertas. Revisa tu conexión.',
+            error: tr('locationErrors.offersServer'),
           });
         }
       }

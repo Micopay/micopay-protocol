@@ -20,6 +20,8 @@ import i18n from '../i18n';
 
 // Textos que no pasan por el hook: el arbol se vuelve a pintar al cambiar de idioma.
 const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
+// Saldos y fechas en el idioma activo, no siempre en es-MX.
+const displayLocale = () => (i18n.language === 'en' ? 'en-US' : 'es-MX');
 
 const EXPLORER = "https://stellar.expert/explorer/testnet/tx";
 
@@ -164,17 +166,17 @@ const Home = ({
 
   const mxnBalance = balanceLoading || rateLoading || totalMxn == null
     ? "—"
-    : `$${totalMxn.toLocaleString("es-MX", { maximumFractionDigits: 2 })} MXN`;
+    : `$${totalMxn.toLocaleString(displayLocale(), { maximumFractionDigits: 2 })} MXN`;
 
   // Per-asset MXN value for the XLM row (its own value, not the grand total).
   const rawXlm = tokens.find((t) => t.code === 'XLM')?.balance ?? 0;
   const xlmMxnValue = balanceLoading || rateLoading || rateError || xlmMxnRate == null
     ? "—"
-    : `$${(rawXlm * xlmMxnRate).toLocaleString("es-MX", { maximumFractionDigits: 2 })} MXN`;
+    : `$${(rawXlm * xlmMxnRate).toLocaleString(displayLocale(), { maximumFractionDigits: 2 })} MXN`;
 
   /* Solo la primera letra. La clase `capitalize` de CSS sube la inicial de
      CADA palabra, y en es-MX eso imprimia "Jueves, 6 De Agosto". */
-  const rawToday = new Date().toLocaleDateString("es-MX", {
+  const rawToday = new Date().toLocaleDateString(displayLocale(), {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -382,13 +384,13 @@ const Home = ({
           {onNavigateBankWithdraw && (
             <button
               onClick={onNavigateBankWithdraw}
-              aria-label={t('home.bankWithdraw', { defaultValue: 'Retirar a banco' })}
+              aria-label={tr('home.bankWithdraw')}
               className="w-full h-[56px] bg-papel text-tinta border-2 border-tinta shadow-solida font-bold rounded-sm active:translate-x-[2px] active:translate-y-[2px] transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <span aria-hidden="true" className="material-symbols-outlined">
                 account_balance
               </span>
-              {t('home.bankWithdraw', { defaultValue: 'Retirar a banco' })}
+              {tr('home.bankWithdraw')}
             </button>
           )}
           <p className="text-sm text-on-surface-variant font-medium opacity-60">
@@ -445,7 +447,7 @@ const Home = ({
                     ? "—"
                     : walletBalanceError
                       ? "--"
-                      : `${(tokens.find((t) => t.code === 'USDC')?.balance ?? 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC`}
+                      : `${(tokens.find((t) => t.code === 'USDC')?.balance ?? 0).toLocaleString(displayLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC`}
                 </p>
               </div>
             </div>
@@ -497,7 +499,7 @@ const Home = ({
                   color: STATUS_COLOR[trade.status] ?? "text-gris",
                 };
                 const date = new Date(trade.created_at).toLocaleString(
-                  "es-MX",
+                  displayLocale(),
                   {
                     day: "numeric",
                     month: "short",
@@ -519,7 +521,7 @@ const Home = ({
                         </div>
                         <div>
                           <p className="font-bold text-on-surface text-sm">
-                            ${trade.amount_mxn.toLocaleString("es-MX")} MXN
+                            ${trade.amount_mxn.toLocaleString(displayLocale())} MXN
                           </p>
                           <p className="text-[11px] text-gris">{date}</p>
                         </div>

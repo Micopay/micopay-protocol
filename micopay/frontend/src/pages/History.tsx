@@ -9,6 +9,7 @@ import i18n from '../i18n';
 
 // Textos que no pasan por el hook: el arbol se vuelve a pintar al cambiar de idioma.
 const tr = (key: string, options?: Record<string, unknown>) => i18n.t(key, options);
+const displayLocale = () => (i18n.language === 'en' ? 'en-US' : 'es-MX');
 
 /** Renglon del historial: una operacion de efectivo o una transferencia de la red. */
 type Row =
@@ -21,17 +22,19 @@ function shortAddress(addr: string): string {
 
 function formatAmount(amount: string): string {
   const n = Number(amount);
-  return Number.isFinite(n) ? n.toLocaleString('es-MX', { maximumFractionDigits: 7 }) : amount;
+  return Number.isFinite(n) ? n.toLocaleString(displayLocale(), { maximumFractionDigits: 7 }) : amount;
 }
 
-const STATUS_LABEL: Record<string, { label: string; color: string; bg: string }> = {
-  completed: { label: 'Completado', color: 'text-verde-claro', bg: 'bg-verde-claro/10' },
-  locked:    { label: 'Bloqueado',  color: 'text-primary',   bg: 'bg-primary/10' },
-  revealing: { label: 'Revelando',  color: 'text-primary',   bg: 'bg-primary/10' },
-  pending:   { label: 'Pendiente',  color: 'text-gris',   bg: 'bg-outline/10' },
-  cancelled: { label: 'Cancelado',  color: 'text-error',     bg: 'bg-error/10' },
-  expired:   { label: 'Expirado',   color: 'text-gris',   bg: 'bg-outline/10' },
-  refunded:  { label: 'Reembolsado', color: 'text-[#8b5cf6]', bg: 'bg-[#8b5cf6]/10' },
+// #510: la etiqueta se traduce al pintar (historyText.status.*), no aqui:
+// una constante de modulo queda en el idioma con el que arranco la app.
+const STATUS_LABEL: Record<string, { color: string; bg: string }> = {
+  completed: { color: 'text-verde-claro', bg: 'bg-verde-claro/10' },
+  locked:    { color: 'text-primary',   bg: 'bg-primary/10' },
+  revealing: { color: 'text-primary',   bg: 'bg-primary/10' },
+  pending:   { color: 'text-gris',   bg: 'bg-outline/10' },
+  cancelled: { color: 'text-error',     bg: 'bg-error/10' },
+  expired:   { color: 'text-gris',   bg: 'bg-outline/10' },
+  refunded:  { color: 'text-[#8b5cf6]', bg: 'bg-[#8b5cf6]/10' },
 };
 
 interface HistoryProps {
@@ -41,12 +44,12 @@ interface HistoryProps {
 }
 
 const FILTERS = [
-  { id: 'all', label: 'Todos' },
-  { id: 'transfers', label: 'Transferencias' },
-  { id: 'completed', label: 'Completados' },
-  { id: 'cancelled', label: 'Cancelados' },
-  { id: 'expired', label: 'Expirados' },
-  { id: 'refunded', label: 'Reembolsados' },
+  { id: 'all' },
+  { id: 'transfers' },
+  { id: 'completed' },
+  { id: 'cancelled' },
+  { id: 'expired' },
+  { id: 'refunded' },
 ];
 
 const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
@@ -120,7 +123,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
               activa={status === f.id}
               onClick={() => handleFilterChange(f.id)}
             >
-              {f.label}
+              {tr(`historyText.filter.${f.id}`)}
             </Pill>
           ))}
         </section>
@@ -145,7 +148,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 opacity-50">
             <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p className="text-sm font-medium">Cargando historial...</p>
+            <p className="text-sm font-medium">{tr('historyText.loading')}</p>
           </div>
         ) : loadError ? null : rows.length === 0 ? (
           <div className="bg-papel rounded-sm border-2 border-tinta p-12 text-center mt-10">
@@ -161,9 +164,10 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
             {rows.map((row) => {
               if (row.kind === 'payment') return <PaymentRow key={`p-${row.payment.id}`} payment={row.payment} />;
               const trade = row.trade;
-              const s = STATUS_LABEL[trade.status] || STATUS_LABEL.pending;
+              const statusKey = STATUS_LABEL[trade.status] ? trade.status : 'pending';
+              const s = STATUS_LABEL[statusKey];
               const isCashIn = false;
-              const date = new Date(trade.created_at).toLocaleDateString('es-MX', {
+              const date = new Date(trade.created_at).toLocaleDateString(displayLocale(), {
                 day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
               });
 
@@ -186,14 +190,14 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
                           {trade.seller_id.slice(0, 8)}…
                         </p>
                         <p className="font-black text-on-surface text-sm">
-                          ${trade.amount_mxn.toLocaleString('es-MX')} MXN
+                          ${trade.amount_mxn.toLocaleString(displayLocale())} MXN
                         </p>
                       </div>
                       
                       <div className="flex justify-between items-center">
                         <p className="text-[11px] text-gris font-medium uppercase tracking-wider">{date}</p>
                         <span className={`px-2 py-0.5 rounded-sm text-[10px] font-black uppercase tracking-widest ${s.color} ${s.bg}`}>
-                          {s.label}
+                          {tr(`historyText.status.${statusKey}`)}
                         </span>
                       </div>
                     </div>
@@ -235,7 +239,7 @@ const History = ({ onBack, onSelectTrade, token }: HistoryProps) => {
 function PaymentRow({ payment }: { payment: PaymentHistoryItem }) {
   const incoming = payment.direction === 'in';
   const who = payment.counterparty_username ? `@${payment.counterparty_username}` : shortAddress(payment.counterparty);
-  const date = new Date(payment.created_at).toLocaleDateString('es-MX', {
+  const date = new Date(payment.created_at).toLocaleDateString(displayLocale(), {
     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
   });
   return (
@@ -254,7 +258,7 @@ function PaymentRow({ payment }: { payment: PaymentHistoryItem }) {
         <div className="flex-1 min-w-0">
           <div className="flex justify-between items-start mb-1">
             <p className="font-bold text-on-surface text-sm truncate">
-              {incoming ? 'De' : 'A'} {who}
+              {incoming ? tr('historyText.from', { who }) : tr('historyText.to', { who })}
             </p>
             <p className={`font-black text-sm ${incoming ? 'text-verde-claro' : 'text-on-surface'}`}>
               {incoming ? '+' : '−'}{formatAmount(payment.amount)} {payment.asset}
@@ -263,7 +267,7 @@ function PaymentRow({ payment }: { payment: PaymentHistoryItem }) {
           <div className="flex justify-between items-center">
             <p className="text-[11px] text-gris font-medium uppercase tracking-wider">{date}</p>
             <span className="px-2 py-0.5 rounded-sm text-[10px] font-black uppercase tracking-widest text-gris bg-outline/10">
-              {incoming ? 'Recibido' : 'Enviado'}
+              {incoming ? tr('historyText.received') : tr('historyText.sent')}
             </span>
           </div>
         </div>
