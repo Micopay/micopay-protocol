@@ -40,6 +40,11 @@ fn tier_thresholds(tier: u32) -> Option<(u32, u32)> {
 /// (~180 dias en testnet) y documentar que un keeper debe extenderlo.
 const NULLIFIER_TTL: u32 = 3_110_400;
 
+/// labs (R2): TTL de la configuracion (admin, VK, raiz vigente). Se extiende en cada
+/// `publish_root` y `prove_tier`, para que el contrato no se archive por desuso.
+const INSTANCE_TTL_MIN: u32 = 17_280; // ~1 dia
+const INSTANCE_TTL_EXTEND: u32 = 518_400; // ~30 dias
+
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -50,6 +55,8 @@ pub enum Error {
     NullifierAlreadyUsed = 4,
     VerificationFailed = 5,
     InvalidTier = 6,
+    /// labs (R2): no quedan numeros de epoca.
+    EpochOverflow = 7,
 }
 
 #[contracttype]
@@ -60,6 +67,18 @@ enum Key {
     Root,
     Epoch,
     Nullifier(BytesN<32>),
+    /// labs (R2): historial de raices, una por epoca. Nunca se reescribe.
+    RootAt(u32),
+}
+
+/// labs (R2): una raiz publicada, con su fecha.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RootRecord {
+    pub root: BytesN<32>,
+    /// Segundos Unix del ledger en que se publico.
+    pub published_at: u64,
+    pub ledger: u32,
 }
 
 #[contractevent(topics = ["root_published"])]
@@ -112,14 +131,47 @@ impl AgentTierRegistry {
     }
 
     /// MicoPay publica la raiz de estadisticas certificadas (p. ej. cada noche).
-    pub fn publish_root(env: Env, root: BytesN<32>) -> u32 {
+    /// labs (R2): las epocas van en orden (1, 2, 3...), cada una guarda su raiz y su
+    /// fecha en `root_at`, y una epoca ya publicada nunca se reescribe.
+    pub fn publish_root(env: Env, root: BytesN<32>) -> Result<u32, Error> {
         let admin: Address = env.storage().instance().get(&Key::Admin).unwrap();
         admin.require_auth();
-        let epoch: u32 = env.storage().instance().get::<_, u32>(&Key::Epoch).unwrap() + 1;
+        let epoch: u32 = env
+            .storage()
+            .instance()
+            .get::<_, u32>(&Key::Epoch)
+            .unwrap()
+            .checked_add(1)
+            .ok_or(Error::EpochOverflow)?;
+        let record_key = Key::RootAt(epoch);
+        // Con la epoca que solo sube no deberia pasar; se revisa igual.
+        if env.storage().persistent().has(&record_key) {
+            return Err(Error::EpochOverflow);
+        }
+        let record = RootRecord {
+            root: root.clone(),
+            published_at: env.ledger().timestamp(),
+            ledger: env.ledger().sequence(),
+        };
+        env.storage().persistent().set(&record_key, &record);
+        env.storage()
+            .persistent()
+            .extend_ttl(&record_key, NULLIFIER_TTL / 2, NULLIFIER_TTL);
         env.storage().instance().set(&Key::Root, &root);
         env.storage().instance().set(&Key::Epoch, &epoch);
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_TTL_MIN, INSTANCE_TTL_EXTEND);
         RootPublished { root, epoch }.publish(&env);
-        epoch
+        Ok(epoch)
+    }
+
+    /// labs (R2): la raiz y la fecha de una epoca publicada.
+    pub fn root_at(env: Env, epoch: u32) -> Result<RootRecord, Error> {
+        env.storage()
+            .persistent()
+            .get(&Key::RootAt(epoch))
+            .ok_or(Error::RootNotPublished)
     }
 
     pub fn root(env: Env) -> Result<(BytesN<32>, u32), Error> {
@@ -183,6 +235,9 @@ impl AgentTierRegistry {
 
         env.storage().persistent().set(&nkey, &epoch);
         env.storage().persistent().extend_ttl(&nkey, NULLIFIER_TTL / 2, NULLIFIER_TTL);
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_TTL_MIN, INSTANCE_TTL_EXTEND);
         TierProven { agent, tier, context, epoch }.publish(&env);
         Ok(())
     }

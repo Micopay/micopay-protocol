@@ -40,7 +40,7 @@ Arma la imagen `micopay-zk-toolchain` (nargo 1.0.0-beta.9 + bb 0.87.0, las versi
 | | Resultado |
 |---|---|
 | Circuito | 9/9 tests |
-| Contrato | 13/13 tests (+1 ignorado: `sondeo_maleabilidad`) |
+| Contrato | 16/16 tests (+1 ignorado: `sondeo_maleabilidad`); 13 de #533 y 3 de R2 |
 | Prueba | 14,592 bytes |
 
 Lo que se intentó y falla: presumir un tier más alto, pedir un umbral a la medida, inventar números, usar la prueba de otra cuenta, reusarla en el mismo trade o en otro, usarla tras una raíz nueva, alterar bits de la prueba, publicar raíz sin el admin.
@@ -78,15 +78,19 @@ Con un solo hilo es el peor caso; con hilos no está medido. 15–30 s en medio 
 3. **Pedersen** porque nargo beta.9 no exporta Poseidon; Protocol 25 ya trae Poseidon nativo. Migrarlo es opcional.
 4. **TTL de nullifiers**: ~180 días por llamada; para anti-reuso permanente hace falta extenderlos.
 5. Las cuentas de `circuit/demo/agents.json` son deterministas, sin fondos, **solo demo**.
-6. **La configuración puede archivarse.** `prove_tier` y `publish_root` no extienden el TTL del almacenamiento de instancia (admin, VK, raíz, época). Si el contrato pasa tiempo sin uso, la red lo archiva y hay que restaurarlo.
+6. **Vida de la configuración (arreglado en R2).** En #533, `prove_tier` y `publish_root` no extendían el TTL de la instancia (admin, VK, raíz, época), y el contrato se podía archivar por desuso. Ahora los dos la extienden a ~30 días.
+
+## Cambios en labs
+
+| ID | Cambio |
+|---|---|
+| R2 | **Raíz por época.** Cada `publish_root` guarda la raíz con su fecha y su ledger en `root_at(epoca)`. Las épocas van en orden (1, 2, 3…) y una ya publicada nunca se reescribe. `publish_root` devuelve `Result` (`EpochOverflow` si se acabaran los números). Además, `publish_root` y `prove_tier` extienden el TTL de la instancia |
 
 ## Pendiente
 
 En labs (plan `PLAN_LABS_ESCROW_V2_Y_TIERS`):
-- **R2:** contexto por época en vez de por trade.
-- **R3:** guardar el tier del agente con su época.
+- **R3:** contexto por época en vez de por trade, y guardar el tier del agente con su época.
 - **R4:** `get_tier(agent)` para leerlo.
-- Extender el TTL de la instancia (caveat 6).
 
 Fuera de labs:
 - Backend: job que arma el árbol y publica la raíz; endpoint con la ruta Merkle del agente.
