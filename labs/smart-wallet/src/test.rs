@@ -314,6 +314,65 @@ fn w3_tope_de_firmantes() {
     assert_eq!(c.try_add_signer(&pk(&env, &key(200)), &1, &pop(&env, &c.address, &key(200))), Err(Ok(WalletError::TooManySigners)));
 }
 
+// ---------- W4: remove_signer ----------
+
+#[test]
+fn w4_quita_y_el_quitado_ya_no_firma() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (a, b) = (key(1), key(2));
+    let (w, c) = setup(&env, &a);
+    let id_b = c.add_signer(&pk(&env, &b), &1, &pop(&env, &c.address, &b));
+    c.remove_signer(&id_b);
+    assert_eq!(c.signers().len(), 1);
+    let p = payload(&env);
+    assert_eq!(
+        check(&env, &w, &p, vec![&env, proof(&env, &w, &b, &p)]),
+        Err(Ok(WalletError::UnknownSigner))
+    );
+    // La llave queda libre: se puede volver a agregar.
+    c.add_signer(&pk(&env, &b), &1, &pop(&env, &c.address, &b));
+}
+
+#[test]
+fn w4_no_quita_el_ultimo() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let a = key(1);
+    let (_, c) = setup(&env, &a);
+    assert_eq!(c.try_remove_signer(&signer_id(&env, &pk(&env, &a))), Err(Ok(WalletError::LastSigner)));
+}
+
+#[test]
+fn w4_no_deja_el_umbral_inalcanzable() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (a, b) = (key(1), key(2));
+    let (_, c) = setup(&env, &a);
+    let id_b = c.add_signer(&pk(&env, &b), &1, &pop(&env, &c.address, &b));
+    c.set_threshold(&2);
+    assert_eq!(c.try_remove_signer(&id_b), Err(Ok(WalletError::ThresholdUnreachable)));
+}
+
+#[test]
+fn w4_desconocido_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    assert_eq!(c.try_remove_signer(&BytesN::random(&env)), Err(Ok(WalletError::UnknownSigner)));
+}
+
+#[test]
+fn w4_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let id_b = c.add_signer(&pk(&env, &key(2)), &1, &pop(&env, &c.address, &key(2)));
+    env.set_auths(&[]);
+    assert_eq!(c.try_remove_signer(&id_b).err(), Some(Err(auth_error())));
+    assert_eq!(c.signers().len(), 2);
+}
+
 // ---------- W5: set_threshold ----------
 
 #[test]
