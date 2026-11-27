@@ -4,9 +4,24 @@ mod errors;
 mod types;
 
 use errors::EscrowError;
-use types::{DataKey, TimeoutBounds, TradeEscrow, TradeStatus};
+use types::{DataKey, TierGate, TierRecord, TimeoutBounds, TradeEscrow, TradeStatus};
 
-use soroban_sdk::{contract, contractimpl, log, symbol_short, token, Address, Bytes, BytesN, Env};
+use soroban_sdk::{
+    contract, contractclient, contractimpl, log, symbol_short, token, Address, Bytes, BytesN, Env,
+};
+
+/// labs (X1): la unica funcion del registro de tiers que usa el escrow.
+#[contractclient(name = "TierRegistryClient")]
+pub trait TierRegistry {
+    fn get_tier(env: Env, agent: Address) -> Option<TierRecord>;
+}
+
+/// labs (X1): true si `agent` tiene un tier vigente igual o mayor que `min_tier`.
+fn has_tier(env: &Env, gate: &TierGate, agent: &Address) -> bool {
+    TierRegistryClient::new(env, &gate.registry)
+        .get_tier(agent)
+        .map_or(false, |record| record.tier >= gate.min_tier)
+}
 
 // TTL constants (~5s per ledger on mainnet)
 const TTL_MIN: u32 = 17_280; // ~1 day — extend if below this
@@ -179,6 +194,44 @@ impl EscrowFactory {
         env.storage().instance().get(&DataKey::PendingAdmin)
     }
 
+    /// labs (X1): desde `threshold` (unidades del token), `lock` pide que el vendedor
+    /// o el comprador tengan un tier vigente >= `min_tier` en `registry`. Solo el admin.
+    pub fn set_tier_gate(
+        env: Env,
+        registry: Address,
+        threshold: i128,
+        min_tier: u32,
+    ) -> Result<(), EscrowError> {
+        read_admin(&env)?.require_auth();
+        if threshold <= 0 || !(1..=3).contains(&min_tier) {
+            return Err(EscrowError::InvalidConfig);
+        }
+        let gate = TierGate {
+            registry,
+            threshold,
+            min_tier,
+        };
+        env.storage().instance().set(&DataKey::TierGate, &gate);
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.events()
+            .publish((symbol_short!("tiergate"),), (gate.registry, threshold, min_tier));
+        Ok(())
+    }
+
+    /// labs (X1): quita la regla de tier. Solo el admin.
+    pub fn clear_tier_gate(env: Env) -> Result<(), EscrowError> {
+        read_admin(&env)?.require_auth();
+        env.storage().instance().remove(&DataKey::TierGate);
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.events().publish((symbol_short!("tiergate"),), ());
+        Ok(())
+    }
+
+    /// labs (X1): regla de tier vigente, si la hay.
+    pub fn tier_gate(env: Env) -> Option<TierGate> {
+        env.storage().instance().get(&DataKey::TierGate)
+    }
+
     /// labs (E7): pausa de emergencia. Solo bloquea `lock` (y `extend`, E8, cuando
     /// exista). Las salidas siguen: nadie queda con su dinero atrapado por una pausa.
     pub fn pause(env: Env) -> Result<(), EscrowError> {
@@ -279,6 +332,18 @@ impl EscrowFactory {
 
         if amount <= 0 || platform_fee < 0 {
             return Err(EscrowError::InsufficientAmount);
+        }
+
+        // labs (X1): en un trade grande, alguno de los dos tiene que tener tier. El
+        // vendedor ya firmo; si el que tiene tier es el comprador, tambien firma.
+        // Abajo del umbral no se consulta el registro.
+        if let Some(gate) = Self::tier_gate(env.clone()) {
+            if amount >= gate.threshold && !has_tier(&env, &gate, &seller) {
+                if !has_tier(&env, &gate, &buyer) {
+                    return Err(EscrowError::TierRequired);
+                }
+                buyer.require_auth();
+            }
         }
 
         let token_id: Address = env

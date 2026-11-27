@@ -1213,3 +1213,190 @@ fn test_e8_extended_trade_refunds_only_at_new_timeout() {
     escrow.refund(&id);
     assert_eq!(escrow.get_trade(&id).status, TradeStatus::Refunded);
 }
+
+// ── labs (X1): trade grande con un participante con tier ─────────────────────
+
+mod tier_mock {
+    use crate::types::TierRecord;
+    use soroban_sdk::{contract, contractimpl, contracttype, Address, Env};
+
+    #[contracttype]
+    enum Key {
+        Tier(Address),
+        Calls,
+    }
+
+    /// Hace de `AgentTierRegistry`: devuelve el tier que le pongan y cuenta consultas.
+    #[contract]
+    pub struct MockTierRegistry;
+
+    #[contractimpl]
+    impl MockTierRegistry {
+        pub fn set(env: Env, agent: Address, tier: u32, epoch: u32) {
+            env.storage().instance().set(&Key::Tier(agent), &TierRecord { tier, epoch });
+        }
+
+        pub fn get_tier(env: Env, agent: Address) -> Option<TierRecord> {
+            let calls: u32 = env.storage().instance().get(&Key::Calls).unwrap_or(0);
+            env.storage().instance().set(&Key::Calls, &(calls + 1));
+            env.storage().instance().get(&Key::Tier(agent))
+        }
+
+        pub fn calls(env: Env) -> u32 {
+            env.storage().instance().get(&Key::Calls).unwrap_or(0)
+        }
+    }
+
+    /// Un registro roto: cualquier consulta falla.
+    #[contract]
+    pub struct BrokenTierRegistry;
+
+    #[contractimpl]
+    impl BrokenTierRegistry {
+        pub fn get_tier(_env: Env, _agent: Address) -> Option<TierRecord> {
+            panic!("registro roto")
+        }
+    }
+}
+
+use tier_mock::{BrokenTierRegistry, MockTierRegistry, MockTierRegistryClient};
+
+const BIG: i128 = 10_000_000_000; // 1,000 unidades del token
+const PLATA: u32 = 2;
+
+fn gated() -> (Env, EscrowFactoryClient<'static>, Address, Address, Address, MockTierRegistryClient<'static>) {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let registry_id = env.register(MockTierRegistry, ());
+    let registry = MockTierRegistryClient::new(&env, &registry_id);
+    escrow.set_tier_gate(&registry_id, &BIG, &PLATA);
+    (env, escrow, contract_id, seller, buyer, registry)
+}
+
+fn lock_amount(
+    env: &Env,
+    escrow: &EscrowFactoryClient,
+    seller: &Address,
+    buyer: &Address,
+    tag: &[u8],
+    amount: i128,
+) -> Result<BytesN<32>, EscrowError> {
+    let (_, hash) = tagged_hash(env, tag);
+    match escrow.try_lock(seller, buyer, &amount, &0i128, &hash, &120u32) {
+        Ok(Ok(id)) => Ok(id),
+        Err(Ok(e)) => Err(e),
+        other => panic!("resultado inesperado: {:?}", other),
+    }
+}
+
+#[test]
+fn test_x1_below_threshold_does_not_ask() {
+    let (env, escrow, _, seller, buyer, registry) = gated();
+    lock_amount(&env, &escrow, &seller, &buyer, b"chico", BIG - 1).unwrap();
+    assert_eq!(registry.calls(), 0);
+}
+
+#[test]
+fn test_x1_at_threshold_without_tier_fails() {
+    let (env, escrow, _, seller, buyer, registry) = gated();
+    // En el umbral exacto ya se pide tier, y nadie lo tiene.
+    assert_eq!(
+        lock_amount(&env, &escrow, &seller, &buyer, b"justo", BIG),
+        Err(EscrowError::TierRequired),
+    );
+    // (El conteo de consultas no sirve aqui: un lock fallido revierte todo, tambien
+    // el contador del registro simulado.)
+    let _ = registry;
+}
+
+#[test]
+fn test_x1_seller_with_tier_passes() {
+    let (env, escrow, _, seller, buyer, registry) = gated();
+    registry.set(&seller, &PLATA, &1);
+    lock_amount(&env, &escrow, &seller, &buyer, b"vendedor", BIG).unwrap();
+    // Con el vendedor basta: no se consulta al comprador.
+    assert_eq!(registry.calls(), 1);
+}
+
+#[test]
+fn test_x1_low_or_expired_tier_does_not_count() {
+    let (env, escrow, _, seller, buyer, registry) = gated();
+    // Bronce no alcanza para Plata.
+    registry.set(&seller, &1, &1);
+    assert_eq!(
+        lock_amount(&env, &escrow, &seller, &buyer, b"bronce", BIG),
+        Err(EscrowError::TierRequired),
+    );
+    // Oro si alcanza.
+    registry.set(&seller, &3, &1);
+    lock_amount(&env, &escrow, &seller, &buyer, b"oro", BIG).unwrap();
+    // Vencido: el registro real (get_tier, R4) da None, igual que un agente que
+    // nunca probo; ese caso es el de test_x1_at_threshold_without_tier_fails.
+}
+
+#[test]
+fn test_x1_buyer_with_tier_must_sign() {
+    let (env, escrow, contract_id, seller, buyer, registry) = gated();
+    registry.set(&buyer, &PLATA, &1);
+    let (_, hash) = tagged_hash(&env, b"comprador");
+    let invoke = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "lock",
+        args: (seller.clone(), buyer.clone(), BIG, 0i128, hash.clone(), 120u32).into_val(&env),
+        sub_invokes: &[],
+    };
+
+    // Solo firma el vendedor: el comprador con tier tiene que firmar tambien.
+    env.mock_auths(&[auth_for(&seller, &invoke)]);
+    assert!(escrow.try_lock(&seller, &buyer, &BIG, &0i128, &hash, &120u32).is_err());
+
+    env.mock_all_auths();
+    escrow.lock(&seller, &buyer, &BIG, &0i128, &hash, &120u32);
+    assert!(env.auths().iter().any(|(signer, _)| *signer == buyer));
+}
+
+#[test]
+fn test_x1_broken_registry_fails_the_lock() {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+    let broken = env.register(BrokenTierRegistry, ());
+    escrow.set_tier_gate(&broken, &BIG, &PLATA);
+    let before = token_client.balance(&seller);
+    let (_, hash) = tagged_hash(&env, b"roto");
+    assert!(escrow.try_lock(&seller, &buyer, &BIG, &0i128, &hash, &120u32).is_err());
+    assert_eq!(token_client.balance(&seller), before);
+    // Abajo del umbral no se consulta, asi que pasa aunque el registro este roto.
+    lock_amount(&env, &escrow, &seller, &buyer, b"chico-roto", BIG - 1).unwrap();
+}
+
+#[test]
+fn test_x1_gate_config() {
+    let (env, contract_id, admin, seller, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let registry = env.register(MockTierRegistry, ());
+    assert_eq!(escrow.tier_gate(), None);
+    for (threshold, tier) in [(0i128, PLATA), (-1, PLATA), (BIG, 0), (BIG, 4)] {
+        assert_eq!(
+            escrow.try_set_tier_gate(&registry, &threshold, &tier),
+            Err(Ok(EscrowError::InvalidConfig)),
+        );
+    }
+
+    let invoke = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "set_tier_gate",
+        args: (registry.clone(), BIG, PLATA).into_val(&env),
+        sub_invokes: &[],
+    };
+    env.mock_auths(&[auth_for(&seller, &invoke)]);
+    assert!(escrow.try_set_tier_gate(&registry, &BIG, &PLATA).is_err());
+    assert_eq!(escrow.tier_gate(), None);
+    env.mock_auths(&[auth_for(&admin, &invoke)]);
+    escrow.set_tier_gate(&registry, &BIG, &PLATA);
+    assert_eq!(escrow.tier_gate().unwrap().threshold, BIG);
+
+    env.mock_all_auths();
+    escrow.clear_tier_gate();
+    assert_eq!(escrow.tier_gate(), None);
+}

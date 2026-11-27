@@ -33,4 +33,6 @@ pub enum EscrowError {
     InvalidExtension = 19,
     /// labs (E8): el nuevo vencimiento pasa el tope de vida que se guardo al bloquear.
     ExtensionAboveCap = 20,
+    /// labs (X1): trade grande y ningun participante tiene el tier minimo vigente.
+    TierRequired = 21,
 }
