@@ -6,7 +6,7 @@
 //   2. trades >= min_trades  y  rate >= min_rate   (ej. ">= 10 ops y >= 90 %")
 //   3. agent_id es publico: la prueba queda amarrada a SU cuenta Stellar y no se
 //      puede prestar a otro agente.
-//   4. nullifier = H(secret, context): una prueba por contexto (ej. por trade_id),
+//   4. nullifier = H(secret, context): una prueba por contexto (labs R3: la epoca),
 //      no reutilizable.
 //
 // Lo que NO sale de la prueba: trades exactos, rate exacto, secret, posicion en el arbol.

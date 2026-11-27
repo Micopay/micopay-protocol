@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Corre DENTRO del contenedor micopay-zk-toolchain (nargo 1.0.0-beta.9 + bb 0.87.0),
 # con labs/agent-tier/ montado en /work. Ver scripts/demo.sh.
-# Lupe (agente demo 0, 37 ops / 97 %) prueba tier Plata (>= 10 ops, min_rate 0) para trade:demo-0001.
+# Lupe (agente demo 0, 37 ops / 97 %) prueba tier Plata (>= 10 ops, min_rate 0) en la epoca 1.
 set -euo pipefail
 cd /work/circuit
 

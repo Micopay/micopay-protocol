@@ -7,7 +7,7 @@ use soroban_sdk::{
 };
 
 // Fixture generada por scripts/build_proof.sh: Lupe (37 ops / 97 %) prueba
-// "soy Plata" (>= 10 ops) para trade:demo-0001.
+// "soy Plata" (>= 10 ops) en la epoca 1 (labs R3).
 const PROOF: &[u8] = include_bytes!("../fixtures/proof");
 const VK: &[u8] = include_bytes!("../fixtures/vk");
 const PI: &[u8] = include_bytes!("../fixtures/public_inputs");
@@ -24,7 +24,6 @@ struct Ctx {
     client: AgentTierRegistryClient<'static>,
     lupe: Address,
     root: BytesN<32>,
-    context: BytesN<32>,
     nullifier: BytesN<32>,
     proof: Bytes,
 }
@@ -43,7 +42,6 @@ fn setup(publish: bool) -> Ctx {
     }
     Ctx {
         lupe: Address::from_str(&env, LUPE),
-        context: BytesN::from_array(&env, &field(4)),
         nullifier: BytesN::from_array(&env, &field(5)),
         proof: Bytes::from_slice(&env, PROOF),
         root,
@@ -57,9 +55,8 @@ fn ids_coinciden_con_los_del_circuito() {
     let c = setup(false);
     // agent_id derivado on-chain de la Address == el que uso el prover.
     assert_eq!(c.client.agent_id(&c.lupe).to_array(), field(1));
-    // context derivado del trade_id == el que uso el prover.
-    let ctx = c.client.context_of(&Bytes::from_slice(&c.env, b"trade:demo-0001"));
-    assert_eq!(ctx.to_array(), field(4));
+    // labs (R3): el contexto es la epoca 1, el mismo que uso el prover.
+    assert_eq!(c.client.context_for(&1).to_array(), field(4));
     // Umbrales de Plata (min_trades=10, min_rate=0) en los inputs publicos.
     assert_eq!(field(2)[31], 10);
     assert_eq!(field(3)[31], 0);
@@ -70,7 +67,7 @@ fn lupe_prueba_plata_sin_revelar_numeros() {
     let c = setup(true);
     c.env.cost_estimate().budget().reset_default();
     c.env.cost_estimate().budget().reset_unlimited();
-    c.client.prove_tier(&c.lupe, &PLATA, &c.context, &c.nullifier, &c.proof);
+    c.client.prove_tier(&c.lupe, &PLATA, &c.nullifier, &c.proof);
     let cpu = c.env.cost_estimate().budget().cpu_instruction_cost();
     let mem = c.env.cost_estimate().budget().memory_bytes_cost();
     std::println!("prove_tier CPU instructions: {cpu}  memoria: {mem} bytes");
@@ -81,8 +78,8 @@ fn lupe_prueba_plata_sin_revelar_numeros() {
 #[test]
 fn replay_en_el_mismo_trade_se_rechaza() {
     let c = setup(true);
-    c.client.prove_tier(&c.lupe, &PLATA, &c.context, &c.nullifier, &c.proof);
-    let r = c.client.try_prove_tier(&c.lupe, &PLATA, &c.context, &c.nullifier, &c.proof);
+    c.client.prove_tier(&c.lupe, &PLATA, &c.nullifier, &c.proof);
+    let r = c.client.try_prove_tier(&c.lupe, &PLATA, &c.nullifier, &c.proof);
     assert_eq!(r, Err(Ok(Error::NullifierAlreadyUsed)));
 }
 
@@ -90,23 +87,27 @@ fn replay_en_el_mismo_trade_se_rechaza() {
 fn la_prueba_no_se_presta_a_otra_cuenta() {
     let c = setup(true);
     let beto = Address::from_str(&c.env, BETO);
-    let r = c.client.try_prove_tier(&beto, &PLATA, &c.context, &c.nullifier, &c.proof);
+    let r = c.client.try_prove_tier(&beto, &PLATA, &c.nullifier, &c.proof);
     assert_eq!(r, Err(Ok(Error::VerificationFailed)));
 }
 
 #[test]
 fn no_puede_presumir_oro_con_prueba_de_plata() {
     let c = setup(true);
-    let r = c.client.try_prove_tier(&c.lupe, &ORO, &c.context, &c.nullifier, &c.proof);
+    let r = c.client.try_prove_tier(&c.lupe, &ORO, &c.nullifier, &c.proof);
     assert_eq!(r, Err(Ok(Error::VerificationFailed)));
 }
 
 #[test]
-fn no_sirve_en_otro_trade() {
+fn no_sirve_en_otra_epoca_aunque_la_raiz_sea_igual() {
+    // labs (R3): MicoPay vuelve a publicar la misma raiz como epoca 2. La prueba se
+    // hizo para la epoca 1, asi que ya no pasa: cada epoca pide una prueba nueva.
     let c = setup(true);
-    let otro = c.client.context_of(&Bytes::from_slice(&c.env, b"trade:demo-0002"));
-    let r = c.client.try_prove_tier(&c.lupe, &PLATA, &otro, &c.nullifier, &c.proof);
+    c.client.publish_root(&c.root);
+    assert_eq!(c.client.root(), (c.root.clone(), 2));
+    let r = c.client.try_prove_tier(&c.lupe, &PLATA, &c.nullifier, &c.proof);
     assert_eq!(r, Err(Ok(Error::VerificationFailed)));
+    assert_eq!(c.client.tier_record(&c.lupe), None);
 }
 
 #[test]
@@ -117,7 +118,7 @@ fn raiz_nueva_invalida_pruebas_viejas() {
     let mut otra = field(0);
     otra[31] ^= 1;
     c.client.publish_root(&BytesN::from_array(&c.env, &otra));
-    let r = c.client.try_prove_tier(&c.lupe, &PLATA, &c.context, &c.nullifier, &c.proof);
+    let r = c.client.try_prove_tier(&c.lupe, &PLATA, &c.nullifier, &c.proof);
     assert_eq!(r, Err(Ok(Error::VerificationFailed)));
     assert_eq!(c.client.root().1, 2);
 }
@@ -132,7 +133,7 @@ fn prueba_alterada_falla() {
     for word in [0usize, 16, 31, 100, 200, 312, 400, 455] {
         let mut p = std::vec::Vec::from(PROOF);
         p[word * 32 + 31] ^= 0x01;
-        let r = c.client.try_prove_tier(&c.lupe, &PLATA, &c.context, &c.nullifier, &Bytes::from_slice(&c.env, &p));
+        let r = c.client.try_prove_tier(&c.lupe, &PLATA, &c.nullifier, &Bytes::from_slice(&c.env, &p));
         assert!(r.is_err(), "palabra {word} alterada paso");
     }
     assert!(!c.client.is_used(&c.nullifier));
@@ -150,7 +151,7 @@ fn sondeo_maleabilidad() {
             let i = word * 32 + off;
             let mut p = std::vec::Vec::from(PROOF);
             p[i] ^= 0x01;
-            let r = c.client.try_prove_tier(&c.lupe, &PLATA, &c.context, &c.nullifier, &Bytes::from_slice(&c.env, &p));
+            let r = c.client.try_prove_tier(&c.lupe, &PLATA, &c.nullifier, &Bytes::from_slice(&c.env, &p));
             if r.is_ok() {
                 aceptados.push((word, off));
                 // deshacer la quema para seguir probando
@@ -167,7 +168,7 @@ fn sondeo_maleabilidad() {
 #[test]
 fn sin_raiz_publicada_no_verifica() {
     let c = setup(false);
-    let r = c.client.try_prove_tier(&c.lupe, &PLATA, &c.context, &c.nullifier, &c.proof);
+    let r = c.client.try_prove_tier(&c.lupe, &PLATA, &c.nullifier, &c.proof);
     assert_eq!(r, Err(Ok(Error::RootNotPublished)));
     let _ = c.root;
 }
@@ -179,7 +180,7 @@ fn solo_existen_tiers_fijos() {
     // binaria del numero exacto.
     let c = setup(true);
     for bad in [0u32, 4, 30, 37, u32::MAX] {
-        let r = c.client.try_prove_tier(&c.lupe, &bad, &c.context, &c.nullifier, &c.proof);
+        let r = c.client.try_prove_tier(&c.lupe, &bad, &c.nullifier, &c.proof);
         assert_eq!(r, Err(Ok(Error::InvalidTier)), "tier {bad}");
     }
     assert_eq!(c.client.thresholds(&BRONCE), (1, 0));
@@ -192,7 +193,7 @@ fn lupe_no_puede_probar_un_tier_mas_bajo_con_la_prueba_de_plata() {
     // La prueba esta hecha para los umbrales de Plata; con Bronce los inputs
     // publicos cambian y no verifica (cada tier es una prueba distinta).
     let c = setup(true);
-    let r = c.client.try_prove_tier(&c.lupe, &BRONCE, &c.context, &c.nullifier, &c.proof);
+    let r = c.client.try_prove_tier(&c.lupe, &BRONCE, &c.nullifier, &c.proof);
     assert_eq!(r, Err(Ok(Error::VerificationFailed)));
 }
 
@@ -293,8 +294,33 @@ fn publicar_y_probar_extienden_la_vida_del_contrato() {
     // Pasan ~29 dias sin uso: una prueba vuelve a extenderla.
     c.env.ledger().with_mut(|l| l.sequence_number += INSTANCE_TTL_EXTEND - 100);
     assert!(ttl() < INSTANCE_TTL_MIN);
-    c.client.prove_tier(&c.lupe, &PLATA, &c.context, &c.nullifier, &c.proof);
+    c.client.prove_tier(&c.lupe, &PLATA, &c.nullifier, &c.proof);
     assert_eq!(ttl(), INSTANCE_TTL_EXTEND);
+}
+
+// ---- labs (R3): prueba por epoca y tier guardado ----
+
+#[test]
+fn el_tier_queda_guardado_con_su_epoca() {
+    let c = setup(true);
+    assert_eq!(c.client.tier_record(&c.lupe), None);
+    c.client.prove_tier(&c.lupe, &PLATA, &c.nullifier, &c.proof);
+    assert_eq!(c.client.tier_record(&c.lupe), Some(TierRecord { tier: PLATA, epoch: 1 }));
+
+    // Una epoca nueva no borra el registro: tier_record lo sigue mostrando con su
+    // epoca (get_tier, R4, es la consulta que lo da por vencido).
+    c.client.publish_root(&root_n(&c.env, 7));
+    assert_eq!(c.client.tier_record(&c.lupe), Some(TierRecord { tier: PLATA, epoch: 1 }));
+}
+
+#[test]
+fn una_prueba_fallida_no_guarda_tier() {
+    let c = setup(true);
+    let beto = Address::from_str(&c.env, BETO);
+    assert!(c.client.try_prove_tier(&beto, &PLATA, &c.nullifier, &c.proof).is_err());
+    assert!(c.client.try_prove_tier(&c.lupe, &ORO, &c.nullifier, &c.proof).is_err());
+    assert_eq!(c.client.tier_record(&beto), None);
+    assert_eq!(c.client.tier_record(&c.lupe), None);
 }
 
 #[allow(dead_code)]

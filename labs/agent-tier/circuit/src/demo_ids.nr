@@ -17,5 +17,5 @@ pub global IDS: [Field; 8] = [
     0x00958374eb364db9afcdfe1c0c9233e31bd47a926e463f2e5c13cd1f6a089a8a,
     0x00a354f93064143e731e54244d3e8301f11b62b446af32eb4e82d51572d0ca7d,
 ];
-// trade:demo-0001
-pub global CONTEXT: Field = 0x00f0e597ef34f6abb80175bbad3bcb10596101fbb85fa391b1f32e38903b7361;
+// epoca 1 (labs R3: la prueba se amarra a la epoca de la raiz, no al trade)
+pub global CONTEXT: Field = 0x0000000000000000000000000000000000000000000000000000000000000001;
