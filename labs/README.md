@@ -12,6 +12,7 @@ Experimentos de MicoPay en Soroban, **solo en testnet**. Nada de esta carpeta va
 |---|---|
 | `escrow-v2/` | Copia experimental del escrow, con más reglas en cadena (L1) |
 | `agent-tier/` | Reputación privada de agentes con prueba ZK (trabajo de Raúl, R1) |
+| `smart-account/` | Spike: el escrow real con una smart wallet (`C…`) como vendedor y comprador |
 
 ## Reglas
 
