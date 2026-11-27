@@ -21,7 +21,7 @@ El escrow libera a quien debe (el comprador, con el secreto) o regresa el dinero
 |---|---|
 | L1 | El constructor exige la firma del admin. En producción se guarda sin firma |
 | L1 | `decline` deja el trade en `Declined`, no en `Refunded`. Así se distingue un rechazo de un reembolso por vencimiento |
-| L1 | Nuevo estado `Resolved`, reservado para `resolve` (E5). Todavía ninguna función lo usa |
+| L1 | Nuevo estado `Resolved`, para `resolve` (E5) |
 | E1 | `lock` rechaza un `timeout_minutes` fuera de [mínimo, máximo] (`TimeoutOutOfRange`). Nace con 1 min y 24 h; el admin los cambia con `set_timeout_bounds` y se leen con `timeout_bounds`. El máximo no puede llegar al TTL de un trade (~30 días). El vencimiento se calcula con aritmética comprobada: un valor enorme da error en vez de abortar. Producción acepta 0 y aborta con valores enormes |
 | E2 | `lock` rechaza una comisión de MicoPay mayor que el tope (`FeeAboveCap`): piso de `monto × fee_cap_bps / 10000`. Nace con 100 bps (1 %); el admin lo cambia con `set_fee_cap` (0 a 10000) y se lee con `fee_cap`. Solo afecta a locks futuros. **La comisión del agente no se toca:** va dentro del precio y el contrato no la ve. Producción no tiene tope en cadena |
 | E7 | Pausa de emergencia: `pause` y `unpause` (solo el admin), `is_paused` para leerla. En pausa, `lock` y `extend` (E8) fallan con `Paused`. **Las salidas siguen**: `release`, `decline` y `refund` funcionan en pausa, para que nadie quede con su dinero atrapado. Producción no tiene pausa |
@@ -31,11 +31,12 @@ El escrow libera a quien debe (el comprador, con el secreto) o regresa el dinero
 | E8 | Extender el plazo: `extend(trade_id, nuevo_vencimiento)`, con **la firma de las dos partes** sobre el mismo nuevo vencimiento. Solo en `Locked`, antes de vencer y fuera de pausa. El nuevo vencimiento tiene que ser posterior al actual y no pasar el tope de vida del trade: al bloquear, el trade guarda `lock_ledger` y `max_total_ledgers` (el máximo de E1 en ese momento), así que si el admin cambia los límites después, el trade conserva los suyos. Producción no puede extender |
 | E3 | **Margen antes del reembolso.** Después del vencimiento T, el comprador conserva un margen para cobrar con el secreto: `refund` falla con `ClaimWindowOpen` hasta G = T + margen, y desde G funciona. `release` y `decline` siguen funcionando dentro del margen. Nace con **15 minutos**; el admin lo cambia con `set_claim_margin` (no puede ser 0) y se lee con `claim_margin`. Cada trade guarda su margen al bloquear (`margin_ledgers`), así que un cambio solo afecta a trades nuevos. La vida máxima de un trade ahora cuenta el máximo de E1 más el margen, y tiene que quedar debajo del TTL (~30 días). En producción, `refund` funciona justo al vencer |
 | E4 | **"Ya pagué".** `report_paid(trade_id)`: el comprador (con su firma) dice que pagó el efectivo y no tiene el secreto. Solo **entre T y G**: antes de T nadie puede reembolsar, así que reportar solo congelaría el dinero del vendedor; desde G llega tarde (`ClaimWindowClosed`). Pasa el trade a `Disputed` y fija **D = máx(G, ahora + plazo de disputa)**; reportar nunca adelanta un reembolso. En disputa, `refund` falla con `DisputeOpen` hasta D y desde D funciona; `release` y `decline` siguen funcionando, y `extend` ya no. No se puede reportar dos veces. Funciona en pausa. El plazo nace en **7 días**; el admin lo cambia con `set_dispute_window` (no puede ser 0) y se lee con `dispute_window`. Cada trade guarda su plazo al bloquear. La vida máxima de un trade cuenta el máximo de E1 + el margen + el plazo de disputa. El reporte deja al trade con la vida completa (~30 días). Producción no tiene disputas |
+| E5 | **Árbitro (experimento: el escrow real no lo tendrá).** El admin fija el árbitro de los trades futuros con `set_arbiter` (se lee con `arbiter`); nace sin árbitro. Cada trade guarda el árbitro vigente al bloquear, y un árbitro nuevo no toca trades abiertos. El árbitro no puede ser el vendedor ni el comprador: ese `lock` falla con `ArbiterIsParty`. `resolve(trade_id, to_buyer)`: solo el árbitro guardado, solo en `Disputed` (`NotDisputed` si no), una sola vez. A favor del comprador paga el monto y la comisión se acumula (E11); a favor del vendedor le regresa monto + comisión. Solo paga a las direcciones del trade. Funciona antes y después de D, y en pausa. Si el trade no tiene árbitro, `resolve` da `NoArbiter` y la salida sigue siendo `refund` desde D |
 | X1 | **Trade grande con un participante con tier.** El admin fija una regla con `set_tier_gate(registry, umbral, tier_minimo)` (se quita con `clear_tier_gate`, se lee con `tier_gate`). Desde el umbral, en unidades del token, `lock` consulta `get_tier` del registro de `labs/agent-tier`: si el vendedor tiene el tier mínimo vigente, pasa (ya firmó); si no, y el comprador lo tiene, el comprador también tiene que firmar; si nadie lo tiene, falla con `TierRequired`. Abajo del umbral no se consulta. Si el registro falla, el `lock` falla. Nace sin regla. Garantiza "firmó un participante con tier", no "el agente": el contrato no sabe quién es el agente |
 
 Las siguientes funciones (E1–E12) están en el plan de labs.
 
-**Asimetría (E4, mientras no exista el árbitro de E5):** "ya pagué" solo retrasa el reembolso hasta D; no protege al comprador. Si nadie resuelve, desde D el dinero regresa al vendedor.
+**Asimetría:** si el árbitro no actúa, o el trade no tiene árbitro, la salida en D favorece al vendedor: "ya pagué" solo retrasa el reembolso; no protege al comprador.
 
 ## Plazos en ledgers, no en reloj
 
@@ -47,7 +48,7 @@ Las siguientes funciones (E1–E12) están en el plan de labs.
 cargo test
 ```
 
-76 pruebas: las 9 de producción, 5 de L1, 7 de E1, 7 de E2, 3 de E7, 5 de E9, 4 de E11, 4 de E12, 6 de E8, 7 de X1, 6 de E3 y 13 de E4. Desde E3, las pruebas de producción que reembolsan esperan también el margen. Las de X1 usan un registro de tiers simulado (`MockTierRegistry`): `labs/agent-tier` usa otra versión del SDK y su verificación necesita la prueba ZK. Las de firmas usan **firmas reales**, sin `mock_all_auths()`:
+85 pruebas: las 9 de producción, 5 de L1, 7 de E1, 7 de E2, 3 de E7, 5 de E9, 4 de E11, 4 de E12, 6 de E8, 7 de X1, 6 de E3, 13 de E4 y 9 de E5. Desde E3, las pruebas de producción que reembolsan esperan también el margen. Las de X1 usan un registro de tiers simulado (`MockTierRegistry`): `labs/agent-tier` usa otra versión del SDK y su verificación necesita la prueba ZK. Las de firmas usan **firmas reales**, sin `mock_all_auths()`:
 - el constructor falla sin la firma del admin, y la registra cuando la hay;
 - `decline` falla si solo firma el vendedor;
 - `release` falla si lo firma el vendedor, aunque tenga el secreto;
@@ -60,3 +61,4 @@ cargo test
 - en un trade grande, si solo el comprador tiene tier, tiene que firmar el `lock` (X1); solo el admin fija la regla.
 - solo el admin cambia el margen antes del reembolso (E3).
 - solo el comprador reporta "ya pagué", no el vendedor; solo el admin cambia el plazo de disputa (E4).
+- solo el árbitro guardado en el trade resuelve: ni el vendedor, ni el comprador, ni un árbitro nuevo; solo el admin fija el árbitro (E5).

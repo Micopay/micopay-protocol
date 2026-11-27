@@ -1745,3 +1745,173 @@ fn escrow_token(env: &Env, escrow: &EscrowFactoryClient, _id: &BytesN<32>) -> Ad
         env.storage().instance().get::<_, Address>(&DataKey::TokenId).unwrap()
     })
 }
+
+// ── labs (E5): arbitro (experimento) ──────────────────────────────────────────
+
+/// Trade en disputa con arbitro. Devuelve tambien el token y el D del trade.
+fn disputed_with_arbiter(
+    tag: &[u8],
+) -> (Env, EscrowFactoryClient<'static>, Address, Address, Address, Address, BytesN<32>, Bytes, u32, Address) {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let arbiter = Address::generate(&env);
+    escrow.set_arbiter(&arbiter);
+    let (secret, hash) = tagged_hash(&env, tag);
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &8i128, &hash, &1u32);
+    let t = escrow.get_trade(&id).timeout_ledger;
+    go_to(&env, t);
+    let d = escrow.report_paid(&id);
+    (env, escrow, contract_id, seller, buyer, arbiter, id, secret, d, token_id)
+}
+
+#[test]
+fn test_e5_resolve_to_buyer_and_to_seller() {
+    let (env, escrow, contract_id, _, buyer, _, id, _, _, token_id) = disputed_with_arbiter(b"comprador");
+    let token_client = token::Client::new(&env, &token_id);
+    escrow.resolve(&id, &true);
+    assert_eq!(escrow.get_trade(&id).status, TradeStatus::Resolved);
+    assert_eq!(token_client.balance(&buyer), 1_000);
+    assert_eq!(escrow.accrued_fees(), 8);
+    assert_eq!(token_client.balance(&contract_id), 8);
+
+    let (env2, escrow2, contract_id2, seller2, buyer2, _, id2, _, _, token_id2) = disputed_with_arbiter(b"vendedor");
+    let token_client2 = token::Client::new(&env2, &token_id2);
+    let before = token_client2.balance(&seller2);
+    escrow2.resolve(&id2, &false);
+    assert_eq!(token_client2.balance(&seller2), before + 1_008);
+    assert_eq!(token_client2.balance(&buyer2), 0);
+    assert_eq!(escrow2.accrued_fees(), 0);
+    assert_eq!(token_client2.balance(&contract_id2), 0);
+}
+
+#[test]
+fn test_e5_only_the_stored_arbiter_resolves() {
+    let (env, escrow, contract_id, seller, buyer, arbiter, id, _, _, _) = disputed_with_arbiter(b"firma");
+    let invoke = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "resolve",
+        args: (id.clone(), true).into_val(&env),
+        sub_invokes: &[],
+    };
+    for who in [&seller, &buyer] {
+        env.mock_auths(&[auth_for(who, &invoke)]);
+        assert!(escrow.try_resolve(&id, &true).is_err());
+    }
+    // Un arbitro nuevo no sirve en un trade viejo, ni el admin.
+    env.mock_all_auths();
+    let new_arbiter = Address::generate(&env);
+    escrow.set_arbiter(&new_arbiter);
+    env.mock_auths(&[auth_for(&new_arbiter, &invoke)]);
+    assert!(escrow.try_resolve(&id, &true).is_err());
+    assert_eq!(escrow.get_trade(&id).status, TradeStatus::Disputed);
+    env.mock_auths(&[auth_for(&arbiter, &invoke)]);
+    escrow.resolve(&id, &true);
+    assert_eq!(escrow.get_trade(&id).status, TradeStatus::Resolved);
+}
+
+#[test]
+fn test_e5_only_in_dispute_and_only_once() {
+    let (env, escrow, _, seller, buyer, _, id, _, _, _) = disputed_with_arbiter(b"una");
+    escrow.resolve(&id, &false);
+    assert_eq!(escrow.try_resolve(&id, &true), Err(Ok(EscrowError::TradeNotLocked)));
+    assert_eq!(escrow.try_refund(&id), Err(Ok(EscrowError::TradeNotLocked)));
+
+    // Un trade sin reporte no se resuelve.
+    let (_, hash) = tagged_hash(&env, b"sin-reporte");
+    let locked = escrow.lock(&seller, &buyer, &1_000i128, &0i128, &hash, &1u32);
+    assert_eq!(escrow.try_resolve(&locked, &true), Err(Ok(EscrowError::NotDisputed)));
+}
+
+#[test]
+fn test_e5_without_arbiter_refund_at_d_is_the_exit() {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+    let before = token_client.balance(&seller);
+    let (_, hash) = tagged_hash(&env, b"sin-arbitro");
+    let id = escrow.lock(&seller, &buyer, &1_000i128, &8i128, &hash, &1u32);
+    assert_eq!(escrow.get_trade(&id).arbiter, None);
+    go_to(&env, escrow.get_trade(&id).timeout_ledger);
+    let d = escrow.report_paid(&id);
+    assert_eq!(escrow.try_resolve(&id, &true), Err(Ok(EscrowError::NoArbiter)));
+    go_to(&env, d);
+    escrow.refund(&id);
+    assert_eq!(token_client.balance(&seller), before);
+}
+
+#[test]
+fn test_e5_arbiter_that_never_acts() {
+    let (env, escrow, _, _, _, _, id, _, d, _) = disputed_with_arbiter(b"no-actua");
+    go_to(&env, d - 1);
+    assert_eq!(escrow.try_refund(&id), Err(Ok(EscrowError::DisputeOpen)));
+    go_to(&env, d);
+    escrow.refund(&id);
+    assert_eq!(escrow.get_trade(&id).status, TradeStatus::Refunded);
+    assert_eq!(escrow.try_resolve(&id, &true), Err(Ok(EscrowError::TradeNotLocked)));
+}
+
+#[test]
+fn test_e5_races_with_release_and_refund() {
+    // release primero: el arbitro ya no puede.
+    let (_, escrow, _, _, _, _, id, secret, _, _) = disputed_with_arbiter(b"release-1");
+    escrow.release(&id, &secret);
+    assert_eq!(escrow.try_resolve(&id, &false), Err(Ok(EscrowError::TradeNotLocked)));
+    // resolve primero: el comprador ya no puede cobrar con el secreto.
+    let (_, escrow, _, _, _, _, id, secret, _, _) = disputed_with_arbiter(b"release-2");
+    escrow.resolve(&id, &false);
+    assert_eq!(escrow.try_release(&id, &secret), Err(Ok(EscrowError::TradeNotLocked)));
+    // En D: refund primero y luego resolve, y al reves.
+    let (env, escrow, _, _, _, _, id, _, d, _) = disputed_with_arbiter(b"refund-1");
+    go_to(&env, d);
+    escrow.refund(&id);
+    assert_eq!(escrow.try_resolve(&id, &true), Err(Ok(EscrowError::TradeNotLocked)));
+    let (env, escrow, _, _, _, _, id, _, d, _) = disputed_with_arbiter(b"refund-2");
+    go_to(&env, d);
+    escrow.resolve(&id, &true);
+    assert_eq!(escrow.try_refund(&id), Err(Ok(EscrowError::TradeNotLocked)));
+}
+
+#[test]
+fn test_e5_arbiter_cannot_be_a_party() {
+    let (env, contract_id, _, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+    let before = token_client.balance(&seller);
+    for (i, party) in [&seller, &buyer].into_iter().enumerate() {
+        escrow.set_arbiter(party);
+        let (_, hash) = tagged_hash(&env, &[b'p', i as u8]);
+        assert_eq!(
+            escrow.try_lock(&seller, &buyer, &1_000i128, &0i128, &hash, &1u32),
+            Err(Ok(EscrowError::ArbiterIsParty)),
+        );
+    }
+    assert_eq!(token_client.balance(&seller), before);
+}
+
+#[test]
+fn test_e5_only_admin_sets_arbiter() {
+    let (env, contract_id, admin, seller, _, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    assert_eq!(escrow.arbiter(), None);
+    let arbiter = Address::generate(&env);
+    let invoke = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "set_arbiter",
+        args: (arbiter.clone(),).into_val(&env),
+        sub_invokes: &[],
+    };
+    env.mock_auths(&[auth_for(&seller, &invoke)]);
+    assert!(escrow.try_set_arbiter(&arbiter).is_err());
+    assert_eq!(escrow.arbiter(), None);
+    env.mock_auths(&[auth_for(&admin, &invoke)]);
+    escrow.set_arbiter(&arbiter);
+    assert_eq!(escrow.arbiter(), Some(arbiter));
+}
+
+#[test]
+fn test_e5_resolve_works_in_pause() {
+    let (_, escrow, _, _, _, _, id, _, _, _) = disputed_with_arbiter(b"pausa");
+    escrow.pause();
+    escrow.resolve(&id, &true);
+    assert_eq!(escrow.get_trade(&id).status, TradeStatus::Resolved);
+}

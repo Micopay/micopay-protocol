@@ -41,4 +41,10 @@ pub enum EscrowError {
     ClaimWindowClosed = 23,
     /// labs (E4): hay una disputa abierta y su plazo D todavia no llega.
     DisputeOpen = 24,
+    /// labs (E5): el arbitro vigente es el vendedor o el comprador de este trade.
+    ArbiterIsParty = 25,
+    /// labs (E5): el trade se bloqueo sin arbitro; nadie puede resolverlo.
+    NoArbiter = 26,
+    /// labs (E5): solo se resuelve un trade en disputa.
+    NotDisputed = 27,
 }

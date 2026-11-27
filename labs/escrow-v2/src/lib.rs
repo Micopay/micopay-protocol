@@ -210,6 +210,21 @@ impl EscrowFactory {
         Ok(())
     }
 
+    /// labs (E5, experimento: el escrow real no tendra arbitro). El admin fija el
+    /// arbitro de los trades futuros. Los trades abiertos conservan el suyo.
+    pub fn set_arbiter(env: Env, arbiter: Address) -> Result<(), EscrowError> {
+        read_admin(&env)?.require_auth();
+        env.storage().instance().set(&DataKey::Arbiter, &arbiter);
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.events().publish((symbol_short!("arbiter"),), arbiter);
+        Ok(())
+    }
+
+    /// labs (E5): arbitro vigente para los trades nuevos, si lo hay.
+    pub fn arbiter(env: Env) -> Option<Address> {
+        env.storage().instance().get(&DataKey::Arbiter)
+    }
+
     /// labs (E4): plazo de disputa vigente, en minutos.
     pub fn dispute_window(env: Env) -> Result<u32, EscrowError> {
         env.storage()
@@ -478,6 +493,15 @@ impl EscrowFactory {
         timeout_ledger
             .checked_add(margin_ledgers)
             .ok_or(EscrowError::LedgerOverflow)?;
+        // labs (E5): el trade guarda el arbitro vigente, que no puede ser una de las
+        // partes: el vendedor o el comprador se darian la razon a si mismos.
+        let arbiter = Self::arbiter(env.clone());
+        if let Some(a) = &arbiter {
+            if *a == seller || *a == buyer {
+                return Err(EscrowError::ArbiterIsParty);
+            }
+        }
+
         // labs (E4): el trade guarda tambien su plazo de disputa.
         let dispute_ledgers = Self::dispute_window(env.clone())?
             .checked_mul(LEDGERS_PER_MINUTE)
@@ -512,6 +536,7 @@ impl EscrowFactory {
             margin_ledgers,
             dispute_ledgers,
             dispute_deadline: 0,
+            arbiter,
         };
 
         env.storage()
@@ -823,6 +848,67 @@ impl EscrowFactory {
             (trade_id, trade.buyer, deadline),
         );
         Ok(deadline)
+    }
+
+    /// labs (E5, experimento): el arbitro guardado en el trade cierra una disputa.
+    /// `to_buyer` = true paga el monto al comprador y la comision se acumula (E11);
+    /// false regresa monto + comision al vendedor. Solo paga a las direcciones del
+    /// trade. Funciona antes y despues de D, y en pausa. Mientras nadie cierre el
+    /// trade, desde D tambien funciona `refund`.
+    pub fn resolve(env: Env, trade_id: BytesN<32>, to_buyer: bool) -> Result<(), EscrowError> {
+        let mut trade: TradeEscrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Trade(trade_id.clone()))
+            .ok_or(EscrowError::TradeNotFound)?;
+        if !is_open(&trade) {
+            return Err(EscrowError::TradeNotLocked);
+        }
+        if trade.status != TradeStatus::Disputed {
+            return Err(EscrowError::NotDisputed);
+        }
+        let arbiter = trade.arbiter.clone().ok_or(EscrowError::NoArbiter)?;
+        arbiter.require_auth();
+
+        let token_id: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::TokenId)
+            .ok_or(EscrowError::NotInitialized)?;
+        let token_client = token::Client::new(&env, &token_id);
+        let (recipient, paid, fee) = if to_buyer {
+            token_client.transfer(&env.current_contract_address(), &trade.buyer, &trade.amount);
+            if trade.platform_fee > 0 {
+                let accrued = Self::accrued_fees(env.clone())
+                    .checked_add(trade.platform_fee)
+                    .ok_or(EscrowError::AmountOverflow)?;
+                env.storage().instance().set(&DataKey::AccruedFees, &accrued);
+            }
+            (trade.buyer.clone(), trade.amount, trade.platform_fee)
+        } else {
+            let total = trade
+                .amount
+                .checked_add(trade.platform_fee)
+                .ok_or(EscrowError::AmountOverflow)?;
+            token_client.transfer(&env.current_contract_address(), &trade.seller, &total);
+            (trade.seller.clone(), total, 0i128)
+        };
+
+        trade.status = TradeStatus::Resolved;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Trade(trade_id.clone()), &trade);
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Trade(trade_id.clone()),
+            TTL_MIN,
+            TTL_EXTEND,
+        );
+        env.events().publish(
+            (symbol_short!("resolved"),),
+            (trade_id, arbiter, recipient, paid, fee),
+        );
+        Ok(())
     }
 
     /// labs (E12): el comprador firma que el trade es suyo, mientras siga abierto.
