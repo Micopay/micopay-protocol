@@ -108,6 +108,38 @@ impl EscrowFactory {
         env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
     }
 
+    /// labs (E11): comisiones acumuladas que todavia no se cobran.
+    pub fn accrued_fees(env: Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&DataKey::AccruedFees)
+            .unwrap_or(0)
+    }
+
+    /// labs (E11): el admin cobra las comisiones acumuladas y las manda a `to`.
+    /// Devuelve cuanto cobro. Nunca toca el dinero de los trades abiertos.
+    pub fn claim_fees(env: Env, to: Address) -> Result<i128, EscrowError> {
+        read_admin(&env)?.require_auth();
+        let accrued = Self::accrued_fees(env.clone());
+        if accrued > 0 {
+            let token_id: Address = env
+                .storage()
+                .instance()
+                .get(&DataKey::TokenId)
+                .ok_or(EscrowError::NotInitialized)?;
+            env.storage().instance().set(&DataKey::AccruedFees, &0i128);
+            token::Client::new(&env, &token_id).transfer(
+                &env.current_contract_address(),
+                &to,
+                &accrued,
+            );
+            env.events()
+                .publish((symbol_short!("fees"),), (to, accrued));
+        }
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        Ok(accrued)
+    }
+
     /// labs (E9): el admin propone a su reemplazo. El admin actual sigue con todos
     /// sus permisos hasta que el nuevo acepta. Una propuesta nueva reemplaza a la anterior.
     pub fn propose_admin(env: Env, new_admin: Address) -> Result<(), EscrowError> {
@@ -353,24 +385,19 @@ impl EscrowFactory {
             .get(&DataKey::TokenId)
             .ok_or(EscrowError::NotInitialized)?;
 
-        let platform_wallet: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::PlatformWallet)
-            .ok_or(EscrowError::NotInitialized)?;
-
         let token_client = token::Client::new(&env, &token_id);
 
         // Transfer escrow amount to buyer
         token_client.transfer(&env.current_contract_address(), &trade.buyer, &trade.amount);
 
-        // Transfer platform fee
+        // labs (E11): la comision se queda en el contrato y se cobra aparte con
+        // `claim_fees`. Si la billetera de MicoPay estuviera congelada o sin
+        // trustline, en produccion el `release` fallaria y el comprador no cobraria.
         if trade.platform_fee > 0 {
-            token_client.transfer(
-                &env.current_contract_address(),
-                &platform_wallet,
-                &trade.platform_fee,
-            );
+            let accrued = Self::accrued_fees(env.clone())
+                .checked_add(trade.platform_fee)
+                .ok_or(EscrowError::AmountOverflow)?;
+            env.storage().instance().set(&DataKey::AccruedFees, &accrued);
         }
 
         // Update status

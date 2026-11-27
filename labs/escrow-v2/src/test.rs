@@ -2,7 +2,7 @@
 
 use super::*;
 use soroban_sdk::{
-    testutils::{Address as _, Ledger, LedgerInfo, MockAuth, MockAuthInvoke},
+    testutils::{Address as _, IssuerFlags, Ledger, LedgerInfo, MockAuth, MockAuthInvoke},
     token, Address, Bytes, BytesN, Env, IntoVal,
 };
 
@@ -93,7 +93,10 @@ fn test_lock_and_release() {
     // Verify buyer received the escrowed amount
     assert_eq!(token_client.balance(&buyer), amount);
 
-    // Verify platform received the fee
+    // labs (E11): la comision se acumula en el contrato y se cobra aparte.
+    assert_eq!(token_client.balance(&platform_wallet), 0);
+    assert_eq!(escrow.accrued_fees(), platform_fee);
+    assert_eq!(escrow.claim_fees(&platform_wallet), platform_fee);
     assert_eq!(token_client.balance(&platform_wallet), platform_fee);
 
     // Verify trade is now Released
@@ -678,6 +681,8 @@ fn test_e2_new_cap_does_not_touch_open_trades() {
     // Bajar el tope a 0 no le quita la comision a un trade ya bloqueado.
     escrow.set_fee_cap(&0u32);
     escrow.release(&trade_id, &secret);
+    assert_eq!(escrow.accrued_fees(), 10_000);
+    escrow.claim_fees(&platform_wallet);
     assert_eq!(token_client.balance(&platform_wallet), 10_000);
 }
 
@@ -880,4 +885,129 @@ fn test_e9_old_admin_loses_permissions() {
     env.mock_auths(&[auth_for(&new_admin, &pause)]);
     escrow.pause();
     assert!(escrow.is_paused());
+}
+
+// ── labs (E11): comisiones acumuladas ────────────────────────────────────────
+
+#[test]
+fn test_e11_release_pays_buyer_even_if_platform_wallet_is_frozen() {
+    // Mismo arranque que setup_env, pero con un token que el emisor puede congelar.
+    let env = Env::default();
+    env.mock_all_auths();
+    let admin = Address::generate(&env);
+    let seller = Address::generate(&env);
+    let buyer = Address::generate(&env);
+    let platform_wallet = Address::generate(&env);
+    let asset = env.register_stellar_asset_contract_v2(admin.clone());
+    asset.issuer().set_flag(IssuerFlags::RevocableFlag);
+    let token_id = asset.address();
+    let sac = token::StellarAssetClient::new(&env, &token_id);
+    sac.mint(&seller, &100_000_000i128);
+    let contract_id = env.register(
+        EscrowFactory,
+        EscrowFactoryArgs::__constructor(&admin, &token_id, &platform_wallet),
+    );
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+
+    // La billetera de MicoPay queda congelada: no puede recibir.
+    sac.set_authorized(&platform_wallet, &false);
+    assert!(!sac.authorized(&platform_wallet));
+
+    let (secret, hash) = tagged_hash(&env, b"congelada");
+    let trade_id = escrow.lock(&seller, &buyer, &1_000_000i128, &8_000i128, &hash, &120u32);
+    escrow.release(&trade_id, &secret);
+
+    assert_eq!(token_client.balance(&buyer), 1_000_000);
+    assert_eq!(escrow.accrued_fees(), 8_000);
+    // Cobrar a la billetera congelada falla y no pierde lo acumulado.
+    assert!(escrow.try_claim_fees(&platform_wallet).is_err());
+    assert_eq!(escrow.accrued_fees(), 8_000);
+    // Se puede cobrar en otra direccion.
+    let other = Address::generate(&env);
+    assert_eq!(escrow.claim_fees(&other), 8_000);
+    assert_eq!(token_client.balance(&other), 8_000);
+}
+
+#[test]
+fn test_e11_claim_pays_accrued_once() {
+    let (env, contract_id, _, seller, buyer, platform_wallet, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+    for (tag, fee) in [(b"uno".as_slice(), 3_000i128), (b"dos", 5_000)] {
+        let (secret, hash) = tagged_hash(&env, tag);
+        let id = escrow.lock(&seller, &buyer, &1_000_000i128, &fee, &hash, &120u32);
+        escrow.release(&id, &secret);
+    }
+    assert_eq!(escrow.claim_fees(&platform_wallet), 8_000);
+    assert_eq!(escrow.accrued_fees(), 0);
+    // Un segundo cobro no paga nada.
+    assert_eq!(escrow.claim_fees(&platform_wallet), 0);
+    assert_eq!(token_client.balance(&platform_wallet), 8_000);
+}
+
+#[test]
+fn test_e11_only_admin_claims() {
+    let (env, contract_id, admin, seller, buyer, _, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+    let (secret, hash) = tagged_hash(&env, b"admin");
+    let id = escrow.lock(&seller, &buyer, &1_000_000i128, &8_000i128, &hash, &120u32);
+    escrow.release(&id, &secret);
+
+    let invoke = MockAuthInvoke {
+        contract: &contract_id,
+        fn_name: "claim_fees",
+        args: (seller.clone(),).into_val(&env),
+        sub_invokes: &[],
+    };
+    env.mock_auths(&[auth_for(&seller, &invoke)]);
+    assert!(escrow.try_claim_fees(&seller).is_err());
+    assert_eq!(escrow.accrued_fees(), 8_000);
+
+    env.mock_auths(&[auth_for(&admin, &invoke)]);
+    let before = token_client.balance(&seller);
+    escrow.claim_fees(&seller);
+    assert_eq!(token_client.balance(&seller), before + 8_000);
+}
+
+#[test]
+fn test_e11_contract_balance_matches_open_trades_plus_fees() {
+    let (env, contract_id, _, seller, buyer, platform_wallet, token_id) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    let token_client = token::Client::new(&env, &token_id);
+
+    let (s1, h1) = tagged_hash(&env, b"t1");
+    let (_, h2) = tagged_hash(&env, b"t2");
+    let (_, h3) = tagged_hash(&env, b"t3");
+    let t1 = escrow.lock(&seller, &buyer, &1_000_000i128, &8_000i128, &h1, &1u32);
+    let t2 = escrow.lock(&seller, &buyer, &2_000_000i128, &16_000i128, &h2, &1u32);
+    let t3 = escrow.lock(&seller, &buyer, &500_000i128, &4_000i128, &h3, &1u32);
+
+    // saldo del contrato = suma de (monto + comision) de los abiertos + acumuladas
+    let check = |open: &[&BytesN<32>]| {
+        let locked: i128 = open
+            .iter()
+            .map(|id| {
+                let t = escrow.get_trade(id);
+                t.amount + t.platform_fee
+            })
+            .sum();
+        assert_eq!(token_client.balance(&contract_id), locked + escrow.accrued_fees());
+    };
+    check(&[&t1, &t2, &t3]);
+    escrow.release(&t1, &s1);
+    check(&[&t2, &t3]);
+    escrow.decline(&t2);
+    check(&[&t3]);
+    let current = env.ledger().get();
+    env.ledger().set(LedgerInfo {
+        sequence_number: current.sequence_number + 20,
+        ..current
+    });
+    escrow.refund(&t3);
+    check(&[]);
+    escrow.claim_fees(&platform_wallet);
+    check(&[]);
+    assert_eq!(token_client.balance(&contract_id), 0);
 }
