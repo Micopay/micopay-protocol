@@ -183,6 +183,20 @@ impl SmartWallet {
         Ok(id)
     }
 
+    /// W5. Cambia el umbral. Tiene que ser alcanzable con los pesos actuales.
+    pub fn set_threshold(env: Env, threshold: u32) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        if threshold == 0 {
+            return Err(WalletError::InvalidThreshold);
+        }
+        if threshold > total_weight(&signers(&env)?)? {
+            return Err(WalletError::ThresholdUnreachable);
+        }
+        env.storage().instance().set(&DataKey::Threshold, &threshold);
+        bump(&env);
+        Ok(())
+    }
+
     /// Lectura: firmantes por id.
     pub fn signers(env: Env) -> Result<Map<BytesN<32>, Signer>, WalletError> {
         signers(&env)

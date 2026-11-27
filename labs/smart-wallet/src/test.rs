@@ -1,9 +1,10 @@
 #![cfg(test)]
+extern crate std;
 
 use super::*;
 use ed25519_dalek::{Signer as _, SigningKey};
 use soroban_sdk::{
-    testutils::BytesN as _, vec, xdr::{ScErrorCode, ScErrorType}, Address, BytesN, Env, Error, IntoVal, InvokeError, String,
+    testutils::BytesN as _, vec, xdr::{self, Limits, ScErrorCode, ScErrorType, WriteXdr}, Address, BytesN, Env, Error, IntoVal, InvokeError, String, TryFromVal, Val,
 };
 
 fn key(n: u8) -> SigningKey {
@@ -132,6 +133,29 @@ fn w2_firma_para_otra_wallet_falla() {
 }
 
 #[test]
+fn w2_umbral_2_una_firma_falla_dos_pasan() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (a, b) = (key(1), key(2));
+    let (w, c) = setup(&env, &a);
+    c.add_signer(&pk(&env, &b), &1, &pop(&env, &c.address, &b));
+    c.set_threshold(&2);
+    let p = payload(&env);
+    assert_eq!(
+        check(&env, &w, &p, vec![&env, proof(&env, &w, &a, &p)]),
+        Err(Ok(WalletError::InsufficientWeight))
+    );
+    assert_eq!(
+        check(&env, &w, &p, vec![&env, proof(&env, &w, &b, &p)]),
+        Err(Ok(WalletError::InsufficientWeight))
+    );
+    assert_eq!(
+        check(&env, &w, &p, vec![&env, proof(&env, &w, &a, &p), proof(&env, &w, &b, &p)]),
+        Ok(())
+    );
+}
+
+#[test]
 fn w2_la_misma_firma_dos_veces_no_suma_doble() {
     let env = Env::default();
     let a = key(1);
@@ -139,6 +163,23 @@ fn w2_la_misma_firma_dos_veces_no_suma_doble() {
     let p = payload(&env);
     let pa = proof(&env, &w, &a, &p);
     assert_eq!(check(&env, &w, &p, vec![&env, pa.clone(), pa]), Err(Ok(WalletError::DuplicateProof)));
+}
+
+#[test]
+fn w2_pesos_distintos() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (a, b) = (key(1), key(2));
+    let (w, c) = setup(&env, &a);
+    c.add_signer(&pk(&env, &b), &2, &pop(&env, &c.address, &b));
+    c.set_threshold(&2);
+    let p = payload(&env);
+    // b pesa 2: basta solo; a pesa 1: no basta.
+    assert_eq!(check(&env, &w, &p, vec![&env, proof(&env, &w, &b, &p)]), Ok(()));
+    assert_eq!(
+        check(&env, &w, &p, vec![&env, proof(&env, &w, &a, &p)]),
+        Err(Ok(WalletError::InsufficientWeight))
+    );
 }
 
 #[test]
@@ -271,4 +312,112 @@ fn w3_tope_de_firmantes() {
         c.add_signer(&pk(&env, &key(n)), &1, &pop(&env, &c.address, &key(n)));
     }
     assert_eq!(c.try_add_signer(&pk(&env, &key(200)), &1, &pop(&env, &c.address, &key(200))), Err(Ok(WalletError::TooManySigners)));
+}
+
+// ---------- W5: set_threshold ----------
+
+#[test]
+fn w5_cambia_el_umbral() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    c.add_signer(&pk(&env, &key(2)), &1, &pop(&env, &c.address, &key(2)));
+    c.set_threshold(&2);
+    assert_eq!(c.threshold(), 2);
+}
+
+#[test]
+fn w5_cero_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    assert_eq!(c.try_set_threshold(&0), Err(Ok(WalletError::InvalidThreshold)));
+}
+
+#[test]
+fn w5_mayor_que_la_suma_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    c.add_signer(&pk(&env, &key(2)), &1, &pop(&env, &c.address, &key(2)));
+    assert_eq!(c.try_set_threshold(&3), Err(Ok(WalletError::ThresholdUnreachable)));
+}
+
+#[test]
+fn w5_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    c.add_signer(&pk(&env, &key(2)), &1, &pop(&env, &c.address, &key(2)));
+    env.set_auths(&[]);
+    assert_eq!(c.try_set_threshold(&2).err(), Some(Err(auth_error())));
+    assert_eq!(c.threshold(), 1);
+}
+
+// ---------- Autorizacion real (sin mock_all_auths) en W3 y W5 ----------
+
+/// Entrada de autorizacion real para `wallet.fn_name(args)`, firmada por `keys`.
+fn signed_entry(env: &Env, wallet: &Address, fn_name: &str, args: Vec<Val>, keys: &[&SigningKey]) -> xdr::SorobanAuthorizationEntry {
+    static NONCE: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(1);
+    let nonce = NONCE.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let exp = env.ledger().sequence() + 100;
+    let invocation = xdr::SorobanAuthorizedInvocation {
+        function: xdr::SorobanAuthorizedFunction::ContractFn(xdr::InvokeContractArgs {
+            contract_address: wallet.try_into().unwrap(),
+            function_name: fn_name.try_into().unwrap(),
+            args: args.try_into().unwrap(),
+        }),
+        sub_invocations: std::vec![].try_into().unwrap(),
+    };
+    let pre = xdr::HashIdPreimage::SorobanAuthorization(xdr::HashIdPreimageSorobanAuthorization {
+        network_id: xdr::Hash(env.ledger().network_id().to_array()),
+        nonce,
+        signature_expiration_ledger: exp,
+        invocation: invocation.clone(),
+    });
+    let payload = env.crypto().sha256(&Bytes::from_slice(env, &pre.to_xdr(Limits::none()).unwrap()));
+    let mut proofs: Vec<Proof> = Vec::new(env);
+    for k in keys {
+        proofs.push_back(proof(env, wallet, k, &payload));
+    }
+    let v: Val = proofs.into_val(env);
+    xdr::SorobanAuthorizationEntry {
+        root_invocation: invocation,
+        credentials: xdr::SorobanCredentials::Address(xdr::SorobanAddressCredentials {
+            address: wallet.try_into().unwrap(),
+            nonce,
+            signature_expiration_ledger: exp,
+            signature: xdr::ScVal::try_from_val(env, &v).unwrap(),
+        }),
+    }
+}
+
+fn add_args(env: &Env, wallet: &Address, k: &SigningKey, weight: u32) -> Vec<Val> {
+    vec![env, pk(env, k).into_val(env), weight.into_val(env), pop(env, wallet, k).into_val(env)]
+}
+
+#[test]
+fn firma_real_umbral_1_y_luego_2_de_2() {
+    let env = Env::default();
+    let (a, b, n) = (key(1), key(2), key(3));
+    let (w, c) = setup(&env, &a);
+
+    // 1 de 1: a sola agrega a b y sube el umbral.
+    env.set_auths(&[signed_entry(&env, &w, "add_signer", add_args(&env, &w, &b, 1), &[&a])]);
+    c.add_signer(&pk(&env, &b), &1, &pop(&env, &w, &b));
+    env.set_auths(&[signed_entry(&env, &w, "set_threshold", vec![&env, 2u32.into_val(&env)], &[&a])]);
+    c.set_threshold(&2);
+    assert_eq!(c.threshold(), 2);
+
+    // 2 de 2: a sola ya no puede agregar a n.
+    env.set_auths(&[signed_entry(&env, &w, "add_signer", add_args(&env, &w, &n, 5), &[&a])]);
+    assert_eq!(c.try_add_signer(&pk(&env, &n), &5, &pop(&env, &w, &n)).err(), Some(Err(InvokeError::Abort)));
+    // a y b firmaron otro peso (1): no sirve para agregar con peso 5.
+    env.set_auths(&[signed_entry(&env, &w, "add_signer", add_args(&env, &w, &n, 1), &[&a, &b])]);
+    assert!(c.try_add_signer(&pk(&env, &n), &5, &pop(&env, &w, &n)).is_err());
+    assert_eq!(c.signers().len(), 2);
+    // a y b sobre los argumentos correctos: pasa.
+    env.set_auths(&[signed_entry(&env, &w, "add_signer", add_args(&env, &w, &n, 5), &[&a, &b])]);
+    c.add_signer(&pk(&env, &n), &5, &pop(&env, &w, &n));
+    assert_eq!(c.signers().len(), 3);
 }
