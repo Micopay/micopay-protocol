@@ -1,0 +1,88 @@
+name: Labs
+
+# labs/ es experimentacion en testnet (Ship It). Nada de ahi va a produccion.
+# Este workflow lo hace cumplir (L0 de PLAN_LABS_ESCROW_V2_Y_TIERS.md):
+#   1. un PR de labs solo cambia labs/;
+#   2. la app y su despliegue no mencionan labs/;
+#   3. backend y frontend compilan sin labs/;
+#   4. las pruebas de labs corren aparte, sin credenciales.
+
+on:
+  pull_request:
+    branches: [main, feat/micopay-web]
+  push:
+    branches: [main]
+
+concurrency:
+  group: labs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Labs aislado de la app — BLOQUEANTE
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Revisar que labs/ no toque la app
+        env:
+          # Titulo y rama van por env, nunca interpolados en el script.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BRANCH: ${{ github.head_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          is_labs=false
+          if printf '%s %s' "$PR_TITLE" "$PR_BRANCH" | grep -qi 'labs'; then is_labs=true; fi
+          # En push a main no hay PR: solo corre la revision 2.
+          if [ "${{ github.event_name }}" != "pull_request" ]; then is_labs=false; fi
+          if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then BASE_SHA=HEAD~1; fi
+          bash labs/ci/guard.sh "$BASE_SHA" "$is_labs"
+
+  app-without-labs:
+    name: Backend y frontend compilan sin labs/ — BLOQUEANTE
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Quitar labs/ del checkout
+        run: rm -rf labs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Backend (tsc)
+        working-directory: micopay/backend
+        run: |
+          npm ci
+          npm run build
+      # Mismo arreglo que ci.yml: npm 11 y sin lock (npm #4828).
+      - name: Frontend (tsc + vite build)
+        working-directory: micopay/frontend
+        run: |
+          npm i -g npm@11
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
+          npm run build
+
+  cargo:
+    name: Pruebas de labs (cargo test) — BLOQUEANTE
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            labs/**/target
+          key: labs-cargo-${{ hashFiles('labs/**/Cargo.lock') }}
+      - name: cargo test de cada proyecto de labs/
+        run: |
+          dirs=$(find labs -name Cargo.toml -not -path '*/target/*' -printf '%h\n' | sort)
+          if [ -z "$dirs" ]; then echo "Todavia no hay proyectos Cargo en labs/."; exit 0; fi
+          for d in $dirs; do
+            echo "== $d"
+            (cd "$d" && cargo test --locked)
+          done
