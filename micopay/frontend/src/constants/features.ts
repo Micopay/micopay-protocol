@@ -28,3 +28,10 @@ export const CETES_AVAILABLE = DEFI_TRADING_ENABLED || SPEI_RAMP_ENABLED;
  * propia bandera, separada de CETES: `VITE_ENABLE_BLEND=true`. Apagada en web.
  */
 export const BLEND_AVAILABLE = import.meta.env.VITE_ENABLE_BLEND === 'true';
+
+/**
+ * VITE_ENABLE_ASSISTANT: asistente con chat y voz (#532). Apagado en todos los
+ * builds hasta revisarlo: la voz manda audio a Google y el plugin de voz no se
+ * ha probado en el APK con Capacitor 8. Sin la bandera no hay boton ni ruta.
+ */
+export const ASSISTANT_ENABLED = import.meta.env.VITE_ENABLE_ASSISTANT === 'true';

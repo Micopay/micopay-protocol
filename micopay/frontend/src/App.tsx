@@ -37,7 +37,7 @@ import SuccessScreen, { receiptFromServer, type SuccessReceipt } from "./pages/S
 import Explore from "./pages/Explore";
 import ComingSoon from "./pages/ComingSoon";
 import Boveda from "./pages/Boveda";
-import { CETES_AVAILABLE, BLEND_AVAILABLE, DEFI_TRADING_ENABLED, SPEI_RAMP_ENABLED, BANK_WITHDRAW_ENABLED } from "./constants/features";
+import { CETES_AVAILABLE, BLEND_AVAILABLE, DEFI_TRADING_ENABLED, SPEI_RAMP_ENABLED, BANK_WITHDRAW_ENABLED, ASSISTANT_ENABLED } from "./constants/features";
 import BankWithdrawScreen from "./pages/BankWithdrawScreen";
 import History from "./pages/History";
 import TradeDetail from "./pages/TradeDetail";
@@ -1021,7 +1021,7 @@ function AssistantFabAdapter() {
   const location = useLocation();
   const { sessionUser } = useAppCtx();
 
-  if (!sessionUser) return null;
+  if (!ASSISTANT_ENABLED || !sessionUser) return null;
   if (location.pathname === '/assistant') return null;
   if (HIDE_BOTTOMNAV_ROUTES.has(location.pathname)) return null;
   if (HIDE_BOTTOMNAV_PREFIX.some((prefix) => location.pathname.startsWith(prefix))) return null;
@@ -1754,7 +1754,7 @@ function App() {
                 <Route path="/welcome" element={<ProtectedRoute><WelcomeRoute /></ProtectedRoute>} />
                 <Route path="/join-network" element={<ProtectedRoute><ProviderOnboardingRoute /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><ProfileRoute /></ProtectedRoute>} />
-                <Route path="/assistant" element={<ProtectedRoute><AssistantRoute /></ProtectedRoute>} />
+                {ASSISTANT_ENABLED && <Route path="/assistant" element={<ProtectedRoute><AssistantRoute /></ProtectedRoute>} />}
                 {!IS_EXTERNAL_SIGNER && <Route path="/conexiones-web" element={<ProtectedRoute><WalletConnections /></ProtectedRoute>} />}
                 <Route path="/privacy" element={<ProtectedRoute><PrivacyRoute /></ProtectedRoute>} />
                 <Route path="/terms" element={<ProtectedRoute><TermsRoute /></ProtectedRoute>} />
