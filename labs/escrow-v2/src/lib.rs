@@ -34,6 +34,8 @@ const DEFAULT_MIN_TIMEOUT_MINUTES: u32 = 1;
 const DEFAULT_MAX_TIMEOUT_MINUTES: u32 = 1_440; // 24 h
 // labs (E3): margen con el que nace el contrato (decidido el 2026-11-27).
 const DEFAULT_CLAIM_MARGIN_MINUTES: u32 = 15;
+// labs (E4): plazo de disputa con el que nace el contrato (decidido el 2026-11-27).
+const DEFAULT_DISPUTE_WINDOW_MINUTES: u32 = 7 * 24 * 60;
 
 // labs (E2): tope de la comision de MicoPay, en puntos base (100 = 1 %).
 // Produccion cobra 0.8 % fijo, que el backend calcula. La comision del agente va
@@ -57,17 +59,24 @@ fn max_platform_fee(amount: i128, fee_cap_bps: u32) -> Result<i128, EscrowError>
 
 /// Un trade no puede vivir mas que el TTL que el contrato le extiende: si no, se
 /// archivaria con el dinero adentro antes de vencer.
-/// labs (E3): la vida que cuenta es el maximo de E1 mas el margen.
+/// labs (E3, E4): la vida que cuenta es el maximo de E1 mas el margen mas el plazo
+/// de disputa (regla R-4 del plan).
 fn validate_timeout_bounds(
     min_minutes: u32,
     max_minutes: u32,
     margin_minutes: u32,
+    dispute_minutes: u32,
 ) -> Result<(), EscrowError> {
-    if min_minutes == 0 || min_minutes > max_minutes || margin_minutes == 0 {
+    if min_minutes == 0
+        || min_minutes > max_minutes
+        || margin_minutes == 0
+        || dispute_minutes == 0
+    {
         return Err(EscrowError::InvalidConfig);
     }
     let lifetime = max_minutes
         .checked_add(margin_minutes)
+        .and_then(|minutes| minutes.checked_add(dispute_minutes))
         .and_then(|minutes| minutes.checked_mul(LEDGERS_PER_MINUTE))
         .ok_or(EscrowError::InvalidConfig)?;
     if lifetime >= TTL_EXTEND {
@@ -112,6 +121,12 @@ fn compute_trade_id(
     env.crypto().sha256(&seed).into()
 }
 
+/// labs (E4): un trade abierto puede cerrarse: `Locked` o `Disputed` (regla R-1).
+/// Si las salidas solo aceptaran `Locked`, una disputa dejaria el dinero atorado.
+fn is_open(trade: &TradeEscrow) -> bool {
+    matches!(trade.status, TradeStatus::Locked | TradeStatus::Disputed)
+}
+
 #[contract]
 pub struct EscrowFactory;
 
@@ -139,6 +154,9 @@ impl EscrowFactory {
         env.storage()
             .instance()
             .set(&DataKey::ClaimMargin, &DEFAULT_CLAIM_MARGIN_MINUTES);
+        env.storage()
+            .instance()
+            .set(&DataKey::DisputeWindow, &DEFAULT_DISPUTE_WINDOW_MINUTES);
         env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
     }
 
@@ -148,7 +166,12 @@ impl EscrowFactory {
     pub fn set_claim_margin(env: Env, margin_minutes: u32) -> Result<(), EscrowError> {
         read_admin(&env)?.require_auth();
         let bounds = Self::timeout_bounds(env.clone())?;
-        validate_timeout_bounds(bounds.min_minutes, bounds.max_minutes, margin_minutes)?;
+        validate_timeout_bounds(
+            bounds.min_minutes,
+            bounds.max_minutes,
+            margin_minutes,
+            Self::dispute_window(env.clone())?,
+        )?;
         env.storage()
             .instance()
             .set(&DataKey::ClaimMargin, &margin_minutes);
@@ -163,6 +186,35 @@ impl EscrowFactory {
         env.storage()
             .instance()
             .get(&DataKey::ClaimMargin)
+            .ok_or(EscrowError::NotInitialized)
+    }
+
+    /// labs (E4): el admin fija el plazo de disputa, en minutos: cuanto espera
+    /// `refund` despues de un "ya pague". No puede ser 0. Solo afecta a los `lock`
+    /// futuros.
+    pub fn set_dispute_window(env: Env, dispute_minutes: u32) -> Result<(), EscrowError> {
+        read_admin(&env)?.require_auth();
+        let bounds = Self::timeout_bounds(env.clone())?;
+        validate_timeout_bounds(
+            bounds.min_minutes,
+            bounds.max_minutes,
+            Self::claim_margin(env.clone())?,
+            dispute_minutes,
+        )?;
+        env.storage()
+            .instance()
+            .set(&DataKey::DisputeWindow, &dispute_minutes);
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.events()
+            .publish((symbol_short!("dispwin"),), dispute_minutes);
+        Ok(())
+    }
+
+    /// labs (E4): plazo de disputa vigente, en minutos.
+    pub fn dispute_window(env: Env) -> Result<u32, EscrowError> {
+        env.storage()
+            .instance()
+            .get(&DataKey::DisputeWindow)
             .ok_or(EscrowError::NotInitialized)
     }
 
@@ -330,7 +382,12 @@ impl EscrowFactory {
         max_minutes: u32,
     ) -> Result<(), EscrowError> {
         read_admin(&env)?.require_auth();
-        validate_timeout_bounds(min_minutes, max_minutes, Self::claim_margin(env.clone())?)?;
+        validate_timeout_bounds(
+            min_minutes,
+            max_minutes,
+            Self::claim_margin(env.clone())?,
+            Self::dispute_window(env.clone())?,
+        )?;
         env.storage().instance().set(
             &DataKey::TimeoutBounds,
             &TimeoutBounds {
@@ -421,6 +478,10 @@ impl EscrowFactory {
         timeout_ledger
             .checked_add(margin_ledgers)
             .ok_or(EscrowError::LedgerOverflow)?;
+        // labs (E4): el trade guarda tambien su plazo de disputa.
+        let dispute_ledgers = Self::dispute_window(env.clone())?
+            .checked_mul(LEDGERS_PER_MINUTE)
+            .ok_or(EscrowError::LedgerOverflow)?;
 
         // labs (E2): la comision de MicoPay no pasa el tope vigente.
         if platform_fee > max_platform_fee(amount, Self::fee_cap(env.clone())?)? {
@@ -449,6 +510,8 @@ impl EscrowFactory {
                 .checked_mul(LEDGERS_PER_MINUTE)
                 .ok_or(EscrowError::LedgerOverflow)?,
             margin_ledgers,
+            dispute_ledgers,
+            dispute_deadline: 0,
         };
 
         env.storage()
@@ -488,7 +551,8 @@ impl EscrowFactory {
             .get(&DataKey::Trade(trade_id.clone()))
             .ok_or(EscrowError::TradeNotFound)?;
 
-        if trade.status != TradeStatus::Locked {
+        // labs (E4): tambien en disputa; el comprador puede cobrar hasta que se cierre.
+        if !is_open(&trade) {
             return Err(EscrowError::TradeNotLocked);
         }
 
@@ -552,8 +616,14 @@ impl EscrowFactory {
             .get(&DataKey::Trade(trade_id.clone()))
             .ok_or(EscrowError::TradeNotFound)?;
 
-        if trade.status != TradeStatus::Locked {
+        if !is_open(&trade) {
             return Err(EscrowError::TradeNotLocked);
+        }
+
+        // labs (E4): en disputa, refund espera hasta D. Desde D es la salida del
+        // vendedor si nadie resuelve.
+        if trade.status == TradeStatus::Disputed && env.ledger().sequence() < trade.dispute_deadline {
+            return Err(EscrowError::DisputeOpen);
         }
 
         // Check that timeout HAS been reached
@@ -610,7 +680,7 @@ impl EscrowFactory {
             .get(&DataKey::Trade(trade_id.clone()))
             .ok_or(EscrowError::TradeNotFound)?;
 
-        if trade.status != TradeStatus::Locked {
+        if !is_open(&trade) {
             return Err(EscrowError::TradeNotLocked);
         }
 
@@ -706,6 +776,55 @@ impl EscrowFactory {
         Ok(())
     }
 
+    /// labs (E4): "ya pague". El comprador dice que pago el efectivo y no tiene el
+    /// secreto. Solo entre el vencimiento T y G: antes de T nadie puede reembolsar,
+    /// asi que reportar no protege nada y solo congelaria el dinero del vendedor.
+    /// Pasa el trade a `Disputed` y fija D = max(G, ahora + plazo de disputa): desde
+    /// D, `refund` vuelve a funcionar. Reportar nunca adelanta un reembolso.
+    /// Funciona en pausa, como las salidas.
+    pub fn report_paid(env: Env, trade_id: BytesN<32>) -> Result<u32, EscrowError> {
+        let mut trade: TradeEscrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Trade(trade_id.clone()))
+            .ok_or(EscrowError::TradeNotFound)?;
+        if trade.status != TradeStatus::Locked {
+            return Err(EscrowError::TradeNotLocked);
+        }
+        trade.buyer.require_auth();
+        let now = env.ledger().sequence();
+        if now < trade.timeout_ledger {
+            return Err(EscrowError::TimeoutNotReached);
+        }
+        let grace = grace_ledger(&trade)?;
+        if now >= grace {
+            return Err(EscrowError::ClaimWindowClosed);
+        }
+        let deadline = now
+            .checked_add(trade.dispute_ledgers)
+            .ok_or(EscrowError::LedgerOverflow)?
+            .max(grace);
+
+        trade.status = TradeStatus::Disputed;
+        trade.dispute_deadline = deadline;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Trade(trade_id.clone()), &trade);
+        // D - ahora <= margen + plazo de disputa < TTL_EXTEND (R-4), asi que el trade
+        // sigue vivo hasta D con colchon.
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Trade(trade_id.clone()),
+            TTL_EXTEND,
+            TTL_EXTEND,
+        );
+        env.events().publish(
+            (symbol_short!("disputed"),),
+            (trade_id, trade.buyer, deadline),
+        );
+        Ok(deadline)
+    }
+
     /// labs (E12): el comprador firma que el trade es suyo, mientras siga abierto.
     /// No cambia como se libera ni a quien se paga: solo marca el trade para que
     /// cuente en las estadisticas. Asi nadie infla o ensucia una reputacion con
@@ -716,7 +835,7 @@ impl EscrowFactory {
             .persistent()
             .get(&DataKey::Trade(trade_id.clone()))
             .ok_or(EscrowError::TradeNotFound)?;
-        if trade.status != TradeStatus::Locked {
+        if !is_open(&trade) {
             return Err(EscrowError::TradeNotLocked);
         }
         trade.buyer.require_auth();

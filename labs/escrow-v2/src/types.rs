@@ -4,6 +4,9 @@ use soroban_sdk::{contracttype, Address, BytesN};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TradeStatus {
     Locked,
+    /// labs (E4): el comprador reporto "ya pague" entre T y G. Sigue abierto:
+    /// `release` y `decline` funcionan, y `refund` espera hasta D.
+    Disputed,
     Released,
     /// Reembolso por vencimiento (`refund`).
     Refunded,
@@ -35,6 +38,11 @@ pub struct TradeEscrow {
     /// labs (E3): margen en ledgers despues del vencimiento. `refund` espera hasta
     /// G = `timeout_ledger` + este margen. Se copia al bloquear.
     pub margin_ledgers: u32,
+    /// labs (E4): plazo de disputa en ledgers. Se copia al bloquear.
+    pub dispute_ledgers: u32,
+    /// labs (E4): D, el ledger desde el que `refund` vuelve a funcionar en una
+    /// disputa. 0 mientras no haya reporte.
+    pub dispute_deadline: u32,
 }
 
 /// labs (E1): limites del tiempo de bloqueo, en minutos. Los fija el admin.
@@ -85,4 +93,6 @@ pub enum DataKey {
     TierGate,
     /// labs (E3): margen antes del reembolso, en minutos.
     ClaimMargin,
+    /// labs (E4): plazo de disputa, en minutos.
+    DisputeWindow,
 }

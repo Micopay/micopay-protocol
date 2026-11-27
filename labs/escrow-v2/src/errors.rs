@@ -37,4 +37,8 @@ pub enum EscrowError {
     TierRequired = 21,
     /// labs (E3): el trade ya vencio, pero sigue el margen del comprador (antes de G).
     ClaimWindowOpen = 22,
+    /// labs (E4): "ya pague" solo entre el vencimiento T y G; ya paso G.
+    ClaimWindowClosed = 23,
+    /// labs (E4): hay una disputa abierta y su plazo D todavia no llega.
+    DisputeOpen = 24,
 }
