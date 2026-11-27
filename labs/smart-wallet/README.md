@@ -1,6 +1,6 @@
-# smart-wallet (W0–W5)
+# smart-wallet (W0–W5, W17–W19 en construcción)
 
-Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios firmantes y un umbral. **Solo testnet.** No va a producción: la app sigue con la cuenta clásica `G…`. El plan completo está fuera del repo (`PLAN_SMART_WALLET.md`, v0.3); esta carpeta es la fase W0–W5.
+Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios firmantes y un umbral. **Solo testnet.** No va a producción: la app sigue con la cuenta clásica `G…`. El plan completo está fuera del repo (`PLAN_SMART_WALLET.md`, v0.3); esta carpeta tiene las fases W0–W5 (multifirma) y W17–W19 (límites y escrows registrados).
 
 `labs/smart-account/` sigue como el spike de un firmante.
 
@@ -13,7 +13,11 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 | W3 | `add_signer(key, weight, possession)` | Agrega un firmante ed25519; el id lo deriva el contrato. La llave nueva tiene que firmar una prueba de posesión, para que el umbral nunca dependa de una llave que nadie tiene | La wallet (umbral vigente) |
 | W4 | `remove_signer(id)` | Quita un firmante; no quita el último ni deja el umbral inalcanzable | La wallet |
 | W5 | `set_threshold(t)` | Cambia el umbral; `0 < t ≤ suma de pesos` | La wallet |
-| — | `signers()`, `threshold()` | Lecturas | Cualquiera |
+| W17 | `set_limit(token, per_period)` | Límite de gasto por periodo (~1 día) de un token. Ponerlo o bajarlo aplica ya; subirlo queda pendiente `DELAY_LEDGERS` | La wallet |
+| W17 | `apply_limit(token)` | Aplica una subida pendiente cuando ya pasó la espera | Cualquiera |
+| — | `signers()`, `threshold()`, `limit(token)`, `spent(token)` | Lecturas | Cualquiera |
+
+Las reglas que hacen cumplir los límites y los escrows dentro de `__check_auth` llegan con W19 (último PR de la fase).
 
 **Reglas de la firma:**
 - Id de firmante: `sha256(0x00 ‖ pubkey)`. Una llave no puede entrar dos veces ni aportar doble peso.
@@ -27,7 +31,7 @@ Sin admin ni llave de MicoPay. Un relayer `G…` manda y paga las transacciones;
 ## Pruebas
 
 ```bash
-cargo test                 # 31 pruebas con firmas ed25519 reales
+cargo test                 # 36 pruebas con firmas ed25519 reales
 stellar contract build
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk> --vector   # vector compartido Rust/JS
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet
@@ -39,6 +43,8 @@ node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet
 - Regresión inyectada: quitar a mano el umbral, el control de duplicados, el `require_auth`, la dirección del mensaje o el control de `remove_signer` hace fallar al menos una prueba en cada caso.
 
 ## Demo en testnet
+
+### W1–W5
 
 Corrida del 2026-11-27 contra el escrow real de XLM `CCX5E4ALJ5J5ZUOW7ZKXYDJ23ZREKDWYR6JR62NBOSTHUQ3LIGKG6GU4`, sin cambios. Wallet `CA662JXMUCAQRH5VMVSSWJIHETJA6FYL3U6LAYU5LQLRFUPG2G6JX2HP`. Un relayer `G…` mandó y pagó todo; `a` y `b` son llaves ed25519, no cuentas de Stellar.
 

@@ -4,7 +4,8 @@ extern crate std;
 use super::*;
 use ed25519_dalek::{Signer as _, SigningKey};
 use soroban_sdk::{
-    testutils::BytesN as _, vec, xdr::{self, Limits, ScErrorCode, ScErrorType, WriteXdr}, Address, BytesN, Env, Error, IntoVal, InvokeError, String, TryFromVal, Val,
+    testutils::{Address as _, BytesN as _, Ledger},
+    vec, xdr::{self, Limits, ScErrorCode, ScErrorType, WriteXdr}, Address, BytesN, Env, Error, IntoVal, InvokeError, String, TryFromVal, Val,
 };
 
 fn key(n: u8) -> SigningKey {
@@ -479,4 +480,71 @@ fn firma_real_umbral_1_y_luego_2_de_2() {
     env.set_auths(&[signed_entry(&env, &w, "add_signer", add_args(&env, &w, &n, 5), &[&a, &b])]);
     c.add_signer(&pk(&env, &n), &5, &pop(&env, &w, &n));
     assert_eq!(c.signers().len(), 3);
+}
+
+// ---------- W17: limites ----------
+
+fn advance(env: &Env, ledgers: u32) {
+    env.ledger().with_mut(|l| l.sequence_number += ledgers);
+}
+
+#[test]
+fn w17_poner_y_bajar_aplica_ya() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let token = Address::generate(&env);
+    assert!(c.set_limit(&token, &100));
+    assert_eq!(c.limit(&token), Some(100));
+    assert!(c.set_limit(&token, &50));
+    assert_eq!(c.limit(&token), Some(50));
+}
+
+#[test]
+fn w17_subir_espera() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let token = Address::generate(&env);
+    c.set_limit(&token, &100);
+    assert!(!c.set_limit(&token, &500));
+    assert_eq!(c.limit(&token), Some(100));
+    assert_eq!(c.try_apply_limit(&token), Err(Ok(WalletError::NotReady)));
+    advance(&env, DELAY_LEDGERS);
+    // Cualquiera la aplica: sin firmas.
+    env.set_auths(&[]);
+    c.apply_limit(&token);
+    assert_eq!(c.limit(&token), Some(500));
+    assert_eq!(c.try_apply_limit(&token), Err(Ok(WalletError::NothingPending)));
+}
+
+#[test]
+fn w17_bajar_cancela_la_subida_pendiente() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let token = Address::generate(&env);
+    c.set_limit(&token, &100);
+    c.set_limit(&token, &500);
+    c.set_limit(&token, &10);
+    advance(&env, DELAY_LEDGERS);
+    assert_eq!(c.try_apply_limit(&token), Err(Ok(WalletError::NothingPending)));
+    assert_eq!(c.limit(&token), Some(10));
+}
+
+#[test]
+fn w17_negativo_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    assert_eq!(c.try_set_limit(&Address::generate(&env), &-1), Err(Ok(WalletError::InvalidLimit)));
+}
+
+#[test]
+fn w17_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    let (_, c) = setup(&env, &key(1));
+    let token = Address::generate(&env);
+    assert_eq!(c.try_set_limit(&token, &100).err(), Some(Err(auth_error())));
+    assert_eq!(c.limit(&token), None);
 }
