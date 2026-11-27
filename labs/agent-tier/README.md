@@ -91,7 +91,7 @@ Con un solo hilo es el peor caso; con hilos no está medido. 15–30 s en medio 
 ## Pendiente
 
 En labs (plan `PLAN_LABS_ESCROW_V2_Y_TIERS`):
-- **X1:** que `escrow-v2` pida un participante con tier (vía `get_tier`) en los trades grandes.
+- Nada. `escrow-v2` ya consulta `get_tier` para los trades grandes (X1).
 
 Fuera de labs:
 - Backend: job que arma el árbol y publica la raíz; endpoint con la ruta Merkle del agente.

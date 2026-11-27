@@ -42,6 +42,27 @@ pub struct TimeoutBounds {
     pub max_minutes: u32,
 }
 
+/// labs (X1): lo que devuelve `get_tier` del registro de `labs/agent-tier`. Mismos
+/// nombres y tipos que su `TierRecord`, para que se lea igual en cadena.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TierRecord {
+    pub tier: u32,
+    pub epoch: u32,
+}
+
+/// labs (X1): desde que monto se pide un participante con tier, y cual.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TierGate {
+    /// Contrato `AgentTierRegistry` de `labs/agent-tier`.
+    pub registry: Address,
+    /// En unidades del token de este escrow (stroops).
+    pub threshold: i128,
+    /// 1 Bronce, 2 Plata, 3 Oro.
+    pub min_tier: u32,
+}
+
 #[contracttype]
 pub enum DataKey {
     Admin,
@@ -57,4 +78,6 @@ pub enum DataKey {
     PendingAdmin,
     /// labs (E11): comisiones de MicoPay cobradas en `release` y aun no retiradas.
     AccruedFees,
+    /// labs (X1): regla de tier para trades grandes. Sin la llave, no hay regla.
+    TierGate,
 }
