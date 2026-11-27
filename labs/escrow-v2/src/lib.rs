@@ -328,6 +328,11 @@ impl EscrowFactory {
             timeout_ledger,
             status: TradeStatus::Locked,
             accepted: false,
+            lock_ledger: env.ledger().sequence(),
+            max_total_ledgers: bounds
+                .max_minutes
+                .checked_mul(LEDGERS_PER_MINUTE)
+                .ok_or(EscrowError::LedgerOverflow)?,
         };
 
         env.storage()
@@ -520,6 +525,60 @@ impl EscrowFactory {
             (trade_id, trade.seller.clone()),
         );
 
+        Ok(())
+    }
+
+    /// labs (E8): las dos partes acuerdan un vencimiento posterior. Las dos firman
+    /// la misma llamada, asi que firman el mismo `new_timeout_ledger`. Solo mientras
+    /// el trade siga `Locked` y antes de vencer, y sin pasar el tope de vida que
+    /// el trade guardo al bloquear. En pausa no se puede (E7).
+    pub fn extend(
+        env: Env,
+        trade_id: BytesN<32>,
+        new_timeout_ledger: u32,
+    ) -> Result<(), EscrowError> {
+        if Self::is_paused(env.clone()) {
+            return Err(EscrowError::Paused);
+        }
+        let mut trade: TradeEscrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Trade(trade_id.clone()))
+            .ok_or(EscrowError::TradeNotFound)?;
+        if trade.status != TradeStatus::Locked {
+            return Err(EscrowError::TradeNotLocked);
+        }
+        trade.seller.require_auth();
+        trade.buyer.require_auth();
+        if env.ledger().sequence() >= trade.timeout_ledger {
+            return Err(EscrowError::TimeoutReached);
+        }
+        if new_timeout_ledger <= trade.timeout_ledger {
+            return Err(EscrowError::InvalidExtension);
+        }
+        let lifetime = new_timeout_ledger
+            .checked_sub(trade.lock_ledger)
+            .ok_or(EscrowError::LedgerOverflow)?;
+        if lifetime > trade.max_total_ledgers {
+            return Err(EscrowError::ExtensionAboveCap);
+        }
+
+        let old_timeout_ledger = trade.timeout_ledger;
+        trade.timeout_ledger = new_timeout_ledger;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Trade(trade_id.clone()), &trade);
+        // max_total_ledgers < TTL_EXTEND (E1), asi que este TTL cubre el nuevo vencimiento.
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Trade(trade_id.clone()),
+            TTL_MIN,
+            TTL_EXTEND,
+        );
+        env.events().publish(
+            (symbol_short!("extended"),),
+            (trade_id, old_timeout_ledger, new_timeout_ledger),
+        );
         Ok(())
     }
 
