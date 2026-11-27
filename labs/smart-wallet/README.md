@@ -9,6 +9,7 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 | ID | Función | Qué hace | Quién la puede llamar |
 |---|---|---|---|
 | W1 | `__constructor(owner)` | Primer firmante ed25519 con peso 1 y umbral 1. Los plazos del plan (D5) llegan con las fases que los usan | Quien despliega |
+| W2 | `__check_auth` | Suma el peso de firmantes **distintos** con firma válida; tiene que llegar al umbral | Soroban, cuando un contrato pide `require_auth` de la wallet |
 | — | `signers()`, `threshold()` | Lecturas | Cualquiera |
 
 Esta fase entra en un PR por función (W1, W2, W3, W5, W4). Las reglas de la firma, la demo en testnet y sus transacciones llegan completas con el último PR (W4).
@@ -16,5 +17,5 @@ Esta fase entra en un PR por función (W1, W2, W3, W5, W4). Las reglas de la fir
 ## Pruebas
 
 ```bash
-cargo test   # 1 prueba
+cargo test   # 12 pruebas con firmas ed25519 reales
 ```
