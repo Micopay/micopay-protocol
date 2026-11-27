@@ -11,6 +11,8 @@ use soroban_sdk::{contract, contractimpl, log, symbol_short, token, Address, Byt
 // TTL constants (~5s per ledger on mainnet)
 const TTL_MIN: u32 = 17_280; // ~1 day — extend if below this
 const TTL_EXTEND: u32 = 518_400; // ~30 days — extend to this
+// La constancia de pago frena `refund` 24 horas (~12 ledgers por minuto).
+const PAID_REPORT_LEDGERS: u32 = 24 * 60 * 12;
 
 fn compute_trade_id(
     env: &Env,
@@ -211,6 +213,18 @@ impl EscrowFactory {
             return Err(EscrowError::TimeoutNotReached);
         }
 
+        // Con constancia de pago, el reembolso espera a que termine su plazo
+        // aunque el timeout ya haya pasado.
+        let report: Option<u32> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::PaidReport(trade_id.clone()));
+        if let Some(until) = report {
+            if env.ledger().sequence() < until {
+                return Err(EscrowError::PaymentReported);
+            }
+        }
+
         let token_id: Address = env
             .storage()
             .instance()
@@ -292,6 +306,59 @@ impl EscrowFactory {
         );
 
         Ok(())
+    }
+
+    /// Constancia de pago: el BUYER declara que ya entrego el efectivo.
+    /// Se deja una sola vez, mientras los fondos sigan bloqueados. No mueve
+    /// dinero: `release` y `decline` siguen igual, y `refund` espera hasta el
+    /// ledger que devuelve (24 horas despues de la constancia, o el timeout si
+    /// es mas tarde).
+    pub fn report_paid(env: Env, trade_id: BytesN<32>) -> Result<u32, EscrowError> {
+        let trade: TradeEscrow = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Trade(trade_id.clone()))
+            .ok_or(EscrowError::TradeNotFound)?;
+
+        if trade.status != TradeStatus::Locked {
+            return Err(EscrowError::TradeNotLocked);
+        }
+
+        trade.buyer.require_auth();
+
+        let key = DataKey::PaidReport(trade_id.clone());
+        if env.storage().persistent().has(&key) {
+            return Err(EscrowError::AlreadyReported);
+        }
+
+        let until = env
+            .ledger()
+            .sequence()
+            .saturating_add(PAID_REPORT_LEDGERS)
+            .max(trade.timeout_ledger);
+        env.storage().persistent().set(&key, &until);
+
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_EXTEND);
+        env.storage().persistent().extend_ttl(&key, TTL_MIN, TTL_EXTEND);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Trade(trade_id.clone()),
+            TTL_MIN,
+            TTL_EXTEND,
+        );
+
+        env.events().publish(
+            (symbol_short!("reported"),),
+            (trade_id, trade.buyer, until),
+        );
+
+        Ok(until)
+    }
+
+    /// Ledger hasta el que la constancia de pago frena `refund` (view function).
+    pub fn paid_report(env: Env, trade_id: BytesN<32>) -> Option<u32> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::PaidReport(trade_id))
     }
 
     /// Read trade state (view function).

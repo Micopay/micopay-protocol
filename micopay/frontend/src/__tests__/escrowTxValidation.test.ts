@@ -60,7 +60,7 @@ function operation(action: EscrowAction, targetContract = contractId) {
       nativeToScVal(secret, { type: 'bytes' }),
     );
   }
-  return contract.call('decline', nativeToScVal(tradeId, { type: 'bytes' }));
+  return contract.call(action, nativeToScVal(tradeId, { type: 'bytes' }));
 }
 
 function build(action: EscrowAction, options: {
@@ -97,6 +97,18 @@ describe('validatePreparedEscrowTx', () => {
   it('acepta decline exacto', async () => {
     vi.mocked(getPublicKey).mockResolvedValue(buyer.publicKey());
     await expect(validatePreparedEscrowTx(build('decline'), Networks.TESTNET, trade, 'decline')).resolves.toBeUndefined();
+  });
+
+  it('acepta refund y report_paid exactos', async () => {
+    vi.mocked(getPublicKey).mockResolvedValue(buyer.publicKey());
+    await expect(validatePreparedEscrowTx(build('refund'), Networks.TESTNET, trade, 'refund')).resolves.toBeUndefined();
+    await expect(validatePreparedEscrowTx(build('report_paid'), Networks.TESTNET, trade, 'report_paid')).resolves.toBeUndefined();
+  });
+
+  it('rechaza un refund presentado como constancia de pago', async () => {
+    vi.mocked(getPublicKey).mockResolvedValue(buyer.publicKey());
+    await expect(validatePreparedEscrowTx(build('refund'), Networks.TESTNET, trade, 'report_paid'))
+      .rejects.toThrow(/esperaba report_paid/);
   });
 
   it('rechaza contrato, source y método alterados', async () => {

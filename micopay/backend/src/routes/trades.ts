@@ -317,20 +317,27 @@ export async function tradeRoutes(app: FastifyInstance) {
    * D4: el cliente de un depósito reporta que pagó y el agente no confirmó.
    * Bloquea el reembolso por la app y deja el caso a soporte.
    */
+  /** Cliente: arma report_paid() para firmarlo, o `{ onchain: false }` si no aplica. */
+  app.post('/trades/:id/cash-claim/prepare', async (request) => {
+    const { id } = request.params as { id: string };
+    return tradeService.prepareCashClaim(request, id, request.user.id);
+  });
+
   app.post('/trades/:id/cash-claim', {
     schema: {
       body: {
         type: 'object',
         properties: {
           note: { type: 'string', maxLength: 1000 },
+          signed_xdr: { type: 'string' },
         },
         additionalProperties: false,
       },
     },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { note } = (request.body as { note?: string } | undefined) ?? {};
-    const claim = await tradeService.openCashClaim(request, id, request.user.id, note);
+    const { note, signed_xdr } = (request.body as { note?: string; signed_xdr?: string } | undefined) ?? {};
+    const claim = await tradeService.openCashClaim(request, id, request.user.id, note, signed_xdr);
     reply.status(201);
     return { claim };
   });
@@ -342,9 +349,26 @@ export async function tradeRoutes(app: FastifyInstance) {
    * and transitions the trade to 'refunded' status. Returns `{ status, refund_tx_hash }`.
    * Errors use `{ error, message }` via the global Fastify error handler.
    */
-  app.post('/trades/:id/refund', async (request) => {
+  app.post('/trades/:id/refund/prepare', async (request) => {
     const { id } = request.params as { id: string };
-    return tradeService.refundTrade(request, id, request.user.id);
+    return tradeService.prepareRefundTrade(request, id, request.user.id);
+  });
+
+  /** `signed_xdr` opcional: firmada en la app; sin ella firma la plataforma. */
+  app.post('/trades/:id/refund', {
+    schema: {
+      body: {
+        type: ['object', 'null'],
+        properties: {
+          signed_xdr: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request) => {
+    const { id } = request.params as { id: string };
+    const { signed_xdr } = (request.body as { signed_xdr?: string } | undefined) ?? {};
+    return tradeService.refundTrade(request, id, request.user.id, signed_xdr);
   });
 
   /**

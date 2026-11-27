@@ -30,6 +30,14 @@ public class EscrowSigningPolicyTest {
         EscrowSigningPolicy.requireArgumentCount("lock", 6);
         EscrowSigningPolicy.requireArgumentCount("release", 2);
         EscrowSigningPolicy.requireArgumentCount("decline", 1);
+        EscrowSigningPolicy.requireArgumentCount("refund", 1);
+        EscrowSigningPolicy.requireArgumentCount("report_paid", 1);
+    }
+
+    @Test
+    public void rechazaFuncionNoPermitida() {
+        assertThrows(IllegalArgumentException.class,
+            () -> EscrowSigningPolicy.requireArgumentCount("get_trade", 1));
     }
 
     @Test

@@ -27,3 +27,15 @@ export function escrowContractSupportsDecline(
   if (config.mockStellar) return true;
   return config.escrowDeclineContractIds.includes(escrowContractForTrade(trade));
 }
+
+/**
+ * Instancias con report_paid(): la constancia de pago del cliente queda en
+ * cadena y frena refund 24 horas. Las anteriores guardan el reclamo solo en
+ * la base.
+ */
+export function escrowContractSupportsPaidReport(
+  trade: { escrow_contract_id?: string | null; asset_code?: string | null },
+): boolean {
+  if (config.mockStellar) return false;
+  return config.escrowPaidReportContractIds.includes(escrowContractForTrade(trade));
+}

@@ -433,6 +433,8 @@ public class StellarKeyVaultPlugin extends Plugin {
         if ("lock".equals(reason)) return "Confirma para bloquear tu dinero en garantía";
         if ("release".equals(reason)) return "Confirma para liberar el dinero";
         if ("decline".equals(reason)) return "Confirma para devolver los fondos";
+        if ("refund".equals(reason)) return "Confirma para recuperar tus fondos";
+        if ("report_paid".equals(reason)) return "Confirma para dejar tu constancia de pago";
         if ("reveal_key".equals(reason)) return "Confirma para ver tu llave secreta";
         if ("migration".equals(reason)) return "Confirma para proteger tu cuenta con Android Keystore";
         return "Confirma para firmar esta operación";
@@ -456,7 +458,8 @@ public class StellarKeyVaultPlugin extends Plugin {
             }
             return;
         }
-        if ("lock".equals(reason) || "release".equals(reason) || "decline".equals(reason)) {
+        if ("lock".equals(reason) || "release".equals(reason) || "decline".equals(reason)
+            || "refund".equals(reason) || "report_paid".equals(reason)) {
             if (!(operation instanceof InvokeHostFunctionOperation)) {
                 throw new IllegalArgumentException("La intención de escrow no invoca un contrato");
             }

@@ -25,6 +25,7 @@ export function configuredEscrowContracts(): string[] {
     ...Object.values(config.escrowContracts),
     config.escrowLegacyContractId,
     ...config.escrowDeclineContractIds,
+    ...config.escrowPaidReportContractIds,
   ].filter((id): id is string => Boolean(id));
   return [...new Set(ids)];
 }
