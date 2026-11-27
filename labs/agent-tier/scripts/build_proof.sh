@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Corre DENTRO del contenedor micopay-zk-toolchain (nargo 1.0.0-beta.9 + bb 0.87.0),
-# con micopay/ montado en /work. Ver scripts/demo.sh.
+# con labs/agent-tier/ montado en /work. Ver scripts/demo.sh.
 # Lupe (agente demo 0, 37 ops / 97 %) prueba tier Plata (>= 10 ops, min_rate 0) para trade:demo-0001.
 set -euo pipefail
-cd /work/circuits/agent_tier_v1
+cd /work/circuit
 
 out=$(nargo test print_demo --show-output 2>&1)
 root=$(grep -oP '^ROOT \K\S+' <<<"$out")
@@ -35,7 +35,7 @@ bb write_vk --scheme ultra_honk --oracle_hash keccak -b $J -o target --output_fo
 bb verify --scheme ultra_honk --oracle_hash keccak -k target/vk -p target/proof -i target/public_inputs && echo "OFFCHAIN VERIFY OK"
 
 # Fixture para los tests del contrato
-F=/work/contracts/agent-tier/fixtures
+F=/work/contract/fixtures
 mkdir -p $F
 cp target/proof target/vk target/public_inputs $F/
 # Insumos del bench de navegador
