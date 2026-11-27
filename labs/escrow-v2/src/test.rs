@@ -1915,3 +1915,140 @@ fn test_e5_resolve_works_in_pause() {
     escrow.resolve(&id, &true);
     assert_eq!(escrow.get_trade(&id).status, TradeStatus::Resolved);
 }
+
+// ── labs (E6): contador de operaciones ───────────────────────────────────────
+
+fn stats_of(c: u32, r: u32, d: u32, o: u32, l: u32) -> Stats {
+    Stats {
+        completed: c,
+        refunded: r,
+        declined: d,
+        disputes_opened: o,
+        disputes_lost: l,
+    }
+}
+
+/// Trade aceptado (o no) con arbitro, listo para cerrarse.
+fn stats_trade(
+    env: &Env,
+    escrow: &EscrowFactoryClient,
+    seller: &Address,
+    buyer: &Address,
+    tag: &[u8],
+    accept: bool,
+) -> (BytesN<32>, Bytes) {
+    let (secret, hash) = tagged_hash(env, tag);
+    let id = escrow.lock(seller, buyer, &1_000i128, &8i128, &hash, &1u32);
+    if accept {
+        escrow.accept(&id);
+    }
+    (id, secret)
+}
+
+fn stats_env() -> (Env, EscrowFactoryClient<'static>, Address, Address) {
+    let (env, contract_id, _, seller, buyer, _, _) = setup_env();
+    let escrow = EscrowFactoryClient::new(&env, &contract_id);
+    escrow.set_arbiter(&Address::generate(&env));
+    (env, escrow, seller, buyer)
+}
+
+#[test]
+fn test_e6_new_address_is_zero() {
+    let (env, escrow, _, _) = stats_env();
+    assert_eq!(escrow.stats(&Address::generate(&env)), Stats::default());
+}
+
+#[test]
+fn test_e6_each_exit_adds_what_it_should() {
+    let (env, escrow, seller, buyer) = stats_env();
+    let (a, sa) = stats_trade(&env, &escrow, &seller, &buyer, b"a", true);
+    escrow.release(&a, &sa);
+    assert_eq!(escrow.stats(&seller), stats_of(1, 0, 0, 0, 0));
+    assert_eq!(escrow.stats(&buyer), stats_of(1, 0, 0, 0, 0));
+
+    let (b, _) = stats_trade(&env, &escrow, &seller, &buyer, b"b", true);
+    escrow.decline(&b);
+    assert_eq!(escrow.stats(&seller), stats_of(1, 0, 1, 0, 0));
+
+    let (c, _) = stats_trade(&env, &escrow, &seller, &buyer, b"c", true);
+    go_to(&env, escrow.get_trade(&c).timeout_ledger + MARGIN);
+    escrow.refund(&c);
+    assert_eq!(escrow.stats(&seller), stats_of(1, 1, 1, 0, 0));
+    assert_eq!(escrow.stats(&buyer), stats_of(1, 1, 1, 0, 0));
+}
+
+#[test]
+fn test_e6_disputes_opened_and_lost() {
+    let (env, escrow, seller, buyer) = stats_env();
+    // Gana el comprador: pierde el vendedor.
+    let (a, _) = stats_trade(&env, &escrow, &seller, &buyer, b"gana-comprador", true);
+    let (b, _) = stats_trade(&env, &escrow, &seller, &buyer, b"gana-vendedor", true);
+    let (c, _) = stats_trade(&env, &escrow, &seller, &buyer, b"nadie-resuelve", true);
+    go_to(&env, escrow.get_trade(&a).timeout_ledger);
+    escrow.report_paid(&a);
+    escrow.report_paid(&b);
+    let d = escrow.report_paid(&c);
+    assert_eq!(escrow.stats(&seller), stats_of(0, 0, 0, 3, 0));
+    assert_eq!(escrow.stats(&buyer), stats_of(0, 0, 0, 3, 0));
+
+    escrow.resolve(&a, &true);
+    assert_eq!(escrow.stats(&seller), stats_of(0, 0, 0, 3, 1));
+    assert_eq!(escrow.stats(&buyer), stats_of(0, 0, 0, 3, 0));
+    escrow.resolve(&b, &false);
+    assert_eq!(escrow.stats(&buyer), stats_of(0, 0, 0, 3, 1));
+
+    // Reembolso en D sin resolve: suma reembolso, no disputa perdida.
+    go_to(&env, d);
+    escrow.refund(&c);
+    assert_eq!(escrow.stats(&seller), stats_of(0, 1, 0, 3, 1));
+    assert_eq!(escrow.stats(&buyer), stats_of(0, 1, 0, 3, 1));
+}
+
+#[test]
+fn test_e6_unaccepted_trade_does_not_count() {
+    let (env, escrow, seller, buyer) = stats_env();
+    let (a, sa) = stats_trade(&env, &escrow, &seller, &buyer, b"a", false);
+    escrow.release(&a, &sa);
+    let (b, _) = stats_trade(&env, &escrow, &seller, &buyer, b"b", false);
+    escrow.decline(&b);
+    let (c, _) = stats_trade(&env, &escrow, &seller, &buyer, b"c", false);
+    let (e, _) = stats_trade(&env, &escrow, &seller, &buyer, b"e", false);
+    go_to(&env, escrow.get_trade(&c).timeout_ledger);
+    escrow.report_paid(&c);
+    escrow.resolve(&c, &true);
+    go_to(&env, escrow.get_trade(&e).timeout_ledger + MARGIN);
+    escrow.refund(&e);
+    assert_eq!(escrow.stats(&seller), Stats::default());
+    assert_eq!(escrow.stats(&buyer), Stats::default());
+}
+
+#[test]
+fn test_e6_rejected_close_does_not_add() {
+    let (env, escrow, seller, buyer) = stats_env();
+    let (a, sa) = stats_trade(&env, &escrow, &seller, &buyer, b"a", true);
+    escrow.release(&a, &sa);
+    let before = escrow.stats(&seller);
+    // Segundo cierre, secreto malo y reembolso antes de tiempo: todos fallan.
+    assert!(escrow.try_release(&a, &sa).is_err());
+    assert!(escrow.try_decline(&a).is_err());
+    assert!(escrow.try_refund(&a).is_err());
+    let (b, _) = stats_trade(&env, &escrow, &seller, &buyer, b"b", true);
+    assert!(escrow.try_release(&b, &Bytes::from_slice(&env, b"malo")).is_err());
+    assert!(escrow.try_refund(&b).is_err());
+    assert!(escrow.try_report_paid(&b).is_err());
+    assert_eq!(escrow.stats(&seller), before);
+    assert_eq!(escrow.stats(&buyer), before);
+}
+
+#[test]
+fn test_e6_stats_are_per_address() {
+    let (env, escrow, seller, buyer) = stats_env();
+    let other_buyer = Address::generate(&env);
+    let (a, sa) = stats_trade(&env, &escrow, &seller, &buyer, b"a", true);
+    escrow.release(&a, &sa);
+    let (b, sb) = stats_trade(&env, &escrow, &seller, &other_buyer, b"b", true);
+    escrow.release(&b, &sb);
+    assert_eq!(escrow.stats(&seller), stats_of(2, 0, 0, 0, 0));
+    assert_eq!(escrow.stats(&buyer), stats_of(1, 0, 0, 0, 0));
+    assert_eq!(escrow.stats(&other_buyer), stats_of(1, 0, 0, 0, 0));
+}

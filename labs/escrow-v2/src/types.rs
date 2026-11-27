@@ -48,6 +48,24 @@ pub struct TradeEscrow {
     pub arbiter: Option<Address>,
 }
 
+/// labs (E6): operaciones de una direccion, como vendedor o como comprador. Solo
+/// cuentan los trades que el comprador acepto (E12).
+#[contracttype]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Stats {
+    /// Cerrados con `release`.
+    pub completed: u32,
+    /// Cerrados con `refund`, incluido el de D sin `resolve`.
+    pub refunded: u32,
+    /// Cerrados con `decline`.
+    pub declined: u32,
+    /// Trades en los que hubo "ya pague" (`report_paid`).
+    pub disputes_opened: u32,
+    /// `resolve` en contra: al vendedor si gano el comprador, y al reves. Un
+    /// `refund` en D sin `resolve` no cuenta como disputa perdida.
+    pub disputes_lost: u32,
+}
+
 /// labs (E1): limites del tiempo de bloqueo, en minutos. Los fija el admin.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -100,4 +118,6 @@ pub enum DataKey {
     DisputeWindow,
     /// labs (E5): arbitro para los trades futuros. Sin la llave, no hay arbitro.
     Arbiter,
+    /// labs (E6): estadisticas de una direccion.
+    Stats(Address),
 }
