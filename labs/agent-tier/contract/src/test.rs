@@ -2,8 +2,8 @@ extern crate std;
 use super::*;
 use crate::{BRONCE, ORO, PLATA};
 use soroban_sdk::{
-    testutils::{Address as _, Events as _, Ledger},
-    Address, Bytes, BytesN, Env, String,
+    testutils::{storage::Instance as _, Address as _, Events as _, Ledger, MockAuth, MockAuthInvoke},
+    Address, Bytes, BytesN, Env, IntoVal, String,
 };
 
 // Fixture generada por scripts/build_proof.sh: Lupe (37 ops / 97 %) prueba
@@ -217,6 +217,84 @@ fn publish_root_exige_admin() {
     let client = AgentTierRegistryClient::new(&env, &id);
     // sin mock_all_auths: la firma del admin falta
     client.publish_root(&BytesN::from_array(&env, &[0u8; 32]));
+}
+
+// ---- labs (R2): raiz por epoca ----
+
+fn root_n(env: &Env, n: u8) -> BytesN<32> {
+    let mut r = [0u8; 32];
+    r[31] = n;
+    BytesN::from_array(env, &r)
+}
+
+#[test]
+fn epocas_en_orden_con_fecha_y_sin_reescribir() {
+    let c = setup(false);
+    c.env.ledger().with_mut(|l| {
+        l.timestamp = 1_000;
+        l.sequence_number = 50;
+    });
+    assert_eq!(c.client.publish_root(&root_n(&c.env, 1)), 1);
+    c.env.ledger().with_mut(|l| {
+        l.timestamp = 87_400;
+        l.sequence_number = 17_330;
+    });
+    assert_eq!(c.client.publish_root(&root_n(&c.env, 2)), 2);
+    assert_eq!(c.client.publish_root(&root_n(&c.env, 3)), 3);
+
+    // Publicar la 2 y la 3 no toco la 1: queda con su raiz y su fecha.
+    let uno = c.client.root_at(&1);
+    assert_eq!(uno.root, root_n(&c.env, 1));
+    assert_eq!(uno.published_at, 1_000);
+    assert_eq!(uno.ledger, 50);
+    let dos = c.client.root_at(&2);
+    assert_eq!(dos.root, root_n(&c.env, 2));
+    assert_eq!(dos.published_at, 87_400);
+    // La vigente es la ultima.
+    assert_eq!(c.client.root(), (root_n(&c.env, 3), 3));
+    assert_eq!(c.client.try_root_at(&4), Err(Ok(Error::RootNotPublished)));
+    assert_eq!(c.client.try_root_at(&0), Err(Ok(Error::RootNotPublished)));
+}
+
+#[test]
+fn solo_el_admin_publica_con_firmas_reales() {
+    let env = Env::default();
+    env.ledger().set_protocol_version(26);
+    let admin = Address::generate(&env);
+    let otro = Address::generate(&env);
+    let id = env.register(AgentTierRegistry, (admin.clone(), Bytes::from_slice(&env, VK)));
+    let client = AgentTierRegistryClient::new(&env, &id);
+    let root = root_n(&env, 9);
+    let invoke = MockAuthInvoke {
+        contract: &id,
+        fn_name: "publish_root",
+        args: (root.clone(),).into_val(&env),
+        sub_invokes: &[],
+    };
+
+    env.mock_auths(&[MockAuth { address: &otro, invoke: &invoke }]);
+    assert!(client.try_publish_root(&root).is_err());
+    assert_eq!(client.try_root(), Err(Ok(Error::RootNotPublished)));
+
+    env.mock_auths(&[MockAuth { address: &admin, invoke: &invoke }]);
+    assert_eq!(client.publish_root(&root), 1);
+}
+
+#[test]
+fn publicar_y_probar_extienden_la_vida_del_contrato() {
+    let c = setup(false);
+    let ttl = || {
+        c.env
+            .as_contract(&c.client.address, || c.env.storage().instance().get_ttl())
+    };
+    c.client.publish_root(&c.root);
+    assert_eq!(ttl(), INSTANCE_TTL_EXTEND);
+
+    // Pasan ~29 dias sin uso: una prueba vuelve a extenderla.
+    c.env.ledger().with_mut(|l| l.sequence_number += INSTANCE_TTL_EXTEND - 100);
+    assert!(ttl() < INSTANCE_TTL_MIN);
+    c.client.prove_tier(&c.lupe, &PLATA, &c.context, &c.nullifier, &c.proof);
+    assert_eq!(ttl(), INSTANCE_TTL_EXTEND);
 }
 
 #[allow(dead_code)]
