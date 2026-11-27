@@ -10,7 +10,7 @@ Experimentos de MicoPay en Soroban, **solo en testnet**. Nada de esta carpeta va
 
 | Carpeta | Qué es |
 |---|---|
-| `escrow-v2/` | Copia experimental del escrow, con más reglas en cadena |
+| `escrow-v2/` | Copia experimental del escrow, con más reglas en cadena (L1) |
 | `agent-tier/` | Reputación privada de agentes con prueba ZK (trabajo de Raúl) |
 
 ## Reglas
