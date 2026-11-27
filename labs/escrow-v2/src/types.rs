@@ -46,4 +46,6 @@ pub enum DataKey {
     Paused,
     /// labs (E9): admin propuesto que todavia no acepta.
     PendingAdmin,
+    /// labs (E11): comisiones de MicoPay cobradas en `release` y aun no retiradas.
+    AccruedFees,
 }
