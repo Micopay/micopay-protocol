@@ -11,16 +11,15 @@
 //! - agregar, quitar firmantes y cambiar el umbral pide la firma de la propia wallet,
 //!   es decir, el umbral vigente;
 //! - limites por token y escrows registrados (W17–W19): subir un limite o registrar un
-//!   escrow espera `DELAY_LEDGERS`; bajar o quitar aplica ya. Las reglas que los hacen
-//!   cumplir dentro de `__check_auth` llegan con W19.
+//!   escrow espera `DELAY_LEDGERS`; bajar o quitar aplica ya. `approve` se rechaza siempre.
 #![no_std]
 
 use soroban_sdk::{
-    auth::{Context, CustomAccountInterface},
+    auth::{Context, ContractContext, CustomAccountInterface},
     contract, contracterror, contractimpl, contracttype,
     crypto::Hash,
     xdr::ToXdr,
-    Address, Bytes, BytesN, Env, Map, Vec,
+    Address, Bytes, BytesN, Env, Map, Symbol, TryFromVal, Val, Vec,
 };
 
 const TTL_MIN: u32 = 17_280;
@@ -42,6 +41,9 @@ pub const DELAY_LEDGERS: u32 = 120;
 /// Periodo del limite de gasto (~1 dia). Ventana fija desde el primer gasto: cerca del
 /// cambio de periodo pueden salir hasta dos limites seguidos.
 pub const PERIOD_LEDGERS: u32 = 17_280;
+/// Plazo maximo de un `lock` en un escrow registrado (7 dias, en minutos). Fijo mientras D5
+/// siga abierta; el escrow no acota el plazo por su cuenta.
+pub const MAX_LOCK_TIMEOUT_MINUTES: u32 = 10_080;
 
 #[contracttype]
 #[derive(Clone)]
@@ -126,10 +128,15 @@ pub enum WalletError {
     Overflow = 12,
     TooManyProofs = 13,
     InvalidLimit = 14,
+    LimitExceeded = 15,
     NothingPending = 16,
     NotReady = 17,
+    ApproveDenied = 18,
+    EscrowTransferMismatch = 19,
+    EscrowLockInvalid = 20,
     InvalidFee = 21,
     UnknownEscrow = 22,
+    BadArgs = 23,
 }
 
 /// Id de un firmante ed25519: `sha256(0x00 ‖ pubkey)`.
@@ -402,7 +409,7 @@ impl CustomAccountInterface for SmartWallet {
         env: Env,
         signature_payload: Hash<32>,
         signatures: Vec<Proof>,
-        _auth_contexts: Vec<Context>,
+        auth_contexts: Vec<Context>,
     ) -> Result<(), WalletError> {
         if signatures.is_empty() {
             return Err(WalletError::NoProofs);
@@ -431,9 +438,155 @@ impl CustomAccountInterface for SmartWallet {
         if weight < threshold(&env)? {
             return Err(WalletError::InsufficientWeight);
         }
+        check_contexts(&env, &auth_contexts)?;
         bump(&env);
         Ok(())
     }
+}
+
+fn arg<T: TryFromVal<Env, Val>>(env: &Env, args: &Vec<Val>, i: u32) -> Result<T, WalletError> {
+    let v = args.get(i).ok_or(WalletError::BadArgs)?;
+    T::try_from_val(env, &v).map_err(|_| WalletError::BadArgs)
+}
+
+/// W19. Reglas de tokens y escrows sobre lo que la wallet esta autorizando.
+///
+/// - `approve` se rechaza siempre: un permiso de gasto lo usaria un tercero
+///   (`transfer_from`, `burn_from`) sin pasar por esta wallet ni por su limite.
+/// - `transfer` y `burn` desde esta wallet suman al gasto del periodo del token, si tiene limite.
+///   Si el token no tiene limite y el destino no es un escrow registrado, no se leen sus
+///   argumentos: asi pasan un NFT o un destino muxed.
+/// - Un `lock` en un escrow registrado solo se autoriza si la autorizacion es **exactamente**
+///   `[escrow.lock, token.transfer(esta wallet, escrow, amount + platform_fee)]`, con el `lock`
+///   valido (`check_lock`). Cualquier otra transferencia a un escrow registrado se rechaza: no
+///   crea trade y el dinero se quedaria atorado. Con mas contextos alrededor, un contrato
+///   intermedio podria llamar solo al `transfer` y nunca al `lock`.
+/// - El `lock` cuenta contra el limite como cualquier gasto (D9 sigue abierta).
+fn check_contexts(env: &Env, contexts: &Vec<Context>) -> Result<(), WalletError> {
+    let me = env.current_contract_address();
+    let transfer = Symbol::new(env, "transfer");
+    let burn = Symbol::new(env, "burn");
+    let approve = Symbol::new(env, "approve");
+    let lock = Symbol::new(env, "lock");
+    let st = env.storage().instance();
+    // La transferencia que corresponde al `lock` de un escrow registrado: (token, escrow, importe).
+    let mut expected: Option<(Address, Address, i128)> = None;
+    for (i, ctx) in contexts.iter().enumerate() {
+        if let Context::Contract(c) = ctx {
+            if c.fn_name == lock {
+                let rule: Option<EscrowRule> = st.get(&DataKey::Escrow(c.contract.clone()));
+                if let Some(rule) = rule {
+                    if i != 0 || contexts.len() != 2 || expected.is_some() {
+                        return Err(WalletError::EscrowTransferMismatch);
+                    }
+                    expected = Some(check_lock(env, &me, &c, &rule)?);
+                }
+            }
+        }
+    }
+    for ctx in contexts.iter() {
+        let c: ContractContext = match ctx {
+            Context::Contract(c) => c,
+            _ => continue,
+        };
+        if c.contract == me {
+            continue;
+        }
+        if c.fn_name == approve {
+            return Err(WalletError::ApproveDenied);
+        }
+        let limited = st.has(&DataKey::Limit(c.contract.clone()));
+        if c.fn_name == transfer {
+            let from: Address = arg(env, &c.args, 0)?;
+            if from != me {
+                continue;
+            }
+            // Un destino muxed (o que no es una direccion) no puede ser un escrow registrado.
+            let to: Option<Address> = c.args.get(1).and_then(|v| Address::try_from_val(env, &v).ok());
+            let to_escrow = match &to {
+                Some(to) => st.has(&DataKey::Escrow(to.clone())),
+                None => false,
+            };
+            if !limited && !to_escrow {
+                continue;
+            }
+            let amount: i128 = arg(env, &c.args, 2)?;
+            if to_escrow {
+                let key = (c.contract.clone(), to.ok_or(WalletError::BadArgs)?, amount);
+                if expected.take() != Some(key) {
+                    return Err(WalletError::EscrowTransferMismatch);
+                }
+            }
+            if limited {
+                charge(env, &c.contract, amount)?;
+            }
+        } else if c.fn_name == burn {
+            let from: Address = arg(env, &c.args, 0)?;
+            if from != me || !limited {
+                continue;
+            }
+            charge(env, &c.contract, arg(env, &c.args, 1)?)?;
+        }
+    }
+    // Un `lock` valido sin su `transfer` exacto no se autoriza.
+    if expected.is_some() {
+        return Err(WalletError::EscrowTransferMismatch);
+    }
+    Ok(())
+}
+
+/// Valida un `lock(seller, buyer, amount, platform_fee, secret_hash, timeout_minutes)` en un
+/// escrow registrado y devuelve la transferencia que le corresponde.
+fn check_lock(env: &Env, me: &Address, c: &ContractContext, rule: &EscrowRule) -> Result<(Address, Address, i128), WalletError> {
+    if c.args.len() != 6 {
+        return Err(WalletError::EscrowLockInvalid);
+    }
+    let seller: Address = arg(env, &c.args, 0)?;
+    let buyer: Address = arg(env, &c.args, 1)?;
+    let amount: i128 = arg(env, &c.args, 2)?;
+    let fee: i128 = arg(env, &c.args, 3)?;
+    let _secret_hash: BytesN<32> = arg(env, &c.args, 4)?;
+    let timeout: u32 = arg(env, &c.args, 5)?;
+    if seller != *me || buyer == *me || amount <= 0 || fee < 0 {
+        return Err(WalletError::EscrowLockInvalid);
+    }
+    if timeout == 0 || timeout > MAX_LOCK_TIMEOUT_MINUTES {
+        return Err(WalletError::EscrowLockInvalid);
+    }
+    let max_fee = amount
+        .checked_mul(rule.fee_bps_max as i128)
+        .ok_or(WalletError::Overflow)?
+        / 10_000;
+    if fee > max_fee {
+        return Err(WalletError::EscrowLockInvalid);
+    }
+    let total = amount.checked_add(fee).ok_or(WalletError::Overflow)?;
+    Ok((rule.token.clone(), c.contract.clone(), total))
+}
+
+/// Suma `amount` al gasto del periodo de `token`, si tiene limite.
+fn charge(env: &Env, token: &Address, amount: i128) -> Result<(), WalletError> {
+    if amount < 0 {
+        return Err(WalletError::BadArgs);
+    }
+    let st = env.storage().instance();
+    let limit: i128 = match st.get(&DataKey::Limit(token.clone())) {
+        Some(l) => l,
+        None => return Ok(()),
+    };
+    let now = env.ledger().sequence();
+    let mut s: Spent = st
+        .get(&DataKey::Spent(token.clone()))
+        .unwrap_or(Spent { period_start: now, amount: 0 });
+    if now >= s.period_start.saturating_add(PERIOD_LEDGERS) {
+        s = Spent { period_start: now, amount: 0 };
+    }
+    s.amount = s.amount.checked_add(amount).ok_or(WalletError::Overflow)?;
+    if s.amount > limit {
+        return Err(WalletError::LimitExceeded);
+    }
+    st.set(&DataKey::Spent(token.clone()), &s);
+    Ok(())
 }
 
 mod test;
