@@ -1437,9 +1437,11 @@ fn w11_cambiar_guardianes_invalida_los_votos() {
     let env = Env::default();
     let (_, c, gs) = with_guardians(&env, &key(1), 3, 2);
     let id = start(&env, &c, &gs[..1], &key(9));
-    c.set_guardian_threshold(&3);
-    assert_eq!(c.try_approve_recovery(&gs[1], &id), Err(Ok(WalletError::Stale)));
-    assert_eq!(c.try_finish_recovery(&id), Err(Ok(WalletError::Stale)));
+    // Desde el arreglo del umbral, con la recuperacion en curso no se cambia el quorum: ya no
+    // hay forma de subir la epoca de guardianes mientras la propuesta esta vigente.
+    assert_eq!(c.try_set_guardian_threshold(&3), Err(Ok(WalletError::RecoveryActive)));
+    c.approve_recovery(&gs[1], &id);
+    assert!(c.recovery().unwrap().ready_ledger > 0);
 }
 
 #[test]
@@ -2537,4 +2539,763 @@ fn w7_vector_de_navegador_alterado_falla() {
 fn w7_vector_de_navegador_con_contador_cambiado_no_verifica() {
     // Mismo prefijo valido, pero la firma ya no cubre esos bytes: secp256r1_verify aborta.
     let _ = browser_verify(|a, _, _| a[36] = 2);
+}
+
+// ---------- W22: cancelar una subida de limite ----------
+
+#[test]
+fn w22_cancela_solo_la_subida_y_deja_el_limite_y_el_gasto() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, _, token) = with_rules(&env, &owner, Some(100));
+    let to = Address::generate(&env);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, transfer_ctx(&env, &token, &w, &to, 60)]), Ok(()));
+    assert!(!c.set_limit(&token, &500));
+    c.cancel_limit(&token);
+    assert_eq!(c.limit(&token), Some(100));
+    assert_eq!(c.spent(&token), 60);
+    advance(&env, DELAY_LEDGERS);
+    assert_eq!(c.try_apply_limit(&token), Err(Ok(WalletError::NothingPending)));
+    assert_eq!(c.limit(&token), Some(100));
+    // El limite vigente sigue cobrando: 60 + 41 > 100.
+    assert_eq!(
+        check_ctx(&env, &w, &owner, vec![&env, transfer_ctx(&env, &token, &w, &to, 41)]),
+        Err(Ok(WalletError::LimitExceeded))
+    );
+}
+
+#[test]
+fn w22_sin_pendiente_o_dos_veces_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let token = Address::generate(&env);
+    assert_eq!(c.try_cancel_limit(&token), Err(Ok(WalletError::NothingPending)));
+    c.set_limit(&token, &100);
+    // Poner o bajar el limite aplica ya: no deja nada pendiente.
+    assert_eq!(c.try_cancel_limit(&token), Err(Ok(WalletError::NothingPending)));
+    c.set_limit(&token, &500);
+    c.cancel_limit(&token);
+    assert_eq!(c.try_cancel_limit(&token), Err(Ok(WalletError::NothingPending)));
+    assert_eq!(c.limit(&token), Some(100));
+}
+
+#[test]
+fn w22_solo_cancela_el_token_pedido() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let (t1, t2) = (Address::generate(&env), Address::generate(&env));
+    c.set_limit(&t1, &10);
+    c.set_limit(&t2, &10);
+    c.set_limit(&t1, &50);
+    c.set_limit(&t2, &50);
+    c.cancel_limit(&t1);
+    advance(&env, DELAY_LEDGERS);
+    assert_eq!(c.try_apply_limit(&t1), Err(Ok(WalletError::NothingPending)));
+    c.apply_limit(&t2);
+    assert_eq!(c.limit(&t1), Some(10));
+    assert_eq!(c.limit(&t2), Some(50));
+}
+
+#[test]
+fn w22_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let token = Address::generate(&env);
+    c.set_limit(&token, &100);
+    c.set_limit(&token, &500);
+    env.set_auths(&[]);
+    assert_eq!(c.try_cancel_limit(&token).err(), Some(Err(auth_error())));
+    // La subida sigue pendiente y se aplica.
+    advance(&env, DELAY_LEDGERS);
+    c.apply_limit(&token);
+    assert_eq!(c.limit(&token), Some(500));
+}
+
+#[test]
+fn w22_congelada_se_permite_pero_no_mezclada() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, gs) = with_guardians(&env, &owner, 1, 1);
+    let token = Address::generate(&env);
+    c.set_limit(&token, &10);
+    c.set_limit(&token, &1_000);
+    c.freeze(&gv(&env, &gs));
+    // D12: congelada, cancelar una subida pasa.
+    let cancel = call(&env, &w, "cancel_limit", vec![&env, token.into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, cancel.clone()]), Ok(()));
+    // Junto con algo prohibido, no.
+    let set = call(&env, &w, "set_limit", vec![&env, token.into_val(&env), 5_000i128.into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, cancel, set]), Err(Ok(WalletError::Frozen)));
+}
+
+#[test]
+fn w22_lo_pendiente_del_dueno_anterior_se_puede_cancelar() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 1, 1);
+    let token = Address::generate(&env);
+    c.set_limit(&token, &100);
+    c.set_limit(&token, &1_000_000);
+    let id = start(&env, &c, &gs, &key(9));
+    advance(&env, RECOVERY_DELAY);
+    c.finish_recovery(&id);
+    assert_eq!(c.try_apply_limit(&token), Err(Ok(WalletError::Stale)));
+    // El dueno nuevo borra la subida vieja, que ya no se podia aplicar.
+    c.cancel_limit(&token);
+    assert_eq!(c.try_apply_limit(&token), Err(Ok(WalletError::NothingPending)));
+    assert_eq!(c.try_cancel_limit(&token), Err(Ok(WalletError::NothingPending)));
+    assert_eq!(c.limit(&token), Some(100));
+}
+
+// ---------- W23: cancelar un registro de escrow pendiente ----------
+
+#[test]
+fn w23_cancela_un_registro_nuevo() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let (escrow, token) = (Address::generate(&env), Address::generate(&env));
+    c.add_escrow(&escrow, &token, &100);
+    c.cancel_escrow(&escrow);
+    advance(&env, DELAY_LEDGERS);
+    assert_eq!(c.try_apply_escrow(&escrow), Err(Ok(WalletError::NothingPending)));
+    assert_eq!(c.escrow(&escrow), None);
+}
+
+#[test]
+fn w23_cancelar_un_cambio_conserva_la_regla_la_sesion_y_su_gasto() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let rule = EscrowRule { token: s.token.clone(), fee_bps_max: 100 };
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 100, 0, 60)), Ok(()));
+    assert_eq!(s.c.session(&s.id).unwrap().spent, 100);
+    // Cambio de regla pendiente (bajar la comision) y luego se cancela.
+    s.c.add_escrow(&s.escrow, &s.token, &50);
+    s.c.cancel_escrow(&s.escrow);
+    assert_eq!(s.c.escrow(&s.escrow), Some(rule.clone()));
+    let session = s.c.session(&s.id).unwrap();
+    assert_eq!(session.rule, rule);
+    assert_eq!(session.spent, 100);
+    advance(&env, DELAY_LEDGERS);
+    assert_eq!(s.c.try_apply_escrow(&s.escrow), Err(Ok(WalletError::NothingPending)));
+    assert_eq!(s.c.escrow(&s.escrow), Some(rule));
+    // La sesion sigue operando con la regla vieja, con su comision de 1%.
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 99, 0, 60)), Ok(()));
+    assert_eq!(s.c.session(&s.id).unwrap().spent, 199);
+    let t = BytesN::random(&env);
+    assert_eq!(scheck(&env, &s, vec![&env, trade_ctx(&env, &s, "release", &t)]), Ok(()));
+}
+
+#[test]
+fn w23_sin_pendiente_o_dos_veces_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    // Registrado y sin cambio pendiente.
+    assert_eq!(s.c.try_cancel_escrow(&s.escrow), Err(Ok(WalletError::NothingPending)));
+    assert_eq!(s.c.try_cancel_escrow(&Address::generate(&env)), Err(Ok(WalletError::NothingPending)));
+    s.c.add_escrow(&s.escrow, &s.token, &50);
+    s.c.cancel_escrow(&s.escrow);
+    assert_eq!(s.c.try_cancel_escrow(&s.escrow), Err(Ok(WalletError::NothingPending)));
+    assert!(s.c.session(&s.id).is_some());
+}
+
+#[test]
+fn w23_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let (escrow, token) = (Address::generate(&env), Address::generate(&env));
+    c.add_escrow(&escrow, &token, &100);
+    env.set_auths(&[]);
+    assert_eq!(c.try_cancel_escrow(&escrow).err(), Some(Err(auth_error())));
+    advance(&env, DELAY_LEDGERS);
+    c.apply_escrow(&escrow);
+    assert_eq!(c.escrow(&escrow), Some(EscrowRule { token, fee_bps_max: 100 }));
+}
+
+#[test]
+fn w23_congelada_falla_con_la_firma_real() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, gs) = with_guardians(&env, &owner, 1, 1);
+    let (escrow, token) = (Address::generate(&env), Address::generate(&env));
+    c.add_escrow(&escrow, &token, &100);
+    let cancel = call(&env, &w, "cancel_escrow", vec![&env, escrow.into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, cancel.clone()]), Ok(()));
+    c.freeze(&gv(&env, &gs));
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, cancel]), Err(Ok(WalletError::Frozen)));
+}
+
+#[test]
+fn w23_lo_pendiente_del_dueno_anterior_se_puede_cancelar() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 1, 1);
+    let (escrow, token) = (Address::generate(&env), Address::generate(&env));
+    c.add_escrow(&escrow, &token, &100);
+    let id = start(&env, &c, &gs, &key(9));
+    advance(&env, RECOVERY_DELAY);
+    c.finish_recovery(&id);
+    assert_eq!(c.try_apply_escrow(&escrow), Err(Ok(WalletError::Stale)));
+    c.cancel_escrow(&escrow);
+    assert_eq!(c.try_apply_escrow(&escrow), Err(Ok(WalletError::NothingPending)));
+    assert_eq!(c.try_cancel_escrow(&escrow), Err(Ok(WalletError::NothingPending)));
+    assert_eq!(c.escrow(&escrow), None);
+}
+
+// ---------- Arreglo: set_guardian_threshold durante una recuperacion ----------
+
+#[test]
+fn fix_umbral_con_recuperacion_en_curso_falla_aunque_sea_el_mismo() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 3, 2);
+    let id = start(&env, &c, &gs[..1], &key(9));
+    assert_eq!(c.try_set_guardian_threshold(&2), Err(Ok(WalletError::RecoveryActive)));
+    assert_eq!(c.try_set_guardian_threshold(&3), Err(Ok(WalletError::RecoveryActive)));
+    assert_eq!(c.guardian_threshold(), 2);
+    // Los votos siguen contando y la recuperacion termina.
+    c.approve_recovery(&gs[1], &id);
+    advance(&env, RECOVERY_DELAY);
+    c.finish_recovery(&id);
+    assert_eq!(c.recovery(), None);
+}
+
+#[test]
+fn fix_umbral_sin_recuperacion_sigue_funcionando() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 3, 2);
+    c.set_guardian_threshold(&3);
+    assert_eq!(c.guardian_threshold(), 3);
+    c.set_guardian_threshold(&3);
+    // Cancelada la recuperacion, se puede otra vez.
+    start(&env, &c, &gs[..1], &key(9));
+    assert_eq!(c.try_set_guardian_threshold(&1), Err(Ok(WalletError::RecoveryActive)));
+    c.cancel_recovery();
+    c.set_guardian_threshold(&1);
+    // Vencida la recuperacion, tambien.
+    c.set_guardian_threshold(&2);
+    start(&env, &c, &gs[..1], &key(9));
+    advance(&env, RECOVERY_DELAY + RECOVERY_MARGIN);
+    c.set_guardian_threshold(&1);
+    assert_eq!(c.guardian_threshold(), 1);
+}
+
+/// Llamada a la propia wallet que siempre esta prohibida congelada.
+fn forbidden(env: &Env, w: &Address) -> Context {
+    call(env, w, "add_signer", vec![env])
+}
+
+// ---------- W25: cancelar una baja de guardian ----------
+
+#[test]
+fn w25_cancela_solo_esa_baja() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 3, 2);
+    c.remove_guardian(&gs[0]);
+    c.remove_guardian(&gs[1]);
+    c.cancel_guardian_removal(&gs[0]);
+    advance(&env, DELAY_LEDGERS);
+    assert_eq!(c.try_apply_guardian_removal(&gs[0]), Err(Ok(WalletError::NothingPending)));
+    c.apply_guardian_removal(&gs[1]);
+    assert_eq!(c.guardians(), gv(&env, &[gs[0].clone(), gs[2].clone()]));
+    assert_eq!(c.guardian_threshold(), 2);
+}
+
+#[test]
+fn w25_sin_pendiente_o_dos_veces_falla() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 2, 1);
+    assert_eq!(c.try_cancel_guardian_removal(&gs[0]), Err(Ok(WalletError::NothingPending)));
+    c.remove_guardian(&gs[0]);
+    c.cancel_guardian_removal(&gs[0]);
+    assert_eq!(c.try_cancel_guardian_removal(&gs[0]), Err(Ok(WalletError::NothingPending)));
+}
+
+#[test]
+fn w25_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 2, 1);
+    c.remove_guardian(&gs[0]);
+    env.set_auths(&[]);
+    // Ni un guardian puede cancelarla por su cuenta: hace falta la wallet.
+    assert_eq!(c.try_cancel_guardian_removal(&gs[0]).err(), Some(Err(auth_error())));
+    advance(&env, DELAY_LEDGERS);
+    c.apply_guardian_removal(&gs[0]);
+    assert_eq!(c.guardians(), gv(&env, &gs[1..]));
+}
+
+#[test]
+fn w25_congelada_falla_con_la_firma_real() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, gs) = with_guardians(&env, &owner, 2, 1);
+    c.remove_guardian(&gs[0]);
+    let cancel = call(&env, &w, "cancel_guardian_removal", vec![&env, gs[0].into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, cancel.clone()]), Ok(()));
+    c.freeze(&gv(&env, &gs[..1]));
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, cancel]), Err(Ok(WalletError::Frozen)));
+}
+
+// ---------- W26: un guardian cancela la solicitud de descongelar ----------
+
+#[test]
+fn w26_borra_solo_la_solicitud_y_conserva_el_congelamiento_y_la_recuperacion() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 3, 2);
+    c.freeze(&gv(&env, &gs[..1]));
+    c.request_unfreeze();
+    let id = start(&env, &c, &gs[1..2], &key(9));
+    c.cancel_unfreeze(&gs[2]);
+    assert!(c.frozen());
+    assert_eq!(c.recovery().unwrap().id, id);
+    advance(&env, UNFREEZE_DELAY);
+    // Sin solicitud, la recuperacion bloquea primero; cancelada, falta la solicitud.
+    assert_eq!(c.try_unfreeze(), Err(Ok(WalletError::RecoveryActive)));
+    c.cancel_recovery();
+    assert_eq!(c.try_unfreeze(), Err(Ok(WalletError::NothingPending)));
+    assert_eq!(c.try_cancel_unfreeze(&gs[2]), Err(Ok(WalletError::NothingPending)));
+    // El congelamiento vence cuando tocaba y cualquiera limpia.
+    advance(&env, FREEZE_MAX - UNFREEZE_DELAY);
+    assert!(!c.frozen());
+    env.set_auths(&[]);
+    c.unfreeze();
+    // El enfriamiento del congelamiento de un guardian solo sigue.
+    env.mock_all_auths();
+    assert_eq!(c.try_freeze(&gv(&env, &gs[1..2])), Err(Ok(WalletError::FreezeCooldown)));
+}
+
+#[test]
+fn w26_guardian_ajeno_sin_congelar_o_sin_solicitud_falla() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 2, 2);
+    assert_eq!(c.try_cancel_unfreeze(&Address::generate(&env)), Err(Ok(WalletError::UnknownGuardian)));
+    assert_eq!(c.try_cancel_unfreeze(&gs[0]), Err(Ok(WalletError::NotFrozen)));
+    c.freeze(&gv(&env, &gs[..1]));
+    assert_eq!(c.try_cancel_unfreeze(&gs[0]), Err(Ok(WalletError::NothingPending)));
+    // Un guardian pendiente todavia no es guardian.
+    let tg = Address::generate(&env);
+    c.add_guardian(&tg);
+    c.request_unfreeze();
+    assert_eq!(c.try_cancel_unfreeze(&tg), Err(Ok(WalletError::UnknownGuardian)));
+}
+
+#[test]
+fn w26_sin_firma_del_guardian_falla() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 2, 2);
+    c.freeze(&gv(&env, &gs[..1]));
+    c.request_unfreeze();
+    env.set_auths(&[]);
+    assert_eq!(c.try_cancel_unfreeze(&gs[0]).err(), Some(Err(auth_error())));
+    advance(&env, UNFREEZE_DELAY);
+    c.unfreeze();
+    assert!(!c.frozen());
+}
+
+#[test]
+fn w26_la_wallet_congelada_no_la_autoriza() {
+    // La firma es del guardian; la wallet congelada no autoriza esa llamada para si.
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, gs) = with_guardians(&env, &owner, 2, 2);
+    c.freeze(&gv(&env, &gs[..1]));
+    let cancel = call(&env, &w, "cancel_unfreeze", vec![&env, gs[0].into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, cancel]), Err(Ok(WalletError::Frozen)));
+}
+
+// ---------- W27: peso de un firmante ----------
+
+#[test]
+fn w27_cambia_el_peso_ed25519_y_passkey() {
+    let env = Env::default();
+    let (w, c, k) = passkey_wallet(&env);
+    let a = signer_id(&env, &pk(&env, &key(1)));
+    let pid = passkey_id(&env, &pk65(&env, &k));
+    c.set_threshold(&2);
+    c.set_signer_weight(&a, &2);
+    assert_eq!(c.signers().get(a.clone()).unwrap().weight, 2);
+    // La ed25519 sola ya llega al umbral.
+    let p = payload(&env);
+    assert_eq!(check(&env, &w, &p, vec![&env, proof(&env, &w, &key(1), &p)]), Ok(()));
+    c.set_signer_weight(&pid, &5);
+    assert_eq!(c.passkeys().get(pid).unwrap().weight, 5);
+    assert_eq!(c.threshold(), 2);
+}
+
+#[test]
+fn w27_peso_0_desconocido_umbral_inalcanzable_o_desborde_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (w, c) = setup(&env, &key(1));
+    c.add_signer(&pk(&env, &key(2)), &2, &pop(&env, &w, &key(2)));
+    c.set_threshold(&3);
+    let b = signer_id(&env, &pk(&env, &key(2)));
+    assert_eq!(c.try_set_signer_weight(&b, &0), Err(Ok(WalletError::InvalidWeight)));
+    assert_eq!(c.try_set_signer_weight(&BytesN::random(&env), &1), Err(Ok(WalletError::UnknownSigner)));
+    assert_eq!(c.try_set_signer_weight(&b, &1), Err(Ok(WalletError::ThresholdUnreachable)));
+    assert_eq!(c.try_set_signer_weight(&b, &u32::MAX), Err(Ok(WalletError::Overflow)));
+    assert_eq!(c.signers().get(b).unwrap().weight, 2);
+}
+
+#[test]
+fn w27_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    let (_, c) = setup(&env, &key(1));
+    let a = signer_id(&env, &pk(&env, &key(1)));
+    assert_eq!(c.try_set_signer_weight(&a, &5).err(), Some(Err(auth_error())));
+    assert_eq!(c.signers().get(a).unwrap().weight, 1);
+}
+
+#[test]
+fn w27_una_llave_de_peso_1_no_sube_su_propio_peso_sola() {
+    let env = Env::default();
+    let (a, b) = (key(1), key(2));
+    let (w, c) = setup(&env, &a);
+    env.mock_all_auths();
+    c.add_signer(&pk(&env, &b), &1, &pop(&env, &w, &b));
+    c.set_threshold(&2);
+    let bid = signer_id(&env, &pk(&env, &b));
+    let ctx = call(&env, &w, "set_signer_weight", vec![&env, bid.into_val(&env), 2u32.into_val(&env)]);
+    // La firma cuenta con el peso de antes (1 < 2).
+    assert_eq!(check_ctx(&env, &w, &b, vec![&env, ctx]), Err(Ok(WalletError::InsufficientWeight)));
+    // Por el camino real tampoco pasa.
+    let args = vec![&env, bid.into_val(&env), 2u32.into_val(&env)];
+    env.set_auths(&[signed_entry(&env, &w, "set_signer_weight", args.clone(), &[&b])]);
+    assert!(c.try_set_signer_weight(&bid, &2).is_err());
+    assert_eq!(c.signers().get(bid.clone()).unwrap().weight, 1);
+    // Con las dos firmas si.
+    env.set_auths(&[signed_entry(&env, &w, "set_signer_weight", args, &[&a, &b])]);
+    c.set_signer_weight(&bid, &2);
+    assert_eq!(c.signers().get(bid).unwrap().weight, 2);
+}
+
+#[test]
+fn w27_congelada_falla_con_la_firma_real() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, gs) = with_guardians(&env, &owner, 1, 1);
+    let a = signer_id(&env, &pk(&env, &owner));
+    let ctx = call(&env, &w, "set_signer_weight", vec![&env, a.into_val(&env), 3u32.into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, ctx.clone()]), Ok(()));
+    c.freeze(&gv(&env, &gs));
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, ctx]), Err(Ok(WalletError::Frozen)));
+}
+
+// ---------- W28: rotar la llave de un firmante ----------
+
+#[test]
+fn w28_rota_conserva_el_peso_y_el_umbral() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (a, b, n) = (key(1), key(2), key(3));
+    let (w, c) = setup(&env, &a);
+    c.add_signer(&pk(&env, &b), &3, &pop(&env, &w, &b));
+    c.set_threshold(&2);
+    let bid = signer_id(&env, &pk(&env, &b));
+    let nid = c.rotate_signer(&bid, &pk(&env, &n), &pop(&env, &w, &n));
+    assert_eq!(nid, signer_id(&env, &pk(&env, &n)));
+    let map = c.signers();
+    assert_eq!(map.len(), 2);
+    assert!(map.get(bid.clone()).is_none());
+    assert_eq!(map.get(nid.clone()).unwrap(), Signer { key: pk(&env, &n), weight: 3 });
+    assert_eq!(c.threshold(), 2);
+    let p = payload(&env);
+    assert_eq!(check(&env, &w, &p, vec![&env, proof(&env, &w, &n, &p)]), Ok(()));
+    assert_eq!(check(&env, &w, &p, vec![&env, proof(&env, &w, &b, &p)]), Err(Ok(WalletError::UnknownSigner)));
+    // Rotar otra vez la vieja falla.
+    assert_eq!(c.try_rotate_signer(&bid, &pk(&env, &key(4)), &pop(&env, &w, &key(4))), Err(Ok(WalletError::UnknownSigner)));
+}
+
+#[test]
+fn w28_misma_llave_otra_del_dueno_passkey_o_sin_posesion_falla() {
+    let env = Env::default();
+    let (w, c, k) = passkey_wallet(&env);
+    let (a, b) = (key(1), key(2));
+    c.add_signer(&pk(&env, &b), &1, &pop(&env, &w, &b));
+    let aid = signer_id(&env, &pk(&env, &a));
+    assert_eq!(c.try_rotate_signer(&aid, &pk(&env, &a), &pop(&env, &w, &a)), Err(Ok(WalletError::KeyUsed)));
+    assert_eq!(c.try_rotate_signer(&aid, &pk(&env, &b), &pop(&env, &w, &b)), Err(Ok(WalletError::KeyUsed)));
+    // Solo ed25519: el id de un passkey no se rota.
+    let pid = passkey_id(&env, &pk65(&env, &k));
+    assert_eq!(c.try_rotate_signer(&pid, &pk(&env, &key(4)), &pop(&env, &w, &key(4))), Err(Ok(WalletError::UnknownSigner)));
+    // Sin la prueba de posesion de la llave nueva aborta.
+    let n = key(4);
+    let mala = BytesN::from_array(&env, &n.sign(b"otra cosa").to_bytes());
+    assert_eq!(c.try_rotate_signer(&aid, &pk(&env, &n), &mala).err(), Some(Err(InvokeError::Abort)));
+    assert!(c.signers().get(aid).is_some());
+}
+
+#[test]
+fn w28_y_add_signer_rechazan_una_llave_de_sesion() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let aid = signer_id(&env, &pk(&env, &key(1)));
+    assert_eq!(s.c.try_rotate_signer(&aid, &pk(&env, &s.k), &pop(&env, &s.w, &s.k)), Err(Ok(WalletError::KeyUsed)));
+    assert_eq!(s.c.try_add_signer(&pk(&env, &s.k), &1, &pop(&env, &s.w, &s.k)), Err(Ok(WalletError::KeyUsed)));
+    assert_eq!(s.c.signers().len(), 1);
+}
+
+#[test]
+fn w28_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    let (w, c) = setup(&env, &key(1));
+    let aid = signer_id(&env, &pk(&env, &key(1)));
+    let n = key(3);
+    assert_eq!(c.try_rotate_signer(&aid, &pk(&env, &n), &pop(&env, &w, &n)).err(), Some(Err(auth_error())));
+    assert!(c.signers().get(aid).is_some());
+}
+
+#[test]
+fn w28_congelada_falla_con_la_firma_real() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, gs) = with_guardians(&env, &owner, 1, 1);
+    let aid = signer_id(&env, &pk(&env, &owner));
+    let n = key(3);
+    let ctx = call(&env, &w, "rotate_signer", vec![&env, aid.into_val(&env), pk(&env, &n).into_val(&env), pop(&env, &w, &n).into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, ctx.clone()]), Ok(()));
+    c.freeze(&gv(&env, &gs));
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, ctx]), Err(Ok(WalletError::Frozen)));
+}
+
+// ---------- W31: revocar todas las sesiones ----------
+
+#[test]
+fn w31_revoca_todas() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let exp = env.ledger().sequence() + 100;
+    let id2 = s.c.add_session(&pk(&env, &key(6)), &s.escrow, &vec![&env, s.buyer.clone()], &10, &10, &60, &exp);
+    s.c.revoke_all_sessions();
+    assert_eq!(s.c.session(&s.id), None);
+    assert_eq!(s.c.session(&id2), None);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 50, 0, 60)), Err(Ok(WalletError::UnknownSession)));
+    // El escrow sigue registrado.
+    assert!(s.c.escrow(&s.escrow).is_some());
+    assert_eq!(s.c.try_revoke_all_sessions(), Err(Ok(WalletError::UnknownSession)));
+}
+
+#[test]
+fn w31_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    env.set_auths(&[]);
+    assert_eq!(s.c.try_revoke_all_sessions().err(), Some(Err(auth_error())));
+    assert!(s.c.session(&s.id).is_some());
+}
+
+#[test]
+fn w31_congelada_se_permite_pero_no_mezclada() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let g = Address::generate(&env);
+    add_g(&env, &s.c, &g);
+    s.c.freeze(&vec![&env, g]);
+    let w = s.w.clone();
+    let all = call(&env, &w, "revoke_all_sessions", vec![&env]);
+    assert_eq!(check_ctx(&env, &w, &key(1), vec![&env, all.clone()]), Ok(()));
+    assert_eq!(check_ctx(&env, &w, &key(1), vec![&env, all, forbidden(&env, &w)]), Err(Ok(WalletError::Frozen)));
+}
+
+// ---------- W32: bajar los topes de una sesion ----------
+
+#[test]
+fn w32_baja_los_topes_y_conserva_el_resto() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let t = BytesN::random(&env);
+    s.c.allow_session_decline(&s.id, &t);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 100, 0, 60)), Ok(()));
+    let before = s.c.session(&s.id).unwrap();
+    let exp = env.ledger().sequence() + 500;
+    s.c.reduce_session(&s.id, &50, &150, &30, &exp);
+    let after = s.c.session(&s.id).unwrap();
+    assert_eq!((after.max_per_lock, after.max_total, after.max_timeout, after.expires), (50, 150, 30, exp));
+    assert_eq!(after.spent, 100);
+    assert_eq!((after.rule, after.buyers, after.declines, after.owner_epoch), (before.rule, before.buyers, before.declines, before.owner_epoch));
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 51, 0, 30)), Err(Ok(WalletError::SessionLimit)));
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 10, 0, 31)), Err(Ok(WalletError::SessionDenied)));
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 50, 0, 30)), Ok(()));
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 1, 0, 30)), Err(Ok(WalletError::SessionLimit)));
+    // Los mismos valores otra vez pasan (menor o igual).
+    s.c.reduce_session(&s.id, &50, &150, &30, &exp);
+}
+
+#[test]
+fn w32_subir_valores_invalidos_o_bajo_lo_gastado_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 100, 0, 60)), Ok(()));
+    let (c, id) = (&s.c, &s.id);
+    let now = env.ledger().sequence();
+    let exp = now + 500;
+    assert_eq!(c.try_reduce_session(id, &101, &250, &60, &exp), Err(Ok(WalletError::InvalidSession)));
+    assert_eq!(c.try_reduce_session(id, &100, &251, &60, &exp), Err(Ok(WalletError::InvalidSession)));
+    assert_eq!(c.try_reduce_session(id, &100, &250, &61, &exp), Err(Ok(WalletError::InvalidSession)));
+    assert_eq!(c.try_reduce_session(id, &100, &250, &60, &(now + 1_001)), Err(Ok(WalletError::InvalidExpiry)));
+    assert_eq!(c.try_reduce_session(id, &0, &250, &60, &exp), Err(Ok(WalletError::InvalidSession)));
+    assert_eq!(c.try_reduce_session(id, &100, &99, &60, &exp), Err(Ok(WalletError::InvalidSession)));
+    // D15: bajo lo gastado (100) no.
+    assert_eq!(c.try_reduce_session(id, &50, &99, &60, &exp), Err(Ok(WalletError::InvalidSession)));
+    c.reduce_session(id, &50, &100, &60, &exp);
+    assert_eq!(c.try_reduce_session(id, &50, &100, &0, &exp), Err(Ok(WalletError::InvalidSession)));
+    assert_eq!(c.try_reduce_session(id, &50, &100, &60, &now), Err(Ok(WalletError::InvalidExpiry)));
+    assert_eq!(c.try_reduce_session(&BytesN::random(&env), &1, &1, &1, &exp), Err(Ok(WalletError::UnknownSession)));
+    assert_eq!(c.session(id).unwrap().max_total, 100);
+}
+
+#[test]
+fn w32_vencida_o_del_dueno_anterior_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let g = Address::generate(&env);
+    add_g(&env, &s.c, &g);
+    let id = start(&env, &s.c, &[g], &key(9));
+    advance(&env, RECOVERY_DELAY);
+    s.c.finish_recovery(&id);
+    let exp = env.ledger().sequence() + 10;
+    assert_eq!(s.c.try_reduce_session(&s.id, &10, &10, &10, &exp), Err(Ok(WalletError::Stale)));
+    let env = Env::default();
+    let s = ses(&env, None);
+    advance(&env, 1_000);
+    let exp = env.ledger().sequence() + 10;
+    assert_eq!(s.c.try_reduce_session(&s.id, &10, &10, &10, &exp), Err(Ok(WalletError::SessionExpired)));
+}
+
+#[test]
+fn w32_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    env.set_auths(&[]);
+    let exp = env.ledger().sequence() + 10;
+    assert_eq!(s.c.try_reduce_session(&s.id, &10, &10, &10, &exp).err(), Some(Err(auth_error())));
+    assert_eq!(s.c.session(&s.id).unwrap().max_total, 250);
+}
+
+#[test]
+fn w32_congelada_se_permite_pero_no_mezclada() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let g = Address::generate(&env);
+    add_g(&env, &s.c, &g);
+    s.c.freeze(&vec![&env, g]);
+    let w = s.w.clone();
+    let exp = env.ledger().sequence() + 10;
+    let ctx = call(&env, &w, "reduce_session", vec![
+        &env,
+        s.id.into_val(&env),
+        10i128.into_val(&env),
+        10i128.into_val(&env),
+        10u32.into_val(&env),
+        exp.into_val(&env),
+    ]);
+    assert_eq!(check_ctx(&env, &w, &key(1), vec![&env, ctx.clone()]), Ok(()));
+    assert_eq!(check_ctx(&env, &w, &key(1), vec![&env, ctx, forbidden(&env, &w)]), Err(Ok(WalletError::Frozen)));
+}
+
+// ---------- W33: agregar un comprador a una sesion ----------
+
+#[test]
+fn w33_agrega_un_comprador() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let b2 = Address::generate(&env);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &b2, 50, 0, 60)), Err(Ok(WalletError::SessionDenied)));
+    s.c.add_session_buyer(&s.id, &b2);
+    assert_eq!(s.c.session(&s.id).unwrap().buyers, vec![&env, s.buyer.clone(), b2.clone()]);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &b2, 50, 0, 60)), Ok(()));
+    assert_eq!(s.c.try_add_session_buyer(&s.id, &b2), Err(Ok(WalletError::InvalidSession)));
+}
+
+#[test]
+fn w33_la_wallet_tope_regla_cambiada_vencida_o_desconocida_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let w = s.w.clone();
+    assert_eq!(s.c.try_add_session_buyer(&s.id, &w), Err(Ok(WalletError::InvalidSession)));
+    assert_eq!(s.c.try_add_session_buyer(&BytesN::random(&env), &Address::generate(&env)), Err(Ok(WalletError::UnknownSession)));
+    for _ in 1..MAX_SESSION_LIST {
+        s.c.add_session_buyer(&s.id, &Address::generate(&env));
+    }
+    assert_eq!(s.c.try_add_session_buyer(&s.id, &Address::generate(&env)), Err(Ok(WalletError::InvalidSession)));
+    // Con otra regla del escrow, la sesion ya no vale y no se le agregan compradores.
+    let env = Env::default();
+    let s = ses(&env, None);
+    s.c.add_escrow(&s.escrow, &s.token, &50);
+    advance(&env, DELAY_LEDGERS);
+    s.c.apply_escrow(&s.escrow);
+    assert_eq!(s.c.try_add_session_buyer(&s.id, &Address::generate(&env)), Err(Ok(WalletError::Stale)));
+    advance(&env, 1_000);
+    assert_eq!(s.c.try_add_session_buyer(&s.id, &Address::generate(&env)), Err(Ok(WalletError::SessionExpired)));
+}
+
+#[test]
+fn w33_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    env.set_auths(&[]);
+    assert_eq!(s.c.try_add_session_buyer(&s.id, &Address::generate(&env)).err(), Some(Err(auth_error())));
+    assert_eq!(s.c.session(&s.id).unwrap().buyers.len(), 1);
+}
+
+#[test]
+fn w33_congelada_falla_con_la_firma_real() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let w = s.w.clone();
+    let ctx = call(&env, &w, "add_session_buyer", vec![&env, s.id.into_val(&env), Address::generate(&env).into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &key(1), vec![&env, ctx.clone()]), Ok(()));
+    let g = Address::generate(&env);
+    add_g(&env, &s.c, &g);
+    s.c.freeze(&vec![&env, g]);
+    assert_eq!(check_ctx(&env, &w, &key(1), vec![&env, ctx]), Err(Ok(WalletError::Frozen)));
+}
+
+// ---------- W34: quitar un comprador de una sesion ----------
+
+#[test]
+fn w34_quita_un_comprador() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let b2 = Address::generate(&env);
+    s.c.add_session_buyer(&s.id, &b2);
+    s.c.remove_session_buyer(&s.id, &s.buyer);
+    assert_eq!(s.c.session(&s.id).unwrap().buyers, vec![&env, b2.clone()]);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 50, 0, 60)), Err(Ok(WalletError::SessionDenied)));
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &b2, 50, 0, 60)), Ok(()));
+    assert_eq!(s.c.try_remove_session_buyer(&s.id, &s.buyer), Err(Ok(WalletError::InvalidSession)));
+}
+
+#[test]
+fn w34_el_ultimo_o_desconocido_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    assert_eq!(s.c.try_remove_session_buyer(&s.id, &s.buyer), Err(Ok(WalletError::InvalidSession)));
+    assert_eq!(s.c.try_remove_session_buyer(&s.id, &Address::generate(&env)), Err(Ok(WalletError::InvalidSession)));
+    assert_eq!(s.c.try_remove_session_buyer(&BytesN::random(&env), &s.buyer), Err(Ok(WalletError::UnknownSession)));
+    assert_eq!(s.c.session(&s.id).unwrap().buyers.len(), 1);
+}
+
+#[test]
+fn w34_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    s.c.add_session_buyer(&s.id, &Address::generate(&env));
+    env.set_auths(&[]);
+    assert_eq!(s.c.try_remove_session_buyer(&s.id, &s.buyer).err(), Some(Err(auth_error())));
+    assert_eq!(s.c.session(&s.id).unwrap().buyers.len(), 2);
+}
+
+#[test]
+fn w34_congelada_se_permite_pero_no_mezclada() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let g = Address::generate(&env);
+    add_g(&env, &s.c, &g);
+    s.c.freeze(&vec![&env, g]);
+    let w = s.w.clone();
+    let ctx = call(&env, &w, "remove_session_buyer", vec![&env, s.id.into_val(&env), s.buyer.into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &key(1), vec![&env, ctx.clone()]), Ok(()));
+    assert_eq!(check_ctx(&env, &w, &key(1), vec![&env, ctx, forbidden(&env, &w)]), Err(Ok(WalletError::Frozen)));
 }
