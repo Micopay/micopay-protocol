@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Passkey de prueba</title>
+<style>
+  :root { --ink: #111; --bg: #fafaf7; --line: #ccc; --ok: #0a7a3b; --bad: #b00020; }
+  body { font: 16px/1.5 system-ui, sans-serif; color: var(--ink); background: var(--bg); max-width: 760px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.4rem; }
+  section { border: 2px solid var(--ink); padding: 12px 16px; margin: 16px 0; box-shadow: 4px 4px 0 var(--ink); background: #fff; }
+  button { font: inherit; padding: 8px 14px; border: 2px solid var(--ink); background: #ffd84d; cursor: pointer; }
+  input { font: inherit; width: 100%; box-sizing: border-box; padding: 6px; border: 1px solid var(--line); }
+  textarea { width: 100%; box-sizing: border-box; height: 170px; font: 12px/1.4 ui-monospace, monospace; }
+  .st { font-weight: 600; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+</style>
+</head>
+<body>
+<h1>Passkey de prueba (smart wallet de labs)</h1>
+<p>Solo testnet. La llave privada nunca sale del dispositivo: esta página solo copia la llave pública y las firmas. Origen: <code id="origin"></code> · rpId: <code id="rpid"></code></p>
+
+<section>
+  <h2>1. Crear el passkey</h2>
+  <button id="create">Crear passkey</button>
+  <p id="s1" class="st"></p>
+</section>
+
+<section>
+  <h2>2. Firmar un challenge</h2>
+  <p>Pega el challenge en hex (64 caracteres). Para el vector de prueba usa el que ya viene.</p>
+  <input id="challenge" value="4242424242424242424242424242424242424242424242424242424242424242">
+  <p><button id="sign">Firmar con el passkey</button></p>
+  <p id="s2" class="st"></p>
+</section>
+
+<section>
+  <h2>3. Resultado</h2>
+  <p>Copia todo y pégalo en el chat.</p>
+  <textarea id="out" readonly></textarea>
+</section>
+
+<script>
+const $ = (id) => document.getElementById(id);
+$('origin').textContent = location.origin;
+$('rpid').textContent = location.hostname;
+
+const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
+const unhex = (h) => new Uint8Array(h.match(/../g).map((x) => parseInt(x, 16)));
+const N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551n;
+const big = (b) => BigInt('0x' + (hex(b) || '0'));
+const to32 = (n) => n.toString(16).padStart(64, '0');
+
+// La firma de WebAuthn viene en DER; el contrato pide r ‖ s (64 bytes) con S baja.
+function derToRaw(der) {
+  const d = new Uint8Array(der);
+  let i = 2;
+  const rLen = d[i + 1]; const r = d.slice(i + 2, i + 2 + rLen); i += 2 + rLen;
+  const sLen = d[i + 1]; const s = d.slice(i + 2, i + 2 + sLen);
+  let sv = big(s);
+  if (sv > N / 2n) sv = N - sv;
+  return to32(big(r)) + to32(sv);
+}
+
+let state = JSON.parse(localStorageGet('passkey') || 'null');
+function localStorageGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function localStorageSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+function show() { $('out').value = JSON.stringify(state, null, 2); }
+if (state) { $('s1').textContent = 'Passkey ya creado en este navegador.'; $('s1').className = 'st ok'; show(); }
+
+$('create').onclick = async () => {
+  try {
+    const cred = await navigator.credentials.create({ publicKey: {
+      rp: { name: 'MicoPay labs', id: location.hostname },
+      user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'labs', displayName: 'Smart wallet labs' },
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+      authenticatorSelection: { userVerification: 'required', residentKey: 'preferred' },
+      timeout: 120000,
+    }});
+    const spki = new Uint8Array(cred.response.getPublicKey());
+    const key = spki.slice(spki.length - 65);
+    if (key[0] !== 4) throw new Error('la llave no es P-256 sin comprimir');
+    state = { origin: location.origin, rp_id: location.hostname, key: hex(key), credential_id: hex(cred.rawId) };
+    localStorageSet('passkey', JSON.stringify(state));
+    $('s1').textContent = 'Listo.'; $('s1').className = 'st ok'; show();
+  } catch (e) { $('s1').textContent = 'Error: ' + e.message; $('s1').className = 'st bad'; }
+};
+
+$('sign').onclick = async () => {
+  try {
+    if (!state) throw new Error('primero crea el passkey');
+    const ch = $('challenge').value.trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(ch)) throw new Error('el challenge tiene que ser 64 caracteres hex');
+    const a = await navigator.credentials.get({ publicKey: {
+      challenge: unhex(ch),
+      rpId: location.hostname,
+      allowCredentials: [{ type: 'public-key', id: unhex(state.credential_id) }],
+      userVerification: 'required',
+      timeout: 120000,
+    }});
+    state.assertions = state.assertions || [];
+    state.assertions.push({
+      challenge: ch,
+      authenticator_data: hex(a.response.authenticatorData),
+      client_data_json: hex(a.response.clientDataJSON),
+      client_data_json_text: new TextDecoder().decode(a.response.clientDataJSON),
+      sig: derToRaw(a.response.signature),
+    });
+    localStorageSet('passkey', JSON.stringify(state));
+    $('s2').textContent = 'Firmado.'; $('s2').className = 'st ok'; show();
+  } catch (e) { $('s2').textContent = 'Error: ' + e.message; $('s2').className = 'st bad'; }
+};
+</script>
+</body>
+</html>

@@ -58,7 +58,8 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 - `authenticator_data` tiene que empezar con el `rpIdHash` guardado y traer las banderas UP y UV (huella o PIN).
 - Firma: `secp256r1_verify(llave, sha256(authenticator_data ‖ sha256(client_data_json)), r‖s)`. El host rechaza S alta.
 - La recuperación (W14) quita los passkeys junto con las llaves ed25519.
-- Las pruebas arman la aserción con una llave P-256 de prueba y los mismos bytes que produce el navegador. El plan pide además un vector de un navegador real; falta.
+- Las pruebas arman aserciones con una llave P-256 de prueba y, además, verifican un **vector de un navegador real** (`w7_vector_de_navegador_*`): un passkey de Windows Hello creado con `scripts/passkey.html` en `http://localhost:8080`. Cambiar el challenge, las banderas, el `rpIdHash` o el contador lo hace fallar.
+- `scripts/passkey.html` crea un passkey y firma challenges en el navegador; se sirve con `python -m http.server 8080` desde `scripts/` (WebAuthn pide un origen seguro, y `localhost` lo es).
 
 **Reglas de tokens y escrows (W19)**, sobre los contextos que la wallet autoriza:
 - `approve` se rechaza siempre (`ApproveDenied`). Un permiso de gasto lo usaría un tercero (`transfer_from`, `burn_from`) sin pasar por la wallet ni por su límite.
@@ -92,7 +93,7 @@ Sin admin ni llave de MicoPay. Un relayer `G…` manda y paga las transacciones;
 ## Pruebas
 
 ```bash
-cargo test                 # 141 pruebas con firmas ed25519 y P-256 reales
+cargo test                 # 144 pruebas con firmas ed25519 y P-256 reales
 stellar contract build
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk> --vector   # vector compartido Rust/JS
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet
