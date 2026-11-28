@@ -1,4 +1,5 @@
-// Demo en testnet de la smart wallet de labs (W1–W5): varios firmantes ed25519 con peso y umbral.
+// Demo en testnet de la smart wallet de labs (W1–W5, W17–W19): varios firmantes ed25519 con peso y
+// umbral, limite de gasto por token y escrow registrado.
 //
 // Cuentas nuevas cada vez (friendbot), sin secretos guardados:
 //   relayer: G… que manda y paga todas las transacciones de la wallet
@@ -6,12 +7,22 @@
 //   a, b:    llaves ed25519 (telefono y respaldo); no son cuentas de Stellar
 //
 // Pasos:
-//   1. subir el WASM, crear la wallet con a como dueno y darle 5 XLM
+//   1. subir el WASM, crear la wallet con a como dueno y darle 10 XLM; W18 add_escrow(ESCROW, XLM, 100)
+//      firmado por a (queda pendiente DELAY_LEDGERS = 120 ledgers, ~10 min)
 //   2. W3: add_signer(b, 1) firmado por a, con la prueba de posesion de b
 //   3. W5: set_threshold(2) firmado por a
 //   4. lock firmado solo por a: tiene que fallar con #5 (InsufficientWeight)
 //   5. lock firmado por a y b pasa; el agente libera
 //   6. set_threshold(1) con a y b; remove_signer(b) con a; lock solo con b falla con #3 (UnknownSigner)
+//   7. espera a que pase el plazo del escrow (consulta el ultimo ledger) y luego, umbral 1 con a:
+//      7a. apply_escrow(ESCROW) mandado por el relayer sin firmas de la wallet; escrow() = XLM, 100 bps
+//      7b. W17 set_limit(XLM, 2 XLM) aplica ya; limit() = 2 XLM
+//      7c. transfer de 3 XLM al agente falla con #15 (LimitExceeded)
+//      7d. transfer directo de 1.01 XLM al escrow falla con #19 (EscrowTransferMismatch)
+//      7e. lock de 1 XLM + 0.01 de comision pasa; spent() = 1.01 XLM; el agente libera
+//      7f. lock con comision de 2% (tope 1%) falla con #20 (EscrowLockInvalid)
+//      7g. otro lock valido de 1.01 XLM pasaria el limite (2.02 > 2) y falla con #15
+//      7h. set_limit(XLM, 100 XLM) queda pendiente (devuelve false); limit() sigue en 2 XLM
 //
 // Uso (desde labs/smart-wallet):
 //   stellar contract build
@@ -34,6 +45,7 @@ const WASM = 'target/wasm32v1-none/release/micopay_labs_smart_wallet.wasm';
 const XLM1 = 10_000_000n;
 const DOMAIN = Buffer.from('micopay-labs-wallet-v1');
 const MODE_OWNER = 0;
+const DELAY_LEDGERS = 120;
 
 const sha = (b) => createHash('sha256').update(b).digest();
 const explorer = (h) => `https://stellar.expert/explorer/testnet/tx/${h}`;
@@ -156,7 +168,7 @@ async function send(label, sourceKp, op, keys) {
   if (final.status !== 'SUCCESS') throw new Error(`tx ${res.hash} ${final.status}`);
   txs.push({ label, hash: res.hash });
   log(`   ${label}`, explorer(res.hash));
-  return { hash: res.hash, value: final.returnValue ? scValToNative(final.returnValue) : undefined };
+  return { hash: res.hash, ledger: final.ledger, value: final.returnValue ? scValToNative(final.returnValue) : undefined };
 }
 
 // Tiene que fallar con `code`. Devuelve el texto del error.
@@ -196,10 +208,11 @@ const fmt = (s) => (Number(s) / 1e7).toFixed(7);
 const bytes = (b) => nativeToScVal(b, { type: 'bytes' });
 const u32 = (n) => nativeToScVal(n, { type: 'u32' });
 
-const lockOp = (seller, buyer, secretHash) =>
+const i128 = (n) => nativeToScVal(n, { type: 'i128' });
+const lockOp = (seller, buyer, secretHash, fee = XLM1 / 100n) =>
   new Contract(ESCROW).call('lock',
     new Address(seller).toScVal(), new Address(buyer).toScVal(),
-    nativeToScVal(XLM1, { type: 'i128' }), nativeToScVal(XLM1 / 100n, { type: 'i128' }),
+    i128(XLM1), i128(fee),
     bytes(secretHash), u32(30));
 const releaseOp = (tradeId, secret) => new Contract(ESCROW).call('release', bytes(tradeId), bytes(secret));
 
@@ -219,7 +232,7 @@ async function main() {
   log('id a   ', idA.toString('hex'));
   log('id b   ', idB.toString('hex'));
 
-  // 1. Subir el WASM y crear la wallet con a como dueno; darle 5 XLM.
+  // 1. Subir el WASM y crear la wallet con a como dueno; darle 10 XLM; W18 add_escrow (pendiente).
   log('\n1. crear la wallet');
   const wasm = readFileSync(WASM);
   const wasmHash = sha(wasm);
@@ -232,10 +245,15 @@ async function main() {
   }));
   const wallet = created.value;
   log('   wallet', wallet);
-  await send('fondeo 5 XLM', relayer, new Contract(XLM).call('transfer',
-    new Address(relayer.publicKey()).toScVal(), new Address(wallet).toScVal(), nativeToScVal(5n * XLM1, { type: 'i128' })));
+  await send('fondeo 10 XLM', relayer, new Contract(XLM).call('transfer',
+    new Address(relayer.publicKey()).toScVal(), new Address(wallet).toScVal(), nativeToScVal(10n * XLM1, { type: 'i128' })));
   const saldo0 = await balance(wallet);
-  check('1. wallet con 5 XLM', saldo0 === 5n * XLM1, fmt(saldo0));
+  check('1. wallet con 10 XLM', saldo0 === 10n * XLM1, fmt(saldo0));
+  // W18: registrar el escrow ya, para que el plazo corra mientras pasan los pasos 2–6.
+  const addEsc = await send('add_escrow', relayer, new Contract(wallet).call('add_escrow',
+    new Address(ESCROW).toScVal(), new Address(XLM).toScVal(), u32(100)), [a]);
+  const escrowReady = addEsc.ledger + DELAY_LEDGERS;
+  log(`   add_escrow en el ledger ${addEsc.ledger}; se puede aplicar desde el ${escrowReady}`);
 
   // 2. W3: add_signer(b, 1) firmado solo por a (umbral 1).
   log('\n2. W3 add_signer(b, 1) con a');
@@ -277,7 +295,64 @@ async function main() {
   check('6. signers() tiene 1 (solo a)', s6.length === 1 && s6[0] === idA.toString('hex'), `${s6.length} firmante(s)`);
   const err6 = await mustFail('6. lock solo con b falla con #3', 3, relayer, lockOp(wallet, agente.publicKey(), sha(randomBytes(32))), [b]);
 
-  // 7. Resumen.
+  // 7. W17–W19: limite y escrow registrado (umbral 1, solo a).
+  log(`\n7. esperar el plazo del escrow (ledger ${escrowReady})`);
+  for (;;) {
+    let sequence;
+    try {
+      ({ sequence } = await server.getLatestLedger());
+    } catch (e) {
+      // Un corte del RPC durante la espera no debe tirar la demo: se reintenta.
+      log(`   getLatestLedger fallo (${e.code || e.message}); reintento`);
+      await new Promise((r) => setTimeout(r, 5000));
+      continue;
+    }
+    if (sequence >= escrowReady) { log(`   ledger ${sequence}, listo`); break; }
+    log(`   ledger ${sequence}, faltan ${escrowReady - sequence}`);
+    await new Promise((r) => setTimeout(r, Math.min(30, (escrowReady - sequence) * 5) * 1000));
+  }
+
+  log('\n7a. W18 apply_escrow mandado por el relayer, sin firmas de la wallet');
+  await send('apply_escrow', relayer, new Contract(wallet).call('apply_escrow', new Address(ESCROW).toScVal()));
+  const rule = await read(wallet, 'escrow', new Address(ESCROW).toScVal());
+  check('7a. escrow() = XLM, fee_bps_max 100', rule?.token === XLM && rule?.fee_bps_max === 100, JSON.stringify(rule));
+
+  log('\n7b. W17 set_limit(XLM, 2 XLM) con a');
+  const sl7b = await send('set_limit 2', relayer, new Contract(wallet).call('set_limit', new Address(XLM).toScVal(), i128(2n * XLM1)), [a]);
+  check('7b. set_limit devuelve true', sl7b.value === true, String(sl7b.value));
+  const l7b = await read(wallet, 'limit', new Address(XLM).toScVal());
+  check('7b. limit() == 2 XLM', l7b === 2n * XLM1, l7b == null ? 'None' : fmt(l7b));
+
+  const xferOp = (to, amt) => new Contract(XLM).call('transfer', new Address(wallet).toScVal(), new Address(to).toScVal(), i128(amt));
+  log('\n7c. transfer de 3 XLM al agente (limite 2)');
+  const err7c = await mustFail('7c. transfer 3 XLM falla con #15', 15, relayer, xferOp(agente.publicKey(), 3n * XLM1), [a]);
+
+  log('\n7d. transfer directo de 1.01 XLM al escrow');
+  const err7d = await mustFail('7d. transfer al escrow falla con #19', 19, relayer, xferOp(ESCROW, XLM1 + XLM1 / 100n), [a]);
+
+  log('\n7e. lock de 1 XLM + 0.01 con a; release del agente');
+  const secret7 = randomBytes(32);
+  const lock7 = await send('lock 7e', relayer, lockOp(wallet, agente.publicKey(), sha(secret7)), [a]);
+  const sp7 = BigInt(await read(wallet, 'spent', new Address(XLM).toScVal()));
+  check('7e. spent() == 1.01 XLM', sp7 === XLM1 + XLM1 / 100n, fmt(sp7));
+  const tradeId7 = Buffer.from(lock7.value);
+  await send('release 7e', agente, releaseOp(tradeId7, secret7));
+  const status7 = JSON.stringify((await read(ESCROW, 'get_trade', bytes(tradeId7))).status);
+  check('7e. trade Released', status7.includes('Released'), status7);
+
+  log('\n7f. lock con comision 0.02 sobre 1 XLM (2% > tope 1%)');
+  const err7f = await mustFail('7f. lock con 2% falla con #20', 20, relayer, lockOp(wallet, agente.publicKey(), sha(randomBytes(32)), XLM1 / 50n), [a]);
+
+  log('\n7g. segundo lock valido de 1.01 XLM (gasto 2.02 > 2)');
+  const err7g = await mustFail('7g. segundo lock falla con #15', 15, relayer, lockOp(wallet, agente.publicKey(), sha(randomBytes(32))), [a]);
+
+  log('\n7h. set_limit(XLM, 100 XLM) con a: subir queda pendiente');
+  const sl7h = await send('set_limit 100', relayer, new Contract(wallet).call('set_limit', new Address(XLM).toScVal(), i128(100n * XLM1)), [a]);
+  check('7h. set_limit devuelve false (pendiente)', sl7h.value === false, String(sl7h.value));
+  const l7h = await read(wallet, 'limit', new Address(XLM).toScVal());
+  check('7h. limit() sigue en 2 XLM', l7h === 2n * XLM1, l7h == null ? 'None' : fmt(l7h));
+
+  // Resumen.
   log('\n===== resumen =====');
   log('wallet    ', wallet);
   log('wasm hash ', wasmHash.toString('hex'));
@@ -286,6 +361,10 @@ async function main() {
   for (const t of txs) log(`  ${t.label.padEnd(16)} ${t.hash}  ${explorer(t.hash)}`);
   log('\nerror paso 4:', err4 ? err4.text.split('\n')[0] : '-');
   log('error paso 6:', err6 ? err6.text.split('\n')[0] : '-');
+  for (const [n, e] of [['7c', err7c], ['7d', err7d], ['7f', err7f], ['7g', err7g]]) {
+    log(`error paso ${n}:`, e ? e.text.split('\n')[0] : '-');
+    if (e?.diag?.length) log(`  diagnostico ${n}:`, e.diag.join(' | '));
+  }
   log('\nchequeos:');
   for (const c of checks) log(`  ${c.ok ? 'OK   ' : 'FALLO'} ${c.step}`);
   const fallos = checks.filter((c) => !c.ok).length;

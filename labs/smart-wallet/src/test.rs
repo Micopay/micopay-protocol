@@ -4,7 +4,10 @@ extern crate std;
 use super::*;
 use ed25519_dalek::{Signer as _, SigningKey};
 use soroban_sdk::{
-    testutils::BytesN as _, vec, xdr::{self, Limits, ScErrorCode, ScErrorType, WriteXdr}, Address, BytesN, Env, Error, IntoVal, InvokeError, String, TryFromVal, Val,
+    auth::{Context, ContractContext},
+    contract, contractimpl, symbol_short, token,
+    testutils::{Address as _, BytesN as _, Ledger},
+    vec, xdr::{self, Limits, ScErrorCode, ScErrorType, WriteXdr}, Address, BytesN, Env, Error, IntoVal, InvokeError, String, Symbol, TryFromVal, Val,
 };
 
 fn key(n: u8) -> SigningKey {
@@ -479,4 +482,554 @@ fn firma_real_umbral_1_y_luego_2_de_2() {
     env.set_auths(&[signed_entry(&env, &w, "add_signer", add_args(&env, &w, &n, 5), &[&a, &b])]);
     c.add_signer(&pk(&env, &n), &5, &pop(&env, &w, &n));
     assert_eq!(c.signers().len(), 3);
+}
+
+// ---------- W17: limites ----------
+
+fn advance(env: &Env, ledgers: u32) {
+    env.ledger().with_mut(|l| l.sequence_number += ledgers);
+}
+
+#[test]
+fn w17_poner_y_bajar_aplica_ya() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let token = Address::generate(&env);
+    assert!(c.set_limit(&token, &100));
+    assert_eq!(c.limit(&token), Some(100));
+    assert!(c.set_limit(&token, &50));
+    assert_eq!(c.limit(&token), Some(50));
+}
+
+#[test]
+fn w17_subir_espera() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let token = Address::generate(&env);
+    c.set_limit(&token, &100);
+    assert!(!c.set_limit(&token, &500));
+    assert_eq!(c.limit(&token), Some(100));
+    assert_eq!(c.try_apply_limit(&token), Err(Ok(WalletError::NotReady)));
+    advance(&env, DELAY_LEDGERS);
+    // Cualquiera la aplica: sin firmas.
+    env.set_auths(&[]);
+    c.apply_limit(&token);
+    assert_eq!(c.limit(&token), Some(500));
+    assert_eq!(c.try_apply_limit(&token), Err(Ok(WalletError::NothingPending)));
+}
+
+#[test]
+fn w17_bajar_cancela_la_subida_pendiente() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let token = Address::generate(&env);
+    c.set_limit(&token, &100);
+    c.set_limit(&token, &500);
+    c.set_limit(&token, &10);
+    advance(&env, DELAY_LEDGERS);
+    assert_eq!(c.try_apply_limit(&token), Err(Ok(WalletError::NothingPending)));
+    assert_eq!(c.limit(&token), Some(10));
+}
+
+#[test]
+fn w17_negativo_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    assert_eq!(c.try_set_limit(&Address::generate(&env), &-1), Err(Ok(WalletError::InvalidLimit)));
+}
+
+#[test]
+fn w17_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    let (_, c) = setup(&env, &key(1));
+    let token = Address::generate(&env);
+    assert_eq!(c.try_set_limit(&token, &100).err(), Some(Err(auth_error())));
+    assert_eq!(c.limit(&token), None);
+}
+
+// ---------- W18: escrows registrados ----------
+
+#[test]
+fn w18_registrar_espera_y_quitar_aplica_ya() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let (escrow, token) = (Address::generate(&env), Address::generate(&env));
+    c.add_escrow(&escrow, &token, &100);
+    assert_eq!(c.escrow(&escrow), None);
+    assert_eq!(c.try_apply_escrow(&escrow), Err(Ok(WalletError::NotReady)));
+    advance(&env, DELAY_LEDGERS);
+    env.set_auths(&[]);
+    c.apply_escrow(&escrow);
+    assert_eq!(c.escrow(&escrow), Some(EscrowRule { token, fee_bps_max: 100 }));
+    env.mock_all_auths();
+    c.remove_escrow(&escrow);
+    assert_eq!(c.escrow(&escrow), None);
+    assert_eq!(c.try_remove_escrow(&escrow), Err(Ok(WalletError::UnknownEscrow)));
+}
+
+#[test]
+fn w18_quitar_borra_el_registro_pendiente() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let (escrow, token) = (Address::generate(&env), Address::generate(&env));
+    c.add_escrow(&escrow, &token, &100);
+    c.remove_escrow(&escrow);
+    advance(&env, DELAY_LEDGERS);
+    assert_eq!(c.try_apply_escrow(&escrow), Err(Ok(WalletError::NothingPending)));
+}
+
+#[test]
+fn w18_comision_mayor_a_100_por_ciento_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    assert_eq!(
+        c.try_add_escrow(&Address::generate(&env), &Address::generate(&env), &10_001),
+        Err(Ok(WalletError::InvalidFee))
+    );
+}
+
+#[test]
+fn w18_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    let (_, c) = setup(&env, &key(1));
+    let (escrow, token) = (Address::generate(&env), Address::generate(&env));
+    assert_eq!(c.try_add_escrow(&escrow, &token, &100).err(), Some(Err(auth_error())));
+}
+
+// ---------- W19: reglas de tokens y escrow en __check_auth ----------
+
+fn call(env: &Env, contract: &Address, f: &str, args: Vec<Val>) -> Context {
+    Context::Contract(ContractContext { contract: contract.clone(), fn_name: Symbol::new(env, f), args })
+}
+
+fn transfer_ctx(env: &Env, token: &Address, from: &Address, to: &Address, amount: i128) -> Context {
+    call(env, token, "transfer", vec![env, from.into_val(env), to.into_val(env), amount.into_val(env)])
+}
+
+fn lock_ctx(env: &Env, escrow: &Address, seller: &Address, amount: i128, fee: i128) -> Context {
+    let buyer = Address::generate(env);
+    let hash = BytesN::<32>::random(env);
+    call(env, escrow, "lock", vec![
+        env,
+        seller.into_val(env),
+        buyer.into_val(env),
+        amount.into_val(env),
+        fee.into_val(env),
+        hash.into_val(env),
+        30u32.into_val(env),
+    ])
+}
+
+/// Firma real del dueno sobre `contexts`.
+fn check_ctx(env: &Env, w: &Address, owner: &SigningKey, contexts: Vec<Context>) -> Result<(), Result<WalletError, InvokeError>> {
+    let p = payload(env);
+    env.try_invoke_contract_check_auth::<WalletError>(w, &p.to_bytes(), vec![env, proof(env, w, owner, &p)].into_val(env), &contexts)
+}
+
+/// Wallet con limite en `token` y un escrow registrado con 1% de comision maxima.
+fn with_rules<'a>(env: &'a Env, owner: &SigningKey, limit: Option<i128>) -> (Address, SmartWalletClient<'a>, Address, Address) {
+    env.mock_all_auths();
+    let (w, c) = setup(env, owner);
+    let (escrow, token) = (Address::generate(env), Address::generate(env));
+    if let Some(l) = limit {
+        c.set_limit(&token, &l);
+    }
+    c.add_escrow(&escrow, &token, &100);
+    advance(env, DELAY_LEDGERS);
+    c.apply_escrow(&escrow);
+    (w, c, escrow, token)
+}
+
+#[test]
+fn w19_approve_falla_siempre() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, _, _, token) = with_rules(&env, &owner, None);
+    let spender = Address::generate(&env);
+    let ctx = call(&env, &token, "approve", vec![&env, w.into_val(&env), spender.into_val(&env), 5i128.into_val(&env), 100u32.into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, ctx]), Err(Ok(WalletError::ApproveDenied)));
+}
+
+#[test]
+fn w19_transfer_suma_al_limite() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, _, token) = with_rules(&env, &owner, Some(100));
+    let to = Address::generate(&env);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, transfer_ctx(&env, &token, &w, &to, 60)]), Ok(()));
+    assert_eq!(c.spent(&token), 60);
+    assert_eq!(
+        check_ctx(&env, &w, &owner, vec![&env, transfer_ctx(&env, &token, &w, &to, 41)]),
+        Err(Ok(WalletError::LimitExceeded))
+    );
+    // Un intento rechazado no cuenta.
+    assert_eq!(c.spent(&token), 60);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, transfer_ctx(&env, &token, &w, &to, 40)]), Ok(()));
+    assert_eq!(c.spent(&token), 100);
+}
+
+#[test]
+fn w19_dos_transfers_en_la_misma_autorizacion_suman() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, _, _, token) = with_rules(&env, &owner, Some(100));
+    let to = Address::generate(&env);
+    let two = vec![&env, transfer_ctx(&env, &token, &w, &to, 60), transfer_ctx(&env, &token, &w, &to, 60)];
+    assert_eq!(check_ctx(&env, &w, &owner, two), Err(Ok(WalletError::LimitExceeded)));
+}
+
+#[test]
+fn w19_burn_suma_al_limite() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, _, token) = with_rules(&env, &owner, Some(100));
+    let burn = call(&env, &token, "burn", vec![&env, w.into_val(&env), 101i128.into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, burn]), Err(Ok(WalletError::LimitExceeded)));
+    let burn = call(&env, &token, "burn", vec![&env, w.into_val(&env), 30i128.into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, burn]), Ok(()));
+    assert_eq!(c.spent(&token), 30);
+}
+
+#[test]
+fn w19_el_periodo_se_reinicia() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, _, token) = with_rules(&env, &owner, Some(100));
+    let to = Address::generate(&env);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, transfer_ctx(&env, &token, &w, &to, 100)]), Ok(()));
+    advance(&env, PERIOD_LEDGERS);
+    assert_eq!(c.spent(&token), 0);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, transfer_ctx(&env, &token, &w, &to, 100)]), Ok(()));
+}
+
+#[test]
+fn w19_otro_token_sin_limite_no_cuenta() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, _, token) = with_rules(&env, &owner, Some(100));
+    let otro = Address::generate(&env);
+    let to = Address::generate(&env);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, transfer_ctx(&env, &otro, &w, &to, 1_000)]), Ok(()));
+    assert_eq!(c.spent(&token), 0);
+}
+
+#[test]
+fn w19_lock_valido_en_escrow_registrado_pasa_y_cuenta() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, escrow, token) = with_rules(&env, &owner, Some(1_000));
+    // Lo que autoriza la wallet en un lock real: escrow.lock y, debajo, token.transfer.
+    let ctxs = vec![&env, lock_ctx(&env, &escrow, &w, 100, 1), transfer_ctx(&env, &token, &w, &escrow, 101)];
+    assert_eq!(check_ctx(&env, &w, &owner, ctxs), Ok(()));
+    assert_eq!(c.spent(&token), 101);
+}
+
+#[test]
+fn w19_transferencia_directa_al_escrow_falla() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, _, escrow, token) = with_rules(&env, &owner, None);
+    assert_eq!(
+        check_ctx(&env, &w, &owner, vec![&env, transfer_ctx(&env, &token, &w, &escrow, 101)]),
+        Err(Ok(WalletError::EscrowTransferMismatch))
+    );
+}
+
+#[test]
+fn w19_lock_con_importe_distinto_al_transfer_falla() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, _, escrow, token) = with_rules(&env, &owner, None);
+    let ctxs = vec![&env, lock_ctx(&env, &escrow, &w, 100, 1), transfer_ctx(&env, &token, &w, &escrow, 500)];
+    assert_eq!(check_ctx(&env, &w, &owner, ctxs), Err(Ok(WalletError::EscrowTransferMismatch)));
+}
+
+#[test]
+fn w19_lock_sin_su_transfer_falla() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, _, escrow, _) = with_rules(&env, &owner, None);
+    assert_eq!(
+        check_ctx(&env, &w, &owner, vec![&env, lock_ctx(&env, &escrow, &w, 100, 1)]),
+        Err(Ok(WalletError::EscrowTransferMismatch))
+    );
+}
+
+#[test]
+fn w19_lock_con_transfer_en_otro_token_falla() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, _, escrow, _) = with_rules(&env, &owner, None);
+    let otro = Address::generate(&env);
+    let ctxs = vec![&env, lock_ctx(&env, &escrow, &w, 100, 1), transfer_ctx(&env, &otro, &w, &escrow, 101)];
+    assert_eq!(check_ctx(&env, &w, &owner, ctxs), Err(Ok(WalletError::EscrowTransferMismatch)));
+}
+
+#[test]
+fn w19_lock_con_comision_sobre_el_tope_falla() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, _, escrow, token) = with_rules(&env, &owner, None);
+    // Tope 1%: 100 de importe admite 1 de comision, no 2.
+    let ctxs = vec![&env, lock_ctx(&env, &escrow, &w, 100, 2), transfer_ctx(&env, &token, &w, &escrow, 102)];
+    assert_eq!(check_ctx(&env, &w, &owner, ctxs), Err(Ok(WalletError::EscrowLockInvalid)));
+}
+
+#[test]
+fn w19_lock_con_otro_vendedor_falla() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, _, escrow, token) = with_rules(&env, &owner, None);
+    let otro = Address::generate(&env);
+    let ctxs = vec![&env, lock_ctx(&env, &escrow, &otro, 100, 1), transfer_ctx(&env, &token, &w, &escrow, 101)];
+    assert_eq!(check_ctx(&env, &w, &owner, ctxs), Err(Ok(WalletError::EscrowLockInvalid)));
+}
+
+#[test]
+fn w19_escrow_quitado_ya_no_aplica_reglas() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, escrow, token) = with_rules(&env, &owner, None);
+    c.remove_escrow(&escrow);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, transfer_ctx(&env, &token, &w, &escrow, 101)]), Ok(()));
+}
+
+fn lock_ctx_with(env: &Env, escrow: &Address, seller: &Address, buyer: &Address, timeout: u32) -> Context {
+    let hash = BytesN::<32>::random(env);
+    call(env, escrow, "lock", vec![
+        env,
+        seller.into_val(env),
+        buyer.into_val(env),
+        100i128.into_val(env),
+        1i128.into_val(env),
+        hash.into_val(env),
+        timeout.into_val(env),
+    ])
+}
+
+#[test]
+fn w19_lock_con_contextos_extra_o_en_otro_orden_falla() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, _, escrow, token) = with_rules(&env, &owner, None);
+    let otro = Address::generate(&env);
+    let extra = call(&env, &otro, "f", vec![&env]);
+    let lock = lock_ctx(&env, &escrow, &w, 100, 1);
+    let tr = transfer_ctx(&env, &token, &w, &escrow, 101);
+    // Un contrato intermedio podria llamar solo al transfer y nunca al lock.
+    assert_eq!(
+        check_ctx(&env, &w, &owner, vec![&env, extra, lock.clone(), tr.clone()]),
+        Err(Ok(WalletError::EscrowTransferMismatch))
+    );
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, tr, lock]), Err(Ok(WalletError::EscrowTransferMismatch)));
+}
+
+#[test]
+fn w19_lock_con_plazo_fuera_de_rango_o_comprador_propio_falla() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, _, escrow, token) = with_rules(&env, &owner, None);
+    let buyer = Address::generate(&env);
+    for (b, t) in [(&buyer, 0u32), (&buyer, MAX_LOCK_TIMEOUT_MINUTES + 1), (&w, 30)] {
+        let ctxs = vec![&env, lock_ctx_with(&env, &escrow, &w, b, t), transfer_ctx(&env, &token, &w, &escrow, 101)];
+        assert_eq!(check_ctx(&env, &w, &owner, ctxs), Err(Ok(WalletError::EscrowLockInvalid)));
+    }
+    let ctxs = vec![
+        &env,
+        lock_ctx_with(&env, &escrow, &w, &buyer, MAX_LOCK_TIMEOUT_MINUTES),
+        transfer_ctx(&env, &token, &w, &escrow, 101),
+    ];
+    assert_eq!(check_ctx(&env, &w, &owner, ctxs), Ok(()));
+}
+
+#[test]
+fn w19_nft_y_destino_muxed_pasan_sin_limite() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, _, _, token) = with_rules(&env, &owner, None);
+    let nft = Address::generate(&env);
+    let to = Address::generate(&env);
+    let nft_transfer = call(&env, &nft, "transfer", vec![&env, w.into_val(&env), to.into_val(&env), 7u32.into_val(&env)]);
+    let nft_burn = call(&env, &nft, "burn", vec![&env, w.into_val(&env), 7u32.into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, nft_transfer]), Ok(()));
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, nft_burn]), Ok(()));
+    let muxed = xdr::ScVal::Address(xdr::ScAddress::MuxedAccount(xdr::MuxedEd25519Account {
+        id: 42,
+        ed25519: xdr::Uint256([9; 32]),
+    }));
+    let muxed = Val::try_from_val(&env, &muxed).unwrap();
+    let ctx = call(&env, &token, "transfer", vec![&env, w.into_val(&env), muxed, 5i128.into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, ctx]), Ok(()));
+}
+
+// ---------- W19 por el camino real: token SAC, escrow de prueba y autorizacion firmada ----------
+
+/// Copia del `lock` del escrow real: pide la firma del vendedor y le cobra `amount + fee`.
+/// Si el primer byte del hash es 0xFF, falla despues de cobrar (para probar el rollback).
+#[contract]
+pub struct MockEscrow;
+
+#[contractimpl]
+impl MockEscrow {
+    pub fn init(env: Env, token: Address) {
+        env.storage().instance().set(&symbol_short!("tok"), &token);
+    }
+
+    pub fn lock(env: Env, seller: Address, _buyer: Address, amount: i128, platform_fee: i128, secret_hash: BytesN<32>, _timeout_minutes: u32) {
+        seller.require_auth();
+        let t: Address = env.storage().instance().get(&symbol_short!("tok")).unwrap();
+        token::Client::new(&env, &t).transfer(&seller, &env.current_contract_address(), &(amount + platform_fee));
+        if secret_hash.to_array()[0] == 0xFF {
+            panic!("falla despues de cobrar");
+        }
+        let n: u32 = env.storage().instance().get(&symbol_short!("n")).unwrap_or(0);
+        env.storage().instance().set(&symbol_short!("n"), &(n + 1));
+    }
+
+    pub fn trades(env: Env) -> u32 {
+        env.storage().instance().get(&symbol_short!("n")).unwrap_or(0)
+    }
+}
+
+/// Contrato intermedio que pide la firma de la wallet y solo llama al `transfer`.
+#[contract]
+pub struct Evil;
+
+#[contractimpl]
+impl Evil {
+    pub fn f(env: Env, wallet: Address, token: Address, escrow: Address, amount: i128) {
+        wallet.require_auth();
+        token::Client::new(&env, &token).transfer(&wallet, &escrow, &amount);
+    }
+}
+
+fn invocation(c: &Address, f: &str, args: Vec<Val>, subs: std::vec::Vec<xdr::SorobanAuthorizedInvocation>) -> xdr::SorobanAuthorizedInvocation {
+    xdr::SorobanAuthorizedInvocation {
+        function: xdr::SorobanAuthorizedFunction::ContractFn(xdr::InvokeContractArgs {
+            contract_address: c.try_into().unwrap(),
+            function_name: f.try_into().unwrap(),
+            args: args.try_into().unwrap(),
+        }),
+        sub_invocations: subs.try_into().unwrap(),
+    }
+}
+
+fn entry_for(env: &Env, wallet: &Address, invocation: xdr::SorobanAuthorizedInvocation, k: &SigningKey) -> xdr::SorobanAuthorizationEntry {
+    static NONCE: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(1_000);
+    let nonce = NONCE.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let exp = env.ledger().sequence() + 100;
+    let pre = xdr::HashIdPreimage::SorobanAuthorization(xdr::HashIdPreimageSorobanAuthorization {
+        network_id: xdr::Hash(env.ledger().network_id().to_array()),
+        nonce,
+        signature_expiration_ledger: exp,
+        invocation: invocation.clone(),
+    });
+    let payload = env.crypto().sha256(&Bytes::from_slice(env, &pre.to_xdr(Limits::none()).unwrap()));
+    let proofs: Vec<Proof> = vec![env, proof(env, wallet, k, &payload)];
+    let v: Val = proofs.into_val(env);
+    xdr::SorobanAuthorizationEntry {
+        root_invocation: invocation,
+        credentials: xdr::SorobanCredentials::Address(xdr::SorobanAddressCredentials {
+            address: wallet.try_into().unwrap(),
+            nonce,
+            signature_expiration_ledger: exp,
+            signature: xdr::ScVal::try_from_val(env, &v).unwrap(),
+        }),
+    }
+}
+
+struct World<'a> {
+    w: Address,
+    c: SmartWalletClient<'a>,
+    token: Address,
+    escrow: MockEscrowClient<'a>,
+    owner: SigningKey,
+}
+
+fn world<'a>(env: &'a Env, limit: Option<i128>) -> World<'a> {
+    env.mock_all_auths();
+    let owner = key(1);
+    let (w, c) = setup(env, &owner);
+    let token = env.register_stellar_asset_contract_v2(Address::generate(env)).address();
+    token::StellarAssetClient::new(env, &token).mint(&w, &1_000_000);
+    let escrow = MockEscrowClient::new(env, &env.register(MockEscrow, ()));
+    escrow.init(&token);
+    if let Some(l) = limit {
+        c.set_limit(&token, &l);
+    }
+    c.add_escrow(&escrow.address, &token, &100);
+    advance(env, DELAY_LEDGERS);
+    c.apply_escrow(&escrow.address);
+    World { w, c, token, escrow, owner }
+}
+
+/// Firma real del `lock` y su `transfer` hijo, y lo ejecuta en el escrow de prueba.
+fn real_lock(env: &Env, s: &World, amount: i128, fee: i128, first: u8) -> bool {
+    let buyer = Address::generate(env);
+    let mut h = [7u8; 32];
+    h[0] = first;
+    let hash = BytesN::from_array(env, &h);
+    let args = vec![
+        env,
+        s.w.into_val(env),
+        buyer.into_val(env),
+        amount.into_val(env),
+        fee.into_val(env),
+        hash.into_val(env),
+        30u32.into_val(env),
+    ];
+    let child = invocation(&s.token, "transfer", vec![env, s.w.into_val(env), s.escrow.address.into_val(env), (amount + fee).into_val(env)], std::vec![]);
+    let tree = invocation(&s.escrow.address, "lock", args, std::vec![child]);
+    env.set_auths(&[entry_for(env, &s.w, tree, &s.owner)]);
+    s.escrow.try_lock(&s.w, &buyer, &amount, &fee, &hash, &30).is_ok()
+}
+
+#[test]
+fn w19_camino_real_lock_cobra_una_vez_y_el_fallido_no_cobra() {
+    let env = Env::default();
+    let s = world(&env, Some(1_000));
+    let balance = token::Client::new(&env, &s.token);
+    assert!(real_lock(&env, &s, 100, 1, 1));
+    assert_eq!(s.escrow.trades(), 1);
+    assert_eq!(s.c.spent(&s.token), 101);
+    assert_eq!(balance.balance(&s.escrow.address), 101);
+    // El escrow cobra y luego falla: todo se revierte, tambien el gasto que anoto la wallet.
+    assert!(!real_lock(&env, &s, 200, 2, 0xFF));
+    assert_eq!(s.c.spent(&s.token), 101);
+    assert_eq!(balance.balance(&s.escrow.address), 101);
+    // Sobre el limite: 101 + 900 + 9 > 1000.
+    assert!(!real_lock(&env, &s, 900, 9, 1));
+    assert_eq!(s.c.spent(&s.token), 101);
+}
+
+#[test]
+fn w19_camino_real_contrato_intermedio_no_manda_al_escrow_sin_trade() {
+    let env = Env::default();
+    let s = world(&env, None);
+    let evil = EvilClient::new(&env, &env.register(Evil, ()));
+    let buyer = Address::generate(&env);
+    let lock_args = vec![
+        &env,
+        s.w.into_val(&env),
+        buyer.into_val(&env),
+        100i128.into_val(&env),
+        1i128.into_val(&env),
+        BytesN::<32>::random(&env).into_val(&env),
+        30u32.into_val(&env),
+    ];
+    let f_args = vec![&env, s.w.into_val(&env), s.token.into_val(&env), s.escrow.address.into_val(&env), 101i128.into_val(&env)];
+    let tree = invocation(&evil.address, "f", f_args, std::vec![
+        invocation(&s.escrow.address, "lock", lock_args, std::vec![]),
+        invocation(&s.token, "transfer", vec![&env, s.w.into_val(&env), s.escrow.address.into_val(&env), 101i128.into_val(&env)], std::vec![]),
+    ]);
+    env.set_auths(&[entry_for(&env, &s.w, tree, &s.owner)]);
+    assert!(evil.try_f(&s.w, &s.token, &s.escrow.address, &101).is_err());
+    assert_eq!(token::Client::new(&env, &s.token).balance(&s.escrow.address), 0);
 }
