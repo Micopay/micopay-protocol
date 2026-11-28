@@ -1036,14 +1036,27 @@ fn w19_camino_real_contrato_intermedio_no_manda_al_escrow_sin_trade() {
 
 // ---------- W8–W9: guardianes ----------
 
+/// Agrega un guardian: lo pide y lo aplica tras la espera.
+fn add_g(env: &Env, c: &SmartWalletClient, g: &Address) {
+    c.add_guardian(g);
+    advance(env, DELAY_LEDGERS);
+    c.apply_guardian_add(g);
+}
+
 #[test]
-fn w8_agregar_guardian_aplica_ya_y_quorum_pasa_a_1() {
+fn w8_agregar_guardian_espera_y_quorum_pasa_a_1() {
     let env = Env::default();
     env.mock_all_auths();
     let (_, c) = setup(&env, &key(1));
     let g = Address::generate(&env);
     assert_eq!(c.guardian_threshold(), 0);
     c.add_guardian(&g);
+    assert_eq!(c.guardians().len(), 0);
+    assert_eq!(c.try_apply_guardian_add(&g), Err(Ok(WalletError::NotReady)));
+    advance(&env, DELAY_LEDGERS);
+    env.set_auths(&[]);
+    c.apply_guardian_add(&g);
+    env.mock_all_auths();
     assert_eq!(c.guardians(), vec![&env, g.clone()]);
     assert_eq!(c.guardian_threshold(), 1);
     assert_eq!(c.try_add_guardian(&g), Err(Ok(WalletError::GuardianExists)));
@@ -1063,7 +1076,7 @@ fn w8_tope_de_guardianes() {
     env.mock_all_auths();
     let (_, c) = setup(&env, &key(1));
     for _ in 0..MAX_GUARDIANS {
-        c.add_guardian(&Address::generate(&env));
+        add_g(&env, &c, &Address::generate(&env));
     }
     assert_eq!(c.try_add_guardian(&Address::generate(&env)), Err(Ok(WalletError::TooManyGuardians)));
 }
@@ -1074,8 +1087,8 @@ fn w8_quitar_guardian_espera() {
     env.mock_all_auths();
     let (_, c) = setup(&env, &key(1));
     let (g1, g2) = (Address::generate(&env), Address::generate(&env));
-    c.add_guardian(&g1);
-    c.add_guardian(&g2);
+    add_g(&env, &c, &g1);
+    add_g(&env, &c, &g2);
     c.set_guardian_threshold(&2);
     c.remove_guardian(&g1);
     assert_eq!(c.guardians().len(), 2);
@@ -1113,8 +1126,8 @@ fn w9_quorum_entre_1_y_el_numero_de_guardianes() {
     let (_, c) = setup(&env, &key(1));
     assert_eq!(c.try_set_guardian_threshold(&1), Err(Ok(WalletError::InvalidGuardianThreshold)));
     c.set_guardian_threshold(&0);
-    c.add_guardian(&Address::generate(&env));
-    c.add_guardian(&Address::generate(&env));
+    add_g(&env, &c, &Address::generate(&env));
+    add_g(&env, &c, &Address::generate(&env));
     assert_eq!(c.try_set_guardian_threshold(&0), Err(Ok(WalletError::InvalidGuardianThreshold)));
     assert_eq!(c.try_set_guardian_threshold(&3), Err(Ok(WalletError::InvalidGuardianThreshold)));
     c.set_guardian_threshold(&2);
@@ -1126,8 +1139,8 @@ fn w9_sin_firma_de_la_wallet_falla() {
     let env = Env::default();
     env.mock_all_auths();
     let (_, c) = setup(&env, &key(1));
-    c.add_guardian(&Address::generate(&env));
-    c.add_guardian(&Address::generate(&env));
+    add_g(&env, &c, &Address::generate(&env));
+    add_g(&env, &c, &Address::generate(&env));
     env.set_auths(&[]);
     assert_eq!(c.try_set_guardian_threshold(&2).err(), Some(Err(auth_error())));
     assert_eq!(c.guardian_threshold(), 1);
@@ -1141,7 +1154,7 @@ fn with_guardians<'a>(env: &'a Env, owner: &SigningKey, n: u32, t: u32) -> (Addr
     let (w, c) = setup(env, owner);
     let gs: std::vec::Vec<Address> = (0..n).map(|_| Address::generate(env)).collect();
     for g in &gs {
-        c.add_guardian(g);
+        add_g(env, &c, g);
     }
     c.set_guardian_threshold(&t);
     (w, c, gs)
@@ -1424,7 +1437,7 @@ fn w11_cambiar_guardianes_invalida_los_votos() {
     let env = Env::default();
     let (_, c, gs) = with_guardians(&env, &key(1), 3, 2);
     let id = start(&env, &c, &gs[..1], &key(9));
-    c.add_guardian(&Address::generate(&env));
+    c.set_guardian_threshold(&3);
     assert_eq!(c.try_approve_recovery(&gs[1], &id), Err(Ok(WalletError::Stale)));
     assert_eq!(c.try_finish_recovery(&id), Err(Ok(WalletError::Stale)));
 }
@@ -1503,6 +1516,8 @@ fn w14_invalida_lo_pendiente_conserva_el_gasto_y_descongela() {
     c.set_limit(&token, &1_000_000);
     c.add_escrow(&escrow, &token, &100);
     c.remove_guardian(&gs[1]);
+    let otro = Address::generate(&env);
+    c.add_guardian(&otro);
     c.freeze(&gv(&env, &gs[..1]));
     c.request_unfreeze();
     let id = start(&env, &c, &gs[..1], &key(9));
@@ -1512,7 +1527,75 @@ fn w14_invalida_lo_pendiente_conserva_el_gasto_y_descongela() {
     assert_eq!(c.try_apply_limit(&token), Err(Ok(WalletError::Stale)));
     assert_eq!(c.try_apply_escrow(&escrow), Err(Ok(WalletError::Stale)));
     assert_eq!(c.try_apply_guardian_removal(&gs[1]), Err(Ok(WalletError::Stale)));
+    assert_eq!(c.try_apply_guardian_add(&otro), Err(Ok(WalletError::Stale)));
     assert_eq!(c.limit(&token), Some(100));
     assert_eq!(c.spent(&token), 60);
     assert_eq!(c.guardians().len(), 2);
+}
+
+// ---------- Ataques de la revision (deben fallar) ----------
+
+#[test]
+fn atk_con_recuperacion_en_curso_el_dueno_no_descongela() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 1, 1);
+    c.freeze(&gv(&env, &gs));
+    start(&env, &c, &gs, &key(9));
+    assert_eq!(c.try_request_unfreeze(), Err(Ok(WalletError::RecoveryActive)));
+}
+
+#[test]
+fn atk_la_solicitud_previa_tampoco_descongela_durante_la_recuperacion() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 1, 1);
+    c.freeze(&gv(&env, &gs));
+    c.request_unfreeze();
+    let id = start(&env, &c, &gs, &key(9));
+    advance(&env, UNFREEZE_DELAY);
+    assert_eq!(c.try_unfreeze(), Err(Ok(WalletError::RecoveryActive)));
+    assert!(c.frozen());
+    advance(&env, RECOVERY_DELAY - UNFREEZE_DELAY);
+    c.finish_recovery(&id);
+    assert!(!c.frozen());
+}
+
+#[test]
+fn atk_no_se_quitan_ni_agregan_guardianes_durante_la_recuperacion() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 3, 2);
+    c.remove_guardian(&gs[0]);
+    let tg = Address::generate(&env);
+    c.add_guardian(&tg);
+    start(&env, &c, &gs[1..2], &key(9));
+    advance(&env, DELAY_LEDGERS);
+    assert_eq!(c.try_apply_guardian_removal(&gs[0]), Err(Ok(WalletError::RecoveryActive)));
+    assert_eq!(c.try_apply_guardian_add(&tg), Err(Ok(WalletError::RecoveryActive)));
+}
+
+#[test]
+fn atk_el_guardian_del_ladron_no_vale_hasta_la_espera_y_la_recuperacion_lo_anula() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 1, 1);
+    let tg = Address::generate(&env);
+    c.add_guardian(&tg);
+    c.freeze(&gv(&env, &gs));
+    assert_eq!(c.try_guardian_unfreeze(&gv(&env, &[tg.clone()])), Err(Ok(WalletError::UnknownGuardian)));
+    let id = start(&env, &c, &gs, &key(9));
+    advance(&env, RECOVERY_DELAY);
+    c.finish_recovery(&id);
+    assert_eq!(c.try_apply_guardian_add(&tg), Err(Ok(WalletError::Stale)));
+    assert_eq!(c.guardians(), gv(&env, &gs));
+}
+
+#[test]
+fn atk_con_quorum_1_un_guardian_solo_no_congela_sin_fin() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 2, 1);
+    c.freeze(&gv(&env, &gs[..1]));
+    assert_eq!(c.try_freeze(&gv(&env, &gs[..1])), Err(Ok(WalletError::Frozen)));
+    advance(&env, FREEZE_MAX);
+    assert_eq!(c.try_freeze(&gv(&env, &gs[1..])), Err(Ok(WalletError::FreezeCooldown)));
+    // Los dos juntos si prolongan.
+    c.freeze(&gv(&env, &gs));
+    assert!(c.frozen());
 }
