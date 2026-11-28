@@ -2231,3 +2231,259 @@ fn w20_retirar_un_permiso_de_decline() {
     env.set_auths(&[]);
     assert_eq!(s.c.try_disallow_session_decline(&s.id, &t).err(), Some(Err(auth_error())));
 }
+
+// ---------- W6–W7: passkey ----------
+
+use p256::ecdsa::{signature::hazmat::PrehashSigner, Signature as P256Sig, SigningKey as P256Key};
+
+const RP_ID: &str = "app.micopay.test";
+const ORIGIN: &str = "https://app.micopay.test";
+
+fn p256_key(n: u8) -> P256Key {
+    P256Key::from_bytes(&[n; 32].into()).unwrap()
+}
+
+fn pk65(env: &Env, k: &P256Key) -> BytesN<65> {
+    BytesN::from_array(env, k.verifying_key().to_encoded_point(false).as_bytes().try_into().unwrap())
+}
+
+fn sha(env: &Env, data: &[u8]) -> [u8; 32] {
+    env.crypto().sha256(&Bytes::from_slice(env, data)).to_array()
+}
+
+/// base64url sin relleno, escrito aparte del contrato para que la prueba no se valide sola.
+fn b64url(data: &[u8]) -> std::string::String {
+    const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut out = std::string::String::new();
+    for chunk in data.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
+        for j in 0..(chunk.len() + 1) {
+            out.push(T[(n >> (18 - 6 * j)) as usize & 63] as char);
+        }
+    }
+    out
+}
+
+struct Assert<'a> {
+    typ: &'a str,
+    origin: &'a str,
+    rp: &'a str,
+    flags: u8,
+    high_s: bool,
+    /// Lo que sigue a la comilla que cierra el origen.
+    after: &'a str,
+}
+
+const OK: Assert = Assert { typ: "webauthn.get", origin: ORIGIN, rp: RP_ID, flags: 0x05, high_s: false, after: r#","crossOrigin":false}"# };
+
+/// Asercion WebAuthn de `k` sobre `challenge`, con los mismos bytes que arma el navegador.
+fn assertion(env: &Env, k: &P256Key, challenge: &[u8; 32], a: &Assert) -> (Bytes, Bytes, BytesN<64>) {
+    let mut auth = sha(env, a.rp.as_bytes()).to_vec();
+    auth.push(a.flags);
+    auth.extend_from_slice(&[0, 0, 0, 1]);
+    let cdj = std::format!(
+        r#"{{"type":"{}","challenge":"{}","origin":"{}"{}"#,
+        a.typ,
+        b64url(challenge),
+        a.origin,
+        a.after
+    );
+    let mut signed = auth.clone();
+    signed.extend_from_slice(&sha(env, cdj.as_bytes()));
+    let digest = sha(env, &signed);
+    let sig: P256Sig = k.sign_prehash(&digest).unwrap();
+    let sig = sig.normalize_s().unwrap_or(sig);
+    let sig = if a.high_s { P256Sig::from_scalars(sig.r().to_bytes(), (-*sig.s()).to_bytes()).unwrap() } else { sig };
+    let bytes: [u8; 64] = sig.to_bytes().into();
+    (Bytes::from_slice(env, &auth), Bytes::from_slice(env, cdj.as_bytes()), BytesN::from_array(env, &bytes))
+}
+
+fn webauthn(env: &Env, c: &SmartWalletClient) {
+    let rp = BytesN::from_array(env, &sha(env, RP_ID.as_bytes()));
+    c.set_webauthn(&rp, &vec![env, Bytes::from_slice(env, ORIGIN.as_bytes())]);
+}
+
+/// Agrega el passkey `k` con peso `weight` y su prueba de posesion.
+fn add_pk(env: &Env, c: &SmartWalletClient, k: &P256Key, weight: u32) -> BytesN<32> {
+    let key = pk65(env, k);
+    let challenge = possession_message(env, &c.address, &passkey_id(env, &key)).to_array();
+    let (auth, cdj, sig) = assertion(env, k, &challenge, &OK);
+    c.add_passkey(&key, &Bytes::from_slice(env, b"cred-1"), &weight, &auth, &cdj, &sig)
+}
+
+fn pk_proof(env: &Env, w: &Address, k: &P256Key, payload: &Hash<32>, a: &Assert) -> Proof {
+    let challenge = message(env, w, MODE_OWNER, payload).to_array();
+    let (authenticator_data, client_data_json, sig) = assertion(env, k, &challenge, a);
+    Proof::Passkey(PasskeyProof { id: passkey_id(env, &pk65(env, k)), authenticator_data, client_data_json, sig })
+}
+
+fn passkey_wallet<'a>(env: &'a Env) -> (Address, SmartWalletClient<'a>, P256Key) {
+    env.mock_all_auths();
+    let (w, c) = setup(env, &key(1));
+    webauthn(env, &c);
+    let k = p256_key(3);
+    add_pk(env, &c, &k, 1);
+    (w, c, k)
+}
+
+#[test]
+fn w6_agregar_passkey_con_prueba_de_posesion() {
+    let env = Env::default();
+    let (_, c, k) = passkey_wallet(&env);
+    let pks = c.passkeys();
+    assert_eq!(pks.len(), 1);
+    assert_eq!(pks.get(passkey_id(&env, &pk65(&env, &k))).unwrap().weight, 1);
+    // La misma llave dos veces no.
+    let key = pk65(&env, &k);
+    let ch = possession_message(&env, &c.address, &passkey_id(&env, &key)).to_array();
+    let (a, j, s) = assertion(&env, &k, &ch, &OK);
+    assert_eq!(c.try_add_passkey(&key, &Bytes::from_slice(&env, b"c"), &1, &a, &j, &s), Err(Ok(WalletError::KeyUsed)));
+}
+
+#[test]
+fn w6_llave_invalida_o_sin_config_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let k = p256_key(3);
+    let key = pk65(&env, &k);
+    let ch = possession_message(&env, &c.address, &passkey_id(&env, &key)).to_array();
+    let (a, j, s) = assertion(&env, &k, &ch, &OK);
+    let cred = Bytes::from_slice(&env, b"c");
+    assert_eq!(c.try_add_passkey(&key, &cred, &1, &a, &j, &s), Err(Ok(WalletError::NotConfigured)));
+    webauthn(&env, &c);
+    let mut raw = key.to_array();
+    raw[0] = 0x02;
+    assert_eq!(c.try_add_passkey(&BytesN::from_array(&env, &raw), &cred, &1, &a, &j, &s), Err(Ok(WalletError::InvalidPasskey)));
+    assert_eq!(c.try_add_passkey(&key, &Bytes::new(&env), &1, &a, &j, &s), Err(Ok(WalletError::InvalidPasskey)));
+    assert_eq!(c.try_add_passkey(&key, &cred, &0, &a, &j, &s), Err(Ok(WalletError::InvalidWeight)));
+}
+
+#[test]
+fn w6_posesion_de_otra_llave_o_de_otro_mensaje_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    webauthn(&env, &c);
+    let (k, otra) = (p256_key(3), p256_key(4));
+    let key = pk65(&env, &k);
+    let cred = Bytes::from_slice(&env, b"c");
+    let ch = possession_message(&env, &c.address, &passkey_id(&env, &key)).to_array();
+    let (a, j, s) = assertion(&env, &otra, &ch, &OK);
+    assert_eq!(c.try_add_passkey(&key, &cred, &1, &a, &j, &s), Err(Err(InvokeError::Abort)));
+    let (a, j, s) = assertion(&env, &k, &[9u8; 32], &OK);
+    assert_eq!(c.try_add_passkey(&key, &cred, &1, &a, &j, &s), Err(Ok(WalletError::WebAuthnFailed)));
+    assert_eq!(c.passkeys().len(), 0);
+}
+
+#[test]
+fn w6_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    let (_, c) = setup(&env, &key(1));
+    let rp = BytesN::from_array(&env, &[1u8; 32]);
+    let origins = vec![&env, Bytes::from_slice(&env, ORIGIN.as_bytes())];
+    assert_eq!(c.try_set_webauthn(&rp, &origins).err(), Some(Err(auth_error())));
+}
+
+#[test]
+fn w6_config_invalida_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let rp = BytesN::from_array(&env, &[1u8; 32]);
+    assert_eq!(c.try_set_webauthn(&rp, &vec![&env]), Err(Ok(WalletError::InvalidPasskey)));
+    let comilla = vec![&env, Bytes::from_slice(&env, b"https://a\",\"x")];
+    assert_eq!(c.try_set_webauthn(&rp, &comilla), Err(Ok(WalletError::InvalidPasskey)));
+}
+
+#[test]
+fn w7_el_passkey_firma_y_suma_peso() {
+    let env = Env::default();
+    let (w, c, k) = passkey_wallet(&env);
+    let p = payload(&env);
+    assert_eq!(check(&env, &w, &p, vec![&env, pk_proof(&env, &w, &k, &p, &OK)]), Ok(()));
+    // Umbral 2: el passkey solo no basta; passkey + ed25519 si.
+    c.set_threshold(&2);
+    assert_eq!(check(&env, &w, &p, vec![&env, pk_proof(&env, &w, &k, &p, &OK)]), Err(Ok(WalletError::InsufficientWeight)));
+    let ambos = vec![&env, proof(&env, &w, &key(1), &p), pk_proof(&env, &w, &k, &p, &OK)];
+    assert_eq!(check(&env, &w, &p, ambos), Ok(()));
+    let doble = vec![&env, pk_proof(&env, &w, &k, &p, &OK), pk_proof(&env, &w, &k, &p, &OK)];
+    assert_eq!(check(&env, &w, &p, doble), Err(Ok(WalletError::DuplicateProof)));
+}
+
+#[test]
+fn w7_asercion_mal_formada_falla() {
+    let env = Env::default();
+    let (w, _, k) = passkey_wallet(&env);
+    let p = payload(&env);
+    let casos = [
+        Assert { origin: "https://evil.test", ..OK },
+        Assert { origin: "https://app.micopay.test.evil.test", ..OK },
+        Assert { rp: "evil.test", ..OK },
+        Assert { flags: 0x04, ..OK },
+        Assert { flags: 0x01, ..OK },
+        Assert { typ: "webauthn.create", ..OK },
+        // JSON que sigue raro despues del origen.
+        Assert { after: r#"x,"crossOrigin":false}"#, ..OK },
+    ];
+    for a in casos.iter() {
+        assert_eq!(check(&env, &w, &p, vec![&env, pk_proof(&env, &w, &k, &p, a)]), Err(Ok(WalletError::WebAuthnFailed)));
+    }
+    // Challenge de otro mensaje.
+    let otro = pk_proof(&env, &w, &k, &payload(&env), &OK);
+    assert_eq!(check(&env, &w, &p, vec![&env, otro]), Err(Ok(WalletError::WebAuthnFailed)));
+}
+
+#[test]
+fn w7_firma_con_s_alta_o_de_otra_llave_falla() {
+    let env = Env::default();
+    let (w, _, k) = passkey_wallet(&env);
+    let p = payload(&env);
+    let alta = pk_proof(&env, &w, &k, &p, &Assert { high_s: true, ..OK });
+    assert_eq!(check(&env, &w, &p, vec![&env, alta]), Err(Err(InvokeError::Abort)));
+    let Proof::Passkey(mut ajena) = pk_proof(&env, &w, &p256_key(4), &p, &OK) else { unreachable!() };
+    ajena.id = passkey_id(&env, &pk65(&env, &k));
+    assert_eq!(check(&env, &w, &p, vec![&env, Proof::Passkey(ajena)]), Err(Err(InvokeError::Abort)));
+    let desconocida = pk_proof(&env, &w, &p256_key(5), &p, &OK);
+    assert_eq!(check(&env, &w, &p, vec![&env, desconocida]), Err(Ok(WalletError::UnknownSigner)));
+}
+
+#[test]
+fn w6_quitar_y_umbral_cuentan_el_passkey() {
+    let env = Env::default();
+    let (w, c, k) = passkey_wallet(&env);
+    let pid = passkey_id(&env, &pk65(&env, &k));
+    c.set_threshold(&2);
+    assert_eq!(c.try_set_threshold(&3), Err(Ok(WalletError::ThresholdUnreachable)));
+    assert_eq!(c.try_remove_signer(&pid), Err(Ok(WalletError::ThresholdUnreachable)));
+    c.set_threshold(&1);
+    // Quitar la ed25519 deja solo el passkey; quitar el ultimo no.
+    c.remove_signer(&signer_id(&env, &pk(&env, &key(1))));
+    assert_eq!(c.try_remove_signer(&pid), Err(Ok(WalletError::LastSigner)));
+    let p = payload(&env);
+    assert_eq!(check(&env, &w, &p, vec![&env, pk_proof(&env, &w, &k, &p, &OK)]), Ok(()));
+}
+
+#[test]
+fn w6_la_recuperacion_quita_los_passkeys() {
+    let env = Env::default();
+    let (w, c, k) = passkey_wallet(&env);
+    let g = Address::generate(&env);
+    add_g(&env, &c, &g);
+    let id = start(&env, &c, &[g], &key(9));
+    advance(&env, RECOVERY_DELAY);
+    c.finish_recovery(&id);
+    assert_eq!(c.passkeys().len(), 0);
+    let p = payload(&env);
+    assert_eq!(check(&env, &w, &p, vec![&env, pk_proof(&env, &w, &k, &p, &OK)]), Err(Ok(WalletError::UnknownSigner)));
+}
+
+#[test]
+fn w7_base64url_coincide_con_el_contrato() {
+    let env = Env::default();
+    let m = [0xfbu8; 32];
+    assert_eq!(base64url(&env, &m), Bytes::from_slice(&env, b64url(&m).as_bytes()));
+    let m: [u8; 32] = core::array::from_fn(|i| i as u8 * 7);
+    assert_eq!(base64url(&env, &m), Bytes::from_slice(&env, b64url(&m).as_bytes()));
+}

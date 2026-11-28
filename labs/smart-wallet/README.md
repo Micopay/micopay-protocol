@@ -1,6 +1,6 @@
-# smart-wallet (W0–W5, W8–W21)
+# smart-wallet (W0–W21)
 
-Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios firmantes y un umbral. **Solo testnet.** No va a producción: la app sigue con la cuenta clásica `G…`. El plan completo está fuera del repo (`PLAN_SMART_WALLET.md`, v0.3); esta carpeta tiene las fases W0–W5 (multifirma), W8–W16 (guardianes, recuperación y congelamiento) W17–W19 (límites y escrows registrados) W20 (sesiones) y W21 (upgrade con espera).
+Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios firmantes y un umbral. **Solo testnet.** No va a producción: la app sigue con la cuenta clásica `G…`. El plan completo está fuera del repo (`PLAN_SMART_WALLET.md`, v0.3); esta carpeta tiene las fases W0–W5 (multifirma), W6–W7 (passkey), W8–W16 (guardianes, recuperación y congelamiento) W17–W19 (límites y escrows registrados) W20 (sesiones) y W21 (upgrade con espera).
 
 `labs/smart-account/` sigue como el spike de un firmante.
 
@@ -11,8 +11,11 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 | W1 | `__constructor(owner)` | Primer firmante ed25519 con peso 1 y umbral 1. Los plazos del plan (D5) llegan con las fases que los usan | Quien despliega |
 | W2 | `__check_auth` | Suma el peso de firmantes **distintos** con firma válida; tiene que llegar al umbral | Soroban, cuando un contrato pide `require_auth` de la wallet |
 | W3 | `add_signer(key, weight, possession)` | Agrega un firmante ed25519; el id lo deriva el contrato. La llave nueva tiene que firmar una prueba de posesión, para que el umbral nunca dependa de una llave que nadie tiene | La wallet (umbral vigente) |
-| W4 | `remove_signer(id)` | Quita un firmante; no quita el último ni deja el umbral inalcanzable | La wallet |
-| W5 | `set_threshold(t)` | Cambia el umbral; `0 < t ≤ suma de pesos` | La wallet |
+| W4 | `remove_signer(id)` | Quita un firmante (ed25519 o passkey); no quita el último ni deja el umbral inalcanzable | La wallet |
+| W5 | `set_threshold(t)` | Cambia el umbral; `0 < t ≤ suma de pesos` (ed25519 y passkeys) | La wallet |
+| W6 | `set_webauthn(rp_id_hash, origins)` | Fija el sitio de los passkeys: `rpIdHash` y hasta 5 orígenes permitidos | La wallet |
+| W6 | `add_passkey(key65, credential_id, weight, authenticator_data, client_data_json, sig)` | Agrega un passkey secp256r1. La llave nueva firma una aserción WebAuthn cuyo challenge es la prueba de posesión, como en `add_signer` | La wallet |
+| W7 | Passkey en `__check_auth` | Ver abajo | — |
 | W17 | `set_limit(token, per_period)` | Límite de gasto por periodo (~1 día) de un token. Ponerlo o bajarlo aplica ya; subirlo queda pendiente `DELAY_LEDGERS` | La wallet |
 | W17 | `apply_limit(token)` | Aplica una subida pendiente cuando ya pasó la espera | Cualquiera |
 | W18 | `add_escrow(escrow, token, fee_bps_max)` | Registra un escrow con su token y su comisión máxima; queda pendiente `DELAY_LEDGERS` | La wallet |
@@ -39,7 +42,7 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 | W21 | `schedule_upgrade(hash)` | Programa un upgrade al WASM con ese hash; espera `UPGRADE_DELAY` (240 ledgers, ~20 min) | La wallet |
 | W21 | `cancel_upgrade()` | Cancela; aplica ya, también congelada | La wallet |
 | W21 | `apply_upgrade(hash)` | Aplica con el hash exacto, pasada la espera. No congelada, no con una recuperación en curso, no si lo programó el dueño anterior a una recuperación | Cualquiera |
-| — | `signers()`, `threshold()`, `limit(token)`, `spent(token)`, `escrow(escrow)`, `guardians()`, `guardian_threshold()`, `frozen()`, `recovery()`, `session(id)`, `pending_upgrade()` | Lecturas | Cualquiera |
+| — | `signers()`, `threshold()`, `limit(token)`, `spent(token)`, `escrow(escrow)`, `guardians()`, `guardian_threshold()`, `frozen()`, `recovery()`, `session(id)`, `pending_upgrade()`, `passkeys()` | Lecturas | Cualquiera |
 
 **Reglas de la firma:**
 - Id de firmante: `sha256(0x00 ‖ pubkey)`. Una llave no puede entrar dos veces ni aportar doble peso.
@@ -47,6 +50,15 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 - La firma (`Signature`) es una lista de pruebas `Proof::Ed25519(Ed25519Proof { id, sig })`.
 - Prueba de posesión de una llave nueva: firma `sha256("micopay-labs-wallet-v1" ‖ XDR de la wallet ‖ "add-signer" ‖ id)`.
 - Tope de 10 firmantes y de 10 pruebas por firma. Aritmética con `checked_add`.
+
+**Passkey (W6–W7):**
+- Id: `sha256(0x01 ‖ llave de 65 bytes)`; la llave tiene que empezar en `0x04`.
+- La prueba es `Proof::Passkey(PasskeyProof { id, authenticator_data, client_data_json, sig })`, con los **bytes originales** de la aserción. Suma su peso como un firmante más; se puede combinar con firmas ed25519.
+- `client_data_json` tiene que empezar con `{"type":"webauthn.get","challenge":"<base64url del mensaje>","origin":"<origen permitido>"` y seguir con `,` o `}`. Es el orden que fija la serialización de WebAuthn.
+- `authenticator_data` tiene que empezar con el `rpIdHash` guardado y traer las banderas UP y UV (huella o PIN).
+- Firma: `secp256r1_verify(llave, sha256(authenticator_data ‖ sha256(client_data_json)), r‖s)`. El host rechaza S alta.
+- La recuperación (W14) quita los passkeys junto con las llaves ed25519.
+- Las pruebas arman la aserción con una llave P-256 de prueba y los mismos bytes que produce el navegador. El plan pide además un vector de un navegador real; falta.
 
 **Reglas de tokens y escrows (W19)**, sobre los contextos que la wallet autoriza:
 - `approve` se rechaza siempre (`ApproveDenied`). Un permiso de gasto lo usaría un tercero (`transfer_from`, `burn_from`) sin pasar por la wallet ni por su límite.
@@ -80,7 +92,7 @@ Sin admin ni llave de MicoPay. Un relayer `G…` manda y paga las transacciones;
 ## Pruebas
 
 ```bash
-cargo test                 # 130 pruebas con firmas ed25519 reales
+cargo test                 # 141 pruebas con firmas ed25519 y P-256 reales
 stellar contract build
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk> --vector   # vector compartido Rust/JS
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet

@@ -1,7 +1,7 @@
 //! Smart wallet de labs: una cuenta de contrato (`C…`) con varios firmantes ed25519,
 //! cada uno con su peso, y un umbral. Es la fase W0–W5 de PLAN_SMART_WALLET.md.
 //!
-//! Solo testnet. Todavia no tiene passkey. Las fases W8–W21 se describen en el README.
+//! Solo testnet. Las fases W6–W21 se describen en el README.
 //!
 //! Reglas de esta fase:
 //! - el contrato deriva el id de cada firmante (`sha256(0x00 ‖ pubkey)`), asi una llave
@@ -42,6 +42,13 @@ pub const SESSION_MAX_TTL: u32 = 120_960;
 /// Espera de un upgrade (~20 min): mas que `DELAY_LEDGERS`, para que los guardianes alcancen a
 /// congelar si quien robo el telefono programa uno.
 pub const UPGRADE_DELAY: u32 = 240;
+/// Prefijo del id de un passkey (W6): `sha256(0x01 ‖ pubkey de 65 bytes)`.
+const KIND_PASSKEY: u8 = 1;
+/// Tope de origenes WebAuthn permitidos.
+pub const MAX_ORIGINS: u32 = 5;
+/// Banderas de `authenticator_data`: usuario presente (UP) y verificado (UV, huella o PIN).
+const FLAG_UP: u32 = 0x01;
+const FLAG_UV: u32 = 0x04;
 /// Prefijo del id de un firmante ed25519. El passkey (W6) usara 0x01.
 const KIND_ED25519: u8 = 0;
 /// Tope de firmantes, para acotar el costo de `__check_auth`.
@@ -103,6 +110,36 @@ enum DataKey {
     RecoveryNonce,
     Sessions,
     PendingUpgrade,
+    Passkeys,
+    WebAuthn,
+}
+
+/// W6. Passkey secp256r1 registrado como firmante.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Passkey {
+    /// Llave publica sin comprimir (`0x04 ‖ x ‖ y`).
+    pub key: BytesN<65>,
+    pub credential_id: Bytes,
+    pub weight: u32,
+}
+
+/// W6. A que sitio pertenecen los passkeys: `rpIdHash` y los origenes permitidos.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WebAuthnConfig {
+    pub rp_id_hash: BytesN<32>,
+    pub origins: Vec<Bytes>,
+}
+
+/// W7. Firma de un passkey: una asercion WebAuthn con los bytes originales.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PasskeyProof {
+    pub id: BytesN<32>,
+    pub authenticator_data: Bytes,
+    pub client_data_json: Bytes,
+    pub sig: BytesN<64>,
 }
 
 /// W21. Upgrade programado: el hash exacto del WASM nuevo.
@@ -196,6 +233,7 @@ pub struct Ed25519Proof {
 pub enum Proof {
     Ed25519(Ed25519Proof),
     Session(SessionProof),
+    Passkey(PasskeyProof),
 }
 
 /// W20. Firma de una llave de sesion.
@@ -281,6 +319,9 @@ pub enum WalletError {
     InvalidSession = 45,
     TooManySessions = 46,
     UpgradeMismatch = 47,
+    InvalidPasskey = 48,
+    WebAuthnFailed = 49,
+    NotConfigured = 50,
 }
 
 /// Id de un firmante ed25519: `sha256(0x00 ‖ pubkey)`.
@@ -459,6 +500,103 @@ fn total_weight(map: &Map<BytesN<32>, Signer>) -> Result<u32, WalletError> {
     Ok(total)
 }
 
+pub fn passkey_id(env: &Env, key: &BytesN<65>) -> BytesN<32> {
+    let mut b = Bytes::from_array(env, &[KIND_PASSKEY]);
+    b.append(&key.clone().into());
+    env.crypto().sha256(&b).into()
+}
+
+fn passkeys(env: &Env) -> Map<BytesN<32>, Passkey> {
+    env.storage().instance().get(&DataKey::Passkeys).unwrap_or(Map::new(env))
+}
+
+/// Peso de todos los firmantes: ed25519 y passkeys.
+fn all_weight(env: &Env, map: &Map<BytesN<32>, Signer>, pks: &Map<BytesN<32>, Passkey>) -> Result<u32, WalletError> {
+    let mut total = total_weight(map)?;
+    for p in pks.values() {
+        total = total.checked_add(p.weight).ok_or(WalletError::Overflow)?;
+    }
+    let _ = env;
+    Ok(total)
+}
+
+/// base64url sin relleno, como lo pone el navegador en `challenge`.
+fn base64url(env: &Env, data: &[u8; 32]) -> Bytes {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut out = [0u8; 43];
+    let mut o = 0;
+    let mut i = 0;
+    while i + 3 <= 32 {
+        let n = (data[i] as u32) << 16 | (data[i + 1] as u32) << 8 | data[i + 2] as u32;
+        out[o] = T[(n >> 18) as usize & 63];
+        out[o + 1] = T[(n >> 12) as usize & 63];
+        out[o + 2] = T[(n >> 6) as usize & 63];
+        out[o + 3] = T[n as usize & 63];
+        o += 4;
+        i += 3;
+    }
+    // Quedan 2 bytes: 3 caracteres.
+    let n = (data[30] as u32) << 16 | (data[31] as u32) << 8;
+    out[o] = T[(n >> 18) as usize & 63];
+    out[o + 1] = T[(n >> 12) as usize & 63];
+    out[o + 2] = T[(n >> 6) as usize & 63];
+    Bytes::from_array(env, &out)
+}
+
+/// W7. Verifica una asercion WebAuthn sobre `challenge`, con los bytes originales:
+/// - `client_data_json` empieza con `{"type":"webauthn.get","challenge":"<base64url>","origin":"<origen>"`
+///   y sigue `,` o `}` (es el orden que fija la serializacion de WebAuthn), con un origen permitido;
+/// - `authenticator_data` empieza con el `rpIdHash` guardado y trae las banderas UP y UV;
+/// - `secp256r1_verify(pubkey, sha256(authenticator_data ‖ sha256(client_data_json)), r‖s)`.
+///   El host rechaza firmas con S alta.
+fn verify_passkey(
+    env: &Env,
+    key: &BytesN<65>,
+    challenge: &BytesN<32>,
+    authenticator_data: &Bytes,
+    client_data_json: &Bytes,
+    sig: &BytesN<64>,
+) -> Result<(), WalletError> {
+    let cfg: WebAuthnConfig = env.storage().instance().get(&DataKey::WebAuthn).ok_or(WalletError::NotConfigured)?;
+    if authenticator_data.len() < 37 {
+        return Err(WalletError::WebAuthnFailed);
+    }
+    let rp: Bytes = cfg.rp_id_hash.into();
+    if authenticator_data.slice(0..32) != rp {
+        return Err(WalletError::WebAuthnFailed);
+    }
+    let flags = authenticator_data.get(32).unwrap_or(0) as u32;
+    if flags & (FLAG_UP | FLAG_UV) != FLAG_UP | FLAG_UV {
+        return Err(WalletError::WebAuthnFailed);
+    }
+    let mut head = Bytes::from_slice(env, b"{\"type\":\"webauthn.get\",\"challenge\":\"");
+    head.append(&base64url(env, &challenge.to_array()));
+    head.append(&Bytes::from_slice(env, b"\",\"origin\":\""));
+    let mut ok = false;
+    for origin in cfg.origins.iter() {
+        let mut expected = head.clone();
+        expected.append(&origin);
+        expected.push_back(b'"');
+        let n = expected.len();
+        if client_data_json.len() > n && client_data_json.slice(0..n) == expected {
+            let next = client_data_json.get(n).unwrap_or(0);
+            if next == b',' || next == b'}' {
+                ok = true;
+                break;
+            }
+        }
+    }
+    if !ok {
+        return Err(WalletError::WebAuthnFailed);
+    }
+    let mut signed = authenticator_data.clone();
+    signed.append(&env.crypto().sha256(client_data_json).into());
+    let digest = env.crypto().sha256(&signed);
+    // Aborta si la firma no es valida.
+    env.crypto().secp256r1_verify(key, &digest, sig);
+    Ok(())
+}
+
 #[contract]
 pub struct SmartWallet;
 
@@ -499,33 +637,89 @@ impl SmartWallet {
         if map.contains_key(id.clone()) {
             return Err(WalletError::KeyUsed);
         }
-        if map.len() >= MAX_SIGNERS {
+        if map.len() + passkeys(&env).len() >= MAX_SIGNERS {
             return Err(WalletError::TooManySigners);
         }
         map.set(id.clone(), Signer { key, weight });
-        total_weight(&map)?;
+        all_weight(&env, &map, &passkeys(&env))?;
         env.storage().instance().set(&DataKey::Signers, &map);
         bump(&env);
         Ok(id)
     }
 
-    /// W4. Quita un firmante. No deja la wallet sin firmantes ni bajo el umbral.
+    /// W4. Quita un firmante (ed25519 o passkey). No deja la wallet sin firmantes ni bajo el
+    /// umbral.
     pub fn remove_signer(env: Env, id: BytesN<32>) -> Result<(), WalletError> {
         env.current_contract_address().require_auth();
         let mut map = signers(&env)?;
-        if !map.contains_key(id.clone()) {
+        let mut pks = passkeys(&env);
+        if map.remove(id.clone()).is_none() && pks.remove(id).is_none() {
             return Err(WalletError::UnknownSigner);
         }
-        if map.len() == 1 {
+        if map.len() + pks.len() == 0 {
             return Err(WalletError::LastSigner);
         }
-        map.remove(id);
-        if total_weight(&map)? < threshold(&env)? {
+        if all_weight(&env, &map, &pks)? < threshold(&env)? {
             return Err(WalletError::ThresholdUnreachable);
         }
         env.storage().instance().set(&DataKey::Signers, &map);
+        env.storage().instance().set(&DataKey::Passkeys, &pks);
         bump(&env);
         Ok(())
+    }
+
+    /// W6. Fija el sitio de los passkeys: el `rpIdHash` (sha256 del dominio) y los origenes
+    /// permitidos (p. ej. `https://app.micopay.xyz`). Hace falta antes de `add_passkey`.
+    pub fn set_webauthn(env: Env, rp_id_hash: BytesN<32>, origins: Vec<Bytes>) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        if origins.is_empty() || origins.len() > MAX_ORIGINS {
+            return Err(WalletError::InvalidPasskey);
+        }
+        for o in origins.iter() {
+            if o.is_empty() || o.len() > 128 || o.iter().any(|c| c == b'"') {
+                return Err(WalletError::InvalidPasskey);
+            }
+        }
+        env.storage().instance().set(&DataKey::WebAuthn, &WebAuthnConfig { rp_id_hash, origins });
+        bump(&env);
+        Ok(())
+    }
+
+    /// W6. Agrega un passkey secp256r1 (huella o PIN con respaldo del sistema). Como en
+    /// `add_signer`, el passkey nuevo tiene que firmar una prueba de posesion: una asercion
+    /// WebAuthn cuyo challenge es `possession_message(wallet, id)`. Devuelve el id.
+    pub fn add_passkey(
+        env: Env,
+        key: BytesN<65>,
+        credential_id: Bytes,
+        weight: u32,
+        authenticator_data: Bytes,
+        client_data_json: Bytes,
+        sig: BytesN<64>,
+    ) -> Result<BytesN<32>, WalletError> {
+        let wallet = env.current_contract_address();
+        wallet.require_auth();
+        if weight == 0 {
+            return Err(WalletError::InvalidWeight);
+        }
+        if key.get(0) != Some(0x04) || credential_id.is_empty() || credential_id.len() > 255 {
+            return Err(WalletError::InvalidPasskey);
+        }
+        let id = passkey_id(&env, &key);
+        let mut pks = passkeys(&env);
+        if pks.contains_key(id.clone()) {
+            return Err(WalletError::KeyUsed);
+        }
+        let map = signers(&env)?;
+        if map.len() + pks.len() >= MAX_SIGNERS {
+            return Err(WalletError::TooManySigners);
+        }
+        verify_passkey(&env, &key, &possession_message(&env, &wallet, &id), &authenticator_data, &client_data_json, &sig)?;
+        pks.set(id.clone(), Passkey { key, credential_id, weight });
+        all_weight(&env, &map, &pks)?;
+        env.storage().instance().set(&DataKey::Passkeys, &pks);
+        bump(&env);
+        Ok(id)
     }
 
     /// W5. Cambia el umbral. Tiene que ser alcanzable con los pesos actuales.
@@ -534,7 +728,7 @@ impl SmartWallet {
         if threshold == 0 {
             return Err(WalletError::InvalidThreshold);
         }
-        if threshold > total_weight(&signers(&env)?)? {
+        if threshold > all_weight(&env, &signers(&env)?, &passkeys(&env))? {
             return Err(WalletError::ThresholdUnreachable);
         }
         env.storage().instance().set(&DataKey::Threshold, &threshold);
@@ -968,6 +1162,7 @@ impl SmartWallet {
         let mut map = Map::new(&env);
         map.set(signer_id(&env, &r.new_key), Signer { key: r.new_key, weight: 1 });
         st.set(&DataKey::Signers, &map);
+        st.remove(&DataKey::Passkeys);
         st.set(&DataKey::Threshold, &1u32);
         let epoch = owner_epoch(&env).checked_add(1).ok_or(WalletError::Overflow)?;
         st.set(&DataKey::OwnerEpoch, &epoch);
@@ -1155,6 +1350,11 @@ impl SmartWallet {
         Ok(())
     }
 
+    /// Lectura: passkeys registrados.
+    pub fn passkeys(env: Env) -> Map<BytesN<32>, Passkey> {
+        passkeys(&env)
+    }
+
     /// Lectura: una sesion.
     pub fn session(env: Env, id: BytesN<32>) -> Option<Session> {
         sessions(&env).get(id)
@@ -1240,7 +1440,9 @@ impl CustomAccountInterface for SmartWallet {
             return Ok(());
         }
         let map = signers(&env)?;
-        let msg: Bytes = message(&env, &env.current_contract_address(), MODE_OWNER, &signature_payload).into();
+        let pks = passkeys(&env);
+        let msg32 = message(&env, &env.current_contract_address(), MODE_OWNER, &signature_payload);
+        let msg: Bytes = msg32.clone().into();
         let mut seen: Vec<BytesN<32>> = Vec::new(&env);
         let mut weight: u32 = 0;
         for proof in signatures.iter() {
@@ -1256,6 +1458,15 @@ impl CustomAccountInterface for SmartWallet {
                     weight = weight.checked_add(signer.weight).ok_or(WalletError::Overflow)?;
                 }
                 Proof::Session(_) => return Err(WalletError::MixedProofs),
+                Proof::Passkey(p) => {
+                    if seen.contains(&p.id) {
+                        return Err(WalletError::DuplicateProof);
+                    }
+                    let pk = pks.get(p.id.clone()).ok_or(WalletError::UnknownSigner)?;
+                    verify_passkey(&env, &pk.key, &msg32, &p.authenticator_data, &p.client_data_json, &p.sig)?;
+                    seen.push_back(p.id);
+                    weight = weight.checked_add(pk.weight).ok_or(WalletError::Overflow)?;
+                }
             }
         }
         if weight < threshold(&env)? {
