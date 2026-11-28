@@ -146,6 +146,26 @@ Corrida del 2026-11-27, mismo escrow. Wallet `CCUZJDPZCD22AJTVD6B556BFEJQSOTU64C
 | 7g | Segundo `lock` de 1.01 XLM (2.02 > 2): **rechazado** con `#15` | — (falla en la simulación) |
 | 7h | `set_limit(XLM, 100 XLM)` queda pendiente; el límite sigue en 2 XLM | [392e3b97…](https://stellar.expert/explorer/testnet/tx/392e3b97f362e98829f7b1616a1edcf19c2be85bf40aa842c2815e0b072cbb7e) |
 
+### W8–W16
+
+Corrida del 2026-11-27 con `scripts/demo-guardianes.mjs`. Wallet `CBI37B4AWAFDOOJTWRBUS7CTBGN422H6IE77SMCQFAGLGZHD7QFMTL5A` (WASM `ee3f6a14…`, el mismo de la demo de W20–W21). Los 18 chequeos pasan. Guardianes `g1`, `g2`, `g3` son cuentas `G…` normales; `a` es el teléfono robado y `n` el nuevo.
+
+| Paso | Qué pasó | Transacciones |
+|---|---|---|
+| 1 | Subir el WASM, crear la wallet con `a` y darle 5 XLM | [4c806484…](https://stellar.expert/explorer/testnet/tx/4c8064847dd696fd4688c169dd5127e6655def75c1af59e041aea20fcc75df5e) · [6a84b483…](https://stellar.expert/explorer/testnet/tx/6a84b483b160886623fe40f1ee21e9440a64032b85335b6a89038b7e7fc5eb95) · [c9aeeb48…](https://stellar.expert/explorer/testnet/tx/c9aeeb48ea358dacd3854180c6167e33ce432cc2d0f691b51e25675ce2e231ae) |
+| 1 | W8 `add_guardian` de g1, g2 y g3 firmado por `a`: quedan pendientes y `guardians()` sigue vacío | [2888e758…](https://stellar.expert/explorer/testnet/tx/2888e75827b91e8d2e54578b3673dc1d578d464cc189b385bd417d095b0fffc5) · [8d431761…](https://stellar.expert/explorer/testnet/tx/8d431761d4130e8d32dbe7a6c7f1a8a08f06a0f7aed474555528e91ca762d3c7) · [c87f9136…](https://stellar.expert/explorer/testnet/tx/c87f9136117bdc814c4d5e517fe9fe9969dd37d83c0bbba599b0f9879ab426ec) |
+| 1 | Pasada la espera, el relayer aplica las tres altas **sin firmas de la wallet**; el quorum pasa a 1 | [9d4aad1e…](https://stellar.expert/explorer/testnet/tx/9d4aad1ede5a2166f039faa1611e5de48a0da0f9bdf3db002620e308ae451a89) · [ea85d196…](https://stellar.expert/explorer/testnet/tx/ea85d19611623a4eedd8f5b73c8974b6250aa818df189a748b27ab3a37d6bbb1) · [1d550b15…](https://stellar.expert/explorer/testnet/tx/1d550b15964b965d6ef68d1d4ab83090dc758948a8ed10a13c18f7426418e1e9) |
+| 1 | W9 `set_guardian_threshold(2)` firmado por `a` | [afc8fc61…](https://stellar.expert/explorer/testnet/tx/afc8fc61bbd563b21356ee2ee9c780e36fa011073be9e9e3f2bb176264403edd) |
+| 2 | Roban el teléfono: W15 g1 solo congela (hasta 360 ledgers) | [0cf83e1d…](https://stellar.expert/explorer/testnet/tx/0cf83e1dca23a25d5f179aab886d6d7a37d65c8be4005cb71dbb3918bb69266c) |
+| 3 | `transfer` de 1 XLM firmado por `a`: **rechazado** con `#30` (`Frozen`) | — (falla en la simulación) |
+| 4 | W10 g1 abre la recuperación hacia `n`; `ready_ledger` = 0 (falta el quorum) | [4da39158…](https://stellar.expert/explorer/testnet/tx/4da39158df51852b3b5caad7299209174f0d9da17ec2fc9e4bb75b33cba76140) |
+| 4b | W16 `request_unfreeze` firmado por `a` con la recuperación abierta: **rechazado** con `#35` (`RecoveryActive`) | — (falla en la simulación) |
+| 5 | W11 g2 vota: llega al quorum y la espera empieza ahí (240 ledgers) | [d044000c…](https://stellar.expert/explorer/testnet/tx/d044000ca2349a7c0ecd8c0fa59111572cfa35d602735c3da04f70994691a0a1) |
+| 6 | W14 pasada la espera, el relayer termina la recuperación **sin firmas de la wallet**: un solo firmante `n`, umbral 1, descongelada | [bd8071f6…](https://stellar.expert/explorer/testnet/tx/bd8071f656a474891a449cfbaaf68ee110111a0e3ec4f2805e58aa1cd7a1be25) |
+| 7 | `transfer` firmado por `a` (el teléfono viejo): **rechazado** con `#3` (`UnknownSigner`). El mismo firmado por `n` pasa: el agente sube 1 XLM | [ffe7c61f…](https://stellar.expert/explorer/testnet/tx/ffe7c61f52f7ddc12cdd0dfae3a348e497e506e9775c435384fab8aef7a0217b) |
+
+Cuando el rechazo ocurre en la firma de la wallet, el error de arriba es `Error(Auth, InvalidAction)` y el código del contrato sale en los eventos de diagnóstico; el script revisa ese código.
+
 ### W20, W21 y F1–F3
 
 Corrida del 2026-11-27 con `scripts/demo-sesiones.mjs`. Fábrica `CANRZQBAECXYRZZSWFMYABYLI5MPAZYOJWOUUHFIBJMIMLQCIB7EOHCN` (WASM `5a2ec709…`), wallet `CD4KCYV26MW3UOSUC52X2JEL7O63UQKUIX7IBNVFP7UHN3MDVJ6MDIOH` (WASM `ee3f6a14…`, sin W6–W7). Los 29 chequeos del script pasan. El script se cortó (la máquina se quedó sin memoria) justo antes de aplicar el upgrade; el paso 7 se terminó a mano con `stellar contract invoke`.
