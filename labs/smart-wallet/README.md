@@ -17,7 +17,7 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 | W17 | `apply_limit(token)` | Aplica una subida pendiente cuando ya pasó la espera | Cualquiera |
 | W18 | `add_escrow(escrow, token, fee_bps_max)` | Registra un escrow con su token y su comisión máxima; queda pendiente `DELAY_LEDGERS` | La wallet |
 | W18 | `apply_escrow(escrow)` | Aplica un registro pendiente cuando ya pasó la espera | Cualquiera |
-| W18 | `remove_escrow(escrow)` | Quita un escrow registrado o pendiente; aplica ya | La wallet |
+| W18 | `remove_escrow(escrow)` | Quita un escrow registrado o pendiente y revoca sus sesiones; aplica ya | La wallet |
 | W8 | `add_guardian(g)` | Pide agregar un guardián (`G…` o `C…`, no la propia wallet); queda pendiente `DELAY_LEDGERS`. Tope de 10 | La wallet |
 | W8 | `apply_guardian_add(g)` | Aplica el alta pasada la espera; con el primer guardián el quorum pasa a 1 | Cualquiera |
 | W8 | `remove_guardian(g)` | Pide quitar un guardián; queda pendiente `DELAY_LEDGERS` | La wallet |
@@ -35,6 +35,7 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 | W20 | `add_session(key, escrow, buyers, max_per_lock, max_total, max_timeout, expires)` | Llave temporal para un escrow registrado: `lock` hacia compradores de la lista con tope por `lock` y acumulado (contando la comisión), `release`, y `decline` solo con permiso. Hasta 5 sesiones y 7 días. Aplica ya | La wallet |
 | W20 | `revoke_session(id)` | Revoca; aplica ya, también congelada | La wallet |
 | W20 | `allow_session_decline(id, trade_id)` | Permite a la sesión un `decline` de ese trade, una vez | La wallet |
+| W20 | `disallow_session_decline(id, trade_id)` | Retira ese permiso | La wallet |
 | W21 | `schedule_upgrade(hash)` | Programa un upgrade al WASM con ese hash; espera `UPGRADE_DELAY` (240 ledgers, ~20 min) | La wallet |
 | W21 | `cancel_upgrade()` | Cancela; aplica ya, también congelada | La wallet |
 | W21 | `apply_upgrade(hash)` | Aplica con el hash exacto, pasada la espera. No congelada, no con una recuperación en curso, no si lo programó el dueño anterior a una recuperación | Cualquiera |
@@ -72,14 +73,14 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 - Id de sesión: `sha256(0x02 ‖ pubkey)`. Una llave del dueño no puede ser de sesión.
 - Cada contexto tiene que ser, en el escrow de la sesión: `[lock, transfer]` hacia un comprador de la lista y con plazo ≤ `max_timeout`; `release`; o `decline` de un trade permitido. Todo lo demás falla (`SessionDenied`), incluidas las llamadas a la propia wallet y cualquier `transfer`.
 - Las reglas de W19 siguen aplicando encima: comisión dentro del tope del escrow, `transfer` exacto y límite del token.
-- Falla si venció, si la revocaron, si la wallet está congelada, si quitaron el escrow o después de una recuperación (`Stale`).
+- La sesión guarda la regla del escrow (token y comisión máxima) al crearse. Falla si venció, si la revocaron, si la wallet está congelada, si cambió la regla del escrow o después de una recuperación (`Stale`). Quitar el escrow revoca sus sesiones; volver a registrarlo no las revive.
 
 Sin admin ni llave de MicoPay. Un relayer `G…` manda y paga las transacciones; no tiene ninguna llave de la wallet.
 
 ## Pruebas
 
 ```bash
-cargo test                 # 119 pruebas con firmas ed25519 reales
+cargo test                 # 130 pruebas con firmas ed25519 reales
 stellar contract build
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk> --vector   # vector compartido Rust/JS
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet
@@ -88,6 +89,7 @@ node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet
 - Los errores esperados se comparan por código (`WalletError` o `Error(Auth, InvalidAction)`). Una firma inválida de una llave registrada aborta en `ed25519_verify` (`InvokeError::Abort`).
 - `firma_real_umbral_1_y_luego_2_de_2` usa entradas de autorización firmadas de verdad (sin `mock_all_auths`): con 2 de 2, una firma no basta y una firma sobre otros argumentos no sirve.
 - `w19_camino_real_*` corren W19 por el camino real: un token SAC, un escrow de prueba que copia el `lock` del real y autorizaciones firmadas. Prueban que un `lock` cobra una vez, que uno que falla después de cobrar no cuenta, y que un contrato intermedio no puede mandar dinero al escrow sin trade.
+- `r4_*` son los ataques de la revisión de W20 (transfer hijo falso o desviado, otro escrow, importes extremos, un contrato intermedio con varios `lock`); todos fallan como deben.
 - `w21_upgrade_con_espera_conserva_el_estado` sube `testdata/smart_wallet_w21.wasm` (el WASM de este contrato, fijo para que `cargo test` no tenga que compilar a wasm) y revisa que firmantes, guardianes y límites sigan igual después del upgrade.
 - `w2_vector_compartido_rust_js` fija los bytes del mensaje firmado; la demo calcula los mismos en JS.
 - `atk_*` son los ataques de la revisión de W8–W16 (descongelar antes de la recuperación, guardián del ladrón, congelar sin fin con quorum 1); todos fallan.
