@@ -1866,3 +1866,85 @@ fn w20_sin_firma_del_dueno_falla() {
     let t = BytesN::random(&env);
     assert_eq!(s.c.try_allow_session_decline(&s.id, &t).err(), Some(Err(auth_error())));
 }
+
+// ---------- W21: upgrade con espera ----------
+
+/// WASM de este mismo contrato (W21), fijo en `testdata/` para que `cargo test` no dependa de
+/// compilar a wasm. Sirve de "v2" en la prueba de migracion.
+const WASM_V2: &[u8] = include_bytes!("../testdata/smart_wallet_w21.wasm");
+
+#[test]
+fn w21_upgrade_con_espera_conserva_el_estado() {
+    let env = Env::default();
+    let (w, c, gs) = with_guardians(&env, &key(1), 2, 2);
+    let token = Address::generate(&env);
+    c.set_limit(&token, &50);
+    c.add_signer(&pk(&env, &key(2)), &1, &pop(&env, &w, &key(2)));
+    let hash = env.deployer().upload_contract_wasm(WASM_V2);
+    c.schedule_upgrade(&hash);
+    assert_eq!(c.try_apply_upgrade(&hash), Err(Ok(WalletError::NotReady)));
+    advance(&env, UPGRADE_DELAY);
+    let otro = BytesN::from_array(&env, &[7u8; 32]);
+    assert_eq!(c.try_apply_upgrade(&otro), Err(Ok(WalletError::UpgradeMismatch)));
+    env.set_auths(&[]);
+    c.apply_upgrade(&hash);
+    // Despues del upgrade el estado sigue igual.
+    assert_eq!(c.signers().len(), 2);
+    assert_eq!(c.guardians(), gv(&env, &gs));
+    assert_eq!(c.guardian_threshold(), 2);
+    assert_eq!(c.limit(&token), Some(50));
+    assert_eq!(c.pending_upgrade(), None);
+    let p = payload(&env);
+    assert_eq!(check(&env, &w, &p, vec![&env, proof(&env, &w, &key(1), &p)]), Ok(()));
+}
+
+#[test]
+fn w21_cancelado_no_aplica() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let hash = env.deployer().upload_contract_wasm(WASM_V2);
+    c.schedule_upgrade(&hash);
+    c.cancel_upgrade();
+    advance(&env, UPGRADE_DELAY);
+    assert_eq!(c.try_apply_upgrade(&hash), Err(Ok(WalletError::NothingPending)));
+    assert_eq!(c.try_cancel_upgrade(), Err(Ok(WalletError::NothingPending)));
+}
+
+#[test]
+fn w21_congelada_no_aplica_y_el_dueno_puede_cancelar() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, gs) = with_guardians(&env, &owner, 1, 1);
+    let hash = env.deployer().upload_contract_wasm(WASM_V2);
+    c.schedule_upgrade(&hash);
+    c.freeze(&gv(&env, &gs));
+    advance(&env, UPGRADE_DELAY);
+    assert_eq!(c.try_apply_upgrade(&hash), Err(Ok(WalletError::Frozen)));
+    let cancel = call(&env, &w, "cancel_upgrade", vec![&env]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, cancel]), Ok(()));
+    let sched = call(&env, &w, "schedule_upgrade", vec![&env, hash.into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, sched]), Err(Ok(WalletError::Frozen)));
+}
+
+#[test]
+fn w21_la_recuperacion_anula_el_upgrade_del_dueno_anterior() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 1, 1);
+    let hash = env.deployer().upload_contract_wasm(WASM_V2);
+    c.schedule_upgrade(&hash);
+    let id = start(&env, &c, &gs, &key(9));
+    advance(&env, UPGRADE_DELAY);
+    assert_eq!(c.try_apply_upgrade(&hash), Err(Ok(WalletError::RecoveryActive)));
+    c.finish_recovery(&id);
+    assert_eq!(c.try_apply_upgrade(&hash), Err(Ok(WalletError::Stale)));
+}
+
+#[test]
+fn w21_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    let (_, c) = setup(&env, &key(1));
+    let hash = BytesN::from_array(&env, &[7u8; 32]);
+    assert_eq!(c.try_schedule_upgrade(&hash).err(), Some(Err(auth_error())));
+    assert_eq!(c.pending_upgrade(), None);
+}

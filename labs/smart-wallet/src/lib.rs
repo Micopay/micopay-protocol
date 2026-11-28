@@ -39,6 +39,9 @@ pub const MAX_SESSIONS: u32 = 5;
 pub const MAX_SESSION_LIST: u32 = 10;
 /// Vigencia maxima de una sesion (~7 dias).
 pub const SESSION_MAX_TTL: u32 = 120_960;
+/// Espera de un upgrade (~20 min): mas que `DELAY_LEDGERS`, para que los guardianes alcancen a
+/// congelar si quien robo el telefono programa uno.
+pub const UPGRADE_DELAY: u32 = 240;
 /// Prefijo del id de un firmante ed25519. El passkey (W6) usara 0x01.
 const KIND_ED25519: u8 = 0;
 /// Tope de firmantes, para acotar el costo de `__check_auth`.
@@ -99,6 +102,16 @@ enum DataKey {
     Recovery,
     RecoveryNonce,
     Sessions,
+    PendingUpgrade,
+}
+
+/// W21. Upgrade programado: el hash exacto del WASM nuevo.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingUpgrade {
+    pub hash: BytesN<32>,
+    pub ready_ledger: u32,
+    pub owner_epoch: u32,
 }
 
 /// Propuesta de recuperacion: reemplazar todos los firmantes por `new_key`.
@@ -264,6 +277,7 @@ pub enum WalletError {
     SessionLimit = 44,
     InvalidSession = 45,
     TooManySessions = 46,
+    UpgradeMismatch = 47,
 }
 
 /// Id de un firmante ed25519: `sha256(0x00 ‖ pubkey)`.
@@ -1061,6 +1075,62 @@ impl SmartWallet {
         Ok(())
     }
 
+    /// W21. Programa un upgrade al WASM `hash` (ya subido a la red). Se aplica con
+    /// `apply_upgrade` despues de `UPGRADE_DELAY`. Sin espera, el umbral podria cambiar al
+    /// instante el codigo que impone todas las demas esperas.
+    pub fn schedule_upgrade(env: Env, hash: BytesN<32>) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        let ready_ledger = env
+            .ledger()
+            .sequence()
+            .checked_add(UPGRADE_DELAY)
+            .ok_or(WalletError::Overflow)?;
+        let pending = PendingUpgrade { hash, ready_ledger, owner_epoch: owner_epoch(&env) };
+        env.storage().instance().set(&DataKey::PendingUpgrade, &pending);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W21. Cancela el upgrade programado. Aplica ya, tambien con la wallet congelada.
+    pub fn cancel_upgrade(env: Env) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        let st = env.storage().instance();
+        if !st.has(&DataKey::PendingUpgrade) {
+            return Err(WalletError::NothingPending);
+        }
+        st.remove(&DataKey::PendingUpgrade);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W21. Aplica el upgrade programado, ya cumplida la espera. Cualquiera, pero con el hash
+    /// exacto. No con la wallet congelada ni con una recuperacion en curso, ni si lo programo
+    /// el dueno anterior a una recuperacion.
+    pub fn apply_upgrade(env: Env, hash: BytesN<32>) -> Result<(), WalletError> {
+        not_frozen(&env)?;
+        no_live_recovery(&env)?;
+        let st = env.storage().instance();
+        let p: PendingUpgrade = st.get(&DataKey::PendingUpgrade).ok_or(WalletError::NothingPending)?;
+        if p.owner_epoch != owner_epoch(&env) {
+            return Err(WalletError::Stale);
+        }
+        if p.hash != hash {
+            return Err(WalletError::UpgradeMismatch);
+        }
+        if env.ledger().sequence() < p.ready_ledger {
+            return Err(WalletError::NotReady);
+        }
+        st.remove(&DataKey::PendingUpgrade);
+        bump(&env);
+        env.deployer().update_current_contract_wasm(hash);
+        Ok(())
+    }
+
+    /// Lectura: el upgrade programado, si hay.
+    pub fn pending_upgrade(env: Env) -> Option<PendingUpgrade> {
+        env.storage().instance().get(&DataKey::PendingUpgrade)
+    }
+
     /// Lectura: una sesion.
     pub fn session(env: Env, id: BytesN<32>) -> Option<Session> {
         sessions(&env).get(id)
@@ -1177,17 +1247,20 @@ impl CustomAccountInterface for SmartWallet {
 }
 
 /// W15. Con la wallet congelada, el dueno solo puede llamar a la propia wallet para pedir
-/// descongelar (`request_unfreeze`), revocar una sesion (`revoke_session`) o, con dos credenciales distintas, para cancelar una
+/// descongelar (`request_unfreeze`), revocar una sesion (`revoke_session`), cancelar un
+/// upgrade (`cancel_upgrade`) o, con dos credenciales distintas, para cancelar una
 /// recuperacion (`cancel_recovery`, D8): una sola llave robada no veta a los guardianes.
 fn check_frozen(env: &Env, contexts: &Vec<Context>, credentials: u32) -> Result<(), WalletError> {
     let me = env.current_contract_address();
     let request_unfreeze = Symbol::new(env, "request_unfreeze");
     let cancel_recovery = Symbol::new(env, "cancel_recovery");
     let revoke_session = Symbol::new(env, "revoke_session");
+    let cancel_upgrade = Symbol::new(env, "cancel_upgrade");
     for ctx in contexts.iter() {
         match ctx {
             Context::Contract(c) if c.contract == me && c.fn_name == request_unfreeze => {}
             Context::Contract(c) if c.contract == me && c.fn_name == revoke_session => {}
+            Context::Contract(c) if c.contract == me && c.fn_name == cancel_upgrade => {}
             Context::Contract(c) if c.contract == me && c.fn_name == cancel_recovery && credentials >= 2 => {}
             _ => return Err(WalletError::Frozen),
         }

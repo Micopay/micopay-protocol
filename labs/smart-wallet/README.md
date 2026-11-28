@@ -1,6 +1,6 @@
-# smart-wallet (W0–W5, W8–W19)
+# smart-wallet (W0–W5, W8–W21)
 
-Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios firmantes y un umbral. **Solo testnet.** No va a producción: la app sigue con la cuenta clásica `G…`. El plan completo está fuera del repo (`PLAN_SMART_WALLET.md`, v0.3); esta carpeta tiene las fases W0–W5 (multifirma), W8–W16 (guardianes, recuperación y congelamiento) y W17–W19 (límites y escrows registrados).
+Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios firmantes y un umbral. **Solo testnet.** No va a producción: la app sigue con la cuenta clásica `G…`. El plan completo está fuera del repo (`PLAN_SMART_WALLET.md`, v0.3); esta carpeta tiene las fases W0–W5 (multifirma), W8–W16 (guardianes, recuperación y congelamiento) W17–W19 (límites y escrows registrados) W20 (sesiones) y W21 (upgrade con espera).
 
 `labs/smart-account/` sigue como el spike de un firmante.
 
@@ -32,7 +32,13 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 | W16 | `request_unfreeze()` / `unfreeze()` | El dueño pide descongelar y, pasada `UNFREEZE_DELAY`, cualquiera lo aplica. No con una recuperación en curso | La wallet / cualquiera |
 | W16 | `guardian_unfreeze(guardians)` | Descongela al instante | El quorum de guardianes |
 | W19 | Reglas dentro de `__check_auth` | Ver abajo | — |
-| — | `signers()`, `threshold()`, `limit(token)`, `spent(token)`, `escrow(escrow)`, `guardians()`, `guardian_threshold()`, `frozen()`, `recovery()` | Lecturas | Cualquiera |
+| W20 | `add_session(key, escrow, buyers, max_per_lock, max_total, max_timeout, expires)` | Llave temporal para un escrow registrado: `lock` hacia compradores de la lista con tope por `lock` y acumulado (contando la comisión), `release`, y `decline` solo con permiso. Hasta 5 sesiones y 7 días. Aplica ya | La wallet |
+| W20 | `revoke_session(id)` | Revoca; aplica ya, también congelada | La wallet |
+| W20 | `allow_session_decline(id, trade_id)` | Permite a la sesión un `decline` de ese trade, una vez | La wallet |
+| W21 | `schedule_upgrade(hash)` | Programa un upgrade al WASM con ese hash; espera `UPGRADE_DELAY` (240 ledgers, ~20 min) | La wallet |
+| W21 | `cancel_upgrade()` | Cancela; aplica ya, también congelada | La wallet |
+| W21 | `apply_upgrade(hash)` | Aplica con el hash exacto, pasada la espera. No congelada, no con una recuperación en curso, no si lo programó el dueño anterior a una recuperación | Cualquiera |
+| — | `signers()`, `threshold()`, `limit(token)`, `spent(token)`, `escrow(escrow)`, `guardians()`, `guardian_threshold()`, `frozen()`, `recovery()`, `session(id)`, `pending_upgrade()` | Lecturas | Cualquiera |
 
 **Reglas de la firma:**
 - Id de firmante: `sha256(0x00 ‖ pubkey)`. Una llave no puede entrar dos veces ni aportar doble peso.
@@ -61,12 +67,19 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 - `finish_recovery` sube la época del dueño: lo pendiente del dueño anterior (subidas de límite, escrows, altas y bajas de guardianes) queda `Stale`. Se conservan el gasto del periodo, los escrows ya registrados y los guardianes vigentes.
 - Los plazos son cortos y fijos para probarlos en testnet; el plan propone días y la decisión D5 sigue abierta.
 
+**Sesiones (W20)**, para que la web o el agente operen el escrow sin pedir firma a cada rato:
+- La firma de sesión es una sola `Proof::Session(SessionProof { id, sig })` sobre el mismo mensaje con modo `1`. Mezclarla con pruebas del dueño falla (`MixedProofs`); una firma de la llave de sesión en modo `0` no sirve.
+- Id de sesión: `sha256(0x02 ‖ pubkey)`. Una llave del dueño no puede ser de sesión.
+- Cada contexto tiene que ser, en el escrow de la sesión: `[lock, transfer]` hacia un comprador de la lista y con plazo ≤ `max_timeout`; `release`; o `decline` de un trade permitido. Todo lo demás falla (`SessionDenied`), incluidas las llamadas a la propia wallet y cualquier `transfer`.
+- Las reglas de W19 siguen aplicando encima: comisión dentro del tope del escrow, `transfer` exacto y límite del token.
+- Falla si venció, si la revocaron, si la wallet está congelada, si quitaron el escrow o después de una recuperación (`Stale`).
+
 Sin admin ni llave de MicoPay. Un relayer `G…` manda y paga las transacciones; no tiene ninguna llave de la wallet.
 
 ## Pruebas
 
 ```bash
-cargo test                 # 99 pruebas con firmas ed25519 reales
+cargo test                 # 119 pruebas con firmas ed25519 reales
 stellar contract build
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk> --vector   # vector compartido Rust/JS
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet
@@ -75,6 +88,7 @@ node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet
 - Los errores esperados se comparan por código (`WalletError` o `Error(Auth, InvalidAction)`). Una firma inválida de una llave registrada aborta en `ed25519_verify` (`InvokeError::Abort`).
 - `firma_real_umbral_1_y_luego_2_de_2` usa entradas de autorización firmadas de verdad (sin `mock_all_auths`): con 2 de 2, una firma no basta y una firma sobre otros argumentos no sirve.
 - `w19_camino_real_*` corren W19 por el camino real: un token SAC, un escrow de prueba que copia el `lock` del real y autorizaciones firmadas. Prueban que un `lock` cobra una vez, que uno que falla después de cobrar no cuenta, y que un contrato intermedio no puede mandar dinero al escrow sin trade.
+- `w21_upgrade_con_espera_conserva_el_estado` sube `testdata/smart_wallet_w21.wasm` (el WASM de este contrato, fijo para que `cargo test` no tenga que compilar a wasm) y revisa que firmantes, guardianes y límites sigan igual después del upgrade.
 - `w2_vector_compartido_rust_js` fija los bytes del mensaje firmado; la demo calcula los mismos en JS.
 - `atk_*` son los ataques de la revisión de W8–W16 (descongelar antes de la recuperación, guardián del ladrón, congelar sin fin con quorum 1); todos fallan.
 - Regresión inyectada en W8–W16: quitar el bloqueo del congelamiento, la regla de dos credenciales, el enfriamiento, la época de guardianes, la espera de la baja, de descongelar o de la recuperación, o la época del dueño hace fallar al menos una prueba en cada caso.
