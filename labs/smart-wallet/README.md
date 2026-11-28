@@ -58,7 +58,8 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 - `authenticator_data` tiene que empezar con el `rpIdHash` guardado y traer las banderas UP y UV (huella o PIN).
 - Firma: `secp256r1_verify(llave, sha256(authenticator_data ‖ sha256(client_data_json)), r‖s)`. El host rechaza S alta.
 - La recuperación (W14) quita los passkeys junto con las llaves ed25519.
-- Las pruebas arman la aserción con una llave P-256 de prueba y los mismos bytes que produce el navegador. El plan pide además un vector de un navegador real; falta.
+- Las pruebas arman aserciones con una llave P-256 de prueba y, además, verifican un **vector de un navegador real** (`w7_vector_de_navegador_*`): un passkey de Windows Hello creado con `scripts/passkey.html` en `http://localhost:8080`. Cambiar el challenge, las banderas, el `rpIdHash` o el contador lo hace fallar.
+- `scripts/passkey.html` crea un passkey y firma challenges en el navegador; se sirve con `python -m http.server 8080` desde `scripts/` (WebAuthn pide un origen seguro, y `localhost` lo es).
 
 **Reglas de tokens y escrows (W19)**, sobre los contextos que la wallet autoriza:
 - `approve` se rechaza siempre (`ApproveDenied`). Un permiso de gasto lo usaría un tercero (`transfer_from`, `burn_from`) sin pasar por la wallet ni por su límite.
@@ -92,7 +93,7 @@ Sin admin ni llave de MicoPay. Un relayer `G…` manda y paga las transacciones;
 ## Pruebas
 
 ```bash
-cargo test                 # 141 pruebas con firmas ed25519 y P-256 reales
+cargo test                 # 144 pruebas con firmas ed25519 y P-256 reales
 stellar contract build
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk> --vector   # vector compartido Rust/JS
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet
@@ -184,3 +185,15 @@ Corrida del 2026-11-27 con `scripts/demo-sesiones.mjs`. Fábrica `CANRZQBAECXYRZ
 | 7 | Pasada la espera, el relayer aplica el upgrade; `pending_upgrade()` queda vacío, siguen el firmante `a`, el umbral 1 y el escrow registrado | [c93949f0…](https://stellar.expert/explorer/testnet/tx/c93949f0de017de6444cda1d47cc8b7fb2495048e0be0008f581b4e616c9663e) |
 
 Falta en testnet una transferencia firmada por `a` después del upgrade: la llave de esa corrida no se guardó. La prueba `w21_upgrade_con_espera_conserva_el_estado` lo cubre.
+
+### W6–W7 (passkey real)
+
+Corrida del 2026-11-27 con `scripts/demo-passkey.mjs` y un passkey de Windows Hello creado en `scripts/passkey.html` (`http://localhost:8080`). Wallet `CDXBETMTYEXUGOVTB6DYVKCMFCQYYHWWI6QB4IEQ7O2TLV5LKVHXR2GK` (WASM `feee1519…`). Los 6 chequeos pasan. El script tiene tres pasos (`prepare`, `add`, `send`) porque cada challenge lo firma una persona en el navegador; `--fake` firma con una llave P-256 local para probarlo sin navegador.
+
+| Paso | Qué pasó | Transacciones |
+|---|---|---|
+| 1 | Subir el WASM, crear la wallet con `a` y darle 5 XLM | [4bf999e7…](https://stellar.expert/explorer/testnet/tx/4bf999e7c48c2b5f234da84cd099ae1a4ca2de72a9b07cdef34212ae53565350) · [e28c0a4c…](https://stellar.expert/explorer/testnet/tx/e28c0a4c4b08173340f8c050657807e439599755d29c33d1d8820856569f9cf4) · [b8519cb6…](https://stellar.expert/explorer/testnet/tx/b8519cb62a57d4bc51e08b48ca086c94a4ef587ae599e5b22e6771c813fcbf9c) |
+| 2 | W6 `set_webauthn(sha256("localhost"), ["http://localhost:8080"])` firmado por `a` | [ed4b0108…](https://stellar.expert/explorer/testnet/tx/ed4b010856916c72c86c58fed9f7e13bf7d8a9b32bc10e917422fbaaf803452c) |
+| 3 | W6 `add_passkey` con la prueba de posesión firmada en el navegador (huella) | [de1b6216…](https://stellar.expert/explorer/testnet/tx/de1b621614b061371839c7bbfe6c9192285f51daf8cda7b90f0d6fb2b33242e4) |
+| 5 | W7 `transfer` de 1 XLM firmado **solo por el passkey**: el agente sube 1 XLM | [9dd015d5…](https://stellar.expert/explorer/testnet/tx/9dd015d50cd978fd47655dfc6a8306b45ec52aa367ce34046f4d0b645c6d290f) |
+| 6 | La misma aserción sobre un `transfer` de 2 XLM: **rechazada** con `#49` (`WebAuthnFailed`) | — (falla en la simulación) |

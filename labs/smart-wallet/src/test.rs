@@ -2487,3 +2487,54 @@ fn w7_base64url_coincide_con_el_contrato() {
     let m: [u8; 32] = core::array::from_fn(|i| i as u8 * 7);
     assert_eq!(base64url(&env, &m), Bytes::from_slice(&env, b64url(&m).as_bytes()));
 }
+
+/// Asercion de un navegador real (Edge/Chrome con Windows Hello, 2026-11-27) en
+/// `http://localhost:8080` (`scripts/passkey.html`), sobre el challenge `0x42` × 32.
+mod vector_navegador {
+    pub const KEY: &str = "048f16985b9efc3253f514aeb8fedfaf8e7ac4e10b30c740af941b3cc5870f4cc562113c625d39ef3206a80e6c1c0d266d090bc8a20ef8710b24f21a82fe9a318d";
+    pub const AUTH: &str = "49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97630500000001";
+    pub const CDJ: &str = "7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b4a43516b49222c226f726967696e223a22687474703a2f2f6c6f63616c686f73743a38303830222c2263726f73734f726967696e223a66616c73657d";
+    pub const SIG: &str = "d327a5192d14dd883e09518d0d02931fd67bc0fa572cf63ac25180a021a77d071565c4b2ae50e8d2e20860fba2c053247d7719f45d04fb611155dea90de138b2";
+}
+
+fn unhex(h: &str) -> std::vec::Vec<u8> {
+    (0..h.len()).step_by(2).map(|i| u8::from_str_radix(&h[i..i + 2], 16).unwrap()).collect()
+}
+
+/// Corre `verify_passkey` con el vector del navegador, cambiando lo que pida `tweak`.
+fn browser_verify(tweak: impl Fn(&mut std::vec::Vec<u8>, &mut std::vec::Vec<u8>, &mut [u8; 32])) -> Result<(), WalletError> {
+    use vector_navegador::*;
+    let env = Env::default();
+    env.mock_all_auths();
+    let (w, c) = setup(&env, &key(1));
+    let rp = BytesN::from_array(&env, &sha(&env, b"localhost"));
+    c.set_webauthn(&rp, &vec![&env, Bytes::from_slice(&env, b"http://localhost:8080")]);
+    let (mut auth, mut cdj, mut challenge) = (unhex(AUTH), unhex(CDJ), [0x42u8; 32]);
+    tweak(&mut auth, &mut cdj, &mut challenge);
+    let k: BytesN<65> = BytesN::from_array(&env, &unhex(KEY).try_into().unwrap());
+    let sig: BytesN<64> = BytesN::from_array(&env, &unhex(SIG).try_into().unwrap());
+    let (auth, cdj, ch) = (Bytes::from_slice(&env, &auth), Bytes::from_slice(&env, &cdj), BytesN::from_array(&env, &challenge));
+    env.as_contract(&w, || verify_passkey(&env, &k, &ch, &auth, &cdj, &sig))
+}
+
+#[test]
+fn w7_vector_de_navegador_real_pasa() {
+    assert_eq!(browser_verify(|_, _, _| {}), Ok(()));
+}
+
+#[test]
+fn w7_vector_de_navegador_alterado_falla() {
+    // Otro challenge.
+    assert_eq!(browser_verify(|_, _, ch| ch[0] = 0x43), Err(WalletError::WebAuthnFailed));
+    // Banderas sin UV.
+    assert_eq!(browser_verify(|a, _, _| a[32] = 0x01), Err(WalletError::WebAuthnFailed));
+    // Otro rpIdHash.
+    assert_eq!(browser_verify(|a, _, _| a[0] ^= 1), Err(WalletError::WebAuthnFailed));
+}
+
+#[test]
+#[should_panic]
+fn w7_vector_de_navegador_con_contador_cambiado_no_verifica() {
+    // Mismo prefijo valido, pero la firma ya no cubre esos bytes: secp256r1_verify aborta.
+    let _ = browser_verify(|a, _, _| a[36] = 2);
+}
