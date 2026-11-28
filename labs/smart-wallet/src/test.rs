@@ -1302,3 +1302,217 @@ fn w16_vencido_cualquiera_limpia() {
     c.unfreeze();
     assert!(!c.frozen());
 }
+
+// ---------- W10–W14: recuperacion ----------
+
+fn expires(env: &Env) -> u32 {
+    env.ledger().sequence() + RECOVERY_DELAY + RECOVERY_MARGIN
+}
+
+/// Abre una recuperacion hacia `new` con `by` guardianes.
+fn start(env: &Env, c: &SmartWalletClient, by: &[Address], new: &SigningKey) -> BytesN<32> {
+    c.start_recovery(&gv(env, by), &pk(env, new), &pop(env, &c.address, new), &expires(env))
+}
+
+#[test]
+fn w10_a_w14_recuperacion_completa() {
+    let env = Env::default();
+    let (old, new) = (key(1), key(9));
+    let (w, c, gs) = with_guardians(&env, &old, 3, 2);
+    let id = start(&env, &c, &gs[..1], &new);
+    assert_eq!(c.recovery().unwrap().ready_ledger, 0);
+    c.approve_recovery(&gs[1], &id);
+    let ready = c.recovery().unwrap().ready_ledger;
+    assert_eq!(ready, env.ledger().sequence() + RECOVERY_DELAY);
+    assert_eq!(c.try_finish_recovery(&id), Err(Ok(WalletError::NotReady)));
+    // Un voto despues del quorum no reinicia la espera.
+    advance(&env, 10);
+    c.approve_recovery(&gs[2], &id);
+    assert_eq!(c.recovery().unwrap().ready_ledger, ready);
+    advance(&env, RECOVERY_DELAY - 10);
+    env.set_auths(&[]);
+    c.finish_recovery(&id);
+    assert_eq!(c.threshold(), 1);
+    assert_eq!(c.signers().len(), 1);
+    let p = payload(&env);
+    assert_eq!(check(&env, &w, &p, vec![&env, proof(&env, &w, &new, &p)]), Ok(()));
+    // El firmante viejo ya no firma.
+    assert_eq!(check(&env, &w, &p, vec![&env, proof(&env, &w, &old, &p)]), Err(Ok(WalletError::UnknownSigner)));
+    assert_eq!(c.recovery(), None);
+}
+
+#[test]
+fn w10_con_quorum_1_la_espera_empieza_al_abrir() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 1, 1);
+    start(&env, &c, &gs, &key(9));
+    assert_eq!(c.recovery().unwrap().ready_ledger, env.ledger().sequence() + RECOVERY_DELAY);
+}
+
+#[test]
+fn w10_sin_prueba_de_posesion_falla() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 1, 1);
+    let fantasma = BytesN::from_array(&env, &[0xffu8; 32]);
+    let r = c.try_start_recovery(&gv(&env, &gs), &fantasma, &pop(&env, &c.address, &key(9)), &expires(&env));
+    assert_eq!(r, Err(Err(InvokeError::Abort)));
+}
+
+#[test]
+fn w10_caducidad_fuera_de_rango_falla() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 1, 1);
+    let new = key(9);
+    let now = env.ledger().sequence();
+    for e in [now + RECOVERY_DELAY, now + RECOVERY_MAX_TTL + 1] {
+        assert_eq!(
+            c.try_start_recovery(&gv(&env, &gs), &pk(&env, &new), &pop(&env, &c.address, &new), &e),
+            Err(Ok(WalletError::InvalidExpiry))
+        );
+    }
+}
+
+#[test]
+fn w10_solo_un_guardian_no_reemplaza_una_propuesta_vigente_y_el_quorum_si() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 3, 2);
+    let id1 = start(&env, &c, &gs[..1], &key(8));
+    let new = key(9);
+    assert_eq!(
+        c.try_start_recovery(&gv(&env, &gs[1..2]), &pk(&env, &new), &pop(&env, &c.address, &new), &expires(&env)),
+        Err(Ok(WalletError::RecoveryActive))
+    );
+    let id2 = start(&env, &c, &gs[1..], &new);
+    assert_ne!(id1, id2);
+    assert_eq!(c.recovery().unwrap().new_key, pk(&env, &new));
+    assert_eq!(c.try_approve_recovery(&gs[0], &id1), Err(Ok(WalletError::UnknownProposal)));
+}
+
+#[test]
+fn w10_vencida_cualquiera_abre_otra() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 3, 2);
+    start(&env, &c, &gs[..1], &key(8));
+    advance(&env, RECOVERY_DELAY + RECOVERY_MARGIN);
+    start(&env, &c, &gs[1..2], &key(9));
+}
+
+#[test]
+fn w10_sin_firma_del_guardian_falla() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 1, 1);
+    let new = key(9);
+    env.set_auths(&[]);
+    let r = c.try_start_recovery(&gv(&env, &gs), &pk(&env, &new), &pop(&env, &c.address, &new), &expires(&env));
+    assert_eq!(r.err(), Some(Err(auth_error())));
+}
+
+#[test]
+fn w11_voto_repetido_ajeno_o_vencido_falla() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 3, 3);
+    let id = start(&env, &c, &gs[..1], &key(9));
+    assert_eq!(c.try_approve_recovery(&gs[0], &id), Err(Ok(WalletError::AlreadyVoted)));
+    assert_eq!(c.try_approve_recovery(&Address::generate(&env), &id), Err(Ok(WalletError::UnknownGuardian)));
+    assert_eq!(c.try_approve_recovery(&gs[1], &BytesN::random(&env)), Err(Ok(WalletError::UnknownProposal)));
+    advance(&env, RECOVERY_DELAY + RECOVERY_MARGIN);
+    assert_eq!(c.try_approve_recovery(&gs[1], &id), Err(Ok(WalletError::ProposalExpired)));
+}
+
+#[test]
+fn w11_cambiar_guardianes_invalida_los_votos() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 3, 2);
+    let id = start(&env, &c, &gs[..1], &key(9));
+    c.add_guardian(&Address::generate(&env));
+    assert_eq!(c.try_approve_recovery(&gs[1], &id), Err(Ok(WalletError::Stale)));
+    assert_eq!(c.try_finish_recovery(&id), Err(Ok(WalletError::Stale)));
+}
+
+#[test]
+fn w12_el_dueno_cancela() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 1, 1);
+    let id = start(&env, &c, &gs, &key(9));
+    c.cancel_recovery();
+    advance(&env, RECOVERY_DELAY);
+    assert_eq!(c.try_finish_recovery(&id), Err(Ok(WalletError::UnknownProposal)));
+    assert_eq!(c.try_cancel_recovery(), Err(Ok(WalletError::UnknownProposal)));
+}
+
+#[test]
+fn w12_congelada_cancelar_pide_dos_credenciales() {
+    let env = Env::default();
+    let (a, b) = (key(1), key(2));
+    let (w, c, gs) = with_guardians(&env, &a, 2, 2);
+    c.add_signer(&pk(&env, &b), &1, &pop(&env, &w, &b));
+    c.freeze(&gv(&env, &gs[..1]));
+    let cancel = call(&env, &w, "cancel_recovery", vec![&env]);
+    let p = payload(&env);
+    let una = vec![&env, proof(&env, &w, &a, &p)];
+    assert_eq!(
+        env.try_invoke_contract_check_auth::<WalletError>(&w, &p.to_bytes(), una.into_val(&env), &vec![&env, cancel.clone()]),
+        Err(Ok(WalletError::Frozen))
+    );
+    let dos = vec![&env, proof(&env, &w, &a, &p), proof(&env, &w, &b, &p)];
+    assert_eq!(
+        env.try_invoke_contract_check_auth::<WalletError>(&w, &p.to_bytes(), dos.into_val(&env), &vec![&env, cancel]),
+        Ok(())
+    );
+}
+
+#[test]
+fn w13_el_quorum_cancela_y_menos_no() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 2, 2);
+    start(&env, &c, &gs[..1], &key(9));
+    assert_eq!(c.try_guardian_cancel_recovery(&gv(&env, &gs[..1])), Err(Ok(WalletError::NotEnoughGuardians)));
+    c.guardian_cancel_recovery(&gv(&env, &gs));
+    assert_eq!(c.recovery(), None);
+}
+
+#[test]
+fn w14_sin_quorum_no_termina() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 2, 2);
+    let id = start(&env, &c, &gs[..1], &key(9));
+    advance(&env, RECOVERY_DELAY);
+    assert_eq!(c.try_finish_recovery(&id), Err(Ok(WalletError::NotReady)));
+}
+
+#[test]
+fn w14_vencida_no_termina() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 1, 1);
+    let id = start(&env, &c, &gs, &key(9));
+    advance(&env, RECOVERY_DELAY + RECOVERY_MARGIN);
+    assert_eq!(c.try_finish_recovery(&id), Err(Ok(WalletError::ProposalExpired)));
+}
+
+#[test]
+fn w14_invalida_lo_pendiente_conserva_el_gasto_y_descongela() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, gs) = with_guardians(&env, &owner, 2, 1);
+    let token = Address::generate(&env);
+    let escrow = Address::generate(&env);
+    c.set_limit(&token, &100);
+    let to = Address::generate(&env);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, transfer_ctx(&env, &token, &w, &to, 60)]), Ok(()));
+    // Lo que el dueno anterior (o quien robo su telefono) dejo programado.
+    c.set_limit(&token, &1_000_000);
+    c.add_escrow(&escrow, &token, &100);
+    c.remove_guardian(&gs[1]);
+    c.freeze(&gv(&env, &gs[..1]));
+    c.request_unfreeze();
+    let id = start(&env, &c, &gs[..1], &key(9));
+    advance(&env, RECOVERY_DELAY);
+    c.finish_recovery(&id);
+    assert!(!c.frozen());
+    assert_eq!(c.try_apply_limit(&token), Err(Ok(WalletError::Stale)));
+    assert_eq!(c.try_apply_escrow(&escrow), Err(Ok(WalletError::Stale)));
+    assert_eq!(c.try_apply_guardian_removal(&gs[1]), Err(Ok(WalletError::Stale)));
+    assert_eq!(c.limit(&token), Some(100));
+    assert_eq!(c.spent(&token), 60);
+    assert_eq!(c.guardians().len(), 2);
+}
