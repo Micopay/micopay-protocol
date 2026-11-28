@@ -109,6 +109,50 @@ node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet
 - Regresión inyectada en W8–W16: quitar el bloqueo del congelamiento, la regla de dos credenciales, el enfriamiento, la época de guardianes, la espera de la baja, de descongelar o de la recuperación, o la época del dueño hace fallar al menos una prueba en cada caso.
 - Regresión inyectada: quitar a mano el umbral, el control de duplicados, el `require_auth`, la dirección del mensaje o el control de `remove_signer` hace fallar al menos una prueba en cada caso.
 
+## Funciones en testnet
+
+Cada función que escribe estado tiene al menos una transacción exitosa en testnet y sus pruebas en `src/test.rs`. La demo de cada fila está en las secciones de abajo. Las corridas de `demo-resto.mjs` y `demo-passkey.mjs` usan el WASM vigente (`feee1519…`); las demás, versiones anteriores del mismo contrato.
+
+| # | Función | Demo | Transacción |
+|---|---|---|---|
+| 1 | `__constructor` | demo-resto | [8af98fde…](https://stellar.expert/explorer/testnet/tx/8af98fdeb56928d88f3ac1fac5c7d12a8cd5b07888bd61c919e6c8c95e778305) |
+| 2 | `add_signer` | demo.mjs | [07e1311b…](https://stellar.expert/explorer/testnet/tx/07e1311bd8f2f75d2b6a7ecbd1deac9e7c643594602426b5f76b26ad8c5c150e) |
+| 3 | `remove_signer` | demo.mjs | [0297d9ac…](https://stellar.expert/explorer/testnet/tx/0297d9acd6f9267b13ea526c21366c78db735e32f18c18a8f8b363a3fc526996) |
+| 4 | `set_threshold` | demo.mjs | [03fa6cde…](https://stellar.expert/explorer/testnet/tx/03fa6cde031e041efc11d9f0a2fa5b64567055f00885856b9b587c215cfc9f15) |
+| 5 | `__check_auth (multifirma ed25519)` | demo.mjs | [36c37391…](https://stellar.expert/explorer/testnet/tx/36c373913a4f492e6e34487da9746ba41c341a29075369d8a85ee6a0d26fe1c5) |
+| 6 | `set_limit` | demo-resto | [80974635…](https://stellar.expert/explorer/testnet/tx/80974635e6ebc03e5174af091199326d742b514aafefa2924aa0c11493b4ea77) |
+| 7 | `apply_limit` | demo-resto | [1b9e547f…](https://stellar.expert/explorer/testnet/tx/1b9e547f870994ba25b93049d26ef47f0ffd6ef089b1e0aa291edd8b382cfb02) |
+| 8 | `add_escrow` | demo-resto | [8f66ef58…](https://stellar.expert/explorer/testnet/tx/8f66ef5819519777f60d406bf2820f3665d392d3aa2299f7f18a1b2899798c26) |
+| 9 | `apply_escrow` | demo-resto | [53c767b9…](https://stellar.expert/explorer/testnet/tx/53c767b98195e2f94b9d4bb725ca15e77345d2f37643664372c9383212c9bb8d) |
+| 10 | `remove_escrow` | demo-resto | [c5233db8…](https://stellar.expert/explorer/testnet/tx/c5233db82a0f8ca170ae2c977490a88b565f99415902594b25efa2abf4c3dc3f) |
+| 11 | `add_guardian` | demo-resto | [575e42ad…](https://stellar.expert/explorer/testnet/tx/575e42ad64517c86d742f0998ddcf924e15add82f70d1de36435a159f1eebcbd) |
+| 12 | `apply_guardian_add` | demo-resto | [0bda1b95…](https://stellar.expert/explorer/testnet/tx/0bda1b95ffafbedf8391c6e82b961752d5bb187fdb727ecd8231dff803ca069b) |
+| 13 | `remove_guardian` | demo-resto | [5806ed2a…](https://stellar.expert/explorer/testnet/tx/5806ed2ac91d5c8717d2439be07c6df891835094b4a6b81f444e4fbc87692af2) |
+| 14 | `apply_guardian_removal` | demo-resto | [39cda7e3…](https://stellar.expert/explorer/testnet/tx/39cda7e3b4686ea6493cda4e6f22c9163f50cc7fd97586990d1df25f6a8d5567) |
+| 15 | `set_guardian_threshold` | demo-resto | [73d99e2c…](https://stellar.expert/explorer/testnet/tx/73d99e2c0cbd764bac84a76c4b30c5eb778195524dd137792d9045f82bcb12f9) |
+| 16 | `freeze` | demo-resto | [c563e7d6…](https://stellar.expert/explorer/testnet/tx/c563e7d6e9bccd8c0c593e262767a6cc24592ea66edb7a846a69b702d4ee6c1a) |
+| 17 | `request_unfreeze` | demo-resto | [f3bb0fca…](https://stellar.expert/explorer/testnet/tx/f3bb0fca01a69e783e7c3c8ffd283fa69a287d5d1d562e7caf6d5526b44533aa) |
+| 18 | `unfreeze` | demo-resto | [2a717823…](https://stellar.expert/explorer/testnet/tx/2a717823d294762bcbdb6d9c72b4778418527e71653425ffeb1ed9d9cf718f72) |
+| 19 | `guardian_unfreeze` | demo-resto | [90cf53d1…](https://stellar.expert/explorer/testnet/tx/90cf53d1ab2e3079c04c1e14cc23d0a08bcd275f5a795223432e56b092a047a7) |
+| 20 | `start_recovery` | demo-resto | [5161d001…](https://stellar.expert/explorer/testnet/tx/5161d00117f230bb7e72dd9080213a19564246e0fae63e816779944a8bdeeca4) |
+| 21 | `approve_recovery` | demo-guardianes | [d044000c…](https://stellar.expert/explorer/testnet/tx/d044000ca2349a7c0ecd8c0fa59111572cfa35d602735c3da04f70994691a0a1) |
+| 22 | `cancel_recovery` | demo-resto | [6137fd0b…](https://stellar.expert/explorer/testnet/tx/6137fd0be65b64b06d53e9e7e1147e14c3df61f81bd54cfabca870ff553a79c1) |
+| 23 | `guardian_cancel_recovery` | demo-resto | [51d5678d…](https://stellar.expert/explorer/testnet/tx/51d5678dee3ee1702bceb7a524d55cc99d6fc717f6b3b47522a595fb1a5da121) |
+| 24 | `finish_recovery` | demo-guardianes | [bd8071f6…](https://stellar.expert/explorer/testnet/tx/bd8071f656a474891a449cfbaaf68ee110111a0e3ec4f2805e58aa1cd7a1be25) |
+| 25 | `add_session` | demo-resto | [9b4fcd02…](https://stellar.expert/explorer/testnet/tx/9b4fcd022aca2a4990b089def505399a5ddbc0fb4cc345d10db19614caecb5d2) |
+| 26 | `__check_auth (sesión)` | demo-sesiones | [3317992d…](https://stellar.expert/explorer/testnet/tx/3317992dd570e84a429c53f2a7407ccab2f4652f7b2f0a74138187cb98bc87ee) |
+| 27 | `revoke_session` | demo-sesiones | [55526da5…](https://stellar.expert/explorer/testnet/tx/55526da5edce1ae6b89b827e96feb1f829589e00e8ee0e239a47fc4d65fdddfe) |
+| 28 | `allow_session_decline` | demo-resto | [ce2a5449…](https://stellar.expert/explorer/testnet/tx/ce2a5449ef66058967dd13b4155e1a7e5d98efe43d494e16570727f8ccd9b2ce) |
+| 29 | `disallow_session_decline` | demo-resto | [4a455511…](https://stellar.expert/explorer/testnet/tx/4a45551111ee0b768c89e9bd63cec9a3c3173d16a78128a3771d2870b92a31c4) |
+| 30 | `schedule_upgrade` | demo-resto | [3d0540d8…](https://stellar.expert/explorer/testnet/tx/3d0540d80d526787a7166f2dce26d9784ca621bb84c1d34f070e0d707d349cbf) |
+| 31 | `cancel_upgrade` | demo-resto | [10269494…](https://stellar.expert/explorer/testnet/tx/1026949413860fd88acf3ed56564afb4a2ba4ab070ffb1ae4a5e262d5b3c1597) |
+| 32 | `apply_upgrade` | demo-sesiones | [c93949f0…](https://stellar.expert/explorer/testnet/tx/c93949f0de017de6444cda1d47cc8b7fb2495048e0be0008f581b4e616c9663e) |
+| 33 | `set_webauthn` | demo-passkey | [ed4b0108…](https://stellar.expert/explorer/testnet/tx/ed4b010856916c72c86c58fed9f7e13bf7d8a9b32bc10e917422fbaaf803452c) |
+| 34 | `add_passkey` | demo-passkey | [de1b6216…](https://stellar.expert/explorer/testnet/tx/de1b621614b061371839c7bbfe6c9192285f51daf8cda7b90f0d6fb2b33242e4) |
+| 35 | `__check_auth (passkey)` | demo-passkey | [9dd015d5…](https://stellar.expert/explorer/testnet/tx/9dd015d50cd978fd47655dfc6a8306b45ec52aa367ce34046f4d0b645c6d290f) |
+| 36 | `fábrica: __constructor` | demo-sesiones | [ac4e1e04…](https://stellar.expert/explorer/testnet/tx/ac4e1e04f20ec65458e2fc5da722d9fe8f07bbe65d8971593955f58d65aea1df) |
+| 37 | `fábrica: create_account` | demo-sesiones | [4961f98b…](https://stellar.expert/explorer/testnet/tx/4961f98b3b8f02cc23b294f099c594f6f4f0aa4dd9a192d1c2500295c44ed5d9) |
+
 ## Demo en testnet
 
 ### W1–W5
@@ -197,3 +241,19 @@ Corrida del 2026-11-27 con `scripts/demo-passkey.mjs` y un passkey de Windows He
 | 3 | W6 `add_passkey` con la prueba de posesión firmada en el navegador (huella) | [de1b6216…](https://stellar.expert/explorer/testnet/tx/de1b621614b061371839c7bbfe6c9192285f51daf8cda7b90f0d6fb2b33242e4) |
 | 5 | W7 `transfer` de 1 XLM firmado **solo por el passkey**: el agente sube 1 XLM | [9dd015d5…](https://stellar.expert/explorer/testnet/tx/9dd015d50cd978fd47655dfc6a8306b45ec52aa367ce34046f4d0b645c6d290f) |
 | 6 | La misma aserción sobre un `transfer` de 2 XLM: **rechazada** con `#49` (`WebAuthnFailed`) | — (falla en la simulación) |
+
+### Las 12 restantes (demo-resto.mjs)
+
+Corrida del 2026-11-27 con `scripts/demo-resto.mjs`: una sola wallet `CANIGSQC6A3NNI47NEJVK75MKUZJUNIJM3UVOFNOLN2GXLQK6EXMNHZF` (WASM `feee1519…`), dos guardianes `g1` y `g2`. Los 28 chequeos pasan. Deja en testnet las funciones que en las otras demos solo se probaron con rechazos o en pruebas unitarias.
+
+| Paso | Qué pasó | Transacciones |
+|---|---|---|
+| 1 | Subir el WASM, crear la wallet con `a` y darle 5 XLM | [2874f5d1…](https://stellar.expert/explorer/testnet/tx/2874f5d17d38485b88f1cd0df86b90cb709353a7134d1799be1fac44af3b830f) · [8af98fde…](https://stellar.expert/explorer/testnet/tx/8af98fdeb56928d88f3ac1fac5c7d12a8cd5b07888bd61c919e6c8c95e778305) · [071c8b0d…](https://stellar.expert/explorer/testnet/tx/071c8b0d1d889311133f67be38558f6ecf193c6b505e5c5f16164a73b0b1e766) |
+| 2 | `add_guardian` g1 y g2; `set_limit` 10 XLM (aplica ya) y 20 XLM (pendiente); `add_escrow`; `schedule_upgrade` y **`cancel_upgrade`** | [575e42ad…](https://stellar.expert/explorer/testnet/tx/575e42ad64517c86d742f0998ddcf924e15add82f70d1de36435a159f1eebcbd) · [d9a30b70…](https://stellar.expert/explorer/testnet/tx/d9a30b7048ddfafbe8fc341ceef8c4a1bcb7a90071c8efa1d6541eda80f6beb4) · [80974635…](https://stellar.expert/explorer/testnet/tx/80974635e6ebc03e5174af091199326d742b514aafefa2924aa0c11493b4ea77) · [f7e4ec4d…](https://stellar.expert/explorer/testnet/tx/f7e4ec4dbdfe91b323ff8c28fc40855d1311fb85c55a243c9af46a4e0020e672) · [8f66ef58…](https://stellar.expert/explorer/testnet/tx/8f66ef5819519777f60d406bf2820f3665d392d3aa2299f7f18a1b2899798c26) · [3d0540d8…](https://stellar.expert/explorer/testnet/tx/3d0540d80d526787a7166f2dce26d9784ca621bb84c1d34f070e0d707d349cbf) · [10269494…](https://stellar.expert/explorer/testnet/tx/1026949413860fd88acf3ed56564afb4a2ba4ab070ffb1ae4a5e262d5b3c1597) |
+| 4 | Pasada la espera, el relayer aplica las altas, **`apply_limit`** (límite en 20 XLM) y `apply_escrow`; quorum 2 | [0bda1b95…](https://stellar.expert/explorer/testnet/tx/0bda1b95ffafbedf8391c6e82b961752d5bb187fdb727ecd8231dff803ca069b) · [6d37afe8…](https://stellar.expert/explorer/testnet/tx/6d37afe8c2f1ee39dbbf59174995f489ca7f30597e00c21da9fce7feb347f8ce) · [1b9e547f…](https://stellar.expert/explorer/testnet/tx/1b9e547f870994ba25b93049d26ef47f0ffd6ef089b1e0aa291edd8b382cfb02) · [53c767b9…](https://stellar.expert/explorer/testnet/tx/53c767b98195e2f94b9d4bb725ca15e77345d2f37643664372c9383212c9bb8d) · [73d99e2c…](https://stellar.expert/explorer/testnet/tx/73d99e2c0cbd764bac84a76c4b30c5eb778195524dd137792d9045f82bcb12f9) |
+| 5 | `add_session`, **`allow_session_decline`**, **`disallow_session_decline`** y **`remove_escrow`** (que también borra la sesión) | [9b4fcd02…](https://stellar.expert/explorer/testnet/tx/9b4fcd022aca2a4990b089def505399a5ddbc0fb4cc345d10db19614caecb5d2) · [ce2a5449…](https://stellar.expert/explorer/testnet/tx/ce2a5449ef66058967dd13b4155e1a7e5d98efe43d494e16570727f8ccd9b2ce) · [4a455511…](https://stellar.expert/explorer/testnet/tx/4a45551111ee0b768c89e9bd63cec9a3c3173d16a78128a3771d2870b92a31c4) · [c5233db8…](https://stellar.expert/explorer/testnet/tx/c5233db82a0f8ca170ae2c977490a88b565f99415902594b25efa2abf4c3dc3f) |
+| 6 | **`remove_guardian(g2)`**: queda pendiente | [5806ed2a…](https://stellar.expert/explorer/testnet/tx/5806ed2ac91d5c8717d2439be07c6df891835094b4a6b81f444e4fbc87692af2) |
+| 7 | g1 congela; **`request_unfreeze`**; g1 y g2 juntos **`guardian_unfreeze`** | [c563e7d6…](https://stellar.expert/explorer/testnet/tx/c563e7d6e9bccd8c0c593e262767a6cc24592ea66edb7a846a69b702d4ee6c1a) · [f3bb0fca…](https://stellar.expert/explorer/testnet/tx/f3bb0fca01a69e783e7c3c8ffd283fa69a287d5d1d562e7caf6d5526b44533aa) · [90cf53d1…](https://stellar.expert/explorer/testnet/tx/90cf53d1ab2e3079c04c1e14cc23d0a08bcd275f5a795223432e56b092a047a7) |
+| 8 | g1 y g2 congelan; `request_unfreeze`; pasada la espera, el relayer **`unfreeze`** | [032f3c04…](https://stellar.expert/explorer/testnet/tx/032f3c040f4b58ad907cc151ebad1a80d65156523c9d61105f03ab055ae59eeb) · [f646f10d…](https://stellar.expert/explorer/testnet/tx/f646f10d7324c72c43dda8bdb7c84d37c81780823a9b8cff7300f0b2235c256b) · [2a717823…](https://stellar.expert/explorer/testnet/tx/2a717823d294762bcbdb6d9c72b4778418527e71653425ffeb1ed9d9cf718f72) |
+| 9 | El relayer **`apply_guardian_removal(g2)`**: queda g1, quorum 1 | [39cda7e3…](https://stellar.expert/explorer/testnet/tx/39cda7e3b4686ea6493cda4e6f22c9163f50cc7fd97586990d1df25f6a8d5567) |
+| 10 | g1 abre una recuperación y `a` la veta con **`cancel_recovery`**; g1 abre otra y la retira con **`guardian_cancel_recovery`** | [5161d001…](https://stellar.expert/explorer/testnet/tx/5161d00117f230bb7e72dd9080213a19564246e0fae63e816779944a8bdeeca4) · [6137fd0b…](https://stellar.expert/explorer/testnet/tx/6137fd0be65b64b06d53e9e7e1147e14c3df61f81bd54cfabca870ff553a79c1) · [6ab61b9f…](https://stellar.expert/explorer/testnet/tx/6ab61b9f1d4de803f3911a9b8259bea44f84fd556e1a13d5b8d44fcfb1513a39) · [51d5678d…](https://stellar.expert/explorer/testnet/tx/51d5678dee3ee1702bceb7a524d55cc99d6fc717f6b3b47522a595fb1a5da121) |
