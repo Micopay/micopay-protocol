@@ -206,7 +206,7 @@ fn w2_id_inventado_para_una_llave_valida_falla() {
     let (w, _) = setup(&env, &owner);
     let p = payload(&env);
     let good = proof(&env, &w, &owner, &p);
-    let Proof::Ed25519(g) = good.clone();
+    let Proof::Ed25519(g) = good.clone() else { unreachable!() };
     // Misma llave y misma firma, otro id: el id no lo elige quien firma.
     let forged = Proof::Ed25519(Ed25519Proof { id: BytesN::from_array(&env, &[1u8; 32]), sig: g.sig });
     assert_eq!(check(&env, &w, &p, vec![&env, forged.clone()]), Err(Ok(WalletError::UnknownSigner)));
@@ -1598,4 +1598,271 @@ fn atk_con_quorum_1_un_guardian_solo_no_congela_sin_fin() {
     // Los dos juntos si prolongan.
     c.freeze(&gv(&env, &gs));
     assert!(c.frozen());
+}
+
+// ---------- W20: sesiones ----------
+
+struct Ses<'a> {
+    w: Address,
+    c: SmartWalletClient<'a>,
+    escrow: Address,
+    token: Address,
+    buyer: Address,
+    k: SigningKey,
+    id: BytesN<32>,
+}
+
+/// Wallet con escrow registrado, limite opcional y una sesion: 100 por lock, 250 en total,
+/// hasta 60 minutos, un comprador.
+fn ses<'a>(env: &'a Env, limit: Option<i128>) -> Ses<'a> {
+    let (w, c, escrow, token) = with_rules(env, &key(1), limit);
+    let buyer = Address::generate(env);
+    let k = key(5);
+    let expires = env.ledger().sequence() + 1_000;
+    let id = c.add_session(&pk(env, &k), &escrow, &vec![env, buyer.clone()], &100, &250, &60, &expires);
+    Ses { w, c, escrow, token, buyer, k, id }
+}
+
+fn sproof(env: &Env, w: &Address, k: &SigningKey, payload: &Hash<32>, mode: u8) -> Proof {
+    let msg = message(env, w, mode, payload);
+    Proof::Session(SessionProof {
+        id: session_id(env, &pk(env, k)),
+        sig: BytesN::from_array(env, &k.sign(&msg.to_array()).to_bytes()),
+    })
+}
+
+fn scheck(env: &Env, s: &Ses, contexts: Vec<Context>) -> Result<(), Result<WalletError, InvokeError>> {
+    let p = payload(env);
+    let proofs = vec![env, sproof(env, &s.w, &s.k, &p, MODE_SESSION)];
+    env.try_invoke_contract_check_auth::<WalletError>(&s.w, &p.to_bytes(), proofs.into_val(env), &contexts)
+}
+
+/// `[lock, transfer]` de `amount + fee` hacia `buyer`.
+fn slock(env: &Env, s: &Ses, buyer: &Address, amount: i128, fee: i128, timeout: u32) -> Vec<Context> {
+    let lock = call(env, &s.escrow, "lock", vec![
+        env,
+        s.w.into_val(env),
+        buyer.into_val(env),
+        amount.into_val(env),
+        fee.into_val(env),
+        BytesN::<32>::random(env).into_val(env),
+        timeout.into_val(env),
+    ]);
+    vec![env, lock, transfer_ctx(env, &s.token, &s.w, &s.escrow, amount + fee)]
+}
+
+fn trade_ctx(env: &Env, s: &Ses, f: &str, trade: &BytesN<32>) -> Context {
+    call(env, &s.escrow, f, vec![env, trade.into_val(env), Bytes::new(env).into_val(env)])
+}
+
+#[test]
+fn w20_lock_dentro_de_los_topes_pasa_y_acumula() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 100, 0, 60)), Ok(()));
+    assert_eq!(s.c.session(&s.id).unwrap().spent, 100);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 100, 0, 30)), Ok(()));
+    // 200 + 100 > 250.
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 100, 0, 30)), Err(Ok(WalletError::SessionLimit)));
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 49, 0, 30)), Ok(()));
+    assert_eq!(s.c.session(&s.id).unwrap().spent, 249);
+}
+
+#[test]
+fn w20_por_encima_del_tope_por_lock_falla_contando_la_comision() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 100, 1, 60)), Err(Ok(WalletError::SessionLimit)));
+    assert_eq!(s.c.session(&s.id).unwrap().spent, 0);
+}
+
+#[test]
+fn w20_comprador_ajeno_o_plazo_largo_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let otro = Address::generate(&env);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &otro, 50, 0, 60)), Err(Ok(WalletError::SessionDenied)));
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 50, 0, 61)), Err(Ok(WalletError::SessionDenied)));
+}
+
+#[test]
+fn w20_las_reglas_del_escrow_siguen_aplicando() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    // 2% de comision con tope de 1%.
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 50, 2, 60)), Err(Ok(WalletError::EscrowLockInvalid)));
+    // Transfer hijo con otro importe.
+    let mut ctx = slock(&env, &s, &s.buyer, 50, 0, 60);
+    ctx.set(1, transfer_ctx(&env, &s.token, &s.w, &s.escrow, 49));
+    assert_eq!(scheck(&env, &s, ctx), Err(Ok(WalletError::EscrowTransferMismatch)));
+}
+
+#[test]
+fn w20_el_lock_tambien_cuenta_en_el_limite_del_token() {
+    let env = Env::default();
+    let s = ses(&env, Some(80));
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 90, 0, 60)), Err(Ok(WalletError::LimitExceeded)));
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 70, 0, 60)), Ok(()));
+    assert_eq!(s.c.spent(&s.token), 70);
+}
+
+#[test]
+fn w20_release_pasa() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let t = BytesN::random(&env);
+    assert_eq!(scheck(&env, &s, vec![&env, trade_ctx(&env, &s, "release", &t)]), Ok(()));
+}
+
+#[test]
+fn w20_decline_solo_con_permiso_y_una_vez() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let t = BytesN::random(&env);
+    let decline = || vec![&env, call(&env, &s.escrow, "decline", vec![&env, t.into_val(&env)])];
+    assert_eq!(scheck(&env, &s, decline()), Err(Ok(WalletError::SessionDenied)));
+    s.c.allow_session_decline(&s.id, &t);
+    assert_eq!(scheck(&env, &s, decline()), Ok(()));
+    assert_eq!(scheck(&env, &s, decline()), Err(Ok(WalletError::SessionDenied)));
+}
+
+#[test]
+fn w20_transfer_otra_llamada_o_la_wallet_fallan() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let to = Address::generate(&env);
+    assert_eq!(scheck(&env, &s, vec![&env, transfer_ctx(&env, &s.token, &s.w, &to, 1)]), Err(Ok(WalletError::SessionDenied)));
+    assert_eq!(
+        scheck(&env, &s, vec![&env, transfer_ctx(&env, &s.token, &s.w, &s.escrow, 1)]),
+        Err(Ok(WalletError::SessionDenied))
+    );
+    let w = s.w.clone();
+    assert_eq!(scheck(&env, &s, vec![&env, call(&env, &w, "add_signer", vec![&env])]), Err(Ok(WalletError::SessionDenied)));
+    assert_eq!(scheck(&env, &s, vec![&env, call(&env, &w, "revoke_session", vec![&env])]), Err(Ok(WalletError::SessionDenied)));
+    let otro_escrow = Address::generate(&env);
+    let t: BytesN<32> = BytesN::random(&env);
+    assert_eq!(
+        scheck(&env, &s, vec![&env, call(&env, &otro_escrow, "release", vec![&env, t.into_val(&env)])]),
+        Err(Ok(WalletError::SessionDenied))
+    );
+}
+
+#[test]
+fn w20_vencida_o_revocada_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    advance(&env, 1_000);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 50, 0, 60)), Err(Ok(WalletError::SessionExpired)));
+    let env = Env::default();
+    let s = ses(&env, None);
+    s.c.revoke_session(&s.id);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 50, 0, 60)), Err(Ok(WalletError::UnknownSession)));
+    assert_eq!(s.c.try_revoke_session(&s.id), Err(Ok(WalletError::UnknownSession)));
+}
+
+#[test]
+fn w20_firma_de_sesion_en_modo_dueno_o_mezclada_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let p = payload(&env);
+    let ctx = slock(&env, &s, &s.buyer, 50, 0, 60);
+    // Firma de la llave de sesion con el modo del dueno.
+    let mal = vec![&env, sproof(&env, &s.w, &s.k, &p, MODE_OWNER)];
+    assert_eq!(
+        env.try_invoke_contract_check_auth::<WalletError>(&s.w, &p.to_bytes(), mal.into_val(&env), &ctx),
+        Err(Err(InvokeError::Abort))
+    );
+    let mezcla = vec![&env, sproof(&env, &s.w, &s.k, &p, MODE_SESSION), proof(&env, &s.w, &key(1), &p)];
+    assert_eq!(
+        env.try_invoke_contract_check_auth::<WalletError>(&s.w, &p.to_bytes(), mezcla.into_val(&env), &ctx),
+        Err(Ok(WalletError::MixedProofs))
+    );
+    let mezcla = vec![&env, proof(&env, &s.w, &key(1), &p), sproof(&env, &s.w, &s.k, &p, MODE_SESSION)];
+    assert_eq!(
+        env.try_invoke_contract_check_auth::<WalletError>(&s.w, &p.to_bytes(), mezcla.into_val(&env), &ctx),
+        Err(Ok(WalletError::MixedProofs))
+    );
+}
+
+#[test]
+fn w20_congelada_falla_y_el_dueno_puede_revocar() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let g = Address::generate(&env);
+    add_g(&env, &s.c, &g);
+    s.c.freeze(&vec![&env, g]);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 50, 0, 60)), Err(Ok(WalletError::Frozen)));
+    let w = s.w.clone();
+    let revoke = call(&env, &w, "revoke_session", vec![&env, s.id.into_val(&env)]);
+    assert_eq!(check_ctx(&env, &w, &key(1), vec![&env, revoke]), Ok(()));
+}
+
+#[test]
+fn w20_la_recuperacion_anula_las_sesiones() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let g = Address::generate(&env);
+    add_g(&env, &s.c, &g);
+    let id = start(&env, &s.c, &[g], &key(9));
+    advance(&env, RECOVERY_DELAY);
+    s.c.finish_recovery(&id);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 50, 0, 60)), Err(Ok(WalletError::Stale)));
+}
+
+#[test]
+fn w20_quitar_el_escrow_deja_la_sesion_sin_uso() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    s.c.remove_escrow(&s.escrow);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 50, 0, 60)), Err(Ok(WalletError::UnknownEscrow)));
+}
+
+#[test]
+fn w20_validaciones_de_add_session() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let (c, e, b) = (&s.c, &s.escrow, vec![&env, s.buyer.clone()]);
+    let k = pk(&env, &key(6));
+    let exp = env.ledger().sequence() + 100;
+    assert_eq!(c.try_add_session(&k, &Address::generate(&env), &b, &10, &10, &60, &exp), Err(Ok(WalletError::UnknownEscrow)));
+    assert_eq!(c.try_add_session(&k, e, &vec![&env], &10, &10, &60, &exp), Err(Ok(WalletError::InvalidSession)));
+    assert_eq!(c.try_add_session(&k, e, &vec![&env, s.w.clone()], &10, &10, &60, &exp), Err(Ok(WalletError::InvalidSession)));
+    assert_eq!(
+        c.try_add_session(&k, e, &vec![&env, s.buyer.clone(), s.buyer.clone()], &10, &10, &60, &exp),
+        Err(Ok(WalletError::InvalidSession))
+    );
+    assert_eq!(c.try_add_session(&k, e, &b, &0, &10, &60, &exp), Err(Ok(WalletError::InvalidSession)));
+    assert_eq!(c.try_add_session(&k, e, &b, &20, &10, &60, &exp), Err(Ok(WalletError::InvalidSession)));
+    assert_eq!(c.try_add_session(&k, e, &b, &10, &10, &0, &exp), Err(Ok(WalletError::InvalidSession)));
+    assert_eq!(
+        c.try_add_session(&k, e, &b, &10, &10, &(MAX_LOCK_TIMEOUT_MINUTES + 1), &exp),
+        Err(Ok(WalletError::InvalidSession))
+    );
+    let now = env.ledger().sequence();
+    assert_eq!(c.try_add_session(&k, e, &b, &10, &10, &60, &now), Err(Ok(WalletError::InvalidExpiry)));
+    assert_eq!(c.try_add_session(&k, e, &b, &10, &10, &60, &(now + SESSION_MAX_TTL + 1)), Err(Ok(WalletError::InvalidExpiry)));
+    // La llave del dueno no sirve de sesion, ni la misma sesion dos veces.
+    assert_eq!(c.try_add_session(&pk(&env, &key(1)), e, &b, &10, &10, &60, &exp), Err(Ok(WalletError::KeyUsed)));
+    assert_eq!(c.try_add_session(&pk(&env, &s.k), e, &b, &10, &10, &60, &exp), Err(Ok(WalletError::KeyUsed)));
+    for i in 0..(MAX_SESSIONS - 1) {
+        c.add_session(&pk(&env, &key(20 + i as u8)), e, &b, &10, &10, &60, &exp);
+    }
+    assert_eq!(c.try_add_session(&k, e, &b, &10, &10, &60, &exp), Err(Ok(WalletError::TooManySessions)));
+    // Las vencidas liberan su lugar.
+    advance(&env, 1_000);
+    let exp = env.ledger().sequence() + 100;
+    c.add_session(&k, e, &b, &10, &10, &60, &exp);
+}
+
+#[test]
+fn w20_sin_firma_del_dueno_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    env.set_auths(&[]);
+    let exp = env.ledger().sequence() + 100;
+    let b = vec![&env, s.buyer.clone()];
+    assert_eq!(s.c.try_add_session(&pk(&env, &key(6)), &s.escrow, &b, &10, &10, &60, &exp).err(), Some(Err(auth_error())));
+    assert_eq!(s.c.try_revoke_session(&s.id).err(), Some(Err(auth_error())));
+    let t = BytesN::random(&env);
+    assert_eq!(s.c.try_allow_session_decline(&s.id, &t).err(), Some(Err(auth_error())));
 }

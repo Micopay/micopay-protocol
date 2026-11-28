@@ -29,6 +29,16 @@ const TTL_EXTEND: u32 = 518_400;
 pub const DOMAIN: &[u8] = b"micopay-labs-wallet-v1";
 /// Modo de la firma. Solo existe el dueno en esta fase; la sesion (1) llega con W20.
 pub const MODE_OWNER: u8 = 0;
+/// Modo del mensaje firmado por una llave de sesion (W20).
+pub const MODE_SESSION: u8 = 1;
+/// Prefijo del id de una sesion.
+const KIND_SESSION: u8 = 2;
+/// Tope de sesiones a la vez.
+pub const MAX_SESSIONS: u32 = 5;
+/// Tope de compradores por sesion y de permisos de `decline` pendientes.
+pub const MAX_SESSION_LIST: u32 = 10;
+/// Vigencia maxima de una sesion (~7 dias).
+pub const SESSION_MAX_TTL: u32 = 120_960;
 /// Prefijo del id de un firmante ed25519. El passkey (W6) usara 0x01.
 const KIND_ED25519: u8 = 0;
 /// Tope de firmantes, para acotar el costo de `__check_auth`.
@@ -88,6 +98,7 @@ enum DataKey {
     PendingUnfreeze,
     Recovery,
     RecoveryNonce,
+    Sessions,
 }
 
 /// Propuesta de recuperacion: reemplazar todos los firmantes por `new_key`.
@@ -171,6 +182,36 @@ pub struct Ed25519Proof {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Proof {
     Ed25519(Ed25519Proof),
+    Session(SessionProof),
+}
+
+/// W20. Firma de una llave de sesion.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SessionProof {
+    pub id: BytesN<32>,
+    pub sig: BytesN<64>,
+}
+
+/// W20. Llave temporal que solo opera un escrow: `lock` hacia compradores autorizados con
+/// topes propios, `release`, y `decline` solo de los trades que el dueno permitio.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Session {
+    pub key: BytesN<32>,
+    pub escrow: Address,
+    pub buyers: Vec<Address>,
+    /// Tope de `amount + platform_fee` por `lock`.
+    pub max_per_lock: i128,
+    /// Tope acumulado de toda la sesion.
+    pub max_total: i128,
+    pub spent: i128,
+    /// Plazo maximo del `lock`, en minutos.
+    pub max_timeout: u32,
+    pub expires: u32,
+    pub owner_epoch: u32,
+    /// Trades que la sesion puede declinar, una vez cada uno.
+    pub declines: Vec<BytesN<32>>,
 }
 
 #[contracterror]
@@ -216,6 +257,13 @@ pub enum WalletError {
     UnknownProposal = 37,
     ProposalExpired = 38,
     AlreadyVoted = 39,
+    MixedProofs = 40,
+    UnknownSession = 41,
+    SessionExpired = 42,
+    SessionDenied = 43,
+    SessionLimit = 44,
+    InvalidSession = 45,
+    TooManySessions = 46,
 }
 
 /// Id de un firmante ed25519: `sha256(0x00 ‖ pubkey)`.
@@ -343,6 +391,17 @@ fn clear_freeze(env: &Env) {
     let st = env.storage().instance();
     st.remove(&DataKey::Frozen);
     st.remove(&DataKey::PendingUnfreeze);
+}
+
+/// Id de una sesion: `sha256(0x02 ‖ pubkey)`.
+pub fn session_id(env: &Env, key: &BytesN<32>) -> BytesN<32> {
+    let mut b = Bytes::from_array(env, &[KIND_SESSION]);
+    b.append(&key.clone().into());
+    env.crypto().sha256(&b).into()
+}
+
+fn sessions(env: &Env) -> Map<BytesN<32>, Session> {
+    env.storage().instance().get(&DataKey::Sessions).unwrap_or(Map::new(env))
 }
 
 fn guardian_epoch(env: &Env) -> u32 {
@@ -893,6 +952,120 @@ impl SmartWallet {
         Ok(())
     }
 
+    /// W20. Crea una sesion para operar `escrow` (ya registrado) sin la firma del dueno en cada
+    /// trade. Devuelve su id. Aplica ya: la sesion no puede sacar dinero fuera del escrow ni
+    /// pasar de sus topes, y el dueno la revoca al instante.
+    pub fn add_session(
+        env: Env,
+        key: BytesN<32>,
+        escrow: Address,
+        buyers: Vec<Address>,
+        max_per_lock: i128,
+        max_total: i128,
+        max_timeout: u32,
+        expires: u32,
+    ) -> Result<BytesN<32>, WalletError> {
+        let me = env.current_contract_address();
+        me.require_auth();
+        let st = env.storage().instance();
+        if !st.has(&DataKey::Escrow(escrow.clone())) {
+            return Err(WalletError::UnknownEscrow);
+        }
+        if buyers.is_empty() || buyers.len() > MAX_SESSION_LIST {
+            return Err(WalletError::InvalidSession);
+        }
+        let mut seen: Vec<Address> = Vec::new(&env);
+        for b in buyers.iter() {
+            if b == me || seen.contains(&b) {
+                return Err(WalletError::InvalidSession);
+            }
+            seen.push_back(b);
+        }
+        if max_per_lock <= 0 || max_total < max_per_lock {
+            return Err(WalletError::InvalidSession);
+        }
+        if max_timeout == 0 || max_timeout > MAX_LOCK_TIMEOUT_MINUTES {
+            return Err(WalletError::InvalidSession);
+        }
+        let now = env.ledger().sequence();
+        let max = now.checked_add(SESSION_MAX_TTL).ok_or(WalletError::Overflow)?;
+        if expires <= now || expires > max {
+            return Err(WalletError::InvalidExpiry);
+        }
+        // Una llave del dueno no puede ser tambien llave de sesion.
+        for signer in signers(&env)?.values() {
+            if signer.key == key {
+                return Err(WalletError::KeyUsed);
+            }
+        }
+        let id = session_id(&env, &key);
+        let mut map = sessions(&env);
+        // Las vencidas o del dueno anterior no ocupan lugar.
+        let epoch = owner_epoch(&env);
+        for (k, v) in map.clone().iter() {
+            if v.expires <= now || v.owner_epoch != epoch {
+                map.remove(k);
+            }
+        }
+        if map.contains_key(id.clone()) {
+            return Err(WalletError::KeyUsed);
+        }
+        if map.len() >= MAX_SESSIONS {
+            return Err(WalletError::TooManySessions);
+        }
+        let session = Session {
+            key,
+            escrow,
+            buyers,
+            max_per_lock,
+            max_total,
+            spent: 0,
+            max_timeout,
+            expires,
+            owner_epoch: epoch,
+            declines: Vec::new(&env),
+        };
+        map.set(id.clone(), session);
+        st.set(&DataKey::Sessions, &map);
+        bump(&env);
+        Ok(id)
+    }
+
+    /// W20. Revoca una sesion. Aplica ya, tambien con la wallet congelada.
+    pub fn revoke_session(env: Env, id: BytesN<32>) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        let mut map = sessions(&env);
+        if map.remove(id).is_none() {
+            return Err(WalletError::UnknownSession);
+        }
+        env.storage().instance().set(&DataKey::Sessions, &map);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W20. Permite que la sesion `id` haga `decline` de `trade_id`, una vez. Sin esto una
+    /// llave de sesion filtrada podria renunciar a cobros de la wallet.
+    pub fn allow_session_decline(env: Env, id: BytesN<32>, trade_id: BytesN<32>) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        let mut map = sessions(&env);
+        let mut session = map.get(id.clone()).ok_or(WalletError::UnknownSession)?;
+        if !session.declines.contains(&trade_id) {
+            if session.declines.len() >= MAX_SESSION_LIST {
+                return Err(WalletError::InvalidSession);
+            }
+            session.declines.push_back(trade_id);
+        }
+        map.set(id, session);
+        env.storage().instance().set(&DataKey::Sessions, &map);
+        bump(&env);
+        Ok(())
+    }
+
+    /// Lectura: una sesion.
+    pub fn session(env: Env, id: BytesN<32>) -> Option<Session> {
+        sessions(&env).get(id)
+    }
+
     /// Lectura: la propuesta de recuperacion en curso, si hay.
     pub fn recovery(env: Env) -> Option<Recovery> {
         env.storage().instance().get(&DataKey::Recovery)
@@ -963,6 +1136,15 @@ impl CustomAccountInterface for SmartWallet {
         if signatures.len() > MAX_SIGNERS {
             return Err(WalletError::TooManyProofs);
         }
+        if let Some(Proof::Session(p)) = signatures.first() {
+            if signatures.len() != 1 {
+                return Err(WalletError::MixedProofs);
+            }
+            check_session(&env, &signature_payload, &p, &auth_contexts)?;
+            check_contexts(&env, &auth_contexts)?;
+            bump(&env);
+            return Ok(());
+        }
         let map = signers(&env)?;
         let msg: Bytes = message(&env, &env.current_contract_address(), MODE_OWNER, &signature_payload).into();
         let mut seen: Vec<BytesN<32>> = Vec::new(&env);
@@ -979,6 +1161,7 @@ impl CustomAccountInterface for SmartWallet {
                     seen.push_back(p.id);
                     weight = weight.checked_add(signer.weight).ok_or(WalletError::Overflow)?;
                 }
+                Proof::Session(_) => return Err(WalletError::MixedProofs),
             }
         }
         if weight < threshold(&env)? {
@@ -994,19 +1177,90 @@ impl CustomAccountInterface for SmartWallet {
 }
 
 /// W15. Con la wallet congelada, el dueno solo puede llamar a la propia wallet para pedir
-/// descongelar (`request_unfreeze`) o, con dos credenciales distintas, para cancelar una
+/// descongelar (`request_unfreeze`), revocar una sesion (`revoke_session`) o, con dos credenciales distintas, para cancelar una
 /// recuperacion (`cancel_recovery`, D8): una sola llave robada no veta a los guardianes.
 fn check_frozen(env: &Env, contexts: &Vec<Context>, credentials: u32) -> Result<(), WalletError> {
     let me = env.current_contract_address();
     let request_unfreeze = Symbol::new(env, "request_unfreeze");
     let cancel_recovery = Symbol::new(env, "cancel_recovery");
+    let revoke_session = Symbol::new(env, "revoke_session");
     for ctx in contexts.iter() {
         match ctx {
             Context::Contract(c) if c.contract == me && c.fn_name == request_unfreeze => {}
+            Context::Contract(c) if c.contract == me && c.fn_name == revoke_session => {}
             Context::Contract(c) if c.contract == me && c.fn_name == cancel_recovery && credentials >= 2 => {}
             _ => return Err(WalletError::Frozen),
         }
     }
+    Ok(())
+}
+
+/// W20. Modo sesion: la sesion existe, no vencio, es del dueno actual, la wallet no esta
+/// congelada, la firma es valida, y cada contexto es una intencion permitida en su escrow.
+/// `check_contexts` valida despues el `lock` contra la regla del escrow y cobra el limite.
+fn check_session(env: &Env, payload: &Hash<32>, p: &SessionProof, contexts: &Vec<Context>) -> Result<(), WalletError> {
+    let mut map = sessions(env);
+    let mut s = map.get(p.id.clone()).ok_or(WalletError::UnknownSession)?;
+    if env.ledger().sequence() >= s.expires {
+        return Err(WalletError::SessionExpired);
+    }
+    if s.owner_epoch != owner_epoch(env) {
+        return Err(WalletError::Stale);
+    }
+    if is_frozen(env) {
+        return Err(WalletError::Frozen);
+    }
+    if !env.storage().instance().has(&DataKey::Escrow(s.escrow.clone())) {
+        return Err(WalletError::UnknownEscrow);
+    }
+    let me = env.current_contract_address();
+    let msg: Bytes = message(env, &me, MODE_SESSION, payload).into();
+    // Aborta si la firma no es valida.
+    env.crypto().ed25519_verify(&s.key, &msg, &p.sig);
+    let lock = Symbol::new(env, "lock");
+    let release = Symbol::new(env, "release");
+    let decline = Symbol::new(env, "decline");
+    let transfer = Symbol::new(env, "transfer");
+    let mut locked = false;
+    for (i, ctx) in contexts.iter().enumerate() {
+        let c = match ctx {
+            Context::Contract(c) => c,
+            _ => return Err(WalletError::SessionDenied),
+        };
+        if c.contract == s.escrow && c.fn_name == lock {
+            if i != 0 || contexts.len() != 2 {
+                return Err(WalletError::SessionDenied);
+            }
+            let buyer: Address = arg(env, &c.args, 1)?;
+            let amount: i128 = arg(env, &c.args, 2)?;
+            let fee: i128 = arg(env, &c.args, 3)?;
+            let timeout: u32 = arg(env, &c.args, 5)?;
+            if !s.buyers.contains(&buyer) || timeout > s.max_timeout {
+                return Err(WalletError::SessionDenied);
+            }
+            if amount <= 0 || fee < 0 {
+                return Err(WalletError::EscrowLockInvalid);
+            }
+            let total = amount.checked_add(fee).ok_or(WalletError::Overflow)?;
+            let spent = s.spent.checked_add(total).ok_or(WalletError::Overflow)?;
+            if total > s.max_per_lock || spent > s.max_total {
+                return Err(WalletError::SessionLimit);
+            }
+            s.spent = spent;
+            locked = true;
+        } else if c.contract == s.escrow && c.fn_name == release {
+        } else if c.contract == s.escrow && c.fn_name == decline {
+            let trade_id: BytesN<32> = arg(env, &c.args, 0)?;
+            let k = s.declines.first_index_of(&trade_id).ok_or(WalletError::SessionDenied)?;
+            s.declines.remove(k);
+        } else if locked && i == 1 && c.fn_name == transfer {
+            // El transfer hijo del lock: check_contexts verifica token, destino e importe.
+        } else {
+            return Err(WalletError::SessionDenied);
+        }
+    }
+    map.set(p.id.clone(), s);
+    env.storage().instance().set(&DataKey::Sessions, &map);
     Ok(())
 }
 
