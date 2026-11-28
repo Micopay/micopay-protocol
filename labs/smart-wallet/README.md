@@ -126,7 +126,7 @@ node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet
 
 ## Funciones en testnet
 
-Cada función que escribe estado tiene al menos una transacción exitosa en testnet y sus pruebas en `src/test.rs`. La demo de cada fila está en las secciones de abajo. Las corridas de `demo-resto.mjs` y `demo-passkey.mjs` usan el WASM vigente (`feee1519…`); las demás, versiones anteriores del mismo contrato.
+Cada función que escribe estado tiene al menos una transacción exitosa en testnet y sus pruebas en `src/test.rs`. La demo de cada fila está en las secciones de abajo. Las filas 38–47 son de la fase 2 (`demo-fase2.mjs`, WASM `5e93f00d…`, wallet `CDB7ZS6J…`). Las corridas de `demo-resto.mjs` y `demo-passkey.mjs` usan el WASM `feee1519…`; las demás, versiones anteriores del mismo contrato.
 
 | # | Función | Demo | Transacción |
 |---|---|---|---|
@@ -167,6 +167,16 @@ Cada función que escribe estado tiene al menos una transacción exitosa en test
 | 35 | `__check_auth (passkey)` | demo-passkey | [9dd015d5…](https://stellar.expert/explorer/testnet/tx/9dd015d50cd978fd47655dfc6a8306b45ec52aa367ce34046f4d0b645c6d290f) |
 | 36 | `fábrica: __constructor` | demo-sesiones | [ac4e1e04…](https://stellar.expert/explorer/testnet/tx/ac4e1e04f20ec65458e2fc5da722d9fe8f07bbe65d8971593955f58d65aea1df) |
 | 37 | `fábrica: create_account` | demo-sesiones | [4961f98b…](https://stellar.expert/explorer/testnet/tx/4961f98b3b8f02cc23b294f099c594f6f4f0aa4dd9a192d1c2500295c44ed5d9) |
+| 38 | `cancel_limit` | demo-fase2 | [3e0e608f…](https://stellar.expert/explorer/testnet/tx/3e0e608f54521d9cd16c847a12a9ed68258183304d6e3ded88426ab3ac9b94a5) |
+| 39 | `cancel_escrow` | demo-fase2 | [01b530bc…](https://stellar.expert/explorer/testnet/tx/01b530bc2d09981afe276492b37f7dd1bd9665568b78f890700a258c1aaab307) |
+| 40 | `cancel_guardian_removal` | demo-fase2 | [8b5acefa…](https://stellar.expert/explorer/testnet/tx/8b5acefa19e1ee158edfc9f09438b74b950b410e265cf5c32222e34f7c9c8307) |
+| 41 | `cancel_unfreeze` | demo-fase2 | [3b456f4e…](https://stellar.expert/explorer/testnet/tx/3b456f4e6c2786c8ce26fd03bdd9f1b8fd684c07c08657cd2d2f03ce22702c20) |
+| 42 | `set_signer_weight` | demo-fase2 | [a8a16bc7…](https://stellar.expert/explorer/testnet/tx/a8a16bc7b70a414012cfc4c1bdb7a1ae35d6e36faccbc0e2c790d681cfaa541e) |
+| 43 | `rotate_signer` | demo-fase2 | [d9ab9666…](https://stellar.expert/explorer/testnet/tx/d9ab9666df51a27bc9714bf46bfe0506b71a7b4782e2790aa773bb78ffb7801f) |
+| 44 | `revoke_all_sessions` | demo-fase2 | [28520b74…](https://stellar.expert/explorer/testnet/tx/28520b7449952e33452908c5f0c5025059efeb4216256790e0e0779cd8f1d979) |
+| 45 | `reduce_session` | demo-fase2 | [a7881be6…](https://stellar.expert/explorer/testnet/tx/a7881be6eef03ed8c280c30a429fa1c5b79072741ac879a23c84e5cb5722d0f6) |
+| 46 | `add_session_buyer` | demo-fase2 | [ff99b2ae…](https://stellar.expert/explorer/testnet/tx/ff99b2aeb5503af40b8426f722426123c81bae83a2eb6629b2c0b423a2b9abc5) |
+| 47 | `remove_session_buyer` | demo-fase2 | [a28c89b3…](https://stellar.expert/explorer/testnet/tx/a28c89b36b1350e7cefea9e9c3c19fe3705bf4879fe6a43bcc232d1ec45670fe) |
 
 ## Demo en testnet
 
