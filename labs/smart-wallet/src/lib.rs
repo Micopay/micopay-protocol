@@ -462,6 +462,23 @@ fn sessions(env: &Env) -> Map<BytesN<32>, Session> {
     env.storage().instance().get(&DataKey::Sessions).unwrap_or(Map::new(env))
 }
 
+/// `key` es la llave de alguna sesion guardada (vigente o no).
+fn is_session_key(env: &Env, key: &BytesN<32>) -> bool {
+    sessions(env).values().iter().any(|s| s.key == *key)
+}
+
+/// Una sesion que se puede seguir usando: existe, no vencio y es del dueno actual.
+fn live_session(env: &Env, id: &BytesN<32>) -> Result<Session, WalletError> {
+    let s = sessions(env).get(id.clone()).ok_or(WalletError::UnknownSession)?;
+    if env.ledger().sequence() >= s.expires {
+        return Err(WalletError::SessionExpired);
+    }
+    if s.owner_epoch != owner_epoch(env) {
+        return Err(WalletError::Stale);
+    }
+    Ok(s)
+}
+
 fn guardian_epoch(env: &Env) -> u32 {
     env.storage().instance().get(&DataKey::GuardianEpoch).unwrap_or(0)
 }
@@ -637,6 +654,10 @@ impl SmartWallet {
         if map.contains_key(id.clone()) {
             return Err(WalletError::KeyUsed);
         }
+        // W28. Una llave de sesion no puede ser tambien llave del dueno.
+        if is_session_key(&env, &key) {
+            return Err(WalletError::KeyUsed);
+        }
         if map.len() + passkeys(&env).len() >= MAX_SIGNERS {
             return Err(WalletError::TooManySigners);
         }
@@ -736,6 +757,61 @@ impl SmartWallet {
         Ok(())
     }
 
+    /// W27. Cambia el peso de un firmante (ed25519 o passkey). El umbral tiene que seguir
+    /// alcanzable. No con la wallet congelada: una subida de peso puede volver suficiente a una
+    /// llave que sola no lo era. La firma que lo autoriza cuenta con los pesos de antes.
+    pub fn set_signer_weight(env: Env, id: BytesN<32>, weight: u32) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        if weight == 0 {
+            return Err(WalletError::InvalidWeight);
+        }
+        let mut map = signers(&env)?;
+        let mut pks = passkeys(&env);
+        if let Some(mut s) = map.get(id.clone()) {
+            s.weight = weight;
+            map.set(id, s);
+        } else if let Some(mut p) = pks.get(id.clone()) {
+            p.weight = weight;
+            pks.set(id, p);
+        } else {
+            return Err(WalletError::UnknownSigner);
+        }
+        if all_weight(&env, &map, &pks)? < threshold(&env)? {
+            return Err(WalletError::ThresholdUnreachable);
+        }
+        env.storage().instance().set(&DataKey::Signers, &map);
+        env.storage().instance().set(&DataKey::Passkeys, &pks);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W28. Cambia la llave de un firmante ed25519 por otra, con el mismo peso. La llave nueva
+    /// firma su prueba de posesion como en `add_signer`. No puede ser la misma, otra del dueno
+    /// ni la de una sesion. El umbral no cambia. Devuelve el id nuevo.
+    pub fn rotate_signer(
+        env: Env,
+        old_id: BytesN<32>,
+        new_key: BytesN<32>,
+        possession: BytesN<64>,
+    ) -> Result<BytesN<32>, WalletError> {
+        let wallet = env.current_contract_address();
+        wallet.require_auth();
+        let mut map = signers(&env)?;
+        let old = map.get(old_id.clone()).ok_or(WalletError::UnknownSigner)?;
+        let id = signer_id(&env, &new_key);
+        // Aborta si la llave nueva no firmo.
+        env.crypto()
+            .ed25519_verify(&new_key, &possession_message(&env, &wallet, &id).into(), &possession);
+        if map.contains_key(id.clone()) || is_session_key(&env, &new_key) {
+            return Err(WalletError::KeyUsed);
+        }
+        map.remove(old_id);
+        map.set(id.clone(), Signer { key: new_key, weight: old.weight });
+        env.storage().instance().set(&DataKey::Signers, &map);
+        bump(&env);
+        Ok(id)
+    }
+
     /// W17. Pone el limite de gasto por periodo de un token. Bajarlo (o ponerlo por primera
     /// vez) aplica ya; subirlo queda pendiente `DELAY_LEDGERS` y lo aplica `apply_limit`.
     /// Devuelve `true` si ya quedo aplicado.
@@ -782,6 +858,21 @@ impl SmartWallet {
         Ok(())
     }
 
+    /// W22. Cancela una subida de limite pendiente. El limite vigente y lo gastado en el periodo
+    /// quedan igual. Aplica ya, tambien con la wallet congelada (D12): cancelar una subida no le
+    /// sirve al ladron.
+    pub fn cancel_limit(env: Env, token: Address) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        let st = env.storage().instance();
+        let key = DataKey::PendingLimit(token);
+        if !st.has(&key) {
+            return Err(WalletError::NothingPending);
+        }
+        st.remove(&key);
+        bump(&env);
+        Ok(())
+    }
+
     /// W18. Registra un escrow con su token y su comision maxima. Queda pendiente
     /// `DELAY_LEDGERS` y lo aplica `apply_escrow`.
     pub fn add_escrow(env: Env, escrow: Address, token: Address, fee_bps_max: u32) -> Result<(), WalletError> {
@@ -813,6 +904,22 @@ impl SmartWallet {
         }
         st.set(&DataKey::Escrow(escrow.clone()), &p.rule);
         st.remove(&DataKey::PendingEscrow(escrow));
+        bump(&env);
+        Ok(())
+    }
+
+    /// W23. Cancela un registro de escrow pendiente (o un cambio de regla pendiente de un escrow
+    /// ya registrado). La regla vigente y sus sesiones, con lo que llevan gastado, quedan igual.
+    /// No con la wallet congelada: un registro pendiente puede bajar la comision, y cancelarlo
+    /// frustraria un cambio protector.
+    pub fn cancel_escrow(env: Env, escrow: Address) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        let st = env.storage().instance();
+        let key = DataKey::PendingEscrow(escrow);
+        if !st.has(&key) {
+            return Err(WalletError::NothingPending);
+        }
+        st.remove(&key);
         bump(&env);
         Ok(())
     }
@@ -903,6 +1010,20 @@ impl SmartWallet {
         Ok(())
     }
 
+    /// W25. Cancela una baja de guardian pendiente. Solo el dueno y no con la wallet congelada
+    /// (D10): el ladron la usaria para conservar a un guardian comprometido.
+    pub fn cancel_guardian_removal(env: Env, guardian: Address) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        let st = env.storage().instance();
+        let key = DataKey::PendingGuardianRemoval(guardian);
+        if !st.has(&key) {
+            return Err(WalletError::NothingPending);
+        }
+        st.remove(&key);
+        bump(&env);
+        Ok(())
+    }
+
     /// W8. Aplica una baja de guardian pendiente, ya cumplida la espera. Cualquiera. No con la
     /// wallet congelada ni con una recuperacion en curso. Si el quorum queda mayor que los
     /// guardianes que quedan, baja a ese numero.
@@ -929,8 +1050,11 @@ impl SmartWallet {
     }
 
     /// W9. Cambia el quorum de guardianes: `1 ≤ t ≤ guardianes` (0 solo si no hay guardianes).
+    /// No con una recuperacion en curso: cambiar el quorum sube la epoca de guardianes (aunque
+    /// sea el mismo valor) y anularia sus votos, igual que en `apply_guardian_add`.
     pub fn set_guardian_threshold(env: Env, threshold: u32) -> Result<(), WalletError> {
         env.current_contract_address().require_auth();
+        no_live_recovery(&env)?;
         let list = guardian_list(&env);
         let ok = if list.is_empty() { threshold == 0 } else { threshold >= 1 && threshold <= list.len() };
         if !ok {
@@ -1000,6 +1124,27 @@ impl SmartWallet {
             .ok_or(WalletError::Overflow)?;
         let pending = Pending { ready_ledger, owner_epoch: owner_epoch(&env) };
         env.storage().instance().set(&DataKey::PendingUnfreeze, &pending);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W26. Un guardian borra la solicitud de descongelar del dueno (D11): el ladron la pidio y
+    /// los guardianes todavia no juntan el quorum. El congelamiento, su enfriamiento y la
+    /// recuperacion quedan igual. Un guardian malicioso molesta como mucho hasta que venza el
+    /// congelamiento: `unfreeze` sin congelamiento vigente pasa siempre.
+    pub fn cancel_unfreeze(env: Env, guardian: Address) -> Result<(), WalletError> {
+        if !guardian_list(&env).contains(&guardian) {
+            return Err(WalletError::UnknownGuardian);
+        }
+        guardian.require_auth();
+        if !is_frozen(&env) {
+            return Err(WalletError::NotFrozen);
+        }
+        let st = env.storage().instance();
+        if !st.has(&DataKey::PendingUnfreeze) {
+            return Err(WalletError::NothingPending);
+        }
+        st.remove(&DataKey::PendingUnfreeze);
         bump(&env);
         Ok(())
     }
@@ -1262,6 +1407,96 @@ impl SmartWallet {
         Ok(())
     }
 
+    /// W31. Revoca todas las sesiones. Aplica ya, tambien con la wallet congelada.
+    pub fn revoke_all_sessions(env: Env) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        if sessions(&env).is_empty() {
+            return Err(WalletError::UnknownSession);
+        }
+        env.storage().instance().remove(&DataKey::Sessions);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W32. Baja los topes de una sesion vigente: cada valor nuevo es menor o igual al actual y
+    /// valido, y `max_total` no queda bajo lo ya gastado (D15). Conserva lo gastado, la regla,
+    /// los compradores y los permisos de `decline`. Aplica ya, tambien con la wallet congelada.
+    pub fn reduce_session(
+        env: Env,
+        id: BytesN<32>,
+        max_per_lock: i128,
+        max_total: i128,
+        max_timeout: u32,
+        expires: u32,
+    ) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        let mut s = live_session(&env, &id)?;
+        if max_per_lock <= 0 || max_per_lock > s.max_per_lock {
+            return Err(WalletError::InvalidSession);
+        }
+        if max_total < max_per_lock || max_total < s.spent || max_total > s.max_total {
+            return Err(WalletError::InvalidSession);
+        }
+        if max_timeout == 0 || max_timeout > s.max_timeout {
+            return Err(WalletError::InvalidSession);
+        }
+        if expires <= env.ledger().sequence() || expires > s.expires {
+            return Err(WalletError::InvalidExpiry);
+        }
+        s.max_per_lock = max_per_lock;
+        s.max_total = max_total;
+        s.max_timeout = max_timeout;
+        s.expires = expires;
+        let mut map = sessions(&env);
+        map.set(id, s);
+        env.storage().instance().set(&DataKey::Sessions, &map);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W33. Agrega un comprador a una sesion vigente, del dueno actual y con la regla del escrow
+    /// sin cambios. No la propia wallet, sin repetir y hasta `MAX_SESSION_LIST`. No con la
+    /// wallet congelada.
+    pub fn add_session_buyer(env: Env, id: BytesN<32>, buyer: Address) -> Result<(), WalletError> {
+        let me = env.current_contract_address();
+        me.require_auth();
+        let mut s = live_session(&env, &id)?;
+        let rule: EscrowRule = env
+            .storage()
+            .instance()
+            .get(&DataKey::Escrow(s.escrow.clone()))
+            .ok_or(WalletError::UnknownEscrow)?;
+        if rule != s.rule {
+            return Err(WalletError::Stale);
+        }
+        if buyer == me || s.buyers.contains(&buyer) || s.buyers.len() >= MAX_SESSION_LIST {
+            return Err(WalletError::InvalidSession);
+        }
+        s.buyers.push_back(buyer);
+        let mut map = sessions(&env);
+        map.set(id, s);
+        env.storage().instance().set(&DataKey::Sessions, &map);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W34. Quita un comprador de una sesion; no el ultimo. Aplica ya, tambien con la wallet
+    /// congelada.
+    pub fn remove_session_buyer(env: Env, id: BytesN<32>, buyer: Address) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        let mut map = sessions(&env);
+        let mut s = map.get(id.clone()).ok_or(WalletError::UnknownSession)?;
+        let i = s.buyers.first_index_of(&buyer).ok_or(WalletError::InvalidSession)?;
+        if s.buyers.len() <= 1 {
+            return Err(WalletError::InvalidSession);
+        }
+        s.buyers.remove(i);
+        map.set(id, s);
+        env.storage().instance().set(&DataKey::Sessions, &map);
+        bump(&env);
+        Ok(())
+    }
+
     /// W20. Permite que la sesion `id` haga `decline` de `trade_id`, una vez. Sin esto una
     /// llave de sesion filtrada podria renunciar a cobros de la wallet.
     pub fn allow_session_decline(env: Env, id: BytesN<32>, trade_id: BytesN<32>) -> Result<(), WalletError> {
@@ -1485,17 +1720,28 @@ impl CustomAccountInterface for SmartWallet {
 /// descongelar (`request_unfreeze`), revocar una sesion (`revoke_session`), cancelar un
 /// upgrade (`cancel_upgrade`) o, con dos credenciales distintas, para cancelar una
 /// recuperacion (`cancel_recovery`, D8): una sola llave robada no veta a los guardianes.
+/// D12 suma lo que solo quita poder: cancelar una subida de limite (`cancel_limit`, W22),
+/// revocar todas las sesiones (`revoke_all_sessions`, W31), bajar los topes de una sesion
+/// (`reduce_session`, W32) y quitarle un comprador (`remove_session_buyer`, W34).
 fn check_frozen(env: &Env, contexts: &Vec<Context>, credentials: u32) -> Result<(), WalletError> {
     let me = env.current_contract_address();
     let request_unfreeze = Symbol::new(env, "request_unfreeze");
     let cancel_recovery = Symbol::new(env, "cancel_recovery");
     let revoke_session = Symbol::new(env, "revoke_session");
     let cancel_upgrade = Symbol::new(env, "cancel_upgrade");
+    let cancel_limit = Symbol::new(env, "cancel_limit");
+    let revoke_all_sessions = Symbol::new(env, "revoke_all_sessions");
+    let reduce_session = Symbol::new(env, "reduce_session");
+    let remove_session_buyer = Symbol::new(env, "remove_session_buyer");
     for ctx in contexts.iter() {
         match ctx {
             Context::Contract(c) if c.contract == me && c.fn_name == request_unfreeze => {}
             Context::Contract(c) if c.contract == me && c.fn_name == revoke_session => {}
             Context::Contract(c) if c.contract == me && c.fn_name == cancel_upgrade => {}
+            Context::Contract(c) if c.contract == me && c.fn_name == cancel_limit => {}
+            Context::Contract(c) if c.contract == me && c.fn_name == revoke_all_sessions => {}
+            Context::Contract(c) if c.contract == me && c.fn_name == reduce_session => {}
+            Context::Contract(c) if c.contract == me && c.fn_name == remove_session_buyer => {}
             Context::Contract(c) if c.contract == me && c.fn_name == cancel_recovery && credentials >= 2 => {}
             _ => return Err(WalletError::Frozen),
         }

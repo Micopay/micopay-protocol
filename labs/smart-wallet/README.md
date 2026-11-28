@@ -1,6 +1,6 @@
-# smart-wallet (W0–W21)
+# smart-wallet (W0–W34)
 
-Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios firmantes y un umbral. **Solo testnet.** No va a producción: la app sigue con la cuenta clásica `G…`. El plan completo está fuera del repo (`PLAN_SMART_WALLET.md`, v0.3); esta carpeta tiene las fases W0–W5 (multifirma), W6–W7 (passkey), W8–W16 (guardianes, recuperación y congelamiento) W17–W19 (límites y escrows registrados) W20 (sesiones) y W21 (upgrade con espera).
+Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios firmantes y un umbral. **Solo testnet.** No va a producción: la app sigue con la cuenta clásica `G…`. El plan completo está fuera del repo (`PLAN_SMART_WALLET.md`, v0.3); esta carpeta tiene las fases W0–W5 (multifirma), W6–W7 (passkey), W8–W16 (guardianes, recuperación y congelamiento) W17–W19 (límites y escrows registrados) W20 (sesiones) y W21 (upgrade con espera). La fase 2 (`PLAN_SMART_WALLET_FASE2.md`, v0.2) suma W22, W23, W25–W28 y W31–W34; W24, W29, W30, W35 y F4 quedan fuera.
 
 `labs/smart-account/` sigue como el spike de un firmante.
 
@@ -13,19 +13,24 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 | W3 | `add_signer(key, weight, possession)` | Agrega un firmante ed25519; el id lo deriva el contrato. La llave nueva tiene que firmar una prueba de posesión, para que el umbral nunca dependa de una llave que nadie tiene | La wallet (umbral vigente) |
 | W4 | `remove_signer(id)` | Quita un firmante (ed25519 o passkey); no quita el último ni deja el umbral inalcanzable | La wallet |
 | W5 | `set_threshold(t)` | Cambia el umbral; `0 < t ≤ suma de pesos` (ed25519 y passkeys) | La wallet |
+| W27 | `set_signer_weight(id, weight)` | Cambia el peso de un firmante (ed25519 o passkey); `weight > 0` y el umbral sigue alcanzable. La firma que lo autoriza cuenta con los pesos de antes. No congelada | La wallet |
+| W28 | `rotate_signer(old_id, new_key, possession)` | Cambia la llave de un firmante ed25519 por otra con el mismo peso; la nueva firma su prueba de posesión. No la misma, otra del dueño ni una llave de sesión (`KeyUsed`). Devuelve el id nuevo. No congelada | La wallet |
 | W6 | `set_webauthn(rp_id_hash, origins)` | Fija el sitio de los passkeys: `rpIdHash` y hasta 5 orígenes permitidos | La wallet |
 | W6 | `add_passkey(key65, credential_id, weight, authenticator_data, client_data_json, sig)` | Agrega un passkey secp256r1. La llave nueva firma una aserción WebAuthn cuyo challenge es la prueba de posesión, como en `add_signer` | La wallet |
 | W7 | Passkey en `__check_auth` | Ver abajo | — |
 | W17 | `set_limit(token, per_period)` | Límite de gasto por periodo (~1 día) de un token. Ponerlo o bajarlo aplica ya; subirlo queda pendiente `DELAY_LEDGERS` | La wallet |
 | W17 | `apply_limit(token)` | Aplica una subida pendiente cuando ya pasó la espera | Cualquiera |
+| W22 | `cancel_limit(token)` | Borra solo la subida pendiente; el límite vigente y lo gastado quedan igual. Aplica ya, también congelada (D12) | La wallet |
 | W18 | `add_escrow(escrow, token, fee_bps_max)` | Registra un escrow con su token y su comisión máxima; queda pendiente `DELAY_LEDGERS` | La wallet |
 | W18 | `apply_escrow(escrow)` | Aplica un registro pendiente cuando ya pasó la espera | Cualquiera |
+| W23 | `cancel_escrow(escrow)` | Borra solo el registro pendiente; la regla vigente, sus sesiones y lo que llevan gastado quedan igual. No congelada: un pendiente puede bajar la comisión | La wallet |
 | W18 | `remove_escrow(escrow)` | Quita un escrow registrado o pendiente y revoca sus sesiones; aplica ya | La wallet |
 | W8 | `add_guardian(g)` | Pide agregar un guardián (`G…` o `C…`, no la propia wallet); queda pendiente `DELAY_LEDGERS`. Tope de 10 | La wallet |
 | W8 | `apply_guardian_add(g)` | Aplica el alta pasada la espera; con el primer guardián el quorum pasa a 1 | Cualquiera |
 | W8 | `remove_guardian(g)` | Pide quitar un guardián; queda pendiente `DELAY_LEDGERS` | La wallet |
 | W8 | `apply_guardian_removal(g)` | Aplica la baja; si el quorum queda mayor que los guardianes, baja a ese número | Cualquiera |
-| W9 | `set_guardian_threshold(t)` | Quorum de guardianes: `1 ≤ t ≤ guardianes` (0 sin guardianes). Aplica ya | La wallet |
+| W25 | `cancel_guardian_removal(g)` | Borra la baja pendiente. No congelada (D10) | La wallet |
+| W9 | `set_guardian_threshold(t)` | Quorum de guardianes: `1 ≤ t ≤ guardianes` (0 sin guardianes). Aplica ya. No con una recuperación en curso (`RecoveryActive`) | La wallet |
 | W10 | `start_recovery(guardians, new_key, possession, expires)` | Abre una propuesta para reemplazar todos los firmantes por `new_key` (con prueba de posesión). Una a la vez; una vigente solo la sustituye el quorum | Uno o más guardianes |
 | W11 | `approve_recovery(guardian, id)` | Vota. Al llegar al quorum empieza la espera `RECOVERY_DELAY`; los votos de después no la mueven | Un guardián |
 | W12 | `cancel_recovery()` | El veto del dueño. Con la wallet congelada pide dos credenciales distintas (D8, propuesta) | La wallet |
@@ -34,11 +39,16 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 | W15 | `freeze(guardians)` | Congela `FREEZE_MAX`: el dueño no mueve fondos ni cambia nada | Uno o más guardianes |
 | W16 | `request_unfreeze()` / `unfreeze()` | El dueño pide descongelar y, pasada `UNFREEZE_DELAY`, cualquiera lo aplica. No con una recuperación en curso | La wallet / cualquiera |
 | W16 | `guardian_unfreeze(guardians)` | Descongela al instante | El quorum de guardianes |
+| W26 | `cancel_unfreeze(guardian)` | Borra la solicitud de descongelar del dueño. Solo congelada y con solicitud; el congelamiento, su enfriamiento y la recuperación quedan igual (D11) | Un guardián activo |
 | W19 | Reglas dentro de `__check_auth` | Ver abajo | — |
 | W20 | `add_session(key, escrow, buyers, max_per_lock, max_total, max_timeout, expires)` | Llave temporal para un escrow registrado: `lock` hacia compradores de la lista con tope por `lock` y acumulado (contando la comisión), `release`, y `decline` solo con permiso. Hasta 5 sesiones y 7 días. Aplica ya | La wallet |
 | W20 | `revoke_session(id)` | Revoca; aplica ya, también congelada | La wallet |
 | W20 | `allow_session_decline(id, trade_id)` | Permite a la sesión un `decline` de ese trade, una vez | La wallet |
 | W20 | `disallow_session_decline(id, trade_id)` | Retira ese permiso | La wallet |
+| W31 | `revoke_all_sessions()` | Revoca todas las sesiones; aplica ya, también congelada | La wallet |
+| W32 | `reduce_session(id, max_per_lock, max_total, max_timeout, expires)` | Baja los topes de una sesión vigente: cada valor ≤ el actual y válido, y `max_total` no bajo lo gastado (D15). Conserva lo gastado, la regla, los compradores y los `decline`. También congelada | La wallet |
+| W33 | `add_session_buyer(id, buyer)` | Agrega un comprador a una sesión vigente con la regla del escrow sin cambios. No la wallet, sin repetir, hasta 10. No congelada | La wallet |
+| W34 | `remove_session_buyer(id, buyer)` | Quita un comprador; no el último. También congelada | La wallet |
 | W21 | `schedule_upgrade(hash)` | Programa un upgrade al WASM con ese hash; espera `UPGRADE_DELAY` (240 ledgers, ~20 min) | La wallet |
 | W21 | `cancel_upgrade()` | Cancela; aplica ya, también congelada | La wallet |
 | W21 | `apply_upgrade(hash)` | Aplica con el hash exacto, pasada la espera. No congelada, no con una recuperación en curso, no si lo programó el dueño anterior a una recuperación | Cualquiera |
@@ -50,6 +60,8 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 - La firma (`Signature`) es una lista de pruebas `Proof::Ed25519(Ed25519Proof { id, sig })`.
 - Prueba de posesión de una llave nueva: firma `sha256("micopay-labs-wallet-v1" ‖ XDR de la wallet ‖ "add-signer" ‖ id)`.
 - Tope de 10 firmantes y de 10 pruebas por firma. Aritmética con `checked_add`.
+- Una llave de sesión no puede ser del dueño ni al revés: `add_signer` y `rotate_signer` (W28) rechazan una llave que ya es de una sesión, y `add_session` una del dueño.
+- `set_signer_weight` (W27) y `rotate_signer` (W28) piden la firma de la wallet con los pesos vigentes: una llave de peso 1 bajo umbral 2 no sube su propio peso sola.
 
 **Passkey (W6–W7):**
 - Id: `sha256(0x01 ‖ llave de 65 bytes)`; la llave tiene que empezar en `0x04`.
@@ -74,10 +86,12 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 - Un guardián firma con su propia cuenta (`require_auth`); no hay llaves de guardianes dentro de la wallet. Las funciones de guardianes reciben la lista de quienes firman y rechazan repetidos o ajenos.
 - Agregar o quitar un guardián espera `DELAY_LEDGERS`, y no se aplica con la wallet congelada ni con una recuperación en curso. Así quien roba el teléfono no mete un guardián suyo al instante ni saca a los honestos.
 - Congelar: un guardián solo congela `FREEZE_MAX` (360 ledgers, ~30 min) y después nadie sin quorum vuelve a congelar hasta `fin + FREEZE_WINDOW − FREEZE_MAX`: como mucho `FREEZE_MAX` por ventana de `FREEZE_WINDOW` (1 440, ~2 h). El enfriamiento es de la wallet, no de cada guardián. El quorum (y al menos dos guardianes, aunque el quorum sea 1) prolonga sin enfriamiento.
-- Congelada, la wallet solo autoriza llamadas a sí misma para `request_unfreeze`, o `cancel_recovery` con dos credenciales distintas. Las funciones `apply_*` también la respetan.
+- Congelada, la wallet solo autoriza llamadas a sí misma para `request_unfreeze`, `revoke_session`, `cancel_upgrade`, `cancel_limit` (W22), `revoke_all_sessions` (W31), `reduce_session` (W32), `remove_session_buyer` (W34), o `cancel_recovery` con dos credenciales distintas. Si la autorización trae cualquier otro contexto junto a estos, se rechaza entera (`Frozen`). Las funciones `apply_*` también la respetan.
+- Un guardián activo puede borrar la solicitud de descongelar del dueño (`cancel_unfreeze`, W26). Un guardián malicioso molesta como mucho hasta que vence el congelamiento: `unfreeze` sin congelamiento vigente pasa siempre.
 - Con una recuperación en curso el dueño no descongela: si no, quien tiene el teléfono descongelaría antes de que la recuperación esté lista (`UNFREEZE_DELAY` < `RECOVERY_DELAY`) y la cancelaría con una sola llave.
 - Sin congelar, el dueño cancela una recuperación con una sola llave. Ese es el veto ante guardianes que se ponen de acuerdo para robar; por eso los guardianes congelan primero y luego abren la recuperación. Si el congelamiento vence antes de terminar, el ladrón puede cancelar: `FREEZE_MAX` (360) es mayor que `RECOVERY_DELAY` (240), pero hay que juntar el quorum a tiempo.
 - La espera empieza cuando la propuesta llega al quorum, no al abrirla. Cambiar guardianes o el quorum anula la propuesta (`Stale`).
+- Con una recuperación en curso no se cambia el quorum: `set_guardian_threshold` falla con `RecoveryActive`, aunque sea el mismo valor, igual que `apply_guardian_add` y `apply_guardian_removal`. Antes subía la época de guardianes y anulaba la recuperación vigente.
 - `finish_recovery` sube la época del dueño: lo pendiente del dueño anterior (subidas de límite, escrows, altas y bajas de guardianes) queda `Stale`. Se conservan el gasto del periodo, los escrows ya registrados y los guardianes vigentes.
 - Los plazos son cortos y fijos para probarlos en testnet; el plan propone días y la decisión D5 sigue abierta.
 
@@ -93,7 +107,7 @@ Sin admin ni llave de MicoPay. Un relayer `G…` manda y paga las transacciones;
 ## Pruebas
 
 ```bash
-cargo test                 # 144 pruebas con firmas ed25519 y P-256 reales
+cargo test                 # 192 pruebas con firmas ed25519 y P-256 reales
 stellar contract build
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk> --vector   # vector compartido Rust/JS
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet
@@ -107,11 +121,12 @@ node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet
 - `w2_vector_compartido_rust_js` fija los bytes del mensaje firmado; la demo calcula los mismos en JS.
 - `atk_*` son los ataques de la revisión de W8–W16 (descongelar antes de la recuperación, guardián del ladrón, congelar sin fin con quorum 1); todos fallan.
 - Regresión inyectada en W8–W16: quitar el bloqueo del congelamiento, la regla de dos credenciales, el enfriamiento, la época de guardianes, la espera de la baja, de descongelar o de la recuperación, o la época del dueño hace fallar al menos una prueba en cada caso.
+- Regresión inyectada en la fase 2: que `cancel_limit` o `cancel_escrow` borren también lo vigente, sacar `cancel_limit` o `revoke_all_sessions` de `check_frozen`, quitar `no_live_recovery` de `set_guardian_threshold`, el `require_auth` de `cancel_guardian_removal`, el control del umbral en `set_signer_weight`, el control de llave de sesión en `rotate_signer` o en `add_signer`, el de lo gastado en `reduce_session`, el de la regla en `add_session_buyer` o el del último comprador en `remove_session_buyer`, o que `cancel_unfreeze` descongele, hace fallar al menos una prueba en cada caso.
 - Regresión inyectada: quitar a mano el umbral, el control de duplicados, el `require_auth`, la dirección del mensaje o el control de `remove_signer` hace fallar al menos una prueba en cada caso.
 
 ## Funciones en testnet
 
-Cada función que escribe estado tiene al menos una transacción exitosa en testnet y sus pruebas en `src/test.rs`. La demo de cada fila está en las secciones de abajo. Las corridas de `demo-resto.mjs` y `demo-passkey.mjs` usan el WASM vigente (`feee1519…`); las demás, versiones anteriores del mismo contrato.
+Cada función que escribe estado tiene al menos una transacción exitosa en testnet y sus pruebas en `src/test.rs`. La demo de cada fila está en las secciones de abajo. Las filas 38–47 son de la fase 2 (`demo-fase2.mjs`, WASM `5e93f00d…`, wallet `CDB7ZS6J…`). Las corridas de `demo-resto.mjs` y `demo-passkey.mjs` usan el WASM `feee1519…`; las demás, versiones anteriores del mismo contrato.
 
 | # | Función | Demo | Transacción |
 |---|---|---|---|
@@ -152,6 +167,16 @@ Cada función que escribe estado tiene al menos una transacción exitosa en test
 | 35 | `__check_auth (passkey)` | demo-passkey | [9dd015d5…](https://stellar.expert/explorer/testnet/tx/9dd015d50cd978fd47655dfc6a8306b45ec52aa367ce34046f4d0b645c6d290f) |
 | 36 | `fábrica: __constructor` | demo-sesiones | [ac4e1e04…](https://stellar.expert/explorer/testnet/tx/ac4e1e04f20ec65458e2fc5da722d9fe8f07bbe65d8971593955f58d65aea1df) |
 | 37 | `fábrica: create_account` | demo-sesiones | [4961f98b…](https://stellar.expert/explorer/testnet/tx/4961f98b3b8f02cc23b294f099c594f6f4f0aa4dd9a192d1c2500295c44ed5d9) |
+| 38 | `cancel_limit` | demo-fase2 | [3e0e608f…](https://stellar.expert/explorer/testnet/tx/3e0e608f54521d9cd16c847a12a9ed68258183304d6e3ded88426ab3ac9b94a5) |
+| 39 | `cancel_escrow` | demo-fase2 | [01b530bc…](https://stellar.expert/explorer/testnet/tx/01b530bc2d09981afe276492b37f7dd1bd9665568b78f890700a258c1aaab307) |
+| 40 | `cancel_guardian_removal` | demo-fase2 | [8b5acefa…](https://stellar.expert/explorer/testnet/tx/8b5acefa19e1ee158edfc9f09438b74b950b410e265cf5c32222e34f7c9c8307) |
+| 41 | `cancel_unfreeze` | demo-fase2 | [3b456f4e…](https://stellar.expert/explorer/testnet/tx/3b456f4e6c2786c8ce26fd03bdd9f1b8fd684c07c08657cd2d2f03ce22702c20) |
+| 42 | `set_signer_weight` | demo-fase2 | [a8a16bc7…](https://stellar.expert/explorer/testnet/tx/a8a16bc7b70a414012cfc4c1bdb7a1ae35d6e36faccbc0e2c790d681cfaa541e) |
+| 43 | `rotate_signer` | demo-fase2 | [d9ab9666…](https://stellar.expert/explorer/testnet/tx/d9ab9666df51a27bc9714bf46bfe0506b71a7b4782e2790aa773bb78ffb7801f) |
+| 44 | `revoke_all_sessions` | demo-fase2 | [28520b74…](https://stellar.expert/explorer/testnet/tx/28520b7449952e33452908c5f0c5025059efeb4216256790e0e0779cd8f1d979) |
+| 45 | `reduce_session` | demo-fase2 | [a7881be6…](https://stellar.expert/explorer/testnet/tx/a7881be6eef03ed8c280c30a429fa1c5b79072741ac879a23c84e5cb5722d0f6) |
+| 46 | `add_session_buyer` | demo-fase2 | [ff99b2ae…](https://stellar.expert/explorer/testnet/tx/ff99b2aeb5503af40b8426f722426123c81bae83a2eb6629b2c0b423a2b9abc5) |
+| 47 | `remove_session_buyer` | demo-fase2 | [a28c89b3…](https://stellar.expert/explorer/testnet/tx/a28c89b36b1350e7cefea9e9c3c19fe3705bf4879fe6a43bcc232d1ec45670fe) |
 
 ## Demo en testnet
 
