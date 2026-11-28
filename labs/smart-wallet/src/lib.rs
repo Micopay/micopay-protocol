@@ -52,6 +52,8 @@ enum DataKey {
     Limit(Address),
     PendingLimit(Address),
     Spent(Address),
+    Escrow(Address),
+    PendingEscrow(Address),
 }
 
 /// Subida de limite pendiente: el valor nuevo y desde que ledger se puede aplicar.
@@ -68,6 +70,21 @@ pub struct PendingLimit {
 pub struct Spent {
     pub period_start: u32,
     pub amount: i128,
+}
+
+/// Escrow registrado: con que token opera y la comision maxima en puntos base.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowRule {
+    pub token: Address,
+    pub fee_bps_max: u32,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingEscrow {
+    pub rule: EscrowRule,
+    pub ready_ledger: u32,
 }
 
 #[contracttype]
@@ -111,6 +128,8 @@ pub enum WalletError {
     InvalidLimit = 14,
     NothingPending = 16,
     NotReady = 17,
+    InvalidFee = 21,
+    UnknownEscrow = 22,
 }
 
 /// Id de un firmante ed25519: `sha256(0x00 ‖ pubkey)`.
@@ -297,6 +316,50 @@ impl SmartWallet {
         Ok(())
     }
 
+    /// W18. Registra un escrow con su token y su comision maxima. Queda pendiente
+    /// `DELAY_LEDGERS` y lo aplica `apply_escrow`.
+    pub fn add_escrow(env: Env, escrow: Address, token: Address, fee_bps_max: u32) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        if fee_bps_max > 10_000 {
+            return Err(WalletError::InvalidFee);
+        }
+        let ready_ledger = ready_at(&env)?;
+        let rule = EscrowRule { token, fee_bps_max };
+        env.storage()
+            .instance()
+            .set(&DataKey::PendingEscrow(escrow), &PendingEscrow { rule, ready_ledger });
+        bump(&env);
+        Ok(())
+    }
+
+    /// W18. Aplica un registro de escrow pendiente, ya cumplida la espera. Cualquiera.
+    pub fn apply_escrow(env: Env, escrow: Address) -> Result<(), WalletError> {
+        let st = env.storage().instance();
+        let p: PendingEscrow = st
+            .get(&DataKey::PendingEscrow(escrow.clone()))
+            .ok_or(WalletError::NothingPending)?;
+        if env.ledger().sequence() < p.ready_ledger {
+            return Err(WalletError::NotReady);
+        }
+        st.set(&DataKey::Escrow(escrow.clone()), &p.rule);
+        st.remove(&DataKey::PendingEscrow(escrow));
+        bump(&env);
+        Ok(())
+    }
+
+    /// W18. Quita un escrow registrado y su registro pendiente. Aplica ya.
+    pub fn remove_escrow(env: Env, escrow: Address) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        let st = env.storage().instance();
+        if !st.has(&DataKey::Escrow(escrow.clone())) && !st.has(&DataKey::PendingEscrow(escrow.clone())) {
+            return Err(WalletError::UnknownEscrow);
+        }
+        st.remove(&DataKey::Escrow(escrow.clone()));
+        st.remove(&DataKey::PendingEscrow(escrow));
+        bump(&env);
+        Ok(())
+    }
+
     /// Lectura: limite vigente de un token (`None` = sin limite).
     pub fn limit(env: Env, token: Address) -> Option<i128> {
         env.storage().instance().get(&DataKey::Limit(token))
@@ -309,6 +372,11 @@ impl SmartWallet {
             Some(s) if env.ledger().sequence() < s.period_start.saturating_add(PERIOD_LEDGERS) => s.amount,
             _ => 0,
         }
+    }
+
+    /// Lectura: regla de un escrow registrado.
+    pub fn escrow(env: Env, escrow: Address) -> Option<EscrowRule> {
+        env.storage().instance().get(&DataKey::Escrow(escrow))
     }
 
     /// Lectura: firmantes por id.

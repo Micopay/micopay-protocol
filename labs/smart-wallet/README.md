@@ -15,7 +15,10 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 | W5 | `set_threshold(t)` | Cambia el umbral; `0 < t ≤ suma de pesos` | La wallet |
 | W17 | `set_limit(token, per_period)` | Límite de gasto por periodo (~1 día) de un token. Ponerlo o bajarlo aplica ya; subirlo queda pendiente `DELAY_LEDGERS` | La wallet |
 | W17 | `apply_limit(token)` | Aplica una subida pendiente cuando ya pasó la espera | Cualquiera |
-| — | `signers()`, `threshold()`, `limit(token)`, `spent(token)` | Lecturas | Cualquiera |
+| W18 | `add_escrow(escrow, token, fee_bps_max)` | Registra un escrow con su token y su comisión máxima; queda pendiente `DELAY_LEDGERS` | La wallet |
+| W18 | `apply_escrow(escrow)` | Aplica un registro pendiente cuando ya pasó la espera | Cualquiera |
+| W18 | `remove_escrow(escrow)` | Quita un escrow registrado o pendiente; aplica ya | La wallet |
+| — | `signers()`, `threshold()`, `limit(token)`, `spent(token)`, `escrow(escrow)` | Lecturas | Cualquiera |
 
 Las reglas que hacen cumplir los límites y los escrows dentro de `__check_auth` llegan con W19 (último PR de la fase).
 
@@ -31,7 +34,7 @@ Sin admin ni llave de MicoPay. Un relayer `G…` manda y paga las transacciones;
 ## Pruebas
 
 ```bash
-cargo test                 # 36 pruebas con firmas ed25519 reales
+cargo test                 # 40 pruebas con firmas ed25519 reales
 stellar contract build
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk> --vector   # vector compartido Rust/JS
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet

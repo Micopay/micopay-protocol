@@ -548,3 +548,55 @@ fn w17_sin_firma_de_la_wallet_falla() {
     assert_eq!(c.try_set_limit(&token, &100).err(), Some(Err(auth_error())));
     assert_eq!(c.limit(&token), None);
 }
+
+// ---------- W18: escrows registrados ----------
+
+#[test]
+fn w18_registrar_espera_y_quitar_aplica_ya() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let (escrow, token) = (Address::generate(&env), Address::generate(&env));
+    c.add_escrow(&escrow, &token, &100);
+    assert_eq!(c.escrow(&escrow), None);
+    assert_eq!(c.try_apply_escrow(&escrow), Err(Ok(WalletError::NotReady)));
+    advance(&env, DELAY_LEDGERS);
+    env.set_auths(&[]);
+    c.apply_escrow(&escrow);
+    assert_eq!(c.escrow(&escrow), Some(EscrowRule { token, fee_bps_max: 100 }));
+    env.mock_all_auths();
+    c.remove_escrow(&escrow);
+    assert_eq!(c.escrow(&escrow), None);
+    assert_eq!(c.try_remove_escrow(&escrow), Err(Ok(WalletError::UnknownEscrow)));
+}
+
+#[test]
+fn w18_quitar_borra_el_registro_pendiente() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let (escrow, token) = (Address::generate(&env), Address::generate(&env));
+    c.add_escrow(&escrow, &token, &100);
+    c.remove_escrow(&escrow);
+    advance(&env, DELAY_LEDGERS);
+    assert_eq!(c.try_apply_escrow(&escrow), Err(Ok(WalletError::NothingPending)));
+}
+
+#[test]
+fn w18_comision_mayor_a_100_por_ciento_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    assert_eq!(
+        c.try_add_escrow(&Address::generate(&env), &Address::generate(&env), &10_001),
+        Err(Ok(WalletError::InvalidFee))
+    );
+}
+
+#[test]
+fn w18_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    let (_, c) = setup(&env, &key(1));
+    let (escrow, token) = (Address::generate(&env), Address::generate(&env));
+    assert_eq!(c.try_add_escrow(&escrow, &token, &100).err(), Some(Err(auth_error())));
+}
