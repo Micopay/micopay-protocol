@@ -1,52 +1,57 @@
 # 🍄 MicoPay
 
-## Launching on November 27, 2026 (BAF Ship It)
+**Cash in and cash out of Stellar in Mexico, with a Soroban escrow between the
+client and a nearby cash agent.**
 
-By Friday, November 27, we will ship MicoPay working end to end on
-**Stellar Testnet**, on Android and on the web, with the escrow contract
-that is already deployed.
+**Demo:** [app.micopay.com.mx](https://app.micopay.com.mx). To try it, connect
+a Stellar wallet such as Varial. There is also an Android app (APK), not yet
+distributed publicly.
 
-1. **Backend back online.** The AWS stack (RDS database, ECS service and
-   load balancer) running again and serving the app and the web.
-2. **New Android APK.** A release build with every fix below. Users keep
-   their keys on the phone and sign each operation with their fingerprint.
-   The APK and the web share the same backend, so both get the same fixes.
-3. **MicoPay on the web.** The same app in the browser at
-   [app.micopay.com.mx](https://app.micopay.com.mx), for clients and cash
-   providers, signing with your own Stellar wallet. Clients can request cash
-   deposits and withdrawals, and providers can run their operations from a PC.
-   This includes the QA fixes from our web testing: providers can operate the
-   full flow, retries and reloads do not create phantom operations, USDC
-   works, and expired operations are explained and handled.
-4. **Cash protection.** A client who paid in cash and was not confirmed can
-   report it ("I paid and wasn't confirmed"). An open report stops the
-   automatic refund and sends the case to support. An expired deposit waits
-   15 minutes before it is refunded, so the client has time to report.
-5. **Chain reconciliation.** The backend compares its records with the escrow
-   contract and flags any mismatch for review instead of guessing.
-6. **MicoPay wallet on the web.** Connect the MicoPay APK to the web app with
-   a QR code (WalletConnect) and approve each signature on the phone, with
-   your fingerprint. The same connection opens the web app to other Stellar
-   wallets.
-7. **Demo.** A 60–90 second video of a deposit and a withdrawal, from the web
-   and from the APK.
+> **Status:** live on **Stellar mainnet** since November 27, 2026 (BAF Ship It).
+> Escrow contract
+> [`CCM4E3DA…ZP3KO`](https://stellar.expert/explorer/public/contract/CCM4E3DA6QKAQOJYHH5UQ3AFXIUVYDDTBWTPLKAHYJK6ASATVVZZP3KO)
+> locks XLM. The five escrow functions (`lock`, `report_paid`, `release`,
+> `decline`, `refund`) were invoked from the app with real funds:
+> [mainnet validation](./docs/validation/MISION_MAINNET_2026-11-27.md).
 
-**Across the ecosystem.** In parallel, contributors are working on the other
-MicoPay repositories through Drips Wave 11:
-[MicoPay Café](https://github.com/Micopay/micopay-cafe) (payments to coffee
-producers: receipts, payment verification against Stellar, payment history),
-[MicoPay Rentas](https://github.com/Micopay/micopay-rentas) (short-term
-rentals with escrow: pay after check-in, payment links, booking calendar) and
-[MicoPay Issuer OS](https://github.com/Micopay/micopay-issuer-os) (tools for
-third parties that issue an asset: coverage dashboard, operation detail,
-discrepancies panel). Each one also has product-validation issues, where
-contributors test whether people understand the product and see value in it.
+## What it is
+
+A client who wants pesos in cash sells XLM to a cash agent near them (or buys
+XLM by handing over cash). The client's funds sit in the escrow until the agent
+confirms the cash handover, so neither side has to trust the other with the
+digital side of the trade. Keys stay with each user: on the phone, or in the
+user's own Stellar wallet on the web.
+
+## How to use it
+
+**Client (withdraw cash):**
+
+1. Open [app.micopay.com.mx](https://app.micopay.com.mx), create an account and
+   connect your Stellar wallet (for example Varial).
+2. Pick an agent on the map and request a withdrawal in MXN.
+3. Lock your XLM in the escrow (one signature).
+4. Meet the agent and show your QR code.
+
+**Agent (cash provider):**
+
+1. Register as an agent: your location and the amounts you serve.
+2. Accept the request in your inbox.
+3. Scan the client's QR, hand over the cash, and release: the app records the
+   cash delivery on-chain and pays you the XLM.
+4. If you cannot serve the client, tap **"Rechazar y devolver al cliente"** and
+   the XLM goes back at once.
+
+If nobody releases, the client recovers the XLM with **"Recuperar fondos"**
+once the 2-hour lock expires (the backend also refunds expired trades
+automatically).
+
+**Across the ecosystem.** Contributors also work on the other MicoPay
+repositories through Drips:
+[MicoPay Café](https://github.com/Micopay/micopay-cafe),
+[MicoPay Rentas](https://github.com/Micopay/micopay-rentas) and
+[MicoPay Issuer OS](https://github.com/Micopay/micopay-issuer-os).
 
 ---
-
-**A mobile wallet connecting Stellar payments with cash in Mexico.**
-
-> **Status:** Active development. Stellar Testnet; mainnet deployment pending.
 
 MicoPay helps people send and receive digital assets, find nearby cash providers,
 and coordinate cash deposits and withdrawals in Mexican pesos. The app combines
@@ -103,6 +108,8 @@ does not independently verify that cash changed hands.
 MicoPay is under active development. Code being present does not mean a feature
 is enabled in every APK or ready for unrestricted mainnet use.
 
+- **Stellar mainnet:** the web app uses real XLM. Only the XLM escrow is live
+  on mainnet. The mainnet Android APK is not distributed publicly yet.
 - **Stellar Testnet:** used for app testing. Testnet assets are not real funds.
   A Testnet APK can still connect to the shared backend and identity providers;
   this network setting does not isolate every service.
