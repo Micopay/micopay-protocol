@@ -145,3 +145,22 @@ Corrida del 2026-11-27, mismo escrow. Wallet `CCUZJDPZCD22AJTVD6B556BFEJQSOTU64C
 | 7f | `lock` con 2% de comisión: **rechazado** con `#20` (`EscrowLockInvalid`) | — (falla en la simulación) |
 | 7g | Segundo `lock` de 1.01 XLM (2.02 > 2): **rechazado** con `#15` | — (falla en la simulación) |
 | 7h | `set_limit(XLM, 100 XLM)` queda pendiente; el límite sigue en 2 XLM | [392e3b97…](https://stellar.expert/explorer/testnet/tx/392e3b97f362e98829f7b1616a1edcf19c2be85bf40aa842c2815e0b072cbb7e) |
+
+### W20, W21 y F1–F3
+
+Corrida del 2026-11-27 con `scripts/demo-sesiones.mjs`. Fábrica `CANRZQBAECXYRZZSWFMYABYLI5MPAZYOJWOUUHFIBJMIMLQCIB7EOHCN` (WASM `5a2ec709…`), wallet `CD4KCYV26MW3UOSUC52X2JEL7O63UQKUIX7IBNVFP7UHN3MDVJ6MDIOH` (WASM `ee3f6a14…`, sin W6–W7). Los 29 chequeos del script pasan. El script se cortó (la máquina se quedó sin memoria) justo antes de aplicar el upgrade; el paso 7 se terminó a mano con `stellar contract invoke`.
+
+| Paso | Qué pasó | Transacciones |
+|---|---|---|
+| 1 | Subir los dos WASM y crear la fábrica | [8eb487d9…](https://stellar.expert/explorer/testnet/tx/8eb487d9a6a1f57baddb7fa216f1bd59c4c8769cb47a19538796d31fb94d4ecd) · [95570355…](https://stellar.expert/explorer/testnet/tx/95570355e79e58a479f7ace97e1cdb3a9c962a86655ea074d078c770e90ccb25) · [ac4e1e04…](https://stellar.expert/explorer/testnet/tx/ac4e1e04f20ec65458e2fc5da722d9fe8f07bbe65d8971593955f58d65aea1df) |
+| 1 | F3: mandar 10 XLM a la dirección de `address_of` **antes** de crear la wallet | [19e7f571…](https://stellar.expert/explorer/testnet/tx/19e7f571d5d25aeeb4026f6b56ed0ee83f8051e9a0f68fea62e7e04802450a17) |
+| 1 | F2: `create_account` devuelve esa misma dirección y el saldo sigue en 10 XLM | [4961f98b…](https://stellar.expert/explorer/testnet/tx/4961f98b3b8f02cc23b294f099c594f6f4f0aa4dd9a192d1c2500295c44ed5d9) |
+| 2 | `add_escrow` firmado por `a` y `apply_escrow` tras la espera | [8c2c26ad…](https://stellar.expert/explorer/testnet/tx/8c2c26add2a1b8708b59396d8e9fa787a5cb0041edb99d21f0ee74202c1b8770) · [5a59436d…](https://stellar.expert/explorer/testnet/tx/5a59436d2625808c7c91cddd0651b1c7973adeb09c400591b669f1c2709cf0a9) |
+| 3 | W20 `add_session`: 2 XLM por `lock`, 3 XLM en total, un comprador (el agente) | [6467ded3…](https://stellar.expert/explorer/testnet/tx/6467ded34ea4f4f5763c911b5d0910a18274bc48de89462a27cd9c4bb9027431) |
+| 4 | `lock` de 1 XLM + 0.01 firmado **solo por la sesión**; el agente libera; `spent` = 1.01 XLM | [3317992d…](https://stellar.expert/explorer/testnet/tx/3317992dd570e84a429c53f2a7407ccab2f4652f7b2f0a74138187cb98bc87ee) · [6e5487e4…](https://stellar.expert/explorer/testnet/tx/6e5487e47581704fdebcfa1eb58a9158b2d9cb22c2750fcf556cfc78f875adc9) |
+| 5 | Con la sesión: `lock` a otro comprador **rechazado** con `#43`; `lock` de 2.5 XLM **rechazado** con `#44`; `transfer` directo **rechazado** con `#43` | — (fallan en la simulación) |
+| 6 | `revoke_session`; un `lock` con la sesión revocada **rechazado** con `#41` | [55526da5…](https://stellar.expert/explorer/testnet/tx/55526da5edce1ae6b89b827e96feb1f829589e00e8ee0e239a47fc4d65fdddfe) |
+| 7 | W21 `schedule_upgrade`; `apply_upgrade` antes de la espera **rechazado** con `#17` | [6a3de87e…](https://stellar.expert/explorer/testnet/tx/6a3de87e6f31abda579785c195b0baae1d10756016948c47027e6267f6ca37ff) · [e04c3335…](https://stellar.expert/explorer/testnet/tx/e04c333595ef108cd4bf4d7f9e75c7035d14183f7f7fc664285f6c50bd299d96) |
+| 7 | Pasada la espera, el relayer aplica el upgrade; `pending_upgrade()` queda vacío, siguen el firmante `a`, el umbral 1 y el escrow registrado | [c93949f0…](https://stellar.expert/explorer/testnet/tx/c93949f0de017de6444cda1d47cc8b7fb2495048e0be0008f581b4e616c9663e) |
+
+Falta en testnet una transferencia firmada por `a` después del upgrade: la llave de esa corrida no se guardó. La prueba `w21_upgrade_con_espera_conserva_el_estado` lo cubre.
