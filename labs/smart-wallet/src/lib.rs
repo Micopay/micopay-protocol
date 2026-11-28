@@ -46,6 +46,13 @@ pub const PERIOD_LEDGERS: u32 = 17_280;
 pub const MAX_LOCK_TIMEOUT_MINUTES: u32 = 10_080;
 /// Tope de guardianes.
 pub const MAX_GUARDIANS: u32 = 10;
+/// Congelamiento maximo de una vez (~30 min). Los plazos de congelamiento y recuperacion son
+/// cortos para poder probarlos en testnet; el plan propone dias, pero D5 sigue abierta.
+pub const FREEZE_MAX: u32 = 360;
+/// Ventana en la que menos del quorum de guardianes congela como mucho `FREEZE_MAX` (~2 h).
+pub const FREEZE_WINDOW: u32 = 1_440;
+/// Espera para que el dueno descongele por su cuenta (~10 min).
+pub const UNFREEZE_DELAY: u32 = DELAY_LEDGERS;
 
 #[contracttype]
 #[derive(Clone)]
@@ -66,6 +73,17 @@ enum DataKey {
     /// Sube cuando termina una recuperacion: lo pendiente del dueno anterior deja de valer.
     OwnerEpoch,
     PendingGuardianRemoval(Address),
+    Frozen,
+    /// Desde que ledger menos del quorum puede volver a congelar.
+    SoloFreezeAllowedAt,
+    PendingUnfreeze,
+}
+
+/// Congelamiento vigente: hasta que ledger.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Freeze {
+    pub until: u32,
 }
 
 /// Algo pendiente que no lleva valor: desde que ledger se aplica y de que dueno es.
@@ -161,6 +179,11 @@ pub enum WalletError {
     InvalidGuardianThreshold = 27,
     Stale = 28,
     InvalidGuardian = 29,
+    Frozen = 30,
+    NotFrozen = 31,
+    FreezeCooldown = 32,
+    NotEnoughGuardians = 33,
+    DuplicateGuardian = 34,
 }
 
 /// Id de un firmante ed25519: `sha256(0x00 ‖ pubkey)`.
@@ -227,6 +250,54 @@ fn save_guardians(env: &Env, list: &Vec<Address>, threshold: u32) -> Result<(), 
     st.set(&DataKey::GuardianThreshold, &threshold);
     st.set(&DataKey::GuardianEpoch, &epoch.checked_add(1).ok_or(WalletError::Overflow)?);
     Ok(())
+}
+
+/// Verifica que `guardians` sean guardianes distintos y que cada uno firme. Devuelve cuantos son.
+fn guardians_sign(env: &Env, guardians: &Vec<Address>) -> Result<u32, WalletError> {
+    if guardians.is_empty() {
+        return Err(WalletError::NotEnoughGuardians);
+    }
+    let list = guardian_list(env);
+    let mut seen: Vec<Address> = Vec::new(env);
+    for g in guardians.iter() {
+        if !list.contains(&g) {
+            return Err(WalletError::UnknownGuardian);
+        }
+        if seen.contains(&g) {
+            return Err(WalletError::DuplicateGuardian);
+        }
+        g.require_auth();
+        seen.push_back(g);
+    }
+    Ok(seen.len())
+}
+
+/// Como `guardians_sign`, y ademas tienen que llegar al quorum.
+fn guardian_quorum(env: &Env, guardians: &Vec<Address>) -> Result<(), WalletError> {
+    let n = guardians_sign(env, guardians)?;
+    let t = guardian_threshold(env);
+    if t == 0 || n < t {
+        return Err(WalletError::NotEnoughGuardians);
+    }
+    Ok(())
+}
+
+pub(crate) fn is_frozen(env: &Env) -> bool {
+    let f: Option<Freeze> = env.storage().instance().get(&DataKey::Frozen);
+    matches!(f, Some(f) if env.ledger().sequence() < f.until)
+}
+
+fn not_frozen(env: &Env) -> Result<(), WalletError> {
+    if is_frozen(env) {
+        return Err(WalletError::Frozen);
+    }
+    Ok(())
+}
+
+fn clear_freeze(env: &Env) {
+    let st = env.storage().instance();
+    st.remove(&DataKey::Frozen);
+    st.remove(&DataKey::PendingUnfreeze);
 }
 
 fn ready_at(env: &Env) -> Result<u32, WalletError> {
@@ -357,6 +428,7 @@ impl SmartWallet {
     /// puede llamar: solo ejecuta lo que la wallet ya aprobo.
     pub fn apply_limit(env: Env, token: Address) -> Result<(), WalletError> {
         let st = env.storage().instance();
+        not_frozen(&env)?;
         let p: PendingLimit = st
             .get(&DataKey::PendingLimit(token.clone()))
             .ok_or(WalletError::NothingPending)?;
@@ -388,6 +460,7 @@ impl SmartWallet {
     /// W18. Aplica un registro de escrow pendiente, ya cumplida la espera. Cualquiera.
     pub fn apply_escrow(env: Env, escrow: Address) -> Result<(), WalletError> {
         let st = env.storage().instance();
+        not_frozen(&env)?;
         let p: PendingEscrow = st
             .get(&DataKey::PendingEscrow(escrow.clone()))
             .ok_or(WalletError::NothingPending)?;
@@ -453,6 +526,7 @@ impl SmartWallet {
     pub fn apply_guardian_removal(env: Env, guardian: Address) -> Result<(), WalletError> {
         let st = env.storage().instance();
         let key = DataKey::PendingGuardianRemoval(guardian.clone());
+        not_frozen(&env)?;
         let p: Pending = st.get(&key).ok_or(WalletError::NothingPending)?;
         if p.owner_epoch != owner_epoch(&env) {
             st.remove(&key);
@@ -482,6 +556,97 @@ impl SmartWallet {
         save_guardians(&env, &list, threshold)?;
         bump(&env);
         Ok(())
+    }
+
+    /// W15. Congela la wallet hasta `FREEZE_MAX` ledgers: el dueno ya no puede mover fondos
+    /// ni cambiar nada (solo pedir descongelar). Para un telefono robado.
+    ///
+    /// Con el quorum, puede volver a congelar o prolongar. Con menos del quorum (un guardian
+    /// solo), solo si la wallet no esta congelada y paso el enfriamiento: despues de un
+    /// congelamiento asi, nadie sin quorum congela de nuevo hasta `fin + FREEZE_WINDOW - FREEZE_MAX`.
+    /// Asi un guardian solo congela como mucho `FREEZE_MAX` en cualquier ventana de `FREEZE_WINDOW`.
+    pub fn freeze(env: Env, guardians: Vec<Address>) -> Result<u32, WalletError> {
+        let n = guardians_sign(&env, &guardians)?;
+        let t = guardian_threshold(&env);
+        let now = env.ledger().sequence();
+        let until = now.checked_add(FREEZE_MAX).ok_or(WalletError::Overflow)?;
+        let st = env.storage().instance();
+        if t > 0 && n >= t {
+            let current: Option<Freeze> = st.get(&DataKey::Frozen);
+            let until = match current {
+                Some(f) if is_frozen(&env) => f.until.max(until),
+                _ => until,
+            };
+            st.set(&DataKey::Frozen, &Freeze { until });
+            st.remove(&DataKey::PendingUnfreeze);
+            bump(&env);
+            return Ok(until);
+        }
+        if is_frozen(&env) {
+            return Err(WalletError::Frozen);
+        }
+        let allowed: u32 = st.get(&DataKey::SoloFreezeAllowedAt).unwrap_or(0);
+        if now < allowed {
+            return Err(WalletError::FreezeCooldown);
+        }
+        st.set(&DataKey::Frozen, &Freeze { until });
+        st.set(&DataKey::SoloFreezeAllowedAt, &(until + (FREEZE_WINDOW - FREEZE_MAX)));
+        st.remove(&DataKey::PendingUnfreeze);
+        bump(&env);
+        Ok(until)
+    }
+
+    /// W16. El dueno pide descongelar; se aplica con `unfreeze` despues de `UNFREEZE_DELAY`.
+    /// Asi quien tiene el telefono robado no descongela al instante.
+    pub fn request_unfreeze(env: Env) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        if !is_frozen(&env) {
+            return Err(WalletError::NotFrozen);
+        }
+        let ready_ledger = env
+            .ledger()
+            .sequence()
+            .checked_add(UNFREEZE_DELAY)
+            .ok_or(WalletError::Overflow)?;
+        let pending = Pending { ready_ledger, owner_epoch: owner_epoch(&env) };
+        env.storage().instance().set(&DataKey::PendingUnfreeze, &pending);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W16. Descongela si el dueno lo pidio y paso la espera, o si el congelamiento ya vencio.
+    /// Cualquiera.
+    pub fn unfreeze(env: Env) -> Result<(), WalletError> {
+        if is_frozen(&env) {
+            let st = env.storage().instance();
+            let p: Pending = st.get(&DataKey::PendingUnfreeze).ok_or(WalletError::NothingPending)?;
+            if p.owner_epoch != owner_epoch(&env) {
+                st.remove(&DataKey::PendingUnfreeze);
+                return Err(WalletError::Stale);
+            }
+            if env.ledger().sequence() < p.ready_ledger {
+                return Err(WalletError::NotReady);
+            }
+        }
+        clear_freeze(&env);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W16. El quorum de guardianes descongela al instante.
+    pub fn guardian_unfreeze(env: Env, guardians: Vec<Address>) -> Result<(), WalletError> {
+        guardian_quorum(&env, &guardians)?;
+        if !is_frozen(&env) {
+            return Err(WalletError::NotFrozen);
+        }
+        clear_freeze(&env);
+        bump(&env);
+        Ok(())
+    }
+
+    /// Lectura: si la wallet esta congelada.
+    pub fn frozen(env: Env) -> bool {
+        is_frozen(&env)
     }
 
     /// Lectura: guardianes.
@@ -565,10 +730,27 @@ impl CustomAccountInterface for SmartWallet {
         if weight < threshold(&env)? {
             return Err(WalletError::InsufficientWeight);
         }
+        if is_frozen(&env) {
+            check_frozen(&env, &auth_contexts, seen.len())?;
+        }
         check_contexts(&env, &auth_contexts)?;
         bump(&env);
         Ok(())
     }
+}
+
+/// W15. Con la wallet congelada, el dueno solo puede llamar a la propia wallet para pedir
+/// descongelar (`request_unfreeze`).
+fn check_frozen(env: &Env, contexts: &Vec<Context>, _credentials: u32) -> Result<(), WalletError> {
+    let me = env.current_contract_address();
+    let request_unfreeze = Symbol::new(env, "request_unfreeze");
+    for ctx in contexts.iter() {
+        match ctx {
+            Context::Contract(c) if c.contract == me && c.fn_name == request_unfreeze => {}
+            _ => return Err(WalletError::Frozen),
+        }
+    }
+    Ok(())
 }
 
 fn arg<T: TryFromVal<Env, Val>>(env: &Env, args: &Vec<Val>, i: u32) -> Result<T, WalletError> {

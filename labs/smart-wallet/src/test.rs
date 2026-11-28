@@ -1132,3 +1132,173 @@ fn w9_sin_firma_de_la_wallet_falla() {
     assert_eq!(c.try_set_guardian_threshold(&2).err(), Some(Err(auth_error())));
     assert_eq!(c.guardian_threshold(), 1);
 }
+
+// ---------- W15–W16: congelamiento ----------
+
+/// Wallet con `n` guardianes y quorum `t`.
+fn with_guardians<'a>(env: &'a Env, owner: &SigningKey, n: u32, t: u32) -> (Address, SmartWalletClient<'a>, std::vec::Vec<Address>) {
+    env.mock_all_auths();
+    let (w, c) = setup(env, owner);
+    let gs: std::vec::Vec<Address> = (0..n).map(|_| Address::generate(env)).collect();
+    for g in &gs {
+        c.add_guardian(g);
+    }
+    c.set_guardian_threshold(&t);
+    (w, c, gs)
+}
+
+fn gv(env: &Env, gs: &[Address]) -> Vec<Address> {
+    let mut v = Vec::new(env);
+    for g in gs {
+        v.push_back(g.clone());
+    }
+    v
+}
+
+#[test]
+fn w15_congelada_el_dueno_no_mueve_fondos_ni_cambia_nada() {
+    let env = Env::default();
+    let owner = key(1);
+    let (w, c, gs) = with_guardians(&env, &owner, 2, 2);
+    c.freeze(&gv(&env, &gs[..1]));
+    assert!(c.frozen());
+    let token = Address::generate(&env);
+    let to = Address::generate(&env);
+    assert_eq!(
+        check_ctx(&env, &w, &owner, vec![&env, transfer_ctx(&env, &token, &w, &to, 1)]),
+        Err(Ok(WalletError::Frozen))
+    );
+    let add = call(&env, &w, "add_signer", vec![&env]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, add]), Err(Ok(WalletError::Frozen)));
+    // Pedir descongelar si se puede.
+    let req = call(&env, &w, "request_unfreeze", vec![&env]);
+    assert_eq!(check_ctx(&env, &w, &owner, vec![&env, req]), Ok(()));
+}
+
+#[test]
+fn w15_solo_guardianes_de_la_wallet_y_sin_repetir() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 2, 2);
+    assert_eq!(c.try_freeze(&gv(&env, &[Address::generate(&env)])), Err(Ok(WalletError::UnknownGuardian)));
+    assert_eq!(c.try_freeze(&gv(&env, &[gs[0].clone(), gs[0].clone()])), Err(Ok(WalletError::DuplicateGuardian)));
+    assert_eq!(c.try_freeze(&Vec::new(&env)), Err(Ok(WalletError::NotEnoughGuardians)));
+}
+
+#[test]
+fn w15_sin_firma_del_guardian_falla() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 1, 1);
+    env.set_auths(&[]);
+    assert_eq!(c.try_freeze(&gv(&env, &gs)).err(), Some(Err(auth_error())));
+    assert!(!c.frozen());
+}
+
+#[test]
+fn w15_vence_solo() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 2, 2);
+    c.freeze(&gv(&env, &gs[..1]));
+    advance(&env, FREEZE_MAX);
+    assert!(!c.frozen());
+}
+
+#[test]
+fn w15_un_guardian_solo_no_prolonga_el_bloqueo() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 2, 2);
+    c.freeze(&gv(&env, &gs[..1]));
+    // Ni el mismo ni otro guardian sin quorum lo prolonga mientras dura.
+    assert_eq!(c.try_freeze(&gv(&env, &gs[1..])), Err(Ok(WalletError::Frozen)));
+    advance(&env, FREEZE_MAX);
+    // Enfriamiento: hasta fin + FREEZE_WINDOW - FREEZE_MAX.
+    assert_eq!(c.try_freeze(&gv(&env, &gs[1..])), Err(Ok(WalletError::FreezeCooldown)));
+    advance(&env, FREEZE_WINDOW - FREEZE_MAX - 1);
+    assert_eq!(c.try_freeze(&gv(&env, &gs[1..])), Err(Ok(WalletError::FreezeCooldown)));
+    advance(&env, 1);
+    c.freeze(&gv(&env, &gs[1..]));
+    assert!(c.frozen());
+}
+
+#[test]
+fn w15_el_quorum_prolonga() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 2, 2);
+    c.freeze(&gv(&env, &gs[..1]));
+    advance(&env, FREEZE_MAX - 10);
+    c.freeze(&gv(&env, &gs));
+    advance(&env, 20);
+    assert!(c.frozen());
+}
+
+#[test]
+fn w15_congelada_no_se_aplica_lo_pendiente() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 2, 2);
+    let token = Address::generate(&env);
+    let escrow = Address::generate(&env);
+    c.set_limit(&token, &10);
+    c.set_limit(&token, &1_000);
+    c.add_escrow(&escrow, &token, &100);
+    c.remove_guardian(&gs[1]);
+    c.freeze(&gv(&env, &gs[..1]));
+    advance(&env, DELAY_LEDGERS);
+    assert_eq!(c.try_apply_limit(&token), Err(Ok(WalletError::Frozen)));
+    assert_eq!(c.try_apply_escrow(&escrow), Err(Ok(WalletError::Frozen)));
+    assert_eq!(c.try_apply_guardian_removal(&gs[1]), Err(Ok(WalletError::Frozen)));
+    assert_eq!(c.limit(&token), Some(10));
+}
+
+#[test]
+fn w16_el_dueno_descongela_tras_la_espera() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 2, 2);
+    c.freeze(&gv(&env, &gs[..1]));
+    assert_eq!(c.try_unfreeze(), Err(Ok(WalletError::NothingPending)));
+    c.request_unfreeze();
+    assert_eq!(c.try_unfreeze(), Err(Ok(WalletError::NotReady)));
+    advance(&env, UNFREEZE_DELAY);
+    env.set_auths(&[]);
+    c.unfreeze();
+    assert!(!c.frozen());
+}
+
+#[test]
+fn w16_el_quorum_congela_de_nuevo_y_anula_la_solicitud() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 2, 2);
+    c.freeze(&gv(&env, &gs[..1]));
+    c.request_unfreeze();
+    c.freeze(&gv(&env, &gs));
+    advance(&env, UNFREEZE_DELAY);
+    assert_eq!(c.try_unfreeze(), Err(Ok(WalletError::NothingPending)));
+    assert!(c.frozen());
+}
+
+#[test]
+fn w16_quorum_descongela_al_instante_y_menos_no() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 2, 2);
+    c.freeze(&gv(&env, &gs[..1]));
+    assert_eq!(c.try_guardian_unfreeze(&gv(&env, &gs[..1])), Err(Ok(WalletError::NotEnoughGuardians)));
+    c.guardian_unfreeze(&gv(&env, &gs));
+    assert!(!c.frozen());
+    assert_eq!(c.try_guardian_unfreeze(&gv(&env, &gs)), Err(Ok(WalletError::NotFrozen)));
+}
+
+#[test]
+fn w16_pedir_descongelar_sin_congelamiento_falla() {
+    let env = Env::default();
+    let (_, c, _) = with_guardians(&env, &key(1), 1, 1);
+    assert_eq!(c.try_request_unfreeze(), Err(Ok(WalletError::NotFrozen)));
+}
+
+#[test]
+fn w16_vencido_cualquiera_limpia() {
+    let env = Env::default();
+    let (_, c, gs) = with_guardians(&env, &key(1), 1, 1);
+    c.freeze(&gv(&env, &gs));
+    advance(&env, FREEZE_MAX);
+    env.set_auths(&[]);
+    c.unfreeze();
+    assert!(!c.frozen());
+}
