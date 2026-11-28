@@ -53,6 +53,14 @@ pub const FREEZE_MAX: u32 = 360;
 pub const FREEZE_WINDOW: u32 = 1_440;
 /// Espera para que el dueno descongele por su cuenta (~10 min).
 pub const UNFREEZE_DELAY: u32 = DELAY_LEDGERS;
+/// Espera de una recuperacion, contada desde que se llega al quorum (~20 min).
+pub const RECOVERY_DELAY: u32 = 240;
+/// Margen minimo entre el fin de la espera y la caducidad de una propuesta (~10 min).
+pub const RECOVERY_MARGIN: u32 = DELAY_LEDGERS;
+/// Caducidad maxima de una propuesta de recuperacion (~4 h).
+pub const RECOVERY_MAX_TTL: u32 = 2_880;
+/// Etiqueta del id de una propuesta de recuperacion.
+const RECOVERY_TAG: &[u8] = b"recovery";
 
 #[contracttype]
 #[derive(Clone)]
@@ -73,10 +81,27 @@ enum DataKey {
     /// Sube cuando termina una recuperacion: lo pendiente del dueno anterior deja de valer.
     OwnerEpoch,
     PendingGuardianRemoval(Address),
+    PendingGuardianAdd(Address),
     Frozen,
     /// Desde que ledger menos del quorum puede volver a congelar.
     SoloFreezeAllowedAt,
     PendingUnfreeze,
+    Recovery,
+    RecoveryNonce,
+}
+
+/// Propuesta de recuperacion: reemplazar todos los firmantes por `new_key`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Recovery {
+    pub id: BytesN<32>,
+    pub new_key: BytesN<32>,
+    /// Epoca de guardianes en que se abrio: si cambian los guardianes o el quorum, no vale.
+    pub guardian_epoch: u32,
+    pub votes: Vec<Address>,
+    pub expires: u32,
+    /// Ledger desde el que se puede terminar; 0 mientras no llegue al quorum.
+    pub ready_ledger: u32,
 }
 
 /// Congelamiento vigente: hasta que ledger.
@@ -100,6 +125,7 @@ pub struct Pending {
 pub struct PendingLimit {
     pub per_period: i128,
     pub ready_ledger: u32,
+    pub owner_epoch: u32,
 }
 
 /// Gasto del periodo en curso de un token.
@@ -123,6 +149,7 @@ pub struct EscrowRule {
 pub struct PendingEscrow {
     pub rule: EscrowRule,
     pub ready_ledger: u32,
+    pub owner_epoch: u32,
 }
 
 #[contracttype]
@@ -184,6 +211,11 @@ pub enum WalletError {
     FreezeCooldown = 32,
     NotEnoughGuardians = 33,
     DuplicateGuardian = 34,
+    RecoveryActive = 35,
+    InvalidExpiry = 36,
+    UnknownProposal = 37,
+    ProposalExpired = 38,
+    AlreadyVoted = 39,
 }
 
 /// Id de un firmante ed25519: `sha256(0x00 ‖ pubkey)`.
@@ -282,6 +314,19 @@ fn guardian_quorum(env: &Env, guardians: &Vec<Address>) -> Result<(), WalletErro
     Ok(())
 }
 
+/// Hay una propuesta de recuperacion vigente (no vencio y es de la epoca actual).
+fn recovery_live(env: &Env) -> bool {
+    let r: Option<Recovery> = env.storage().instance().get(&DataKey::Recovery);
+    matches!(r, Some(r) if env.ledger().sequence() < r.expires && r.guardian_epoch == guardian_epoch(env))
+}
+
+fn no_live_recovery(env: &Env) -> Result<(), WalletError> {
+    if recovery_live(env) {
+        return Err(WalletError::RecoveryActive);
+    }
+    Ok(())
+}
+
 pub(crate) fn is_frozen(env: &Env) -> bool {
     let f: Option<Freeze> = env.storage().instance().get(&DataKey::Frozen);
     matches!(f, Some(f) if env.ledger().sequence() < f.until)
@@ -298,6 +343,29 @@ fn clear_freeze(env: &Env) {
     let st = env.storage().instance();
     st.remove(&DataKey::Frozen);
     st.remove(&DataKey::PendingUnfreeze);
+}
+
+fn guardian_epoch(env: &Env) -> u32 {
+    env.storage().instance().get(&DataKey::GuardianEpoch).unwrap_or(0)
+}
+
+/// La propuesta vigente con ese id: existe, no vencio y es de la epoca de guardianes actual.
+fn live_recovery(env: &Env, id: &BytesN<32>) -> Result<Recovery, WalletError> {
+    let r: Recovery = env
+        .storage()
+        .instance()
+        .get(&DataKey::Recovery)
+        .ok_or(WalletError::UnknownProposal)?;
+    if r.id != *id {
+        return Err(WalletError::UnknownProposal);
+    }
+    if env.ledger().sequence() >= r.expires {
+        return Err(WalletError::ProposalExpired);
+    }
+    if r.guardian_epoch != guardian_epoch(env) {
+        return Err(WalletError::Stale);
+    }
+    Ok(r)
 }
 
 fn ready_at(env: &Env) -> Result<u32, WalletError> {
@@ -411,7 +479,7 @@ impl SmartWallet {
         let applied = match current {
             Some(c) if per_period > c => {
                 let ready_ledger = ready_at(&env)?;
-                st.set(&DataKey::PendingLimit(token), &PendingLimit { per_period, ready_ledger });
+                st.set(&DataKey::PendingLimit(token), &PendingLimit { per_period, ready_ledger, owner_epoch: owner_epoch(&env) });
                 false
             }
             _ => {
@@ -432,6 +500,9 @@ impl SmartWallet {
         let p: PendingLimit = st
             .get(&DataKey::PendingLimit(token.clone()))
             .ok_or(WalletError::NothingPending)?;
+        if p.owner_epoch != owner_epoch(&env) {
+            return Err(WalletError::Stale);
+        }
         if env.ledger().sequence() < p.ready_ledger {
             return Err(WalletError::NotReady);
         }
@@ -452,7 +523,7 @@ impl SmartWallet {
         let rule = EscrowRule { token, fee_bps_max };
         env.storage()
             .instance()
-            .set(&DataKey::PendingEscrow(escrow), &PendingEscrow { rule, ready_ledger });
+            .set(&DataKey::PendingEscrow(escrow), &PendingEscrow { rule, ready_ledger, owner_epoch: owner_epoch(&env) });
         bump(&env);
         Ok(())
     }
@@ -464,6 +535,9 @@ impl SmartWallet {
         let p: PendingEscrow = st
             .get(&DataKey::PendingEscrow(escrow.clone()))
             .ok_or(WalletError::NothingPending)?;
+        if p.owner_epoch != owner_epoch(&env) {
+            return Err(WalletError::Stale);
+        }
         if env.ledger().sequence() < p.ready_ledger {
             return Err(WalletError::NotReady);
         }
@@ -486,13 +560,42 @@ impl SmartWallet {
         Ok(())
     }
 
-    /// W8. Agrega un guardian (una cuenta `G…` o `C…` que firma por su cuenta). Aplica ya:
-    /// agregar no le quita nada al dueno. Con el primer guardian el quorum pasa a 1.
+    /// W8. Pide agregar un guardian (una cuenta `G…` o `C…` que firma por su cuenta). Queda
+    /// pendiente `DELAY_LEDGERS` y lo aplica `apply_guardian_add`: si agregar aplicara ya, quien
+    /// robo el telefono meteria un guardian suyo que descongela y recupera la wallet para el.
     pub fn add_guardian(env: Env, guardian: Address) -> Result<(), WalletError> {
         let me = env.current_contract_address();
         me.require_auth();
         if guardian == me {
             return Err(WalletError::InvalidGuardian);
+        }
+        let list = guardian_list(&env);
+        if list.contains(&guardian) {
+            return Err(WalletError::GuardianExists);
+        }
+        if list.len() >= MAX_GUARDIANS {
+            return Err(WalletError::TooManyGuardians);
+        }
+        let pending = Pending { ready_ledger: ready_at(&env)?, owner_epoch: owner_epoch(&env) };
+        env.storage().instance().set(&DataKey::PendingGuardianAdd(guardian), &pending);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W8. Aplica un alta de guardian pendiente, ya cumplida la espera. Cualquiera. No con la
+    /// wallet congelada ni con una recuperacion en curso (cambiar guardianes anularia sus votos).
+    /// Con el primer guardian el quorum pasa a 1.
+    pub fn apply_guardian_add(env: Env, guardian: Address) -> Result<(), WalletError> {
+        not_frozen(&env)?;
+        no_live_recovery(&env)?;
+        let st = env.storage().instance();
+        let key = DataKey::PendingGuardianAdd(guardian.clone());
+        let p: Pending = st.get(&key).ok_or(WalletError::NothingPending)?;
+        if p.owner_epoch != owner_epoch(&env) {
+            return Err(WalletError::Stale);
+        }
+        if env.ledger().sequence() < p.ready_ledger {
+            return Err(WalletError::NotReady);
         }
         let mut list = guardian_list(&env);
         if list.contains(&guardian) {
@@ -504,6 +607,7 @@ impl SmartWallet {
         list.push_back(guardian);
         let t = guardian_threshold(&env).max(1);
         save_guardians(&env, &list, t)?;
+        st.remove(&key);
         bump(&env);
         Ok(())
     }
@@ -521,15 +625,16 @@ impl SmartWallet {
         Ok(())
     }
 
-    /// W8. Aplica una baja de guardian pendiente, ya cumplida la espera. Cualquiera. Si el
-    /// quorum queda mayor que los guardianes que quedan, baja a ese numero.
+    /// W8. Aplica una baja de guardian pendiente, ya cumplida la espera. Cualquiera. No con la
+    /// wallet congelada ni con una recuperacion en curso. Si el quorum queda mayor que los
+    /// guardianes que quedan, baja a ese numero.
     pub fn apply_guardian_removal(env: Env, guardian: Address) -> Result<(), WalletError> {
         let st = env.storage().instance();
         let key = DataKey::PendingGuardianRemoval(guardian.clone());
         not_frozen(&env)?;
+        no_live_recovery(&env)?;
         let p: Pending = st.get(&key).ok_or(WalletError::NothingPending)?;
         if p.owner_epoch != owner_epoch(&env) {
-            st.remove(&key);
             return Err(WalletError::Stale);
         }
         if env.ledger().sequence() < p.ready_ledger {
@@ -561,17 +666,18 @@ impl SmartWallet {
     /// W15. Congela la wallet hasta `FREEZE_MAX` ledgers: el dueno ya no puede mover fondos
     /// ni cambiar nada (solo pedir descongelar). Para un telefono robado.
     ///
-    /// Con el quorum, puede volver a congelar o prolongar. Con menos del quorum (un guardian
-    /// solo), solo si la wallet no esta congelada y paso el enfriamiento: despues de un
-    /// congelamiento asi, nadie sin quorum congela de nuevo hasta `fin + FREEZE_WINDOW - FREEZE_MAX`.
-    /// Asi un guardian solo congela como mucho `FREEZE_MAX` en cualquier ventana de `FREEZE_WINDOW`.
+    /// Con el quorum (y al menos dos guardianes), puede volver a congelar o prolongar. Con menos
+    /// (un guardian solo, aunque el quorum sea 1), solo si la wallet no esta congelada y paso el
+    /// enfriamiento: despues de un congelamiento asi, nadie sin ese quorum congela de nuevo hasta
+    /// `fin + FREEZE_WINDOW - FREEZE_MAX`. Asi un guardian solo congela como mucho `FREEZE_MAX` en
+    /// cualquier ventana de `FREEZE_WINDOW`. El enfriamiento es de la wallet, no de cada guardian.
     pub fn freeze(env: Env, guardians: Vec<Address>) -> Result<u32, WalletError> {
         let n = guardians_sign(&env, &guardians)?;
         let t = guardian_threshold(&env);
         let now = env.ledger().sequence();
         let until = now.checked_add(FREEZE_MAX).ok_or(WalletError::Overflow)?;
         let st = env.storage().instance();
-        if t > 0 && n >= t {
+        if t > 0 && n >= t.max(2) {
             let current: Option<Freeze> = st.get(&DataKey::Frozen);
             let until = match current {
                 Some(f) if is_frozen(&env) => f.until.max(until),
@@ -590,19 +696,25 @@ impl SmartWallet {
             return Err(WalletError::FreezeCooldown);
         }
         st.set(&DataKey::Frozen, &Freeze { until });
-        st.set(&DataKey::SoloFreezeAllowedAt, &(until + (FREEZE_WINDOW - FREEZE_MAX)));
+        let allowed_at = until
+            .checked_add(FREEZE_WINDOW - FREEZE_MAX)
+            .ok_or(WalletError::Overflow)?;
+        st.set(&DataKey::SoloFreezeAllowedAt, &allowed_at);
         st.remove(&DataKey::PendingUnfreeze);
         bump(&env);
         Ok(until)
     }
 
     /// W16. El dueno pide descongelar; se aplica con `unfreeze` despues de `UNFREEZE_DELAY`.
-    /// Asi quien tiene el telefono robado no descongela al instante.
+    /// Asi quien tiene el telefono robado no descongela al instante. No con una recuperacion en
+    /// curso: si no, descongelaria antes de que la recuperacion este lista y la cancelaria con
+    /// una sola llave. El dueno con dos credenciales puede cancelarla primero (D8).
     pub fn request_unfreeze(env: Env) -> Result<(), WalletError> {
         env.current_contract_address().require_auth();
         if !is_frozen(&env) {
             return Err(WalletError::NotFrozen);
         }
+        no_live_recovery(&env)?;
         let ready_ledger = env
             .ledger()
             .sequence()
@@ -618,10 +730,10 @@ impl SmartWallet {
     /// Cualquiera.
     pub fn unfreeze(env: Env) -> Result<(), WalletError> {
         if is_frozen(&env) {
+            no_live_recovery(&env)?;
             let st = env.storage().instance();
             let p: Pending = st.get(&DataKey::PendingUnfreeze).ok_or(WalletError::NothingPending)?;
             if p.owner_epoch != owner_epoch(&env) {
-                st.remove(&DataKey::PendingUnfreeze);
                 return Err(WalletError::Stale);
             }
             if env.ledger().sequence() < p.ready_ledger {
@@ -642,6 +754,148 @@ impl SmartWallet {
         clear_freeze(&env);
         bump(&env);
         Ok(())
+    }
+
+    /// W10. Uno o mas guardianes abren una recuperacion: reemplazar todos los firmantes por
+    /// `new_key`, que firma su prueba de posesion como en `add_signer`. Los votos de quienes
+    /// la abren cuentan; si ya llegan al quorum, empieza la espera.
+    ///
+    /// Hay una propuesta a la vez. Una propuesta vigente solo la sustituye el quorum: asi un
+    /// guardian solo no bloquea la recuperacion abriendo propuestas una y otra vez.
+    pub fn start_recovery(
+        env: Env,
+        guardians: Vec<Address>,
+        new_key: BytesN<32>,
+        possession: BytesN<64>,
+        expires: u32,
+    ) -> Result<BytesN<32>, WalletError> {
+        let n = guardians_sign(&env, &guardians)?;
+        let t = guardian_threshold(&env);
+        if t == 0 {
+            return Err(WalletError::NotEnoughGuardians);
+        }
+        let st = env.storage().instance();
+        let now = env.ledger().sequence();
+        let current: Option<Recovery> = st.get(&DataKey::Recovery);
+        if let Some(r) = current {
+            let live = now < r.expires && r.guardian_epoch == guardian_epoch(&env);
+            if live && n < t {
+                return Err(WalletError::RecoveryActive);
+            }
+        }
+        let min = now
+            .checked_add(RECOVERY_DELAY + RECOVERY_MARGIN)
+            .ok_or(WalletError::Overflow)?;
+        let max = now.checked_add(RECOVERY_MAX_TTL).ok_or(WalletError::Overflow)?;
+        if expires < min || expires > max {
+            return Err(WalletError::InvalidExpiry);
+        }
+        let wallet = env.current_contract_address();
+        // Aborta si la llave nueva no firmo.
+        env.crypto().ed25519_verify(
+            &new_key,
+            &possession_message(&env, &wallet, &signer_id(&env, &new_key)).into(),
+            &possession,
+        );
+        let nonce: u32 = st.get(&DataKey::RecoveryNonce).unwrap_or(0);
+        st.set(&DataKey::RecoveryNonce, &nonce.checked_add(1).ok_or(WalletError::Overflow)?);
+        let mut b = Bytes::from_slice(&env, RECOVERY_TAG);
+        b.append(&new_key.clone().into());
+        b.extend_from_array(&nonce.to_be_bytes());
+        let id: BytesN<32> = env.crypto().sha256(&b).into();
+        let ready_ledger = if n >= t {
+            now.checked_add(RECOVERY_DELAY).ok_or(WalletError::Overflow)?
+        } else {
+            0
+        };
+        let r = Recovery {
+            id: id.clone(),
+            new_key,
+            guardian_epoch: guardian_epoch(&env),
+            votes: guardians,
+            expires,
+            ready_ledger,
+        };
+        st.set(&DataKey::Recovery, &r);
+        bump(&env);
+        Ok(id)
+    }
+
+    /// W11. Un guardian vota por la propuesta `proposal_id`. Al llegar al quorum empieza la
+    /// espera; los votos que llegan despues no la reinician.
+    pub fn approve_recovery(env: Env, guardian: Address, proposal_id: BytesN<32>) -> Result<(), WalletError> {
+        if !guardian_list(&env).contains(&guardian) {
+            return Err(WalletError::UnknownGuardian);
+        }
+        guardian.require_auth();
+        let mut r = live_recovery(&env, &proposal_id)?;
+        if r.votes.contains(&guardian) {
+            return Err(WalletError::AlreadyVoted);
+        }
+        r.votes.push_back(guardian);
+        if r.ready_ledger == 0 && r.votes.len() >= guardian_threshold(&env) {
+            r.ready_ledger = env
+                .ledger()
+                .sequence()
+                .checked_add(RECOVERY_DELAY)
+                .ok_or(WalletError::Overflow)?;
+        }
+        env.storage().instance().set(&DataKey::Recovery, &r);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W12. El dueno cancela la recuperacion en curso: su veto ante guardianes que intentan
+    /// robar. Con la wallet congelada solo vale con dos credenciales distintas (D8, propuesta).
+    pub fn cancel_recovery(env: Env) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        let st = env.storage().instance();
+        if !st.has(&DataKey::Recovery) {
+            return Err(WalletError::UnknownProposal);
+        }
+        st.remove(&DataKey::Recovery);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W13. El quorum de guardianes cancela la recuperacion en curso. Es la salida cuando el
+    /// dueno no puede vetar durante un congelamiento.
+    pub fn guardian_cancel_recovery(env: Env, guardians: Vec<Address>) -> Result<(), WalletError> {
+        guardian_quorum(&env, &guardians)?;
+        let st = env.storage().instance();
+        if !st.has(&DataKey::Recovery) {
+            return Err(WalletError::UnknownProposal);
+        }
+        st.remove(&DataKey::Recovery);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W14. Termina la recuperacion: cualquiera, cumplida la espera. Reemplaza todos los
+    /// firmantes por la llave nueva (peso 1, umbral 1), descongela, y deja sin efecto todo lo
+    /// pendiente del dueno anterior (subidas de limite, escrows, bajas de guardianes y
+    /// solicitudes de descongelar). El gasto ya hecho en el periodo se conserva.
+    pub fn finish_recovery(env: Env, proposal_id: BytesN<32>) -> Result<(), WalletError> {
+        let r = live_recovery(&env, &proposal_id)?;
+        if r.ready_ledger == 0 || env.ledger().sequence() < r.ready_ledger {
+            return Err(WalletError::NotReady);
+        }
+        let st = env.storage().instance();
+        let mut map = Map::new(&env);
+        map.set(signer_id(&env, &r.new_key), Signer { key: r.new_key, weight: 1 });
+        st.set(&DataKey::Signers, &map);
+        st.set(&DataKey::Threshold, &1u32);
+        let epoch = owner_epoch(&env).checked_add(1).ok_or(WalletError::Overflow)?;
+        st.set(&DataKey::OwnerEpoch, &epoch);
+        clear_freeze(&env);
+        st.remove(&DataKey::Recovery);
+        bump(&env);
+        Ok(())
+    }
+
+    /// Lectura: la propuesta de recuperacion en curso, si hay.
+    pub fn recovery(env: Env) -> Option<Recovery> {
+        env.storage().instance().get(&DataKey::Recovery)
     }
 
     /// Lectura: si la wallet esta congelada.
@@ -740,13 +994,16 @@ impl CustomAccountInterface for SmartWallet {
 }
 
 /// W15. Con la wallet congelada, el dueno solo puede llamar a la propia wallet para pedir
-/// descongelar (`request_unfreeze`).
-fn check_frozen(env: &Env, contexts: &Vec<Context>, _credentials: u32) -> Result<(), WalletError> {
+/// descongelar (`request_unfreeze`) o, con dos credenciales distintas, para cancelar una
+/// recuperacion (`cancel_recovery`, D8): una sola llave robada no veta a los guardianes.
+fn check_frozen(env: &Env, contexts: &Vec<Context>, credentials: u32) -> Result<(), WalletError> {
     let me = env.current_contract_address();
     let request_unfreeze = Symbol::new(env, "request_unfreeze");
+    let cancel_recovery = Symbol::new(env, "cancel_recovery");
     for ctx in contexts.iter() {
         match ctx {
             Context::Contract(c) if c.contract == me && c.fn_name == request_unfreeze => {}
+            Context::Contract(c) if c.contract == me && c.fn_name == cancel_recovery && credentials >= 2 => {}
             _ => return Err(WalletError::Frozen),
         }
     }
