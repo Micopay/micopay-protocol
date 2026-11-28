@@ -13,7 +13,8 @@ Experimentos de MicoPay en Soroban, **solo en testnet**. Nada de esta carpeta va
 | `escrow-v2/` | Copia experimental del escrow, con más reglas en cadena (L1) |
 | `agent-tier/` | Reputación privada de agentes con prueba ZK (trabajo de Raúl, R1) |
 | `smart-account/` | Spike: el escrow real con una smart wallet (`C…`) como vendedor y comprador |
-| `smart-wallet/` | Smart wallet multifirma con umbral (W0–W5), probada con el escrow real |
+| `smart-wallet/` | Smart wallet: multifirma (W0–W5), guardianes, recuperación y congelamiento (W8–W16), límites y escrows (W17–W19), sesiones (W20) y upgrade con espera (W21) |
+| `smart-wallet-factory/` | Fábrica de esas wallets con dirección predecible (F1–F3) |
 
 ## Reglas
 
