@@ -1,6 +1,6 @@
-# smart-wallet (W0–W5, W8–W21)
+# smart-wallet (W0–W21)
 
-Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios firmantes y un umbral. **Solo testnet.** No va a producción: la app sigue con la cuenta clásica `G…`. El plan completo está fuera del repo (`PLAN_SMART_WALLET.md`, v0.3); esta carpeta tiene las fases W0–W5 (multifirma), W8–W16 (guardianes, recuperación y congelamiento) W17–W19 (límites y escrows registrados) W20 (sesiones) y W21 (upgrade con espera).
+Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios firmantes y un umbral. **Solo testnet.** No va a producción: la app sigue con la cuenta clásica `G…`. El plan completo está fuera del repo (`PLAN_SMART_WALLET.md`, v0.3); esta carpeta tiene las fases W0–W5 (multifirma), W6–W7 (passkey), W8–W16 (guardianes, recuperación y congelamiento) W17–W19 (límites y escrows registrados) W20 (sesiones) y W21 (upgrade con espera).
 
 `labs/smart-account/` sigue como el spike de un firmante.
 
@@ -11,8 +11,11 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 | W1 | `__constructor(owner)` | Primer firmante ed25519 con peso 1 y umbral 1. Los plazos del plan (D5) llegan con las fases que los usan | Quien despliega |
 | W2 | `__check_auth` | Suma el peso de firmantes **distintos** con firma válida; tiene que llegar al umbral | Soroban, cuando un contrato pide `require_auth` de la wallet |
 | W3 | `add_signer(key, weight, possession)` | Agrega un firmante ed25519; el id lo deriva el contrato. La llave nueva tiene que firmar una prueba de posesión, para que el umbral nunca dependa de una llave que nadie tiene | La wallet (umbral vigente) |
-| W4 | `remove_signer(id)` | Quita un firmante; no quita el último ni deja el umbral inalcanzable | La wallet |
-| W5 | `set_threshold(t)` | Cambia el umbral; `0 < t ≤ suma de pesos` | La wallet |
+| W4 | `remove_signer(id)` | Quita un firmante (ed25519 o passkey); no quita el último ni deja el umbral inalcanzable | La wallet |
+| W5 | `set_threshold(t)` | Cambia el umbral; `0 < t ≤ suma de pesos` (ed25519 y passkeys) | La wallet |
+| W6 | `set_webauthn(rp_id_hash, origins)` | Fija el sitio de los passkeys: `rpIdHash` y hasta 5 orígenes permitidos | La wallet |
+| W6 | `add_passkey(key65, credential_id, weight, authenticator_data, client_data_json, sig)` | Agrega un passkey secp256r1. La llave nueva firma una aserción WebAuthn cuyo challenge es la prueba de posesión, como en `add_signer` | La wallet |
+| W7 | Passkey en `__check_auth` | Ver abajo | — |
 | W17 | `set_limit(token, per_period)` | Límite de gasto por periodo (~1 día) de un token. Ponerlo o bajarlo aplica ya; subirlo queda pendiente `DELAY_LEDGERS` | La wallet |
 | W17 | `apply_limit(token)` | Aplica una subida pendiente cuando ya pasó la espera | Cualquiera |
 | W18 | `add_escrow(escrow, token, fee_bps_max)` | Registra un escrow con su token y su comisión máxima; queda pendiente `DELAY_LEDGERS` | La wallet |
@@ -39,7 +42,7 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 | W21 | `schedule_upgrade(hash)` | Programa un upgrade al WASM con ese hash; espera `UPGRADE_DELAY` (240 ledgers, ~20 min) | La wallet |
 | W21 | `cancel_upgrade()` | Cancela; aplica ya, también congelada | La wallet |
 | W21 | `apply_upgrade(hash)` | Aplica con el hash exacto, pasada la espera. No congelada, no con una recuperación en curso, no si lo programó el dueño anterior a una recuperación | Cualquiera |
-| — | `signers()`, `threshold()`, `limit(token)`, `spent(token)`, `escrow(escrow)`, `guardians()`, `guardian_threshold()`, `frozen()`, `recovery()`, `session(id)`, `pending_upgrade()` | Lecturas | Cualquiera |
+| — | `signers()`, `threshold()`, `limit(token)`, `spent(token)`, `escrow(escrow)`, `guardians()`, `guardian_threshold()`, `frozen()`, `recovery()`, `session(id)`, `pending_upgrade()`, `passkeys()` | Lecturas | Cualquiera |
 
 **Reglas de la firma:**
 - Id de firmante: `sha256(0x00 ‖ pubkey)`. Una llave no puede entrar dos veces ni aportar doble peso.
@@ -47,6 +50,15 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 - La firma (`Signature`) es una lista de pruebas `Proof::Ed25519(Ed25519Proof { id, sig })`.
 - Prueba de posesión de una llave nueva: firma `sha256("micopay-labs-wallet-v1" ‖ XDR de la wallet ‖ "add-signer" ‖ id)`.
 - Tope de 10 firmantes y de 10 pruebas por firma. Aritmética con `checked_add`.
+
+**Passkey (W6–W7):**
+- Id: `sha256(0x01 ‖ llave de 65 bytes)`; la llave tiene que empezar en `0x04`.
+- La prueba es `Proof::Passkey(PasskeyProof { id, authenticator_data, client_data_json, sig })`, con los **bytes originales** de la aserción. Suma su peso como un firmante más; se puede combinar con firmas ed25519.
+- `client_data_json` tiene que empezar con `{"type":"webauthn.get","challenge":"<base64url del mensaje>","origin":"<origen permitido>"` y seguir con `,` o `}`. Es el orden que fija la serialización de WebAuthn.
+- `authenticator_data` tiene que empezar con el `rpIdHash` guardado y traer las banderas UP y UV (huella o PIN).
+- Firma: `secp256r1_verify(llave, sha256(authenticator_data ‖ sha256(client_data_json)), r‖s)`. El host rechaza S alta.
+- La recuperación (W14) quita los passkeys junto con las llaves ed25519.
+- Las pruebas arman la aserción con una llave P-256 de prueba y los mismos bytes que produce el navegador. El plan pide además un vector de un navegador real; falta.
 
 **Reglas de tokens y escrows (W19)**, sobre los contextos que la wallet autoriza:
 - `approve` se rechaza siempre (`ApproveDenied`). Un permiso de gasto lo usaría un tercero (`transfer_from`, `burn_from`) sin pasar por la wallet ni por su límite.
@@ -80,7 +92,7 @@ Sin admin ni llave de MicoPay. Un relayer `G…` manda y paga las transacciones;
 ## Pruebas
 
 ```bash
-cargo test                 # 130 pruebas con firmas ed25519 reales
+cargo test                 # 141 pruebas con firmas ed25519 y P-256 reales
 stellar contract build
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk> --vector   # vector compartido Rust/JS
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet
@@ -133,3 +145,42 @@ Corrida del 2026-11-27, mismo escrow. Wallet `CCUZJDPZCD22AJTVD6B556BFEJQSOTU64C
 | 7f | `lock` con 2% de comisión: **rechazado** con `#20` (`EscrowLockInvalid`) | — (falla en la simulación) |
 | 7g | Segundo `lock` de 1.01 XLM (2.02 > 2): **rechazado** con `#15` | — (falla en la simulación) |
 | 7h | `set_limit(XLM, 100 XLM)` queda pendiente; el límite sigue en 2 XLM | [392e3b97…](https://stellar.expert/explorer/testnet/tx/392e3b97f362e98829f7b1616a1edcf19c2be85bf40aa842c2815e0b072cbb7e) |
+
+### W8–W16
+
+Corrida del 2026-11-27 con `scripts/demo-guardianes.mjs`. Wallet `CBI37B4AWAFDOOJTWRBUS7CTBGN422H6IE77SMCQFAGLGZHD7QFMTL5A` (WASM `ee3f6a14…`, el mismo de la demo de W20–W21). Los 18 chequeos pasan. Guardianes `g1`, `g2`, `g3` son cuentas `G…` normales; `a` es el teléfono robado y `n` el nuevo.
+
+| Paso | Qué pasó | Transacciones |
+|---|---|---|
+| 1 | Subir el WASM, crear la wallet con `a` y darle 5 XLM | [4c806484…](https://stellar.expert/explorer/testnet/tx/4c8064847dd696fd4688c169dd5127e6655def75c1af59e041aea20fcc75df5e) · [6a84b483…](https://stellar.expert/explorer/testnet/tx/6a84b483b160886623fe40f1ee21e9440a64032b85335b6a89038b7e7fc5eb95) · [c9aeeb48…](https://stellar.expert/explorer/testnet/tx/c9aeeb48ea358dacd3854180c6167e33ce432cc2d0f691b51e25675ce2e231ae) |
+| 1 | W8 `add_guardian` de g1, g2 y g3 firmado por `a`: quedan pendientes y `guardians()` sigue vacío | [2888e758…](https://stellar.expert/explorer/testnet/tx/2888e75827b91e8d2e54578b3673dc1d578d464cc189b385bd417d095b0fffc5) · [8d431761…](https://stellar.expert/explorer/testnet/tx/8d431761d4130e8d32dbe7a6c7f1a8a08f06a0f7aed474555528e91ca762d3c7) · [c87f9136…](https://stellar.expert/explorer/testnet/tx/c87f9136117bdc814c4d5e517fe9fe9969dd37d83c0bbba599b0f9879ab426ec) |
+| 1 | Pasada la espera, el relayer aplica las tres altas **sin firmas de la wallet**; el quorum pasa a 1 | [9d4aad1e…](https://stellar.expert/explorer/testnet/tx/9d4aad1ede5a2166f039faa1611e5de48a0da0f9bdf3db002620e308ae451a89) · [ea85d196…](https://stellar.expert/explorer/testnet/tx/ea85d19611623a4eedd8f5b73c8974b6250aa818df189a748b27ab3a37d6bbb1) · [1d550b15…](https://stellar.expert/explorer/testnet/tx/1d550b15964b965d6ef68d1d4ab83090dc758948a8ed10a13c18f7426418e1e9) |
+| 1 | W9 `set_guardian_threshold(2)` firmado por `a` | [afc8fc61…](https://stellar.expert/explorer/testnet/tx/afc8fc61bbd563b21356ee2ee9c780e36fa011073be9e9e3f2bb176264403edd) |
+| 2 | Roban el teléfono: W15 g1 solo congela (hasta 360 ledgers) | [0cf83e1d…](https://stellar.expert/explorer/testnet/tx/0cf83e1dca23a25d5f179aab886d6d7a37d65c8be4005cb71dbb3918bb69266c) |
+| 3 | `transfer` de 1 XLM firmado por `a`: **rechazado** con `#30` (`Frozen`) | — (falla en la simulación) |
+| 4 | W10 g1 abre la recuperación hacia `n`; `ready_ledger` = 0 (falta el quorum) | [4da39158…](https://stellar.expert/explorer/testnet/tx/4da39158df51852b3b5caad7299209174f0d9da17ec2fc9e4bb75b33cba76140) |
+| 4b | W16 `request_unfreeze` firmado por `a` con la recuperación abierta: **rechazado** con `#35` (`RecoveryActive`) | — (falla en la simulación) |
+| 5 | W11 g2 vota: llega al quorum y la espera empieza ahí (240 ledgers) | [d044000c…](https://stellar.expert/explorer/testnet/tx/d044000ca2349a7c0ecd8c0fa59111572cfa35d602735c3da04f70994691a0a1) |
+| 6 | W14 pasada la espera, el relayer termina la recuperación **sin firmas de la wallet**: un solo firmante `n`, umbral 1, descongelada | [bd8071f6…](https://stellar.expert/explorer/testnet/tx/bd8071f656a474891a449cfbaaf68ee110111a0e3ec4f2805e58aa1cd7a1be25) |
+| 7 | `transfer` firmado por `a` (el teléfono viejo): **rechazado** con `#3` (`UnknownSigner`). El mismo firmado por `n` pasa: el agente sube 1 XLM | [ffe7c61f…](https://stellar.expert/explorer/testnet/tx/ffe7c61f52f7ddc12cdd0dfae3a348e497e506e9775c435384fab8aef7a0217b) |
+
+Cuando el rechazo ocurre en la firma de la wallet, el error de arriba es `Error(Auth, InvalidAction)` y el código del contrato sale en los eventos de diagnóstico; el script revisa ese código.
+
+### W20, W21 y F1–F3
+
+Corrida del 2026-11-27 con `scripts/demo-sesiones.mjs`. Fábrica `CANRZQBAECXYRZZSWFMYABYLI5MPAZYOJWOUUHFIBJMIMLQCIB7EOHCN` (WASM `5a2ec709…`), wallet `CD4KCYV26MW3UOSUC52X2JEL7O63UQKUIX7IBNVFP7UHN3MDVJ6MDIOH` (WASM `ee3f6a14…`, sin W6–W7). Los 29 chequeos del script pasan. El script se cortó (la máquina se quedó sin memoria) justo antes de aplicar el upgrade; el paso 7 se terminó a mano con `stellar contract invoke`.
+
+| Paso | Qué pasó | Transacciones |
+|---|---|---|
+| 1 | Subir los dos WASM y crear la fábrica | [8eb487d9…](https://stellar.expert/explorer/testnet/tx/8eb487d9a6a1f57baddb7fa216f1bd59c4c8769cb47a19538796d31fb94d4ecd) · [95570355…](https://stellar.expert/explorer/testnet/tx/95570355e79e58a479f7ace97e1cdb3a9c962a86655ea074d078c770e90ccb25) · [ac4e1e04…](https://stellar.expert/explorer/testnet/tx/ac4e1e04f20ec65458e2fc5da722d9fe8f07bbe65d8971593955f58d65aea1df) |
+| 1 | F3: mandar 10 XLM a la dirección de `address_of` **antes** de crear la wallet | [19e7f571…](https://stellar.expert/explorer/testnet/tx/19e7f571d5d25aeeb4026f6b56ed0ee83f8051e9a0f68fea62e7e04802450a17) |
+| 1 | F2: `create_account` devuelve esa misma dirección y el saldo sigue en 10 XLM | [4961f98b…](https://stellar.expert/explorer/testnet/tx/4961f98b3b8f02cc23b294f099c594f6f4f0aa4dd9a192d1c2500295c44ed5d9) |
+| 2 | `add_escrow` firmado por `a` y `apply_escrow` tras la espera | [8c2c26ad…](https://stellar.expert/explorer/testnet/tx/8c2c26add2a1b8708b59396d8e9fa787a5cb0041edb99d21f0ee74202c1b8770) · [5a59436d…](https://stellar.expert/explorer/testnet/tx/5a59436d2625808c7c91cddd0651b1c7973adeb09c400591b669f1c2709cf0a9) |
+| 3 | W20 `add_session`: 2 XLM por `lock`, 3 XLM en total, un comprador (el agente) | [6467ded3…](https://stellar.expert/explorer/testnet/tx/6467ded34ea4f4f5763c911b5d0910a18274bc48de89462a27cd9c4bb9027431) |
+| 4 | `lock` de 1 XLM + 0.01 firmado **solo por la sesión**; el agente libera; `spent` = 1.01 XLM | [3317992d…](https://stellar.expert/explorer/testnet/tx/3317992dd570e84a429c53f2a7407ccab2f4652f7b2f0a74138187cb98bc87ee) · [6e5487e4…](https://stellar.expert/explorer/testnet/tx/6e5487e47581704fdebcfa1eb58a9158b2d9cb22c2750fcf556cfc78f875adc9) |
+| 5 | Con la sesión: `lock` a otro comprador **rechazado** con `#43`; `lock` de 2.5 XLM **rechazado** con `#44`; `transfer` directo **rechazado** con `#43` | — (fallan en la simulación) |
+| 6 | `revoke_session`; un `lock` con la sesión revocada **rechazado** con `#41` | [55526da5…](https://stellar.expert/explorer/testnet/tx/55526da5edce1ae6b89b827e96feb1f829589e00e8ee0e239a47fc4d65fdddfe) |
+| 7 | W21 `schedule_upgrade`; `apply_upgrade` antes de la espera **rechazado** con `#17` | [6a3de87e…](https://stellar.expert/explorer/testnet/tx/6a3de87e6f31abda579785c195b0baae1d10756016948c47027e6267f6ca37ff) · [e04c3335…](https://stellar.expert/explorer/testnet/tx/e04c333595ef108cd4bf4d7f9e75c7035d14183f7f7fc664285f6c50bd299d96) |
+| 7 | Pasada la espera, el relayer aplica el upgrade; `pending_upgrade()` queda vacío, siguen el firmante `a`, el umbral 1 y el escrow registrado | [c93949f0…](https://stellar.expert/explorer/testnet/tx/c93949f0de017de6444cda1d47cc8b7fb2495048e0be0008f581b4e616c9663e) |
+
+Falta en testnet una transferencia firmada por `a` después del upgrade: la llave de esa corrida no se guardó. La prueba `w21_upgrade_con_espera_conserva_el_estado` lo cubre.

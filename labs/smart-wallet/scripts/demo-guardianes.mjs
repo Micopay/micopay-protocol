@@ -11,10 +11,14 @@
 //
 // Pasos:
 //   1. subir el WASM, crear la wallet con a como dueno y darle 5 XLM; W8 add_guardian(g1, g2, g3)
-//      y W9 set_guardian_threshold(2), todo firmado por a. guardians() = 3, guardian_threshold() = 2
+//      firmado por a (cada alta queda pendiente DELAY_LEDGERS = 120, ~10 min); esperar una vez;
+//      apply_guardian_add de los tres mandado por el relayer sin firmas de la wallet (el quorum
+//      pasa a 1 con el primero); W9 set_guardian_threshold(2) firmado por a.
+//      guardians() = 3, guardian_threshold() = 2
 //   2. telefono robado: g1 solo llama freeze([g1]) (W15). frozen() == true
 //   3. con la wallet congelada, transfer de 1 XLM al agente firmado por a falla con #30 (Frozen)
 //   4. g1 abre start_recovery([g1], n, posesion de n, expires) (W10); ready_ledger == 0 (quorum 2)
+//      4b. con la recuperacion abierta, request_unfreeze firmado por a falla con #35 (RecoveryActive)
 //   5. g2 approve_recovery(g2, id) (W11): llega al quorum y empieza la espera (RECOVERY_DELAY = 240)
 //   6. esperar ready_ledger (~20 min); el relayer llama finish_recovery(id) sin firmas de la
 //      wallet (W14). frozen() == false, threshold() == 1, signers() == [id de n]
@@ -38,6 +42,7 @@ const WASM = 'target/wasm32v1-none/release/micopay_labs_smart_wallet.wasm';
 const XLM1 = 10_000_000n;
 const DOMAIN = Buffer.from('micopay-labs-wallet-v1');
 const MODE_OWNER = 0;
+const DELAY_LEDGERS = 120;
 const RECOVERY_DELAY = 240;
 const RECOVERY_MARGIN = 120;
 
@@ -79,6 +84,16 @@ async function latestLedger() {
       log(`   getLatestLedger fallo (${e.code || e.message}); reintento`);
       await sleep(5000);
     }
+  }
+}
+
+// Espera hasta que el ultimo ledger llegue a `target`.
+async function waitLedger(target) {
+  for (;;) {
+    const sequence = await latestLedger();
+    if (sequence >= target) { log(`   ledger ${sequence}, listo`); return; }
+    log(`   ledger ${sequence}, faltan ${target - sequence}`);
+    await sleep(Math.min(30, (target - sequence) * 5) * 1000);
   }
 }
 
@@ -261,9 +276,21 @@ async function main() {
   const saldo0 = await balance(wallet);
   check('1. wallet con 5 XLM', saldo0 === 5n * XLM1, fmt(saldo0));
   const W = new Contract(wallet);
-  for (const [name, g] of [['g1', g1], ['g2', g2], ['g3', g3]]) {
-    await send(`add_guardian ${name}`, relayer, W.call('add_guardian', addr(g.publicKey())), [a]);
+  const gnames = [['g1', g1], ['g2', g2], ['g3', g3]];
+  let lastAdd = 0;
+  for (const [name, g] of gnames) {
+    lastAdd = (await send(`add_guardian ${name}`, relayer, W.call('add_guardian', addr(g.publicKey())), [a])).ledger;
   }
+  const g0 = await read(wallet, 'guardians');
+  check('1. guardians() vacio mientras las altas esperan', g0.length === 0, `${g0.length} guardianes`);
+  const addReady = lastAdd + DELAY_LEDGERS;
+  log(`   ultima alta en el ledger ${lastAdd}; se aplican desde el ${addReady}`);
+  await waitLedger(addReady);
+  for (const [name, g] of gnames) {
+    await send(`apply_guardian_add ${name}`, relayer, W.call('apply_guardian_add', addr(g.publicKey())));
+  }
+  const gt1 = await read(wallet, 'guardian_threshold');
+  check('1. guardian_threshold() == 1 tras aplicar', gt1 === 1, `quorum ${gt1}`);
   await send('set_guardian_thr 2', relayer, W.call('set_guardian_threshold', u32(2)), [a]);
   const gs = await read(wallet, 'guardians');
   const want = [g1, g2, g3].map((k) => k.publicKey());
@@ -294,6 +321,10 @@ async function main() {
   check('4. recovery().ready_ledger == 0', r4?.ready_ledger === 0, `ready_ledger ${r4?.ready_ledger}, votos ${r4?.votes?.length}`);
   check('4. recovery().new_key == n', r4 && Buffer.from(r4.new_key).equals(n.rawPublicKey()));
 
+  // 4b. El ladron no puede pedir descongelar mientras hay una recuperacion abierta.
+  log('\n4b. request_unfreeze firmado por a, con la recuperacion abierta');
+  const err4b = await mustFail('4b. request_unfreeze falla con #35', 35, relayer, W.call('request_unfreeze'), [a]);
+
   // 5. g2 vota: quorum 2 alcanzado, empieza la espera.
   log('\n5. W11 approve_recovery(g2, id) mandado por g2');
   const ap = await send('approve_recovery g2', g2, W.call('approve_recovery', addr(g2.publicKey()), bytes(proposalId)));
@@ -304,12 +335,7 @@ async function main() {
 
   // 6. Esperar la espera de la recuperacion y terminarla sin firmas de la wallet.
   log(`\n6. esperar ready_ledger (${ready})`);
-  for (;;) {
-    const sequence = await latestLedger();
-    if (sequence >= ready) { log(`   ledger ${sequence}, listo`); break; }
-    log(`   ledger ${sequence}, faltan ${ready - sequence}`);
-    await sleep(Math.min(30, (ready - sequence) * 5) * 1000);
-  }
+  await waitLedger(ready);
   const f6a = await read(wallet, 'frozen');
   log(`   frozen() antes de terminar: ${f6a}`);
   log('   W14 finish_recovery mandado por el relayer');
@@ -340,7 +366,7 @@ async function main() {
   log('saldo final', fmt(await balance(wallet)), 'XLM');
   log('\ntransacciones:');
   for (const t of txs) log(`  ${t.label.padEnd(20)} ${t.hash}  ${explorer(t.hash)}`);
-  for (const [k, e] of [['3', err3], ['7', err7]]) {
+  for (const [k, e] of [['3', err3], ['4b', err4b], ['7', err7]]) {
     log(`\nerror paso ${k}:`, e ? e.text.split('\n')[0] : '-');
     if (e?.diag?.length) log(`  diagnostico ${k}:`, e.diag.join(' | '));
   }
