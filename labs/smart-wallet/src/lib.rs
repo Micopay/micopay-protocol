@@ -1,7 +1,7 @@
 //! Smart wallet de labs: una cuenta de contrato (`C…`) con varios firmantes ed25519,
 //! cada uno con su peso, y un umbral. Es la fase W0–W5 de PLAN_SMART_WALLET.md.
 //!
-//! Solo testnet. Todavia no tiene passkey, guardianes ni sesiones.
+//! Solo testnet. Todavia no tiene passkey. Las fases W8–W21 se describen en el README.
 //!
 //! Reglas de esta fase:
 //! - el contrato deriva el id de cada firmante (`sha256(0x00 ‖ pubkey)`), asi una llave
@@ -27,7 +27,7 @@ const TTL_EXTEND: u32 = 518_400;
 
 /// Etiqueta que va al inicio de todo mensaje firmado.
 pub const DOMAIN: &[u8] = b"micopay-labs-wallet-v1";
-/// Modo de la firma. Solo existe el dueno en esta fase; la sesion (1) llega con W20.
+/// Modo de la firma del dueno.
 pub const MODE_OWNER: u8 = 0;
 /// Modo del mensaje firmado por una llave de sesion (W20).
 pub const MODE_SESSION: u8 = 1;
@@ -213,6 +213,9 @@ pub struct SessionProof {
 pub struct Session {
     pub key: BytesN<32>,
     pub escrow: Address,
+    /// Regla del escrow al crear la sesion. Si cambia (otro token u otra comision), la sesion
+    /// deja de valer.
+    pub rule: EscrowRule,
     pub buyers: Vec<Address>,
     /// Tope de `amount + platform_fee` por `lock`.
     pub max_per_lock: i128,
@@ -620,7 +623,7 @@ impl SmartWallet {
         Ok(())
     }
 
-    /// W18. Quita un escrow registrado y su registro pendiente. Aplica ya.
+    /// W18. Quita un escrow registrado y su registro pendiente, y revoca sus sesiones. Aplica ya.
     pub fn remove_escrow(env: Env, escrow: Address) -> Result<(), WalletError> {
         env.current_contract_address().require_auth();
         let st = env.storage().instance();
@@ -628,7 +631,15 @@ impl SmartWallet {
             return Err(WalletError::UnknownEscrow);
         }
         st.remove(&DataKey::Escrow(escrow.clone()));
-        st.remove(&DataKey::PendingEscrow(escrow));
+        st.remove(&DataKey::PendingEscrow(escrow.clone()));
+        // Sus sesiones mueren con el: volver a registrarlo no las revive.
+        let mut map = sessions(&env);
+        for (k, v) in map.clone().iter() {
+            if v.escrow == escrow {
+                map.remove(k);
+            }
+        }
+        st.set(&DataKey::Sessions, &map);
         bump(&env);
         Ok(())
     }
@@ -982,9 +993,7 @@ impl SmartWallet {
         let me = env.current_contract_address();
         me.require_auth();
         let st = env.storage().instance();
-        if !st.has(&DataKey::Escrow(escrow.clone())) {
-            return Err(WalletError::UnknownEscrow);
-        }
+        let rule: EscrowRule = st.get(&DataKey::Escrow(escrow.clone())).ok_or(WalletError::UnknownEscrow)?;
         if buyers.is_empty() || buyers.len() > MAX_SESSION_LIST {
             return Err(WalletError::InvalidSession);
         }
@@ -1030,6 +1039,7 @@ impl SmartWallet {
         let session = Session {
             key,
             escrow,
+            rule,
             buyers,
             max_per_lock,
             max_total,
@@ -1129,6 +1139,20 @@ impl SmartWallet {
     /// Lectura: el upgrade programado, si hay.
     pub fn pending_upgrade(env: Env) -> Option<PendingUpgrade> {
         env.storage().instance().get(&DataKey::PendingUpgrade)
+    }
+
+    /// W20. Retira el permiso de `decline` de `trade_id` (por ejemplo, si el dueno ya resolvio
+    /// ese trade). Aplica ya.
+    pub fn disallow_session_decline(env: Env, id: BytesN<32>, trade_id: BytesN<32>) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        let mut map = sessions(&env);
+        let mut session = map.get(id.clone()).ok_or(WalletError::UnknownSession)?;
+        let i = session.declines.first_index_of(&trade_id).ok_or(WalletError::NothingPending)?;
+        session.declines.remove(i);
+        map.set(id, session);
+        env.storage().instance().set(&DataKey::Sessions, &map);
+        bump(&env);
+        Ok(())
     }
 
     /// Lectura: una sesion.
@@ -1283,8 +1307,13 @@ fn check_session(env: &Env, payload: &Hash<32>, p: &SessionProof, contexts: &Vec
     if is_frozen(env) {
         return Err(WalletError::Frozen);
     }
-    if !env.storage().instance().has(&DataKey::Escrow(s.escrow.clone())) {
-        return Err(WalletError::UnknownEscrow);
+    let rule: EscrowRule = env
+        .storage()
+        .instance()
+        .get(&DataKey::Escrow(s.escrow.clone()))
+        .ok_or(WalletError::UnknownEscrow)?;
+    if rule != s.rule {
+        return Err(WalletError::Stale);
     }
     let me = env.current_contract_address();
     let msg: Bytes = message(env, &me, MODE_SESSION, payload).into();

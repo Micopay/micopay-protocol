@@ -1814,7 +1814,7 @@ fn w20_quitar_el_escrow_deja_la_sesion_sin_uso() {
     let env = Env::default();
     let s = ses(&env, None);
     s.c.remove_escrow(&s.escrow);
-    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 50, 0, 60)), Err(Ok(WalletError::UnknownEscrow)));
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 50, 0, 60)), Err(Ok(WalletError::UnknownSession)));
 }
 
 #[test]
@@ -1947,4 +1947,287 @@ fn w21_sin_firma_de_la_wallet_falla() {
     let hash = BytesN::from_array(&env, &[7u8; 32]);
     assert_eq!(c.try_schedule_upgrade(&hash).err(), Some(Err(auth_error())));
     assert_eq!(c.pending_upgrade(), None);
+}
+
+// ---------- W20: ataques de la revision ----------
+
+// ---------- REVIEW4: ataques a W20 ----------
+
+fn r4_lock_ctx(env: &Env, escrow: &Address, seller: &Address, buyer: &Address, amount: i128, fee: i128, timeout: u32) -> Context {
+    call(env, escrow, "lock", vec![
+        env,
+        seller.into_val(env),
+        buyer.into_val(env),
+        amount.into_val(env),
+        fee.into_val(env),
+        BytesN::<32>::random(env).into_val(env),
+        timeout.into_val(env),
+    ])
+}
+
+#[test]
+fn r4_spent_de_sesion_se_revierte_si_check_contexts_falla() {
+    let env = Env::default();
+    let s = ses(&env, Some(80));
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 90, 0, 60)), Err(Ok(WalletError::LimitExceeded)));
+    assert_eq!(s.c.session(&s.id).unwrap().spent, 0);
+    // [lock, release]: check_session pasa y anota; check_contexts rechaza.
+    let mut ctx = slock(&env, &s, &s.buyer, 50, 0, 60);
+    ctx.set(1, trade_ctx(&env, &s, "release", &BytesN::random(&env)));
+    assert_eq!(scheck(&env, &s, ctx), Err(Ok(WalletError::EscrowTransferMismatch)));
+    assert_eq!(s.c.session(&s.id).unwrap().spent, 0);
+}
+
+#[test]
+fn r4_transfer_hijo_falso_o_desviado_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let attacker = Address::generate(&env);
+    let fake = Address::generate(&env);
+    for second in [
+        transfer_ctx(&env, &s.token, &s.w, &attacker, 50),
+        transfer_ctx(&env, &fake, &s.w, &s.escrow, 50),
+        transfer_ctx(&env, &s.token, &attacker, &s.escrow, 50),
+        call(&env, &s.token, "transfer", vec![&env, s.w.into_val(&env), 7u32.into_val(&env), 50i128.into_val(&env)]),
+    ] {
+        let mut ctx = slock(&env, &s, &s.buyer, 50, 0, 60);
+        ctx.set(1, second);
+        assert_eq!(scheck(&env, &s, ctx), Err(Ok(WalletError::EscrowTransferMismatch)));
+    }
+    // Tres contextos.
+    let mut ctx = slock(&env, &s, &s.buyer, 50, 0, 60);
+    ctx.push_back(trade_ctx(&env, &s, "release", &BytesN::random(&env)));
+    assert_eq!(scheck(&env, &s, ctx), Err(Ok(WalletError::SessionDenied)));
+    // transfer primero, lock despues.
+    let ctx = slock(&env, &s, &s.buyer, 50, 0, 60);
+    let rev = vec![&env, ctx.get(1).unwrap(), ctx.get(0).unwrap()];
+    assert_eq!(scheck(&env, &s, rev), Err(Ok(WalletError::SessionDenied)));
+    assert_eq!(s.c.session(&s.id).unwrap().spent, 0);
+}
+
+#[test]
+fn r4_lock_en_otro_escrow_registrado_o_con_otro_vendedor_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let e2 = Address::generate(&env);
+    s.c.add_escrow(&e2, &s.token, &100);
+    advance(&env, DELAY_LEDGERS);
+    s.c.apply_escrow(&e2);
+    let ctx = vec![&env, r4_lock_ctx(&env, &e2, &s.w, &s.buyer, 50, 0, 60), transfer_ctx(&env, &s.token, &s.w, &e2, 50)];
+    assert_eq!(scheck(&env, &s, ctx), Err(Ok(WalletError::SessionDenied)));
+    let otro = Address::generate(&env);
+    let ctx = vec![&env, r4_lock_ctx(&env, &s.escrow, &otro, &s.buyer, 50, 0, 60), transfer_ctx(&env, &s.token, &s.w, &s.escrow, 50)];
+    assert_eq!(scheck(&env, &s, ctx), Err(Ok(WalletError::EscrowLockInvalid)));
+}
+
+#[test]
+fn r4_importes_extremos() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let lk = |a: i128, f: i128| vec![&env, r4_lock_ctx(&env, &s.escrow, &s.w, &s.buyer, a, f, 60), transfer_ctx(&env, &s.token, &s.w, &s.escrow, a.wrapping_add(f))];
+    assert_eq!(scheck(&env, &s, lk(i128::MAX, 1)), Err(Ok(WalletError::Overflow)));
+    assert_eq!(scheck(&env, &s, lk(60, -10)), Err(Ok(WalletError::EscrowLockInvalid)));
+    assert_eq!(scheck(&env, &s, lk(0, 0)), Err(Ok(WalletError::EscrowLockInvalid)));
+    assert_eq!(scheck(&env, &s, lk(-5, 0)), Err(Ok(WalletError::EscrowLockInvalid)));
+    let ctx = vec![&env, r4_lock_ctx(&env, &s.escrow, &s.w, &s.buyer, 50, 0, 0), transfer_ctx(&env, &s.token, &s.w, &s.escrow, 50)];
+    assert_eq!(scheck(&env, &s, ctx), Err(Ok(WalletError::EscrowLockInvalid)));
+    assert_eq!(s.c.session(&s.id).unwrap().spent, 0);
+}
+
+#[test]
+fn r4_permiso_de_decline_no_se_comparte_ni_se_duplica() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let t = BytesN::<32>::random(&env);
+    let d = call(&env, &s.escrow, "decline", vec![&env, t.into_val(&env)]);
+    s.c.allow_session_decline(&s.id, &t);
+    s.c.allow_session_decline(&s.id, &t);
+    assert_eq!(s.c.session(&s.id).unwrap().declines.len(), 1);
+    // Dos declines con un permiso: falla y el permiso sigue.
+    assert_eq!(scheck(&env, &s, vec![&env, d.clone(), d.clone()]), Err(Ok(WalletError::SessionDenied)));
+    assert_eq!(s.c.session(&s.id).unwrap().declines.len(), 1);
+    // Otra sesion no usa el permiso de la primera.
+    let k2 = key(6);
+    let exp = env.ledger().sequence() + 100;
+    s.c.add_session(&pk(&env, &k2), &s.escrow, &vec![&env, s.buyer.clone()], &10, &10, &60, &exp);
+    let p = payload(&env);
+    let proofs = vec![&env, sproof(&env, &s.w, &k2, &p, MODE_SESSION)];
+    assert_eq!(
+        env.try_invoke_contract_check_auth::<WalletError>(&s.w, &p.to_bytes(), proofs.into_val(&env), &vec![&env, d.clone()]),
+        Err(Ok(WalletError::SessionDenied))
+    );
+    // Decline en otro contrato con el mismo nombre.
+    let d2 = call(&env, &Address::generate(&env), "decline", vec![&env, t.into_val(&env)]);
+    assert_eq!(scheck(&env, &s, vec![&env, d2]), Err(Ok(WalletError::SessionDenied)));
+    assert_eq!(scheck(&env, &s, vec![&env, d]), Ok(()));
+    assert_eq!(s.c.session(&s.id).unwrap().declines.len(), 0);
+}
+
+#[test]
+fn r4_firma_de_sesion_para_otra_wallet_o_como_dueno_falla() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let p = payload(&env);
+    let otra = Address::generate(&env);
+    let proofs = vec![&env, sproof(&env, &otra, &s.k, &p, MODE_SESSION)];
+    assert_eq!(
+        env.try_invoke_contract_check_auth::<WalletError>(&s.w, &p.to_bytes(), proofs.into_val(&env), &slock(&env, &s, &s.buyer, 50, 0, 60)),
+        Err(Err(InvokeError::Abort))
+    );
+    // Prueba de dueno con el id de la sesion.
+    let msg = message(&env, &s.w, MODE_OWNER, &p);
+    let forged = Proof::Ed25519(Ed25519Proof { id: s.id.clone(), sig: BytesN::from_array(&env, &s.k.sign(&msg.to_array()).to_bytes()) });
+    assert_eq!(
+        env.try_invoke_contract_check_auth::<WalletError>(&s.w, &p.to_bytes(), vec![&env, forged].into_val(&env), &slock(&env, &s, &s.buyer, 50, 0, 60)),
+        Err(Ok(WalletError::UnknownSigner))
+    );
+}
+
+// Camino real con sesion.
+
+fn r4_sentry(env: &Env, wallet: &Address, invocation: xdr::SorobanAuthorizedInvocation, k: &SigningKey) -> xdr::SorobanAuthorizationEntry {
+    static NONCE: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(900_000);
+    let nonce = NONCE.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let exp = env.ledger().sequence() + 100;
+    let pre = xdr::HashIdPreimage::SorobanAuthorization(xdr::HashIdPreimageSorobanAuthorization {
+        network_id: xdr::Hash(env.ledger().network_id().to_array()),
+        nonce,
+        signature_expiration_ledger: exp,
+        invocation: invocation.clone(),
+    });
+    let payload = env.crypto().sha256(&Bytes::from_slice(env, &pre.to_xdr(Limits::none()).unwrap()));
+    let proofs: Vec<Proof> = vec![env, sproof(env, wallet, k, &payload, MODE_SESSION)];
+    let v: Val = proofs.into_val(env);
+    xdr::SorobanAuthorizationEntry {
+        root_invocation: invocation,
+        credentials: xdr::SorobanCredentials::Address(xdr::SorobanAddressCredentials {
+            address: wallet.try_into().unwrap(),
+            nonce,
+            signature_expiration_ledger: exp,
+            signature: xdr::ScVal::try_from_val(env, &v).unwrap(),
+        }),
+    }
+}
+
+fn r4_tree(env: &Env, s: &World, buyer: &Address, amount: i128, fee: i128, hash: &BytesN<32>) -> xdr::SorobanAuthorizedInvocation {
+    let args = vec![
+        env,
+        s.w.into_val(env),
+        buyer.into_val(env),
+        amount.into_val(env),
+        fee.into_val(env),
+        hash.into_val(env),
+        30u32.into_val(env),
+    ];
+    let child = invocation(&s.token, "transfer", vec![env, s.w.into_val(env), s.escrow.address.into_val(env), (amount + fee).into_val(env)], std::vec![]);
+    invocation(&s.escrow.address, "lock", args, std::vec![child])
+}
+
+#[contract]
+pub struct R4Caller;
+
+#[contractimpl]
+impl R4Caller {
+    /// Llama varias veces a `lock` y se traga los fallos.
+    pub fn many(env: Env, escrow: Address, wallet: Address, buyer: Address, amount: i128, hashes: Vec<BytesN<32>>) -> u32 {
+        let e = MockEscrowClient::new(&env, &escrow);
+        let mut ok = 0;
+        for h in hashes.iter() {
+            if e.try_lock(&wallet, &buyer, &amount, &0, &h, &30).is_ok() {
+                ok += 1;
+            }
+        }
+        ok
+    }
+}
+
+fn r4_world<'a>(env: &'a Env) -> (World<'a>, Address, SigningKey, BytesN<32>) {
+    let s = world(env, Some(10_000));
+    let buyer = Address::generate(env);
+    let k = key(5);
+    let exp = env.ledger().sequence() + 1_000;
+    let id = s.c.add_session(&pk(env, &k), &s.escrow.address, &vec![env, buyer.clone()], &100, &250, &60, &exp);
+    (s, buyer, k, id)
+}
+
+#[test]
+fn r4_camino_real_sesion_lock_y_fallido_no_cobra() {
+    let env = Env::default();
+    let (s, buyer, k, id) = r4_world(&env);
+    let h1 = BytesN::from_array(&env, &[1u8; 32]);
+    env.set_auths(&[r4_sentry(&env, &s.w, r4_tree(&env, &s, &buyer, 99, 0, &h1), &k)]);
+    assert!(s.escrow.try_lock(&s.w, &buyer, &99, &0, &h1, &30).is_ok());
+    assert_eq!(s.c.session(&id).unwrap().spent, 99);
+    assert_eq!(s.c.spent(&s.token), 99);
+    let hf = BytesN::from_array(&env, &[0xFFu8; 32]);
+    env.set_auths(&[r4_sentry(&env, &s.w, r4_tree(&env, &s, &buyer, 50, 0, &hf), &k)]);
+    assert!(s.escrow.try_lock(&s.w, &buyer, &50, &0, &hf, &30).is_err());
+    assert_eq!(s.c.session(&id).unwrap().spent, 99);
+    assert_eq!(s.c.spent(&s.token), 99);
+}
+
+#[test]
+fn r4_camino_real_contrato_intermedio_traga_fallos_y_varios_locks() {
+    let env = Env::default();
+    let (s, buyer, k, id) = r4_world(&env);
+    let caller = R4CallerClient::new(&env, &env.register(R4Caller, ()));
+    let hs = [1u8, 0xFF, 2, 3, 4];
+    let mut hashes = vec![&env];
+    let mut auths = std::vec::Vec::new();
+    for b in hs {
+        let h = BytesN::from_array(&env, &[b; 32]);
+        auths.push(r4_sentry(&env, &s.w, r4_tree(&env, &s, &buyer, 100, 0, &h), &k));
+        hashes.push_back(h);
+    }
+    env.set_auths(&auths);
+    let ok = caller.many(&s.escrow.address, &s.w, &buyer, &100, &hashes);
+    // 1 pasa, 0xFF falla tras cobrar (se revierte), 2 pasa, 3 y 4 exceden 250.
+    assert_eq!(ok, 2);
+    assert_eq!(s.c.session(&id).unwrap().spent, 200);
+    assert_eq!(s.c.spent(&s.token), 200);
+    assert_eq!(token::Client::new(&env, &s.token).balance(&s.escrow.address), 200);
+}
+
+#[test]
+fn w20_cambiar_el_token_del_escrow_anula_la_sesion() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let t2 = Address::generate(&env);
+    s.c.add_escrow(&s.escrow, &t2, &100);
+    advance(&env, DELAY_LEDGERS);
+    s.c.apply_escrow(&s.escrow);
+    let mut ctx = slock(&env, &s, &s.buyer, 100, 0, 60);
+    ctx.set(1, transfer_ctx(&env, &t2, &s.w, &s.escrow, 100));
+    assert_eq!(scheck(&env, &s, ctx), Err(Ok(WalletError::Stale)));
+}
+
+#[test]
+fn w20_quitar_y_volver_a_registrar_el_escrow_no_revive_la_sesion() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    s.c.remove_escrow(&s.escrow);
+    assert_eq!(s.c.session(&s.id), None);
+    s.c.add_escrow(&s.escrow, &s.token, &100);
+    advance(&env, DELAY_LEDGERS);
+    s.c.apply_escrow(&s.escrow);
+    assert_eq!(scheck(&env, &s, slock(&env, &s, &s.buyer, 100, 0, 60)), Err(Ok(WalletError::UnknownSession)));
+}
+
+#[test]
+fn w20_retirar_un_permiso_de_decline() {
+    let env = Env::default();
+    let s = ses(&env, None);
+    let t: BytesN<32> = BytesN::random(&env);
+    for _ in 0..(MAX_SESSION_LIST - 1) {
+        s.c.allow_session_decline(&s.id, &BytesN::random(&env));
+    }
+    s.c.allow_session_decline(&s.id, &t);
+    assert_eq!(s.c.try_allow_session_decline(&s.id, &BytesN::random(&env)), Err(Ok(WalletError::InvalidSession)));
+    s.c.disallow_session_decline(&s.id, &t);
+    let decline = vec![&env, call(&env, &s.escrow, "decline", vec![&env, t.into_val(&env)])];
+    assert_eq!(scheck(&env, &s, decline), Err(Ok(WalletError::SessionDenied)));
+    s.c.allow_session_decline(&s.id, &BytesN::random(&env));
+    assert_eq!(s.c.try_disallow_session_decline(&s.id, &t), Err(Ok(WalletError::NothingPending)));
+    env.set_auths(&[]);
+    assert_eq!(s.c.try_disallow_session_decline(&s.id, &t).err(), Some(Err(auth_error())));
 }
