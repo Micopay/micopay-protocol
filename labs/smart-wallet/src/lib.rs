@@ -44,6 +44,8 @@ pub const PERIOD_LEDGERS: u32 = 17_280;
 /// Plazo maximo de un `lock` en un escrow registrado (7 dias, en minutos). Fijo mientras D5
 /// siga abierta; el escrow no acota el plazo por su cuenta.
 pub const MAX_LOCK_TIMEOUT_MINUTES: u32 = 10_080;
+/// Tope de guardianes.
+pub const MAX_GUARDIANS: u32 = 10;
 
 #[contracttype]
 #[derive(Clone)]
@@ -56,6 +58,22 @@ enum DataKey {
     Spent(Address),
     Escrow(Address),
     PendingEscrow(Address),
+    /// `Vec<Address>`
+    Guardians,
+    GuardianThreshold,
+    /// Sube con cada cambio de guardianes o de quorum: los votos de antes dejan de contar.
+    GuardianEpoch,
+    /// Sube cuando termina una recuperacion: lo pendiente del dueno anterior deja de valer.
+    OwnerEpoch,
+    PendingGuardianRemoval(Address),
+}
+
+/// Algo pendiente que no lleva valor: desde que ledger se aplica y de que dueno es.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Pending {
+    pub ready_ledger: u32,
+    pub owner_epoch: u32,
 }
 
 /// Subida de limite pendiente: el valor nuevo y desde que ledger se puede aplicar.
@@ -137,6 +155,12 @@ pub enum WalletError {
     InvalidFee = 21,
     UnknownEscrow = 22,
     BadArgs = 23,
+    GuardianExists = 24,
+    UnknownGuardian = 25,
+    TooManyGuardians = 26,
+    InvalidGuardianThreshold = 27,
+    Stale = 28,
+    InvalidGuardian = 29,
 }
 
 /// Id de un firmante ed25519: `sha256(0x00 ‖ pubkey)`.
@@ -181,6 +205,28 @@ fn threshold(env: &Env) -> Result<u32, WalletError> {
         .instance()
         .get(&DataKey::Threshold)
         .ok_or(WalletError::NotInitialized)
+}
+
+fn guardian_list(env: &Env) -> Vec<Address> {
+    env.storage().instance().get(&DataKey::Guardians).unwrap_or(Vec::new(env))
+}
+
+fn guardian_threshold(env: &Env) -> u32 {
+    env.storage().instance().get(&DataKey::GuardianThreshold).unwrap_or(0)
+}
+
+fn owner_epoch(env: &Env) -> u32 {
+    env.storage().instance().get(&DataKey::OwnerEpoch).unwrap_or(0)
+}
+
+/// Guarda guardianes y quorum, y sube la epoca para que los votos viejos no cuenten.
+fn save_guardians(env: &Env, list: &Vec<Address>, threshold: u32) -> Result<(), WalletError> {
+    let st = env.storage().instance();
+    let epoch: u32 = st.get(&DataKey::GuardianEpoch).unwrap_or(0);
+    st.set(&DataKey::Guardians, list);
+    st.set(&DataKey::GuardianThreshold, &threshold);
+    st.set(&DataKey::GuardianEpoch, &epoch.checked_add(1).ok_or(WalletError::Overflow)?);
+    Ok(())
 }
 
 fn ready_at(env: &Env) -> Result<u32, WalletError> {
@@ -365,6 +411,87 @@ impl SmartWallet {
         st.remove(&DataKey::PendingEscrow(escrow));
         bump(&env);
         Ok(())
+    }
+
+    /// W8. Agrega un guardian (una cuenta `G…` o `C…` que firma por su cuenta). Aplica ya:
+    /// agregar no le quita nada al dueno. Con el primer guardian el quorum pasa a 1.
+    pub fn add_guardian(env: Env, guardian: Address) -> Result<(), WalletError> {
+        let me = env.current_contract_address();
+        me.require_auth();
+        if guardian == me {
+            return Err(WalletError::InvalidGuardian);
+        }
+        let mut list = guardian_list(&env);
+        if list.contains(&guardian) {
+            return Err(WalletError::GuardianExists);
+        }
+        if list.len() >= MAX_GUARDIANS {
+            return Err(WalletError::TooManyGuardians);
+        }
+        list.push_back(guardian);
+        let t = guardian_threshold(&env).max(1);
+        save_guardians(&env, &list, t)?;
+        bump(&env);
+        Ok(())
+    }
+
+    /// W8. Pide quitar un guardian. Queda pendiente `DELAY_LEDGERS`: asi quien robo el
+    /// telefono no saca a los guardianes antes de que lo congelen.
+    pub fn remove_guardian(env: Env, guardian: Address) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        if !guardian_list(&env).contains(&guardian) {
+            return Err(WalletError::UnknownGuardian);
+        }
+        let pending = Pending { ready_ledger: ready_at(&env)?, owner_epoch: owner_epoch(&env) };
+        env.storage().instance().set(&DataKey::PendingGuardianRemoval(guardian), &pending);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W8. Aplica una baja de guardian pendiente, ya cumplida la espera. Cualquiera. Si el
+    /// quorum queda mayor que los guardianes que quedan, baja a ese numero.
+    pub fn apply_guardian_removal(env: Env, guardian: Address) -> Result<(), WalletError> {
+        let st = env.storage().instance();
+        let key = DataKey::PendingGuardianRemoval(guardian.clone());
+        let p: Pending = st.get(&key).ok_or(WalletError::NothingPending)?;
+        if p.owner_epoch != owner_epoch(&env) {
+            st.remove(&key);
+            return Err(WalletError::Stale);
+        }
+        if env.ledger().sequence() < p.ready_ledger {
+            return Err(WalletError::NotReady);
+        }
+        let mut list = guardian_list(&env);
+        let i = list.first_index_of(&guardian).ok_or(WalletError::UnknownGuardian)?;
+        list.remove(i);
+        let t = guardian_threshold(&env).min(list.len());
+        save_guardians(&env, &list, t)?;
+        st.remove(&key);
+        bump(&env);
+        Ok(())
+    }
+
+    /// W9. Cambia el quorum de guardianes: `1 ≤ t ≤ guardianes` (0 solo si no hay guardianes).
+    pub fn set_guardian_threshold(env: Env, threshold: u32) -> Result<(), WalletError> {
+        env.current_contract_address().require_auth();
+        let list = guardian_list(&env);
+        let ok = if list.is_empty() { threshold == 0 } else { threshold >= 1 && threshold <= list.len() };
+        if !ok {
+            return Err(WalletError::InvalidGuardianThreshold);
+        }
+        save_guardians(&env, &list, threshold)?;
+        bump(&env);
+        Ok(())
+    }
+
+    /// Lectura: guardianes.
+    pub fn guardians(env: Env) -> Vec<Address> {
+        guardian_list(&env)
+    }
+
+    /// Lectura: quorum de guardianes.
+    pub fn guardian_threshold(env: Env) -> u32 {
+        guardian_threshold(&env)
     }
 
     /// Lectura: limite vigente de un token (`None` = sin limite).

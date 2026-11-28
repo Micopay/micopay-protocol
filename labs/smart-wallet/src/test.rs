@@ -1033,3 +1033,102 @@ fn w19_camino_real_contrato_intermedio_no_manda_al_escrow_sin_trade() {
     assert!(evil.try_f(&s.w, &s.token, &s.escrow.address, &101).is_err());
     assert_eq!(token::Client::new(&env, &s.token).balance(&s.escrow.address), 0);
 }
+
+// ---------- W8–W9: guardianes ----------
+
+#[test]
+fn w8_agregar_guardian_aplica_ya_y_quorum_pasa_a_1() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let g = Address::generate(&env);
+    assert_eq!(c.guardian_threshold(), 0);
+    c.add_guardian(&g);
+    assert_eq!(c.guardians(), vec![&env, g.clone()]);
+    assert_eq!(c.guardian_threshold(), 1);
+    assert_eq!(c.try_add_guardian(&g), Err(Ok(WalletError::GuardianExists)));
+}
+
+#[test]
+fn w8_la_wallet_no_es_su_propio_guardian() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (w, c) = setup(&env, &key(1));
+    assert_eq!(c.try_add_guardian(&w), Err(Ok(WalletError::InvalidGuardian)));
+}
+
+#[test]
+fn w8_tope_de_guardianes() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    for _ in 0..MAX_GUARDIANS {
+        c.add_guardian(&Address::generate(&env));
+    }
+    assert_eq!(c.try_add_guardian(&Address::generate(&env)), Err(Ok(WalletError::TooManyGuardians)));
+}
+
+#[test]
+fn w8_quitar_guardian_espera() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    let (g1, g2) = (Address::generate(&env), Address::generate(&env));
+    c.add_guardian(&g1);
+    c.add_guardian(&g2);
+    c.set_guardian_threshold(&2);
+    c.remove_guardian(&g1);
+    assert_eq!(c.guardians().len(), 2);
+    assert_eq!(c.try_apply_guardian_removal(&g1), Err(Ok(WalletError::NotReady)));
+    advance(&env, DELAY_LEDGERS);
+    // Cualquiera la aplica; el quorum baja a los guardianes que quedan.
+    env.set_auths(&[]);
+    c.apply_guardian_removal(&g1);
+    assert_eq!(c.guardians(), vec![&env, g2]);
+    assert_eq!(c.guardian_threshold(), 1);
+    assert_eq!(c.try_apply_guardian_removal(&g1), Err(Ok(WalletError::NothingPending)));
+}
+
+#[test]
+fn w8_quitar_desconocido_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    assert_eq!(c.try_remove_guardian(&Address::generate(&env)), Err(Ok(WalletError::UnknownGuardian)));
+}
+
+#[test]
+fn w8_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    let (_, c) = setup(&env, &key(1));
+    let g = Address::generate(&env);
+    assert_eq!(c.try_add_guardian(&g).err(), Some(Err(auth_error())));
+    assert_eq!(c.guardians().len(), 0);
+}
+
+#[test]
+fn w9_quorum_entre_1_y_el_numero_de_guardianes() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    assert_eq!(c.try_set_guardian_threshold(&1), Err(Ok(WalletError::InvalidGuardianThreshold)));
+    c.set_guardian_threshold(&0);
+    c.add_guardian(&Address::generate(&env));
+    c.add_guardian(&Address::generate(&env));
+    assert_eq!(c.try_set_guardian_threshold(&0), Err(Ok(WalletError::InvalidGuardianThreshold)));
+    assert_eq!(c.try_set_guardian_threshold(&3), Err(Ok(WalletError::InvalidGuardianThreshold)));
+    c.set_guardian_threshold(&2);
+    assert_eq!(c.guardian_threshold(), 2);
+}
+
+#[test]
+fn w9_sin_firma_de_la_wallet_falla() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, c) = setup(&env, &key(1));
+    c.add_guardian(&Address::generate(&env));
+    c.add_guardian(&Address::generate(&env));
+    env.set_auths(&[]);
+    assert_eq!(c.try_set_guardian_threshold(&2).err(), Some(Err(auth_error())));
+    assert_eq!(c.guardian_threshold(), 1);
+}
