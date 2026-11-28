@@ -1,6 +1,6 @@
-# smart-wallet (W0–W5, W17–W19)
+# smart-wallet (W0–W5, W8–W19)
 
-Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios firmantes y un umbral. **Solo testnet.** No va a producción: la app sigue con la cuenta clásica `G…`. El plan completo está fuera del repo (`PLAN_SMART_WALLET.md`, v0.3); esta carpeta tiene las fases W0–W5 (multifirma) y W17–W19 (límites y escrows registrados).
+Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios firmantes y un umbral. **Solo testnet.** No va a producción: la app sigue con la cuenta clásica `G…`. El plan completo está fuera del repo (`PLAN_SMART_WALLET.md`, v0.3); esta carpeta tiene las fases W0–W5 (multifirma), W8–W16 (guardianes, recuperación y congelamiento) y W17–W19 (límites y escrows registrados).
 
 `labs/smart-account/` sigue como el spike de un firmante.
 
@@ -18,8 +18,21 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 | W18 | `add_escrow(escrow, token, fee_bps_max)` | Registra un escrow con su token y su comisión máxima; queda pendiente `DELAY_LEDGERS` | La wallet |
 | W18 | `apply_escrow(escrow)` | Aplica un registro pendiente cuando ya pasó la espera | Cualquiera |
 | W18 | `remove_escrow(escrow)` | Quita un escrow registrado o pendiente; aplica ya | La wallet |
+| W8 | `add_guardian(g)` | Pide agregar un guardián (`G…` o `C…`, no la propia wallet); queda pendiente `DELAY_LEDGERS`. Tope de 10 | La wallet |
+| W8 | `apply_guardian_add(g)` | Aplica el alta pasada la espera; con el primer guardián el quorum pasa a 1 | Cualquiera |
+| W8 | `remove_guardian(g)` | Pide quitar un guardián; queda pendiente `DELAY_LEDGERS` | La wallet |
+| W8 | `apply_guardian_removal(g)` | Aplica la baja; si el quorum queda mayor que los guardianes, baja a ese número | Cualquiera |
+| W9 | `set_guardian_threshold(t)` | Quorum de guardianes: `1 ≤ t ≤ guardianes` (0 sin guardianes). Aplica ya | La wallet |
+| W10 | `start_recovery(guardians, new_key, possession, expires)` | Abre una propuesta para reemplazar todos los firmantes por `new_key` (con prueba de posesión). Una a la vez; una vigente solo la sustituye el quorum | Uno o más guardianes |
+| W11 | `approve_recovery(guardian, id)` | Vota. Al llegar al quorum empieza la espera `RECOVERY_DELAY`; los votos de después no la mueven | Un guardián |
+| W12 | `cancel_recovery()` | El veto del dueño. Con la wallet congelada pide dos credenciales distintas (D8, propuesta) | La wallet |
+| W13 | `guardian_cancel_recovery(guardians)` | Cancela la propuesta | El quorum de guardianes |
+| W14 | `finish_recovery(id)` | Pasada la espera: una sola llave nueva (peso 1, umbral 1), descongela y anula todo lo pendiente del dueño anterior | Cualquiera |
+| W15 | `freeze(guardians)` | Congela `FREEZE_MAX`: el dueño no mueve fondos ni cambia nada | Uno o más guardianes |
+| W16 | `request_unfreeze()` / `unfreeze()` | El dueño pide descongelar y, pasada `UNFREEZE_DELAY`, cualquiera lo aplica. No con una recuperación en curso | La wallet / cualquiera |
+| W16 | `guardian_unfreeze(guardians)` | Descongela al instante | El quorum de guardianes |
 | W19 | Reglas dentro de `__check_auth` | Ver abajo | — |
-| — | `signers()`, `threshold()`, `limit(token)`, `spent(token)`, `escrow(escrow)` | Lecturas | Cualquiera |
+| — | `signers()`, `threshold()`, `limit(token)`, `spent(token)`, `escrow(escrow)`, `guardians()`, `guardian_threshold()`, `frozen()`, `recovery()` | Lecturas | Cualquiera |
 
 **Reglas de la firma:**
 - Id de firmante: `sha256(0x00 ‖ pubkey)`. Una llave no puede entrar dos veces ni aportar doble peso.
@@ -37,12 +50,23 @@ Smart wallet de MicoPay en Soroban: una cuenta de contrato (`C…`) con varios f
 - `DELAY_LEDGERS` es fijo (120 ledgers, ~10 min) mientras la decisión D5 (plazos configurables) siga abierta. El periodo del límite es una ventana fija desde el primer gasto: cerca del cambio de periodo pueden salir dos límites seguidos.
 - Como `__check_auth` escribe el gasto en la wallet, el cliente tiene que volver a simular la transacción con las autorizaciones ya firmadas antes de enviarla; si no, el footprint no incluye esa escritura. `scripts/demo.mjs` lo hace así.
 
+**Guardianes, recuperación y congelamiento (W8–W16)**, para el teléfono robado:
+- Un guardián firma con su propia cuenta (`require_auth`); no hay llaves de guardianes dentro de la wallet. Las funciones de guardianes reciben la lista de quienes firman y rechazan repetidos o ajenos.
+- Agregar o quitar un guardián espera `DELAY_LEDGERS`, y no se aplica con la wallet congelada ni con una recuperación en curso. Así quien roba el teléfono no mete un guardián suyo al instante ni saca a los honestos.
+- Congelar: un guardián solo congela `FREEZE_MAX` (360 ledgers, ~30 min) y después nadie sin quorum vuelve a congelar hasta `fin + FREEZE_WINDOW − FREEZE_MAX`: como mucho `FREEZE_MAX` por ventana de `FREEZE_WINDOW` (1 440, ~2 h). El enfriamiento es de la wallet, no de cada guardián. El quorum (y al menos dos guardianes, aunque el quorum sea 1) prolonga sin enfriamiento.
+- Congelada, la wallet solo autoriza llamadas a sí misma para `request_unfreeze`, o `cancel_recovery` con dos credenciales distintas. Las funciones `apply_*` también la respetan.
+- Con una recuperación en curso el dueño no descongela: si no, quien tiene el teléfono descongelaría antes de que la recuperación esté lista (`UNFREEZE_DELAY` < `RECOVERY_DELAY`) y la cancelaría con una sola llave.
+- Sin congelar, el dueño cancela una recuperación con una sola llave. Ese es el veto ante guardianes que se ponen de acuerdo para robar; por eso los guardianes congelan primero y luego abren la recuperación. Si el congelamiento vence antes de terminar, el ladrón puede cancelar: `FREEZE_MAX` (360) es mayor que `RECOVERY_DELAY` (240), pero hay que juntar el quorum a tiempo.
+- La espera empieza cuando la propuesta llega al quorum, no al abrirla. Cambiar guardianes o el quorum anula la propuesta (`Stale`).
+- `finish_recovery` sube la época del dueño: lo pendiente del dueño anterior (subidas de límite, escrows, altas y bajas de guardianes) queda `Stale`. Se conservan el gasto del periodo, los escrows ya registrados y los guardianes vigentes.
+- Los plazos son cortos y fijos para probarlos en testnet; el plan propone días y la decisión D5 sigue abierta.
+
 Sin admin ni llave de MicoPay. Un relayer `G…` manda y paga las transacciones; no tiene ninguna llave de la wallet.
 
 ## Pruebas
 
 ```bash
-cargo test                 # 59 pruebas con firmas ed25519 reales
+cargo test                 # 99 pruebas con firmas ed25519 reales
 stellar contract build
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk> --vector   # vector compartido Rust/JS
 node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet
@@ -52,6 +76,8 @@ node scripts/demo.mjs <ruta a @stellar/stellar-sdk>            # demo en testnet
 - `firma_real_umbral_1_y_luego_2_de_2` usa entradas de autorización firmadas de verdad (sin `mock_all_auths`): con 2 de 2, una firma no basta y una firma sobre otros argumentos no sirve.
 - `w19_camino_real_*` corren W19 por el camino real: un token SAC, un escrow de prueba que copia el `lock` del real y autorizaciones firmadas. Prueban que un `lock` cobra una vez, que uno que falla después de cobrar no cuenta, y que un contrato intermedio no puede mandar dinero al escrow sin trade.
 - `w2_vector_compartido_rust_js` fija los bytes del mensaje firmado; la demo calcula los mismos en JS.
+- `atk_*` son los ataques de la revisión de W8–W16 (descongelar antes de la recuperación, guardián del ladrón, congelar sin fin con quorum 1); todos fallan.
+- Regresión inyectada en W8–W16: quitar el bloqueo del congelamiento, la regla de dos credenciales, el enfriamiento, la época de guardianes, la espera de la baja, de descongelar o de la recuperación, o la época del dueño hace fallar al menos una prueba en cada caso.
 - Regresión inyectada: quitar a mano el umbral, el control de duplicados, el `require_auth`, la dirección del mensaje o el control de `remove_signer` hace fallar al menos una prueba en cada caso.
 
 ## Demo en testnet
